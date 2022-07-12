@@ -79,6 +79,7 @@ def analyze(cfg_dir_root: Path, output_dir_root: Path) -> List[Device]:
         device_output_dir = Path(output_dir_root, device_path.name)
 
         device = Device(
+            path=device_path,
             name=device_path.name,
             pages=pages,
             webserver=webserver,
@@ -90,7 +91,7 @@ def analyze(cfg_dir_root: Path, output_dir_root: Path) -> List[Device]:
     return result
 
 
-def normalize(original_content: str) -> str:
+def normalize_jsonl(original_content: str) -> str:
     pattern_to_find_beginning_of_objects = re.compile(r'^(?!\n)\s*(?=\{)', re.RegexFlag.MULTILINE)
 
     parts = pattern_to_find_beginning_of_objects.split(original_content)
@@ -116,7 +117,7 @@ def normalize(original_content: str) -> str:
 
 def generate_component_output(component: Component, component_output_file: Path):
     original_content = component.path.read_text()
-    normalized = normalize(original_content)
+    normalized = normalize_jsonl(original_content)
     component_output_file.write_text(normalized)
 
 
@@ -131,16 +132,50 @@ def generate_page_output(page: Page, page_output_dir: Path):
 
 
 def generate_device_output(device: Device):
+    # *.cmd files in device root
+    for root_file in device.path.glob("*.cmd"):
+        original_content = root_file.read_text()
+        output_file = Path(device.output_dir, root_file.name)
+        output_file.write_text(original_content)
+
+    # device-specific common files
+    common_path = Path(device.path, "common")
+    for common_file in common_path.glob("*.jsonl"):
+        original_content = common_file.read_text()
+        output_file = Path(device.output_dir, common_file.name)
+        normalized = normalize_jsonl(original_content)
+        output_file.write_text(normalized)
+
+    # page-specific files for this device
     for page in device.pages:
         page_output_dir = Path(device.output_dir)
         generate_page_output(page, page_output_dir)
 
 
-def generate_output(devices: List[Device]):
+def generate_output(cfg_root_dir: Path, output_root_dir: Path, devices: List[Device]):
+    # global common files
+    src_common_path = Path(cfg_root_dir, "common")
+
+    output_common_path = Path(output_root_dir, "common")
+    output_common_path.mkdir(parents=True, exist_ok=True)
+
+    for common_file in src_common_path.glob("*.jsonl"):
+        original_content = common_file.read_text()
+        normalized = normalize_jsonl(original_content)
+        output_file = Path(output_common_path, common_file.name)
+        output_file.write_text(normalized)
+
+    # Device specific files
+
     for device in devices:
         print(f"Generating output files for device '{device.name}'...")
-        generate_device_output(device)
 
+        # write global common files to device specific output (?)
+        for common_file in output_common_path.iterdir():
+            content = common_file.read_text()
+            Path(device.output_dir, common_file.name).write_text(content)
+
+        generate_device_output(device)
 
 def upload_files(device: Device):
     for file in device.output_dir.iterdir():
@@ -155,11 +190,12 @@ if __name__ == '__main__':
     print(f"Analyzing config files in '{cfg_dir_root}'...")
     devices = analyze(cfg_dir_root, output_dir_root)
 
-    generate_output(devices)
+    common_path = Path(cfg_dir_root, "common")
+    generate_output(cfg_dir_root, output_dir_root, devices)
 
     for device in devices:
         print(f"Uploading files to device '{device.name}'...")
-        upload_files(device)
+        # upload_files(device)
 
     print(devices)
 

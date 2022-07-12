@@ -27,7 +27,8 @@ class Page:
 
 @dataclass
 class Device:
-    webserver: WebserverConfig
     name: str
+    path: Path
+    webserver: WebserverConfig
     pages: List[Page]
     output_dir: Path
