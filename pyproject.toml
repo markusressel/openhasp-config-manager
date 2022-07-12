@@ -1,0 +1,40 @@
+[tool.poetry]
+name = "openhasp-config-manager"
+version = "0.0.1"
+description = "A tool to manage all of your openHASP device configs in a centralized place."
+
+license = "GPLv3+"
+
+authors = [
+    "Markus Ressel <mail@markusressel.de>",
+]
+
+readme = 'README.md'
+
+repository = "https://github.com/markusressel/openhasp-config-manager"
+homepage = "https://github.com/markusressel/openhasp-config-manager"
+
+keywords = ['openhasp', 'config', 'management']
+
+classifiers = [
+    "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Development Status :: 5 - Production/Stable"
+]
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.dependencies]
+python = "^3.10"  # Compatible python versions must be declared here
+
+requests = "*"
+
+[tool.poetry.dev-dependencies]
+pytest = "*"
+
+[tool.poetry.scripts]
+openhasp-config-generator = 'openhasp_config_manager.cli:cli'
