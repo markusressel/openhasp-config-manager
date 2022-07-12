@@ -140,10 +140,10 @@ class ConfigProcessor:
     def _generate_device_output(self, device: Device):
         device.output_dir.mkdir(parents=True, exist_ok=True)
 
-        # *.cmd files in device root
-        for root_file in device.path.glob("*.cmd"):
-            original_content = root_file.read_text()
-            output_file = Path(device.output_dir, root_file.name)
+        # *.cmd files in device subtree
+        for cmd_file in device.path.rglob("*.cmd"):
+            original_content = cmd_file.read_text()
+            output_file = Path(device.output_dir, cmd_file.name)
             output_file.write_text(original_content)
 
         # device-specific common files
