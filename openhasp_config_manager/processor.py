@@ -124,9 +124,12 @@ class ConfigProcessor:
         return "\n".join(normalized_parts)
 
     def _generate_component_output(self, component: Component, component_output_file: Path):
-        original_content = component.path.read_text()
-        normalized = self._normalize_jsonl(original_content)
-        component_output_file.write_text(normalized)
+        try:
+            original_content = component.path.read_text()
+            normalized = self._normalize_jsonl(original_content)
+            component_output_file.write_text(normalized)
+        except Exception as ex:
+            raise Exception(f"Error normalizing file '{component.path}': {ex}")
 
     def _generate_page_output(self, page: Page, page_output_dir: Path):
         for component in page.components:
