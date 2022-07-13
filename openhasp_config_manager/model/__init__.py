@@ -13,16 +13,7 @@ class WebserverConfig:
 @dataclass
 class Component:
     name: str
-    index: int
     path: Path
-
-
-@dataclass
-class Page:
-    name: str
-    index: int
-    path: Path
-    components: List[Component]
 
 
 @dataclass
@@ -30,5 +21,5 @@ class Device:
     name: str
     path: Path
     webserver: WebserverConfig
-    pages: List[Page]
+    components: List[Component]
     output_dir: Path

@@ -14,18 +14,12 @@ class ConfigUploader:
     def upload(self, devices: List[Device]):
         for device in devices:
             print(f"Uploading files to device '{device.name}'...")
-            self._upload_files(self.output_root, device)
+            self._upload_files(device)
 
         # TODO: naming clashes can still happen and there is no warning about them
 
-    def _upload_files(self, output_root: Path, device: Device):
+    def _upload_files(self, device: Device):
         file_map: Dict[str, str] = {}
-
-        common_dir = Path(output_root, "common")
-        for file in common_dir.iterdir():
-            print(f"Preparing '{file.name}'...")
-            content = file.read_text()
-            file_map[file.name] = content
 
         for file in device.output_dir.iterdir():
             print(f"Preparing '{file.name}'...")
