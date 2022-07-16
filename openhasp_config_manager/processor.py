@@ -12,9 +12,21 @@ class ConfigProcessor:
         self.cfg_root = cfg_root
         self.output_root = output_root
 
-    def process(self) -> List[Device]:
+    def analyze(self) -> List[Device]:
+        """
+        Analyze the files in cfg_root
+        :return: list of devices
+        """
         print(f"Analyzing config files in '{self.cfg_root}'...")
-        devices = self._analyze(self.cfg_root, self.output_root)
+        return self._analyze(self.cfg_root, self.output_root)
+
+    def process(self, devices: List[Device] = None) -> List[Device]:
+        """
+        Process the configuration and generate the corresponding output
+        :return:
+        """
+        if devices is None:
+            devices = self.analyze()
 
         for device in devices:
             self._generate_output(device)
