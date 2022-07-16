@@ -17,13 +17,15 @@ class ConfigUploader:
             print(f"Uploading files to device '{device.name}'...")
             self._upload_files(device)
 
-        # TODO: naming clashes can still happen and there is no warning about them
-
     def _upload_files(self, device: Device):
         file_map: Dict[str, str] = {}
 
         for file in device.output_dir.iterdir():
             print(f"Preparing '{file.name}'...")
+
+            if file.name in file_map:
+                raise ValueError(f"Naming clash for file: {file.name}")
+
             content = file.read_text()
 
             checksum_differs = self._compare_checksum(file, content)
