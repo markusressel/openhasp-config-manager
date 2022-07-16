@@ -5,6 +5,9 @@ from typing import List
 
 from openhasp_config_manager.model import Component, WebserverConfig, Device
 
+COMMON_FOLDER_NAME = "common"
+DEVICES_FOLDER_NAME = "devices"
+
 
 class ConfigProcessor:
 
@@ -73,10 +76,14 @@ class ConfigProcessor:
     def _analyze(self, cfg_dir_root: Path, output_dir_root: Path) -> List[Device]:
         result: List[Device] = []
 
-        common_components_path = Path(cfg_dir_root, "common")
+        common_components_path = Path(cfg_dir_root, COMMON_FOLDER_NAME)
         common_components = self._read_components(common_components_path, prefix="common")
 
-        devices_path = Path(cfg_dir_root, "devices")
+        devices_path = Path(cfg_dir_root, DEVICES_FOLDER_NAME)
+        if not devices_path.exists():
+            raise RuntimeError(
+                f"No '{DEVICES_FOLDER_NAME}' sub-folder found in '{cfg_dir_root}'. Please create it and move your "
+                f"device configuration files there.")
         for device_path in devices_path.iterdir():
             if not device_path.is_dir():
                 continue

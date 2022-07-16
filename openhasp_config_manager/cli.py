@@ -50,6 +50,10 @@ def c_generate(config_dir: Path, output_dir: Path, device: str):
     :param output_dir: Root directory of where to put the generated output files.
     :param device: Only generate the output for the specified device.
     """
+    _generate(config_dir, output_dir, device)
+
+
+def _generate(config_dir: Path, output_dir: Path, device: str):
     from openhasp_config_manager import ConfigProcessor
     processor = ConfigProcessor(config_dir, output_dir)
 
@@ -80,6 +84,10 @@ def c_upload(config_dir: Path, output_dir: Path, device: str):
     :param output_dir: Root directory of where the generated output files from the "generate" command are located.
     :param device: name of a single device to process only
     """
+    _upload(config_dir, output_dir, device)
+
+
+def _upload(config_dir: Path, output_dir: Path, device: str):
     from openhasp_config_manager import ConfigProcessor
     from openhasp_config_manager import ConfigUploader
 
@@ -113,8 +121,12 @@ def c_deploy(config_dir: Path, output_dir: Path, device: str):
     :param output_dir: Root directory of where to put the generated output files.
     :param device: name of a single device to process only
     """
-    c_generate(config_dir, output_dir, device)
-    c_upload(config_dir, output_dir, device)
+    _deploy(config_dir, output_dir, device)
+
+
+def _deploy(config_dir: Path, output_dir: Path, device: str):
+    _generate(config_dir, output_dir, device)
+    _upload(config_dir, output_dir, device)
 
 
 if __name__ == '__main__':
