@@ -42,16 +42,16 @@ def get_option_names(parameter: str) -> list:
               help='Root directory of where to put the generated output files.')
 @click.option(*get_option_names(PARAM_DEVICE), required=False, default=None,
               help='Only generate the output for the specified device.')
-def c_generate(cfg_dir: Path, output_dir: Path, device: str):
+def c_generate(config_dir: Path, output_dir: Path, device: str):
     """
     Generates the output files for all devices in the given config directory.
 
-    :param cfg_dir: Root directory of your config files.
+    :param config_dir: Root directory of your config files.
     :param output_dir: Root directory of where to put the generated output files.
     :param device: Only generate the output for the specified device.
     """
     from openhasp_config_manager import ConfigProcessor
-    processor = ConfigProcessor(cfg_dir, output_dir)
+    processor = ConfigProcessor(config_dir, output_dir)
 
     devices = processor.analyze()
     if device is not None:
@@ -72,18 +72,18 @@ def c_generate(cfg_dir: Path, output_dir: Path, device: str):
               help='Root directory of where the generated output files from the "generate" command are located.')
 @click.option(*get_option_names(PARAM_DEVICE), required=False, default=None,
               help='Only upload the generated files for the specified device.')
-def c_upload(cfg_dir: Path, output_dir: Path, device: str):
+def c_upload(config_dir: Path, output_dir: Path, device: str):
     """
     Uploads the previously generated configuration to their corresponding devices.
 
-    :param cfg_dir: Root directory of the config files.
+    :param config_dir: Root directory of the config files.
     :param output_dir: Root directory of where the generated output files from the "generate" command are located.
     :param device: name of a single device to process only
     """
     from openhasp_config_manager import ConfigProcessor
     from openhasp_config_manager import ConfigUploader
 
-    processor = ConfigProcessor(cfg_dir, output_dir)
+    processor = ConfigProcessor(config_dir, output_dir)
 
     devices = processor.analyze()
     if device is not None:
@@ -105,16 +105,16 @@ def c_upload(cfg_dir: Path, output_dir: Path, device: str):
               help='Root directory of where to put the generated output files.')
 @click.option(*get_option_names(PARAM_DEVICE), required=False, default=None,
               help='Only deploy the specified device.')
-def c_deploy(cfg_dir: Path, output_dir: Path, device: str):
+def c_deploy(config_dir: Path, output_dir: Path, device: str):
     """
     Combines the generation and upload of a configuration.
 
-    :param cfg_dir: Root directory of the config files.
+    :param config_dir: Root directory of the config files.
     :param output_dir: Root directory of where to put the generated output files.
     :param device: name of a single device to process only
     """
-    c_generate(cfg_dir, output_dir, device)
-    c_upload(cfg_dir, output_dir, device)
+    c_generate(config_dir, output_dir, device)
+    c_upload(config_dir, output_dir, device)
 
 
 if __name__ == '__main__':
