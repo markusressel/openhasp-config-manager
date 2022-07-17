@@ -3,10 +3,12 @@ import re
 from pathlib import Path
 from typing import List
 
-from openhasp_config_manager.model import Component, WebserverConfig, Device
+from openhasp_config_manager.model import Component, Config, Device, MqttConfig, HttpConfig
 
 COMMON_FOLDER_NAME = "common"
 DEVICES_FOLDER_NAME = "devices"
+
+CONFIG_FILE_NAME = "config.json"
 
 
 class ConfigProcessor:
@@ -58,19 +60,26 @@ class ConfigProcessor:
 
         return result
 
-    def _read_webserver_config(self, device_path: Path) -> WebserverConfig | None:
-        # TODO: the naming clashes with the "official" config.json of
-        #  OpenHasp itself, so we either merge both or rename ours.
-        #  Currently I like the idea of merging them, since we can easily add out own section within
-        #  the existing structure without breaking other stuff.
-        credentials_path = Path(device_path, "config.json")
-        if credentials_path.exists() and credentials_path.is_file():
-            content = credentials_path.read_text()
+    def _read_config(self, device_path: Path) -> Config | None:
+        config_file = Path(device_path, CONFIG_FILE_NAME)
+        if config_file.exists() and config_file.is_file():
+            content = config_file.read_text()
             loaded = json.loads(content)
-            return WebserverConfig(
-                loaded["website"],
-                loaded["user"],
-                loaded["password"]
+            return Config(
+                mqtt=MqttConfig(
+                    name=loaded["mqtt"]["name"],
+                    group=loaded["mqtt"]["group"],
+                    host=loaded["mqtt"]["host"],
+                    port=loaded["mqtt"]["port"],
+                    user=loaded["mqtt"]["user"],
+                    password=loaded["mqtt"]["pass"]
+                ),
+                http=HttpConfig(
+                    website=loaded["http"]["website"],
+                    port=loaded["http"]["port"],
+                    user=loaded["http"]["user"],
+                    password=loaded["http"]["pass"],
+                )
             )
 
     def _analyze(self, cfg_dir_root: Path, output_dir_root: Path) -> List[Device]:
@@ -89,14 +98,23 @@ class ConfigProcessor:
                 continue
 
             device_components = self._analyze_device(device_path)
-            webserver = self._read_webserver_config(device_path)
+            config = self._read_config(device_path)
+
+            config_component = None
+            if config is not None:
+                config_file = Path(device_path, CONFIG_FILE_NAME)
+                config_component = Component(
+                    name=CONFIG_FILE_NAME,
+                    path=config_file
+                )
+
             device_output_dir = Path(output_dir_root, device_path.name)
 
             device = Device(
                 path=device_path,
                 name=device_path.name,
-                components=common_components + device_components,
-                webserver=webserver,
+                components=common_components + device_components + [config_component],
+                config=config,
                 output_dir=device_output_dir,
             )
 

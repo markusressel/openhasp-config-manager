@@ -4,10 +4,27 @@ from typing import List
 
 
 @dataclass
-class WebserverConfig:
-    website: str
+class MqttConfig:
+    name: str
+    group: str
+    host: str
+    port: int
     user: str
     password: str
+
+
+@dataclass
+class HttpConfig:
+    website: str
+    port: int
+    user: str
+    password: str
+
+
+@dataclass
+class Config:
+    mqtt: MqttConfig
+    http: HttpConfig
 
 
 @dataclass
@@ -20,6 +37,6 @@ class Component:
 class Device:
     name: str
     path: Path
-    webserver: WebserverConfig
+    config: Config
     components: List[Component]
     output_dir: Path

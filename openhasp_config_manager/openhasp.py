@@ -20,13 +20,13 @@ class OpenHaspClient:
     def upload_file(self, device: Device, name: str, content: str):
         print(f"Uploading '{name}'...")
 
-        url = device.webserver.website
+        url = device.config.http.website
         if not url.endswith("/"):
             url += "/"
         url += "edit"
 
-        username = device.webserver.user
-        password = device.webserver.password
+        username = device.config.http.user
+        password = device.config.http.password
         self._do_request(
             POST, url,
             files={
