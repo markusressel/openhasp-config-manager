@@ -18,7 +18,7 @@ class ConfigUploader:
             self._upload_files(device)
 
     def _upload_files(self, device: Device):
-        file_map: Dict[str, str] = {}
+        file_map: Dict[str, bool] = {}
 
         for file in device.output_dir.iterdir():
             print(f"Preparing '{file.name}'...")
@@ -28,29 +28,30 @@ class ConfigUploader:
 
             content = file.read_text()
 
-            checksum_differs = self._compare_checksum(file, content)
-            if checksum_differs:
-                file_map[file.name] = content
+            new_checksum = self._compare_checksum(file, content)
+            if new_checksum is not None:
+                file_map[file.name] = True
+                try:
+                    self.api_client.upload_file(device, file.name, content)
+                    checksum_file = self._get_checksum_file(file)
+                    checksum_file.parent.mkdir(parents=True, exist_ok=True)
+                    checksum_file.write_text(new_checksum)
+                except Exception as ex:
+                    print(f"Error uploading file '{file.name}': {ex}")
             else:
                 print(f"Skipping {file} because it hasn't changed.")
 
-        self.api_client.upload_files(device, file_map)
-
-    def _compare_checksum(self, file: Path, content: str) -> bool:
+    def _compare_checksum(self, file: Path, content: str) -> str | None:
         """
         Checks if the checksum for the given file has changed since it was last uploaded.
         :param file: the path of the file to check
         :param content: the content of the new file
-        :return: true if the checksum changed, false otherwise
+        :return: new checksum if the checksum changed, None otherwise
         """
-        checksum_file = Path(
-            self._cache_dir,
-            *file.relative_to(self.output_root).parts[:-1],
-            file.name + ".md5"
-        )
         import hashlib
         new_hash = hashlib.md5(content.encode('utf-8')).hexdigest()
 
+        checksum_file = self._get_checksum_file(file)
         if not checksum_file.exists():
             changed = True
         else:
@@ -58,7 +59,13 @@ class ConfigUploader:
             changed = old_hash != new_hash
 
         if changed:
-            checksum_file.parent.mkdir(parents=True, exist_ok=True)
-            checksum_file.write_text(new_hash)
+            return new_hash
+        else:
+            return None
 
-        return changed
+    def _get_checksum_file(self, file: Path) -> Path:
+        return Path(
+            self._cache_dir,
+            *file.relative_to(self.output_root).parts[:-1],
+            file.name + ".md5"
+        )
