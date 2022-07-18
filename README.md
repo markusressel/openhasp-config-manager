@@ -11,7 +11,7 @@ A tool to manage all of your openHASP device configs in a centralized place.
   * [x] line breaks wherever you like
 * [x] one click configuration upload to the device
   * [x] automatic diffing to only update changed configuration files
-* [ ] execute commands directly from the CLI (still needs a connection to the MQTT broker)
+* [x] execute commands directly from the CLI (still needs a connection to the MQTT broker)
 
 # How to use
 
