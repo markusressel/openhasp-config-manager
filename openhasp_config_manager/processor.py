@@ -100,20 +100,12 @@ class ConfigProcessor:
             device_components = self._analyze_device(device_path)
             config = self._read_config(device_path)
 
-            config_component = None
-            if config is not None:
-                config_file = Path(device_path, CONFIG_FILE_NAME)
-                config_component = Component(
-                    name=CONFIG_FILE_NAME,
-                    path=config_file
-                )
-
             device_output_dir = Path(output_dir_root, device_path.name)
 
             device = Device(
                 path=device_path,
                 name=device_path.name,
-                components=common_components + device_components + [config_component],
+                components=common_components + device_components,
                 config=config,
                 output_dir=device_output_dir,
             )
