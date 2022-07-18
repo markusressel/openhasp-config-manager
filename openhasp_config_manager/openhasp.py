@@ -11,7 +11,24 @@ POST = "post"
 class OpenHaspClient:
 
     def command(self, device: Device, name: str, params: str):
-        pass
+
+        import paho.mqtt.client as paho
+
+        mqtt_host = device.config.mqtt.host
+        mqtt_port = device.config.mqtt.port
+        mqtt_client_id = 'openhasp-config-manager'
+        mqtt_user = device.config.mqtt.user
+        mqtt_password = device.config.mqtt.password
+
+        topic = f"hasp/{device.config.mqtt.name}/command/{name}"
+
+        client = paho.Client(mqtt_client_id)
+
+        client.username_pw_set(mqtt_user, mqtt_password)
+        client.connect(mqtt_host, mqtt_port)
+
+        data = params
+        client.publish(topic, data)
 
     def upload_files(self, device: Device, files: Dict[str, str]):
         for name, content in files.items():
@@ -54,6 +71,7 @@ class OpenHaspClient:
         if headers is not None:
             _headers.update(headers)
 
+        # TODO: clean this up
         if method is GET:
             response = requests.get(url, headers=_headers, json=json, files=files, auth=(username, password), timeout=5)
         elif method is POST:

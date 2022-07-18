@@ -16,10 +16,8 @@ A tool to manage all of your openHASP device configs in a centralized place.
 # How to use
 
 openhasp-config-manager is first and foremost a configuration
-management system, which means it is cruicial to understand how
-it expects you to layout your configuration files for it to work.
-Fortunately the layout is mostly completely up to you, how you want
-to structure your files besides a few key folders.
+management system. Simply follow the basic folder structure and
+config deployment will become trivial.
 
 ## Configuration
 
@@ -73,6 +71,20 @@ openhasp-configs
         ├── config.json
         ├── offline.cmd
         └── online.cmd
+```
+
+## Run commands
+
+OpenHasp allows you to run commands on a device by issuing MQTT messages.
+While openhasp-config-manager is first and foremost a config management system,
+it also allows you to run commands on a device without the need to install a separate
+MQTT client first. Note that the MQTT _server_ does need to be running and also has to
+be reachable from your local machine.
+
+See: https://openhasp.haswitchplate.com/latest/commands/
+
+```shell
+> openhasp-config-manager cmd -d plate35 -c backlight -p "{\"state\":\"on\",\"brightness\":128}"
 ```
 
 # Contributing
