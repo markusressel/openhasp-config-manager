@@ -1,6 +1,6 @@
 # openhasp-config-manager
 
-A tool to manage all of your openHASP device configs in a centralized place.
+A tool to manage all of your [openHASP](https://github.com/HASwitchPlate/openHASP) device configs in a centralized place.
 
 # Features
 
