@@ -84,7 +84,7 @@ be reachable from your local machine.
 See: https://openhasp.haswitchplate.com/latest/commands/
 
 ```shell
-> openhasp-config-manager cmd -d plate35 -c backlight -p "{\"state\":\"on\",\"brightness\":128}"
+> openhasp-config-manager cmd -c ./openhasp-configs -d plate35 -C backlight -p "{\"state\":\"on\",\"brightness\":128}"
 ```
 
 # Contributing

@@ -5,11 +5,15 @@ import click
 PARAM_CFG_DIR = "cfg_dir"
 PARAM_OUTPUT_DIR = "output_dir"
 PARAM_DEVICE = "device"
+PARAM_CMD = "cmd"
+PARAM_PAYLOAD = "payload"
 
 CMD_OPTION_NAMES = {
     PARAM_CFG_DIR: ["--config-dir", "-c"],
     PARAM_OUTPUT_DIR: ["--output-dir", "-o"],
-    PARAM_DEVICE: ["--device", "-d"]
+    PARAM_DEVICE: ["--device", "-d"],
+    PARAM_CMD: ["--command", "-C"],
+    PARAM_PAYLOAD: ["--payload", "-p"],
 }
 
 CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
@@ -127,6 +131,40 @@ def c_deploy(config_dir: Path, output_dir: Path, device: str):
 def _deploy(config_dir: Path, output_dir: Path, device: str):
     _generate(config_dir, output_dir, device)
     _upload(config_dir, output_dir, device)
+
+
+@cli.command(name="cmd")
+@click.option(*get_option_names(PARAM_CFG_DIR),
+              required=True,
+              type=click.Path(exists=True),
+              help='Root directory of your config files.')
+@click.option(*get_option_names(PARAM_DEVICE),
+              required=True,
+              help='Device to send the command to.')
+@click.option(*get_option_names(PARAM_CMD),
+              required=True,
+              help='The name of the command.')
+@click.option(*get_option_names(PARAM_PAYLOAD),
+              required=False,
+              default="",
+              help='Command payload.')
+def c_cmd(config_dir: Path, device: str, command: str, payload: str):
+    _cmd(config_dir, device, command, payload)
+
+
+def _cmd(config_dir: Path, device: str, command: str, payload: str):
+    from openhasp_config_manager import ConfigProcessor
+    processor = ConfigProcessor(config_dir, "./nonexistent")
+
+    devices = processor.analyze()
+    if device is not None:
+        devices = list(filter(lambda x: x.name == device, devices))
+
+    from openhasp_config_manager.openhasp import OpenHaspClient
+    client = OpenHaspClient()
+
+    for device in devices:
+        client.command(device, command, payload)
 
 
 if __name__ == '__main__':
