@@ -114,25 +114,10 @@ class ConfigProcessor:
 
         return result
 
-    @staticmethod
-    def _normalize_jsonl(original_content: str) -> str:
-        pattern_to_find_beginning_of_objects = re.compile(r'^(?!\n)\s*(?=\{)', re.RegexFlag.MULTILINE)
-
-        parts = pattern_to_find_beginning_of_objects.split(original_content)
+    def _normalize_jsonl(self, original_content: str) -> str:
+        parts = self._split_jsonl_objects(original_content)
         normalized_parts: List[str] = []
         for part in parts:
-            part = part.strip()
-
-            # edge case for first match
-            if "}" not in part:
-                continue
-
-            # ignore lines starting with "//"
-            part = "\n".join([line for line in part.splitlines() if not line.strip().startswith("//")])
-
-            # ignore everything after the last closing bracket
-            part = part.rsplit("}", maxsplit=1)[0] + "}"
-
             p = json.dumps(json.loads(part), indent=None)
             normalized_parts.append(p)
 
@@ -151,6 +136,9 @@ class ConfigProcessor:
     def _generate_output(self, device: Device):
         device.output_dir.mkdir(parents=True, exist_ok=True)
 
+        # TODO: keep track of which files were generated and make sure we don't
+        #  generate the same file twice
+
         for component in device.components:
             component_output_file = Path(
                 device.output_dir,
@@ -158,3 +146,25 @@ class ConfigProcessor:
             )
 
             self._generate_component_output(component, component_output_file)
+
+    def _split_jsonl_objects(self, original_content: str) -> List[str]:
+        pattern_to_find_beginning_of_objects = re.compile(r'^(?!\n)\s*(?=\{)', re.RegexFlag.MULTILINE)
+        parts = pattern_to_find_beginning_of_objects.split(original_content)
+
+        result = []
+        for part in parts:
+            part = part.strip()
+
+            # edge case for first match
+            if "}" not in part:
+                continue
+
+            # ignore lines starting with "//"
+            part = "\n".join([line for line in part.splitlines() if not line.strip().startswith("//")])
+
+            # ignore everything after the last closing bracket
+            part = part.rsplit("}", maxsplit=1)[0] + "}"
+
+            result.append(part)
+
+        return result
