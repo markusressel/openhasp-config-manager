@@ -1,0 +1,33 @@
+// Content of the "Home" page
+
+{
+  // a simple label
+  "page": 1,
+  "id": 1,
+  "obj": "label",
+  "x": 5,
+  "y": 5,
+  "h": 50,
+  "w": 50,
+  "text": "Hello",
+  "enabled": true,
+  "hidden": false
+}
+
+// === buttons ===
+
+{
+  // a button
+  "page": 1,
+  "id": 2,
+  "obj": "btn",
+  "x": 5,
+  "y": 90,
+  "h": 90,
+  "w": 50,
+  "text": "World",
+  "enabled": false,
+  "hidden": false
+}
+
+// === END ===

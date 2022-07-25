@@ -1,13 +1,11 @@
-from pathlib import Path
-
 from openhasp_config_manager import ConfigProcessor
+from tests import TestBase
 
 
-def test_processor():
-    cfg_root = Path("./test_cfg_root")
-    output = Path("./test_output")
+class ProcessorTest(TestBase):
 
-    processor = ConfigProcessor(cfg_root, output)
+    def test_processor(self):
+        processor = ConfigProcessor(self.cfg_root, self.output)
 
-    devices = processor.analyze()
-    processor.process(devices)
+        devices = processor.analyze()
+        processor.process(devices)
