@@ -18,7 +18,7 @@ class ProcessorTest(TestBase):
 
         result = processor.process_jsonl(content)
 
-        self.assertEquals(
+        self.assertEqual(
             result,
             textwrap.dedent("""
                {"x": 0, "y": 0}
@@ -38,7 +38,7 @@ class ProcessorTest(TestBase):
 
         result = processor.process_jsonl(content)
 
-        self.assertEquals(
+        self.assertEqual(
             result,
             textwrap.dedent("""
                {"x": 0, "y": 0}
@@ -56,7 +56,7 @@ class ProcessorTest(TestBase):
 
         result = processor.process_jsonl(content)
 
-        self.assertEquals(
+        self.assertEqual(
             result,
             textwrap.dedent("""
                {"x": 0, "y": 0}
@@ -74,7 +74,7 @@ class ProcessorTest(TestBase):
 
         result = processor.process_jsonl(content)
 
-        self.assertEquals(
+        self.assertEqual(
             result,
             textwrap.dedent("""
             {"x": 0, "y": 0}
