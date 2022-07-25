@@ -58,8 +58,8 @@ def c_generate(config_dir: Path, output_dir: Path, device: str):
 
 
 def _generate(config_dir: Path, output_dir: Path, device: str):
-    from openhasp_config_manager import ConfigProcessor
-    processor = ConfigProcessor(config_dir, output_dir)
+    from openhasp_config_manager.manager import ConfigManager
+    processor = ConfigManager(config_dir, output_dir)
 
     devices = processor.analyze()
     if device is not None:
@@ -92,10 +92,10 @@ def c_upload(config_dir: Path, output_dir: Path, device: str):
 
 
 def _upload(config_dir: Path, output_dir: Path, device: str):
-    from openhasp_config_manager import ConfigProcessor
+    from openhasp_config_manager.manager import ConfigManager
     from openhasp_config_manager import ConfigUploader
 
-    processor = ConfigProcessor(config_dir, output_dir)
+    processor = ConfigManager(config_dir, output_dir)
 
     devices = processor.analyze()
     if device is not None:
@@ -153,8 +153,8 @@ def c_cmd(config_dir: Path, device: str, command: str, payload: str):
 
 
 def _cmd(config_dir: Path, device: str, command: str, payload: str):
-    from openhasp_config_manager import ConfigProcessor
-    processor = ConfigProcessor(config_dir, "./nonexistent")
+    from openhasp_config_manager.manager import ConfigManager
+    processor = ConfigManager(config_dir, Path("./nonexistent"))
 
     devices = processor.analyze()
     if device is not None:

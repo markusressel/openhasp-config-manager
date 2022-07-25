@@ -1,22 +1,64 @@
-from openhasp_config_manager import ConfigProcessor
+import textwrap
+
+from openhasp_config_manager.processor import Processor
 from tests import TestBase
 
 
 class ProcessorTest(TestBase):
 
-    def test_processor(self):
-        processor = ConfigProcessor(self.cfg_root, self.output)
+    def test_ignore_line_comment_between_object_params(self):
+        processor = Processor()
 
-        devices = processor.analyze()
-        processor.process(devices)
+        content = textwrap.dedent("""
+           { 
+             "x": 0,
+             // this is a comment 
+             "y": 0 
+           }
+           """)
 
-        file_count = 0
-        for file in self.output.rglob("*.jsonl"):
-            file_count += 1
-            content = file.read_text()
-            assert len(content) > 0
-            for line in content.splitlines():
-                assert line.startswith("{")
-                assert line.endswith("}")
+        result = processor.process_jsonl(content)
 
-        assert file_count > 0
+        self.assertEquals(
+            result,
+            textwrap.dedent("""
+               {"x": 0, "y": 0}
+               """).strip()
+        )
+
+    def test_ignore_line_comment_between_objects(self):
+        processor = Processor()
+
+        content = textwrap.dedent("""
+           { "x": 0, "y": 0 }
+           // this is a comment
+           { "a": 0, "b": 0 }
+           """)
+
+        result = processor.process_jsonl(content)
+
+        self.assertEquals(
+            result,
+            textwrap.dedent("""
+               {"x": 0, "y": 0}
+               {"a": 0, "b": 0}
+               """).strip()
+        )
+
+    def test_multiple_objects(self):
+        processor = Processor()
+
+        content = textwrap.dedent("""
+        { "x": 0, "y": 0 }
+        { "a": 0, "b": 0 }
+        """)
+
+        result = processor.process_jsonl(content)
+
+        self.assertEquals(
+            result,
+            textwrap.dedent("""
+            {"x": 0, "y": 0}
+            {"a": 0, "b": 0}
+            """).strip()
+        )
