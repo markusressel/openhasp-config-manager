@@ -37,7 +37,9 @@ class OpenHaspClient:
     def upload_file(self, device: Device, name: str, content: str):
         print(f"Uploading '{name}'...")
 
-        url = device.config.http.website
+        url = device.config.openhasp_config_manager.device.ip
+        if not url.startswith("http://"):
+            url = "http://" + url
         if not url.endswith("/"):
             url += "/"
         url += "edit"

@@ -1,6 +1,28 @@
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List
+from typing import List, Optional
+
+
+@dataclass
+class ScreenConfig:
+    width: int
+    height: int
+
+
+@dataclass
+class DeviceConfig:
+    ip: str
+    screen: ScreenConfig
+
+
+@dataclass
+class WebsiteConfig:
+    website: str
+
+
+@dataclass
+class OpenhaspConfigManagerConfig:
+    device: DeviceConfig
 
 
 @dataclass
@@ -10,21 +32,21 @@ class MqttConfig:
     host: str
     port: int
     user: str
-    password: str
+    password: Optional[str]
 
 
 @dataclass
 class HttpConfig:
-    website: str
     port: int
     user: str
-    password: str
+    password: Optional[str]
 
 
 @dataclass
 class Config:
-    mqtt: MqttConfig
-    http: HttpConfig
+    openhasp_config_manager: OpenhaspConfigManagerConfig
+    mqtt: Optional[MqttConfig]
+    http: Optional[HttpConfig]
 
 
 @dataclass
