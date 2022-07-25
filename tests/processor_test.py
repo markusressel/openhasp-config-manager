@@ -1,13 +1,15 @@
 import textwrap
 
-from openhasp_config_manager.processor import Processor
+from openhasp_config_manager.processor import Processor, JsonlObjectProcessor
 from tests import TestBase
 
 
 class ProcessorTest(TestBase):
 
     def test_multiline_object_params(self):
-        processor = Processor()
+        config = self.default_config
+        jsonl_object_processor = JsonlObjectProcessor(config)
+        processor = Processor(jsonl_object_processor)
 
         content = textwrap.dedent("""
            { 
@@ -26,7 +28,9 @@ class ProcessorTest(TestBase):
         )
 
     def test_ignore_line_comment_between_object_params(self):
-        processor = Processor()
+        config = self.default_config
+        jsonl_object_processor = JsonlObjectProcessor(config)
+        processor = Processor(jsonl_object_processor)
 
         content = textwrap.dedent("""
            { 
@@ -46,7 +50,9 @@ class ProcessorTest(TestBase):
         )
 
     def test_ignore_line_comment_between_objects(self):
-        processor = Processor()
+        config = self.default_config
+        jsonl_object_processor = JsonlObjectProcessor(config)
+        processor = Processor(jsonl_object_processor)
 
         content = textwrap.dedent("""
            { "x": 0, "y": 0 }
@@ -65,7 +71,9 @@ class ProcessorTest(TestBase):
         )
 
     def test_multiple_objects(self):
-        processor = Processor()
+        config = self.default_config
+        jsonl_object_processor = JsonlObjectProcessor(config)
+        processor = Processor(jsonl_object_processor)
 
         content = textwrap.dedent("""
         { "x": 0, "y": 0 }

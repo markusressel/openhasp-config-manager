@@ -22,17 +22,23 @@ config deployment will become trivial.
 ## Configuration
 
 * `devices`: In the root directory of your configuration, a folder called
-  `devices` is expected. In there you can create as many subfolders as
-  you like, naming them according to the physical devices that you
-  want to manage.
+  `devices` is expected.
+  * In there you can create as many subfolders as
+    you like, naming them according to the physical devices that you
+    want to manage.
+    * Within those device subfolders you can then create
+      `*.jsonl` and `*.cmd` files.
+    * You must also provide a `config.json` file, see [config.json](#config.json)
+      for more info on how to set it.
 * `common`: The `common` directory can be used to put files
   that should be included on _all_ device.
 
-You are not limited to a single folder level. However, the files
-on OpenHasp devices cannot be put into subfolders. If you put
+You are not limited to a folder depth of one. However, the files
+on OpenHasp devices cannot be put into subfolders. Therefore, Ii you put
 `.json` or `.cmd` files into subfolders, the name of the
 resulting file on the OpenHasp device will be a concatenation of
-the full subpath. So f.ex. the file in the following structure:
+the full subpath using an underscore (`_`) as a separator. So f.ex.
+the file in the following structure:
 
 ```text
 openhasp-configs
@@ -71,6 +77,35 @@ openhasp-configs
         ├── config.json
         ├── offline.cmd
         └── online.cmd
+```
+
+### config.json
+
+openhasp-config-manager makes use of the `config.json` on your plate. Since the official
+API doesn't allow uploading the full file, so only some changes are currently supported.
+
+To retrieve the initial version of the `config.json` file you can use the
+built-in File Browser integrated into the webserver of your OpenHASP plate.
+
+The official `config.json` file doesn't provide enough info for openhasp-config-manager
+to enable all of its features though. To fix that OCM looks for an additional section within
+the file which is not present by default:
+
+```json
+{
+  "openhasp_config_manager": {
+    "device": {
+      "ip": "192.168.5.134",
+      "screen": {
+        "width": 320,
+        "height": 480
+      }
+    }
+  },
+  "wifi": {
+    "ssid": "Turris IoT",
+    ...
+  }
 ```
 
 ## Run commands
