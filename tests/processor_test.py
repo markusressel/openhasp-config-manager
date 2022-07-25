@@ -9,3 +9,14 @@ class ProcessorTest(TestBase):
 
         devices = processor.analyze()
         processor.process(devices)
+
+        file_count = 0
+        for file in self.output.rglob("*.jsonl"):
+            file_count += 1
+            content = file.read_text()
+            assert len(content) > 0
+            for line in content.splitlines():
+                assert line.startswith("{")
+                assert line.endswith("}")
+
+        assert file_count > 0
