@@ -131,6 +131,7 @@ def c_deploy(config_dir: Path, output_dir: Path, device: str):
 def _deploy(config_dir: Path, output_dir: Path, device: str):
     _generate(config_dir, output_dir, device)
     _upload(config_dir, output_dir, device)
+    _cmd(config_dir, device="touch_down_1", command="reboot", payload="")
 
 
 @cli.command(name="cmd")

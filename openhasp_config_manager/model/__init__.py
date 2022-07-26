@@ -43,10 +43,35 @@ class HttpConfig:
 
 
 @dataclass
+class GuiConfig:
+    idle1: int
+    idle2: int
+    bckl: int
+    bcklinv: int
+    rotate: int
+    cursor: int
+    invert: int
+    calibration: List[int]
+
+
+@dataclass
+class HaspConfig:
+    startpage: int
+    startdim: int
+    theme: int
+    color1: str
+    color2: str
+    font: str
+    pages: str
+
+
+@dataclass
 class Config:
     openhasp_config_manager: OpenhaspConfigManagerConfig
-    mqtt: Optional[MqttConfig]
-    http: Optional[HttpConfig]
+    mqtt: MqttConfig
+    http: HttpConfig
+    gui: GuiConfig
+    hasp: HaspConfig
 
 
 @dataclass

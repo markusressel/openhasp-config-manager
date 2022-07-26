@@ -8,20 +8,22 @@ from openhasp_config_manager.openhasp import OpenHaspClient
 class ConfigUploader:
 
     def __init__(self, output_root: Path):
-        self.api_client = OpenHaspClient()
-        self.output_root = output_root
-        self._cache_dir = Path(self.output_root, ".cache")
+        self._api_client = OpenHaspClient()
+        self._output_root = output_root
+        self._cache_dir = Path(self._output_root, ".cache")
 
     def upload(self, devices: List[Device]):
         for device in devices:
             print(f"Uploading files to device '{device.name}'...")
             self._upload_files(device)
 
+            self._update_config(device)
+
     def _upload_files(self, device: Device):
         file_map: Dict[str, bool] = {}
 
         for file in device.output_dir.iterdir():
-            print(f"Preparing '{file.name}'...")
+            print(f"Preparing '{file.name}' for upload...")
 
             if file.name in file_map:
                 raise ValueError(f"Naming clash for file: {file.name}")
@@ -32,7 +34,7 @@ class ConfigUploader:
             if new_checksum is not None:
                 file_map[file.name] = True
                 try:
-                    self.api_client.upload_file(device, file.name, content)
+                    self._api_client.upload_file(device, file.name, content)
                     checksum_file = self._get_checksum_file(file)
                     checksum_file.parent.mkdir(parents=True, exist_ok=True)
                     checksum_file.write_text(new_checksum)
@@ -66,6 +68,11 @@ class ConfigUploader:
     def _get_checksum_file(self, file: Path) -> Path:
         return Path(
             self._cache_dir,
-            *file.relative_to(self.output_root).parts[:-1],
+            *file.relative_to(self._output_root).parts[:-1],
             file.name + ".md5"
         )
+
+    def _update_config(self, device: Device):
+        self._api_client.set_mqtt_config(device, device.config.mqtt)
+        self._api_client.set_http_config(device, device.config.http)
+        self._api_client.set_gui_config(device, device.config.gui)

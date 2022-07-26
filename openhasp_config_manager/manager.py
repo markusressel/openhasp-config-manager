@@ -2,7 +2,9 @@ import json
 from pathlib import Path
 from typing import List
 
-from openhasp_config_manager.model import Component, Config, Device
+import dacite
+
+from openhasp_config_manager.model import Component, Config, Device, ScreenOrientation
 from openhasp_config_manager.processor import Processor, JsonlObjectProcessor
 
 COMMON_FOLDER_NAME = "common"
@@ -14,16 +16,19 @@ CONFIG_FILE_NAME = "config.json"
 class ConfigManager:
 
     def __init__(self, cfg_root: Path, output_root: Path):
-        self.cfg_root = cfg_root
-        self.output_root = output_root
+        self._cfg_root = cfg_root
+        self._output_root = output_root
+
+        jsonl_processor = JsonlObjectProcessor()
+        self._device_processor = Processor(jsonl_processor)
 
     def analyze(self) -> List[Device]:
         """
         Analyze the files in cfg_root
         :return: list of devices
         """
-        print(f"Analyzing config files in '{self.cfg_root}'...")
-        return self._analyze(self.cfg_root, self.output_root)
+        print(f"Analyzing config files in '{self._cfg_root}'...")
+        return self._analyze(self._cfg_root, self._output_root)
 
     def process(self, devices: List[Device] = None) -> List[Device]:
         """
@@ -68,7 +73,15 @@ class ConfigManager:
 
             from dacite import from_dict
 
-            return from_dict(data_class=Config, data=loaded)
+            return from_dict(
+                data_class=Config,
+                data=loaded,
+                config=dacite.Config(
+                    type_hooks={
+                        ScreenOrientation: ScreenOrientation
+                    }
+                )
+            )
 
     def _analyze(self, cfg_dir_root: Path, output_dir_root: Path) -> List[Device]:
         result: List[Device] = []
@@ -102,20 +115,17 @@ class ConfigManager:
 
         return result
 
-    @staticmethod
-    def _generate_component_output(processor: Processor, component: Component, component_output_file: Path):
+    def _generate_component_output(self, device: Device, component: Component, component_output_file: Path):
         try:
             original_content = component.path.read_text()
             output_content = original_content
             if "jsonl" in component.path.suffix:
-                output_content = processor.process_jsonl(original_content)
+                output_content = self._device_processor.process_jsonl(device, original_content)
             component_output_file.write_text(output_content)
         except Exception as ex:
             raise Exception(f"Error normalizing file '{component.path}': {ex}")
 
     def _generate_output(self, device: Device):
-        jsonl_processor = JsonlObjectProcessor(device.config)
-        device_processor = Processor(jsonl_processor)
 
         device.output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -128,4 +138,4 @@ class ConfigManager:
                 component.name
             )
 
-            self._generate_component_output(device_processor, component, component_output_file)
+            self._generate_component_output(device, component, component_output_file)

@@ -2,10 +2,10 @@ from typing import Dict
 
 import requests as requests
 
-from openhasp_config_manager.model import Device
+from openhasp_config_manager.model import Device, MqttConfig, HttpConfig, GuiConfig, HaspConfig
 
-GET = "get"
-POST = "post"
+GET = "GET"
+POST = "POST"
 
 
 class OpenHaspClient:
@@ -30,6 +30,90 @@ class OpenHaspClient:
         data = params
         client.publish(topic, data)
 
+    def reboot(self, device: Device):
+        base_url = self._compute_base_url(device)
+        self._do_request(GET, base_url + "reboot")
+
+    def set_hasp_config(self, device: Device, config: HaspConfig):
+        base_url = self._compute_base_url(device)
+
+        data = {
+            "startpage": config.startpage,
+            "startdim": config.startdim,
+            "theme": config.theme,
+            "color1": config.color1,
+            "color2": config.color2,
+            "font": config.font,
+            "pages": config.pages,
+            "save": "hasp"
+        }
+
+        # ignore keys with None value
+        data = {k: v for k, v in data.items() if v is not None}
+
+        self._do_request(
+            POST, base_url + "config",
+            data=data
+        )
+
+    def set_http_config(self, device: Device, config: HttpConfig):
+        base_url = self._compute_base_url(device)
+
+        data = {
+            "user": config.user,
+            "pass": config.password,
+            "save": "http"
+        }
+
+        # ignore keys with None value
+        data = {k: v for k, v in data.items() if v is not None}
+
+        self._do_request(
+            POST, base_url + "config",
+            data=data
+        )
+
+    def set_mqtt_config(self, device: Device, config: MqttConfig):
+        base_url = self._compute_base_url(device)
+
+        data = {
+            "name": config.name,
+            "group": config.group,
+            "host": config.host,
+            "port": config.port,
+            "user": config.user,
+            "pass": config.password,
+            "save": "mqtt"
+        }
+
+        # ignore keys with None value
+        data = {k: v for k, v in data.items() if v is not None}
+
+        self._do_request(
+            POST, base_url + "config",
+            data=data
+        )
+
+    def set_gui_config(self, device: Device, config: GuiConfig):
+        base_url = self._compute_base_url(device)
+
+        data = {
+            "idle1": config.idle1,
+            "idle2": config.idle2,
+            "rotate": config.rotate,
+            "cursor": config.cursor,
+            "bckl": config.bckl,
+            "save": "gui"
+        }
+
+        # ignore keys with None value
+        data = {k: v for k, v in data.items() if v is not None}
+
+        self._do_request(
+            POST, base_url + "config",
+            data=data
+        )
+
     def upload_files(self, device: Device, files: Dict[str, str]):
         for name, content in files.items():
             self.upload_file(device, name, content)
@@ -37,11 +121,7 @@ class OpenHaspClient:
     def upload_file(self, device: Device, name: str, content: str):
         print(f"Uploading '{name}'...")
 
-        url = device.config.openhasp_config_manager.device.ip
-        if not url.startswith("http://"):
-            url = "http://" + url
-        if not url.endswith("/"):
-            url += "/"
+        url = self._compute_base_url(device)
         url += "edit"
 
         username = device.config.http.user
@@ -56,8 +136,9 @@ class OpenHaspClient:
 
     @staticmethod
     def _do_request(method: str = GET, url: str = "/", params: dict = None,
-                    json: dict = None, files: any = None, headers: dict = None, username: str = None,
-                    password: str = None) -> list or dict or None:
+                    json: any = None, files: any = None, data: any = None,
+                    headers: dict = None,
+                    username: str = None, password: str = None) -> list or dict or None:
         """
         Executes a http request based on the given parameters
 
@@ -73,14 +154,13 @@ class OpenHaspClient:
         if headers is not None:
             _headers.update(headers)
 
-        # TODO: clean this up
-        if method is GET:
-            response = requests.get(url, headers=_headers, json=json, files=files, auth=(username, password), timeout=5)
-        elif method is POST:
-            response = requests.post(url, headers=_headers, json=json, files=files, auth=(username, password),
-                                     timeout=30)
-        else:
-            raise ValueError("Unsupported method: {}".format(method))
+        response = requests.request(
+            method, url, headers=_headers,
+            json=json, files=files,
+            data=data,
+            auth=(username, password),
+            timeout=5
+        )
 
         response.raise_for_status()
         if len(response.content) > 0:
@@ -88,3 +168,11 @@ class OpenHaspClient:
                 return response.json()
             else:
                 return response.content
+
+    def _compute_base_url(self, device: Device) -> str:
+        url = device.config.openhasp_config_manager.device.ip
+        if not url.startswith("http://"):
+            url = "http://" + url
+        if not url.endswith("/"):
+            url += "/"
+        return url
