@@ -4,7 +4,7 @@ from typing import List
 
 import dacite
 
-from openhasp_config_manager.model import Component, Config, Device, ScreenOrientation
+from openhasp_config_manager.model import Component, Config, Device
 from openhasp_config_manager.processor import Processor, JsonlObjectProcessor
 
 COMMON_FOLDER_NAME = "common"
@@ -76,11 +76,7 @@ class ConfigManager:
             return from_dict(
                 data_class=Config,
                 data=loaded,
-                config=dacite.Config(
-                    type_hooks={
-                        ScreenOrientation: ScreenOrientation
-                    }
-                )
+                config=dacite.Config()
             )
 
     def _analyze(self, cfg_dir_root: Path, output_dir_root: Path) -> List[Device]:
