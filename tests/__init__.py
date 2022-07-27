@@ -20,4 +20,6 @@ class TestBase(TestCase):
         ),
         mqtt=None,
         http=None,
+        gui=None,
+        hasp=None,
     )

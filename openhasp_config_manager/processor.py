@@ -62,7 +62,7 @@ class Processor:
 
             processed = self._jsonl_object_processor.process(loaded, config)
 
-            object_key = f"p{processed['page']}b{processed['id']}"
+            object_key = f"p{processed.get('page', '0')}b{processed.get('id', '0')}"
 
             if object_key in self._object_map:
                 print(f"WARNING: duplicate object key detected: {object_key}")

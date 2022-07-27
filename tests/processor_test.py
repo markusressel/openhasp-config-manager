@@ -1,5 +1,7 @@
 import textwrap
+from pathlib import Path
 
+from openhasp_config_manager.model import Device
 from openhasp_config_manager.processor import Processor, JsonlObjectProcessor
 from tests import TestBase
 
@@ -8,7 +10,15 @@ class ProcessorTest(TestBase):
 
     def test_multiline_object_params(self):
         config = self.default_config
-        jsonl_object_processor = JsonlObjectProcessor(config)
+        device = Device(
+            name="device",
+            path=Path(),
+            config=config,
+            components=[],
+            output_dir=Path(),
+        )
+
+        jsonl_object_processor = JsonlObjectProcessor()
         processor = Processor(jsonl_object_processor)
 
         content = textwrap.dedent("""
@@ -18,7 +28,7 @@ class ProcessorTest(TestBase):
            }
            """)
 
-        result = processor.process_jsonl(content)
+        result = processor.process_jsonl(device, content)
 
         self.assertEqual(
             result,
@@ -29,7 +39,15 @@ class ProcessorTest(TestBase):
 
     def test_ignore_line_comment_between_object_params(self):
         config = self.default_config
-        jsonl_object_processor = JsonlObjectProcessor(config)
+        device = Device(
+            name="device",
+            path=Path(),
+            config=config,
+            components=[],
+            output_dir=Path(),
+        )
+
+        jsonl_object_processor = JsonlObjectProcessor()
         processor = Processor(jsonl_object_processor)
 
         content = textwrap.dedent("""
@@ -40,7 +58,7 @@ class ProcessorTest(TestBase):
            }
            """)
 
-        result = processor.process_jsonl(content)
+        result = processor.process_jsonl(device, content)
 
         self.assertEqual(
             result,
@@ -51,7 +69,15 @@ class ProcessorTest(TestBase):
 
     def test_ignore_line_comment_between_objects(self):
         config = self.default_config
-        jsonl_object_processor = JsonlObjectProcessor(config)
+        device = Device(
+            name="device",
+            path=Path(),
+            config=config,
+            components=[],
+            output_dir=Path(),
+        )
+
+        jsonl_object_processor = JsonlObjectProcessor()
         processor = Processor(jsonl_object_processor)
 
         content = textwrap.dedent("""
@@ -60,7 +86,7 @@ class ProcessorTest(TestBase):
            { "a": 0, "b": 0 }
            """)
 
-        result = processor.process_jsonl(content)
+        result = processor.process_jsonl(device, content)
 
         self.assertEqual(
             result,
@@ -72,7 +98,15 @@ class ProcessorTest(TestBase):
 
     def test_multiple_objects(self):
         config = self.default_config
-        jsonl_object_processor = JsonlObjectProcessor(config)
+        device = Device(
+            name="device",
+            path=Path(),
+            config=config,
+            components=[],
+            output_dir=Path(),
+        )
+
+        jsonl_object_processor = JsonlObjectProcessor()
         processor = Processor(jsonl_object_processor)
 
         content = textwrap.dedent("""
@@ -80,7 +114,7 @@ class ProcessorTest(TestBase):
         { "a": 0, "b": 0 }
         """)
 
-        result = processor.process_jsonl(content)
+        result = processor.process_jsonl(device, content)
 
         self.assertEqual(
             result,
