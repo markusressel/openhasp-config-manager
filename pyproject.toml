@@ -40,4 +40,4 @@ paho-mqtt = "*"
 pytest = "*"
 
 [tool.poetry.scripts]
-openhasp-config-generator = 'openhasp_config_manager.cli:cli'
+openhasp-config-manager = 'openhasp_config_manager.cli:cli'

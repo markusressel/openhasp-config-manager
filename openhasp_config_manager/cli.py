@@ -49,10 +49,6 @@ def get_option_names(parameter: str) -> list:
 def c_generate(config_dir: Path, output_dir: Path, device: str):
     """
     Generates the output files for all devices in the given config directory.
-
-    :param config_dir: Root directory of your config files.
-    :param output_dir: Root directory of where to put the generated output files.
-    :param device: Only generate the output for the specified device.
     """
     _generate(config_dir, output_dir, device)
 
@@ -83,10 +79,6 @@ def _generate(config_dir: Path, output_dir: Path, device: str):
 def c_upload(config_dir: Path, output_dir: Path, device: str):
     """
     Uploads the previously generated configuration to their corresponding devices.
-
-    :param config_dir: Root directory of the config files.
-    :param output_dir: Root directory of where the generated output files from the "generate" command are located.
-    :param device: name of a single device to process only
     """
     _upload(config_dir, output_dir, device)
 
@@ -120,18 +112,30 @@ def _upload(config_dir: Path, output_dir: Path, device: str):
 def c_deploy(config_dir: Path, output_dir: Path, device: str):
     """
     Combines the generation and upload of a configuration.
-
-    :param config_dir: Root directory of the config files.
-    :param output_dir: Root directory of where to put the generated output files.
-    :param device: name of a single device to process only
     """
     _deploy(config_dir, output_dir, device)
+
+
+def _reboot(config_dir, device):
+    from openhasp_config_manager.manager import ConfigManager
+    processor = ConfigManager(config_dir, Path("./nonexistent"))
+
+    devices = processor.analyze()
+    if device is not None:
+        devices = list(filter(lambda x: x.name == device, devices))
+
+    from openhasp_config_manager.openhasp import OpenHaspClient
+    client = OpenHaspClient()
+
+    for device in devices:
+        client.reboot(device)
 
 
 def _deploy(config_dir: Path, output_dir: Path, device: str):
     _generate(config_dir, output_dir, device)
     _upload(config_dir, output_dir, device)
-    _cmd(config_dir, device="touch_down_1", command="reboot", payload="")
+    # _cmd(config_dir, device="touch_down_1", command="reboot", payload="")
+    _reboot(config_dir, device)
 
 
 @cli.command(name="cmd")
@@ -164,7 +168,9 @@ def _cmd(config_dir: Path, device: str, command: str, payload: str):
     from openhasp_config_manager.openhasp import OpenHaspClient
     client = OpenHaspClient()
 
+    import json
     for device in devices:
+        payload = json.loads(payload)
         client.command(device, command, payload)
 
 

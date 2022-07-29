@@ -108,6 +108,26 @@ the file which is not present by default:
   }
 ```
 
+## Deployment
+
+To deploy your configurations to the already connected OpenHASP devices, simply use the
+command line tool `openhasp-config-manager`:
+
+```shell
+> openhasp-config-manager                                                         0 (0.604s) < 02:11:38
+Usage: openhasp-config-manager [OPTIONS] COMMAND [ARGS]...
+
+Options:
+  --version   Show the version and exit.
+  -h, --help  Show this message and exit.
+
+Commands:
+  cmd
+  deploy    Combines the generation and upload of a configuration.
+  generate  Generates the output files for all devices in the given...
+  upload    Uploads the previously generated configuration to their...
+```
+
 ## Run commands
 
 OpenHasp allows you to run commands on a device by issuing MQTT messages.

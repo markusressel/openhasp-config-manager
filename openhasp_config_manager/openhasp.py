@@ -1,3 +1,4 @@
+import json
 from typing import Dict
 
 import requests as requests
@@ -10,7 +11,7 @@ POST = "POST"
 
 class OpenHaspClient:
 
-    def command(self, device: Device, name: str, params: str):
+    def command(self, device: Device, name: str, params: dict):
 
         import paho.mqtt.client as paho
 
@@ -20,14 +21,16 @@ class OpenHaspClient:
         mqtt_user = device.config.mqtt.user
         mqtt_password = device.config.mqtt.password
 
-        topic = f"hasp/{device.config.mqtt.name}/command/{name}"
+        topic = f"hasp/{device.config.mqtt.name}/command"
 
         client = paho.Client(mqtt_client_id)
 
         client.username_pw_set(mqtt_user, mqtt_password)
         client.connect(mqtt_host, mqtt_port)
 
-        data = params
+        json_data = json.dumps(params).strip('"')
+
+        data = " ".join([name, json_data])
         client.publish(topic, data)
 
     def reboot(self, device: Device):
