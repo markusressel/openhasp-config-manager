@@ -56,24 +56,27 @@ class Processor:
 
     def _normalize_jsonl(self, config: Config, original_content: str) -> str:
         parts = self._split_jsonl_objects(original_content)
-        normalized_parts: List[str] = []
+
+        file_object_map = {}
         for part in parts:
             loaded = json.loads(part)
 
-            processed = self._jsonl_object_processor.process(loaded, config)
-
-            object_key = f"p{processed.get('page', '0')}b{processed.get('id', '0')}"
+            object_key = f"p{loaded.get('page', '0')}b{loaded.get('id', '0')}"
 
             if object_key in self._object_map:
                 print(f"WARNING: duplicate object key detected: {object_key}")
 
-            self._object_map[object_key] = processed
+            file_object_map[object_key] = loaded
+            self._object_map[object_key] = loaded
 
+        normalized_objects: List[str] = []
+
+        for key, object in file_object_map.items():
+            processed = self._jsonl_object_processor.process(object, config)
             p = json.dumps(processed, indent=None)
+            normalized_objects.append(p)
 
-            normalized_parts.append(p)
-
-        return "\n".join(normalized_parts)
+        return "\n".join(normalized_objects)
 
     @staticmethod
     def _split_jsonl_objects(original_content: str) -> List[str]:
