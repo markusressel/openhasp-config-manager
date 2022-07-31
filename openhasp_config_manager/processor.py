@@ -2,6 +2,8 @@ import json
 import re
 from typing import List, Dict
 
+from jinja2 import Template
+
 from openhasp_config_manager.model import Config, Component
 
 
@@ -53,8 +55,8 @@ class DeviceProcessor:
 
     def __init__(self, config: Config, jsonl_object_processor: JsonlObjectProcessor):
         self._device_config = config
-        self._file_object_map: Dict[str: dict] = {}
-        self._id_object_map: Dict[str: dict] = {}
+        self._file_object_map: Dict[str, dict] = {}
+        self._id_object_map: Dict[str, dict] = {}
         self._others: List[Component] = []
 
         self._jsonl_object_processor = jsonl_object_processor
@@ -89,7 +91,7 @@ class DeviceProcessor:
 
         objects = self._split_jsonl_objects(component.content)
         for ob in objects:
-            p = self._normalize_jsonl_content(config, component, ob)
+            p = self._normalize_jsonl_object(config, component, ob)
             normalized_objects.append(p)
 
         return "\n".join(normalized_objects)
@@ -117,10 +119,30 @@ class DeviceProcessor:
 
         return result
 
-    def _normalize_jsonl_content(self, config: Config, component: Component, content: str):
-        parsed = json.loads(content)
+    def _normalize_jsonl_object(self, config: Config, component: Component, ob: str):
+        parsed = json.loads(ob)
 
-        # for key, object in file_object_map.items():
+        replacements = self._compute_template_variables()
 
-        processed = self._jsonl_object_processor.process(parsed, config)
+        normalized_object = {}
+        for key, value in parsed.items():
+            if isinstance(value, str):
+                template = Template(value)
+                normalized_object[key] = template.render(replacements)
+            else:
+                normalized_object[key] = value
+
+        processed = self._jsonl_object_processor.process(normalized_object, config)
         return json.dumps(processed, indent=None)
+
+    def _compute_template_variables(self) -> dict:
+        result = {}
+
+        # device specific variables
+        result["device"] = self._device_config.openhasp_config_manager.device
+
+        # object specific variables
+        for key, obj in self._id_object_map.items():
+            result[key] = obj
+
+        return result

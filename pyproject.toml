@@ -35,6 +35,7 @@ dacite = "*"
 click = "*"
 requests = "*"
 paho-mqtt = "*"
+Jinja2 = "*"
 
 [tool.poetry.dev-dependencies]
 pytest = "*"
