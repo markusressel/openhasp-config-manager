@@ -27,85 +27,6 @@ class ConfigManager:
         print(f"Analyzing config files in '{self._cfg_root}'...")
         return self._analyze(self._cfg_root, self._output_root)
 
-    def process(self, devices: List[Device] = None) -> List[Device]:
-        """
-        Process the configuration and generate the corresponding output
-        :return:
-        """
-        if devices is None:
-            devices = self.analyze()
-
-        self._generate_output(devices)
-        return devices
-
-    def _generate_output(self, devices: List[Device]):
-        """
-
-        :param devices:
-        :return:
-        """
-        for device in devices:
-
-            jsonl_processor = JsonlObjectProcessor()
-            device_processor = DeviceProcessor(device.config, jsonl_processor)
-
-            # "fill" the processor with all available data for this device
-            for component in device.components:
-                if component.type == "jsonl":
-                    device_processor.add_jsonl(component)
-                else:
-                    device_processor.add_other(component)
-
-            # let the processor manage each component
-            for component in device.components:
-                output_content = device_processor.normalize(component)
-
-                self._write_output(device, component, output_content)
-
-    def _analyze_device(self, device_cfg_dir_root: Path) -> List[Component]:
-        return self._read_components(device_cfg_dir_root)
-
-    def _read_components(self, path: Path, prefix: str = "") -> List[Component]:
-        result: List[Component] = []
-
-        for suffix in [".jsonl", ".cmd"]:
-
-            for file in path.rglob(f"*{suffix}"):
-                if not file.is_file():
-                    continue
-
-                content = file.read_text()
-
-                name_parts = []
-                if len(prefix) > 0:
-                    name_parts.append(prefix)
-                name_parts = name_parts + list(file.relative_to(path).parts)
-
-                name = "_".join(name_parts)
-                component = Component(
-                    name=name,
-                    type=suffix[1:],
-                    path=file,
-                    content=content,
-                )
-                result.append(component)
-
-        return result
-
-    def _read_config(self, device_path: Path) -> Config | None:
-        config_file = Path(device_path, CONFIG_FILE_NAME)
-        if config_file.exists() and config_file.is_file():
-            content = config_file.read_text()
-            loaded = json.loads(content)
-
-            from dacite import from_dict
-
-            return from_dict(
-                data_class=Config,
-                data=loaded,
-                config=dacite.Config()
-            )
-
     def _analyze(self, cfg_dir_root: Path, output_dir_root: Path) -> List[Device]:
         result: List[Device] = []
 
@@ -138,7 +59,84 @@ class ConfigManager:
 
         return result
 
-    def _write_output(self, device: Device, component: Component, output_content: str):
+    def _analyze_device(self, device_cfg_dir_root: Path) -> List[Component]:
+        return self._read_components(device_cfg_dir_root)
+
+    @staticmethod
+    def _read_components(path: Path, prefix: str = "") -> List[Component]:
+        result: List[Component] = []
+
+        for suffix in [".jsonl", ".cmd"]:
+
+            for file in path.rglob(f"*{suffix}"):
+                if not file.is_file():
+                    continue
+
+                content = file.read_text()
+
+                name_parts = []
+                if len(prefix) > 0:
+                    name_parts.append(prefix)
+                name_parts = name_parts + list(file.relative_to(path).parts)
+
+                name = "_".join(name_parts)
+                component = Component(
+                    name=name,
+                    type=suffix[1:],
+                    path=file,
+                    content=content,
+                )
+                result.append(component)
+
+        return result
+
+    @staticmethod
+    def _read_config(device_path: Path) -> Config | None:
+        config_file = Path(device_path, CONFIG_FILE_NAME)
+        if config_file.exists() and config_file.is_file():
+            content = config_file.read_text()
+            loaded = json.loads(content)
+
+            from dacite import from_dict
+
+            return from_dict(
+                data_class=Config,
+                data=loaded,
+                config=dacite.Config()
+            )
+
+    def process(self, devices: List[Device] = None) -> List[Device]:
+        """
+        Process the configuration and generate the corresponding output
+        :return:
+        """
+        if devices is None:
+            devices = self.analyze()
+
+        self._generate_output(devices)
+        return devices
+
+    def _generate_output(self, devices: List[Device]):
+        for device in devices:
+
+            jsonl_processor = JsonlObjectProcessor()
+            device_processor = DeviceProcessor(device.config, jsonl_processor)
+
+            # "fill" the processor with all available data for this device
+            for component in device.components:
+                if component.type == "jsonl":
+                    device_processor.add_jsonl(component)
+                else:
+                    device_processor.add_other(component)
+
+            # let the processor manage each component
+            for component in device.components:
+                output_content = device_processor.normalize(component)
+
+                self._write_output(device, component, output_content)
+
+    @staticmethod
+    def _write_output(device: Device, component: Component, output_content: str):
         device.output_dir.mkdir(parents=True, exist_ok=True)
 
         component_output_file = Path(
