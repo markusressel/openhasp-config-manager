@@ -73,10 +73,14 @@ class DeviceProcessor:
         self._id_object_map: Dict[str, dict] = {}
         self._others: List[Component] = []
 
+        self._component_tree_changed = True
+        self._template_vars: Dict[str, any] = {}
+
         self._jsonl_object_processor = jsonl_object_processor
 
     def add_other(self, component: Component):
         self._others.append(component)
+        self._component_tree_changed = True
 
     def add_jsonl(self, component: Component):
         parts = self._split_jsonl_objects(component.content)
@@ -93,7 +97,13 @@ class DeviceProcessor:
             file_object_map[object_key] = loaded
             self._id_object_map[object_key] = loaded
 
+        self._component_tree_changed = True
+
     def normalize(self, component: Component) -> str:
+        if self._component_tree_changed:
+            self._component_tree_changed = False
+            self._template_vars = self._compute_template_variables()
+
         if component.type == "jsonl":
             return self._normalize_jsonl(self._device_config, component)
         if component.type == "cmd":
@@ -138,13 +148,11 @@ class DeviceProcessor:
     def _normalize_jsonl_object(self, config: Config, component: Component, ob: str) -> str:
         parsed = json.loads(ob)
 
-        replacements = self._compute_template_variables()
-
         normalized_object = {}
         for key, value in parsed.items():
             if isinstance(value, str):
                 template = Template(value)
-                normalized_object[key] = template.render(replacements)
+                normalized_object[key] = template.render(self._template_vars)
             else:
                 normalized_object[key] = value
 
@@ -152,9 +160,8 @@ class DeviceProcessor:
         return json.dumps(processed, indent=None)
 
     def _normalize_cmd(self, _device_config, component) -> str:
-        replacements = self._compute_template_variables()
         template = Template(component.content)
-        return template.render(replacements)
+        return template.render(self._template_vars)
 
     def _compute_template_variables(self) -> dict:
         result = {}
