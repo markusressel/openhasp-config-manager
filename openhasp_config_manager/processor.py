@@ -2,6 +2,7 @@ import json
 import re
 from typing import List, Dict
 
+import jinja2
 from jinja2 import Template
 
 from openhasp_config_manager.model import Config, Component
@@ -11,6 +12,7 @@ class JsonlObjectProcessor:
     PERCENTAGE_REGEX_PATTERN = re.compile(r"^\d+(\.\d+)?%$")
 
     def process(self, input: Dict, config: Config) -> Dict:
+        result: Dict[str, any] = {}
         for key, value in input.items():
             if isinstance(value, str) and re.match(self.PERCENTAGE_REGEX_PATTERN, value):
                 numeric_value = self._parse_percentage(value)
@@ -29,9 +31,21 @@ class JsonlObjectProcessor:
                 else:
                     total = total_height
 
-                input[key] = self._percentage_of(numeric_value, total)
+                result[key] = self._percentage_of(numeric_value, total)
+            else:
+                result[key] = value
 
-        return input
+        # normalize value types, in case of templates
+        for key, value in result.items():
+            if key in [
+                "page", "id",
+                "x", "y", "w", "h",
+                "align", "text_font", "value_font"
+                                      "min", "max",
+            ] and isinstance(value, str):
+                result[key] = int(value)
+
+        return result
 
     @staticmethod
     def _percentage_of(percentage: float, total: int) -> int:
@@ -82,6 +96,8 @@ class DeviceProcessor:
     def normalize(self, component: Component) -> str:
         if component.type == "jsonl":
             return self._normalize_jsonl(self._device_config, component)
+        if component.type == "cmd":
+            return self._normalize_cmd(self._device_config, component)
         else:
             # no changes necessary
             return component.content
@@ -119,7 +135,7 @@ class DeviceProcessor:
 
         return result
 
-    def _normalize_jsonl_object(self, config: Config, component: Component, ob: str):
+    def _normalize_jsonl_object(self, config: Config, component: Component, ob: str) -> str:
         parsed = json.loads(ob)
 
         replacements = self._compute_template_variables()
@@ -135,6 +151,11 @@ class DeviceProcessor:
         processed = self._jsonl_object_processor.process(normalized_object, config)
         return json.dumps(processed, indent=None)
 
+    def _normalize_cmd(self, _device_config, component) -> str:
+        replacements = self._compute_template_variables()
+        template = Template(component.content)
+        return template.render(replacements)
+
     def _compute_template_variables(self) -> dict:
         result = {}
 
@@ -144,5 +165,50 @@ class DeviceProcessor:
         # object specific variables
         for key, obj in self._id_object_map.items():
             result[key] = obj
+
+        rendered = self._render_dict_recursively(result)
+
+        return rendered
+
+    def _render_dict_recursively(self, input: Dict) -> Dict[str, any]:
+        result = input
+        last_successful_renders: int or None = None
+        changed = True
+        while changed:
+            successful_renders = 0
+            changed = False
+            tmp = {}
+            for key, value in result.items():
+
+                rendered_key = key
+                try:
+                    rendered_key = Template(key).render(result)
+                    changed = changed and rendered_key != key
+                    successful_renders += 1
+                except jinja2.UndefinedError as ex:
+                    changed = True
+
+                rendered_val = value
+                if isinstance(value, str):
+                    try:
+                        rendered_val = Template(value).render(result)
+                        successful_renders += 1
+                    except jinja2.UndefinedError as ex:
+                        changed = True
+                if isinstance(value, dict):
+                    try:
+                        rendered_val = self._render_dict_recursively(value)
+                        successful_renders += 1
+                    except jinja2.UndefinedError as ex:
+                        changed = True
+
+                changed = changed and rendered_val != value
+                tmp[rendered_key] = rendered_val
+
+            result = tmp
+
+            if last_successful_renders is not None and last_successful_renders == successful_renders:
+                raise jinja2.UndefinedError("Unable to progress while rendering")
+            last_successful_renders = successful_renders
 
         return result

@@ -9,6 +9,7 @@ A tool to manage all of your [openHASP](https://github.com/HASwitchPlate/openHAS
 * [x] jsonl preprocessing, which allows for
   * [x] `//` comments within jsonl files
   * [x] line breaks wherever you like
+  * [x] jinja2 templating within object values
 * [x] one click configuration upload to the device
   * [x] automatic diffing to only update changed configuration files
 * [x] execute commands directly from the CLI (still needs a connection to the MQTT broker)
@@ -106,6 +107,36 @@ the file which is not present by default:
     "ssid": "Turris IoT",
     ...
   }
+```
+
+### Preprocessing
+
+openhasp-config-manager runs all configuration files through a preprocessor, which allows us to use
+features the original file format doesn't support, like f.ex. templating.
+
+#### Templating
+
+You can use Jinja2 templates inside of values. You can access each of the objects using the
+`pXbY` syntax established by OpenHASP, where `X` is the `page` of an object and `Y` is its `id`.
+
+You can use the full functionality of Jinja2 like f.ex. math operations, function calls or type conversions.
+
+```yaml
+{
+  "page": 1,
+  "id": 1,
+  "x": 0,
+  "y": 0,
+  ...
+}
+
+{
+  "page": 1,
+  "id": 2,
+  "x": "{{ p1b1.x }}",
+  "y": "{{ p1b1.y + 10 }}",
+  ...
+}
 ```
 
 ## Deployment
