@@ -1,8 +1,7 @@
 import textwrap
-from pathlib import Path
 
-from openhasp_config_manager.model import Device
-from openhasp_config_manager.processor import Processor, JsonlObjectProcessor
+from openhasp_config_manager.model import Component
+from openhasp_config_manager.processor import DeviceProcessor, JsonlObjectProcessor
 from tests import TestBase
 
 
@@ -10,16 +9,9 @@ class ProcessorTest(TestBase):
 
     def test_multiline_object_params(self):
         config = self.default_config
-        device = Device(
-            name="device",
-            path=Path(),
-            config=config,
-            components=[],
-            output_dir=Path(),
-        )
 
         jsonl_object_processor = JsonlObjectProcessor()
-        processor = Processor(jsonl_object_processor)
+        processor = DeviceProcessor(config, jsonl_object_processor)
 
         content = textwrap.dedent("""
            { 
@@ -28,7 +20,14 @@ class ProcessorTest(TestBase):
            }
            """)
 
-        result = processor.process_jsonl(device, content)
+        component = Component(
+            name="component",
+            type="jsonl",
+            path=None,
+            content=content
+        )
+
+        result = processor.normalize(component)
 
         self.assertEqual(
             result,
@@ -39,16 +38,9 @@ class ProcessorTest(TestBase):
 
     def test_ignore_line_comment_between_object_params(self):
         config = self.default_config
-        device = Device(
-            name="device",
-            path=Path(),
-            config=config,
-            components=[],
-            output_dir=Path(),
-        )
 
         jsonl_object_processor = JsonlObjectProcessor()
-        processor = Processor(jsonl_object_processor)
+        processor = DeviceProcessor(config, jsonl_object_processor)
 
         content = textwrap.dedent("""
            { 
@@ -58,7 +50,14 @@ class ProcessorTest(TestBase):
            }
            """)
 
-        result = processor.process_jsonl(device, content)
+        component = Component(
+            name="component",
+            type="jsonl",
+            path=None,
+            content=content
+        )
+
+        result = processor.normalize(component)
 
         self.assertEqual(
             result,
@@ -69,16 +68,9 @@ class ProcessorTest(TestBase):
 
     def test_ignore_line_comment_between_objects(self):
         config = self.default_config
-        device = Device(
-            name="device",
-            path=Path(),
-            config=config,
-            components=[],
-            output_dir=Path(),
-        )
 
         jsonl_object_processor = JsonlObjectProcessor()
-        processor = Processor(jsonl_object_processor)
+        processor = DeviceProcessor(config, jsonl_object_processor)
 
         content = textwrap.dedent("""
            { "x": 0, "y": 0 }
@@ -86,7 +78,14 @@ class ProcessorTest(TestBase):
            { "a": 0, "b": 0 }
            """)
 
-        result = processor.process_jsonl(device, content)
+        component = Component(
+            name="component",
+            type="jsonl",
+            path=None,
+            content=content
+        )
+
+        result = processor.normalize(component)
 
         self.assertEqual(
             result,
@@ -98,23 +97,23 @@ class ProcessorTest(TestBase):
 
     def test_multiple_objects(self):
         config = self.default_config
-        device = Device(
-            name="device",
-            path=Path(),
-            config=config,
-            components=[],
-            output_dir=Path(),
-        )
 
         jsonl_object_processor = JsonlObjectProcessor()
-        processor = Processor(jsonl_object_processor)
+        processor = DeviceProcessor(config, jsonl_object_processor)
 
         content = textwrap.dedent("""
-        { "x": 0, "y": 0 }
-        { "a": 0, "b": 0 }
-        """)
+            { "x": 0, "y": 0 }
+            { "a": 0, "b": 0 }
+            """)
 
-        result = processor.process_jsonl(device, content)
+        component = Component(
+            name="component",
+            type="jsonl",
+            path=None,
+            content=content
+        )
+
+        result = processor.normalize(component)
 
         self.assertEqual(
             result,

@@ -5,7 +5,7 @@ from typing import List
 import dacite
 
 from openhasp_config_manager.model import Component, Config, Device
-from openhasp_config_manager.processor import Processor, JsonlObjectProcessor
+from openhasp_config_manager.processor import DeviceProcessor, JsonlObjectProcessor
 
 COMMON_FOLDER_NAME = "common"
 DEVICES_FOLDER_NAME = "devices"
@@ -18,9 +18,6 @@ class ConfigManager:
     def __init__(self, cfg_root: Path, output_root: Path):
         self._cfg_root = cfg_root
         self._output_root = output_root
-
-        jsonl_processor = JsonlObjectProcessor()
-        self._device_processor = Processor(jsonl_processor)
 
     def analyze(self) -> List[Device]:
         """
@@ -38,9 +35,32 @@ class ConfigManager:
         if devices is None:
             devices = self.analyze()
 
-        for device in devices:
-            self._generate_output(device)
+        self._generate_output(devices)
         return devices
+
+    def _generate_output(self, devices: List[Device]):
+        """
+
+        :param devices:
+        :return:
+        """
+        for device in devices:
+
+            jsonl_processor = JsonlObjectProcessor()
+            device_processor = DeviceProcessor(device.config, jsonl_processor)
+
+            # "fill" the processor with all available data for this device
+            for component in device.components:
+                if component.type == "jsonl":
+                    device_processor.add_jsonl(component)
+                else:
+                    device_processor.add_other(component)
+
+            # let the processor manage each component
+            for component in device.components:
+                output_content = device_processor.normalize(component)
+
+                self._write_output(device, component, output_content)
 
     def _analyze_device(self, device_cfg_dir_root: Path) -> List[Component]:
         return self._read_components(device_cfg_dir_root)
@@ -54,13 +74,20 @@ class ConfigManager:
                 if not file.is_file():
                     continue
 
+                content = file.read_text()
+
                 name_parts = []
                 if len(prefix) > 0:
                     name_parts.append(prefix)
                 name_parts = name_parts + list(file.relative_to(path).parts)
 
                 name = "_".join(name_parts)
-                component = Component(name=name, path=file)
+                component = Component(
+                    name=name,
+                    type=suffix[1:],
+                    path=file,
+                    content=content,
+                )
                 result.append(component)
 
         return result
@@ -94,10 +121,10 @@ class ConfigManager:
             if not device_path.is_dir():
                 continue
 
-            device_components = self._analyze_device(device_path)
+            device_output_dir = Path(output_dir_root, device_path.name)
             config = self._read_config(device_path)
 
-            device_output_dir = Path(output_dir_root, device_path.name)
+            device_components = self._analyze_device(device_path)
 
             device = Device(
                 path=device_path,
@@ -111,27 +138,12 @@ class ConfigManager:
 
         return result
 
-    def _generate_component_output(self, device: Device, component: Component, component_output_file: Path):
-        try:
-            original_content = component.path.read_text()
-            output_content = original_content
-            if "jsonl" in component.path.suffix:
-                output_content = self._device_processor.process_jsonl(device, original_content)
-            component_output_file.write_text(output_content)
-        except Exception as ex:
-            raise Exception(f"Error normalizing file '{component.path}': {ex}")
-
-    def _generate_output(self, device: Device):
-
+    def _write_output(self, device: Device, component: Component, output_content: str):
         device.output_dir.mkdir(parents=True, exist_ok=True)
 
-        # TODO: keep track of which files were generated and make sure we don't
-        #  generate the same file twice
+        component_output_file = Path(
+            device.output_dir,
+            component.name
+        )
 
-        for component in device.components:
-            component_output_file = Path(
-                device.output_dir,
-                component.name
-            )
-
-            self._generate_component_output(device, component, component_output_file)
+        component_output_file.write_text(output_content)

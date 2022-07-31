@@ -2,7 +2,7 @@ import json
 import re
 from typing import List, Dict
 
-from openhasp_config_manager.model import Config, Device
+from openhasp_config_manager.model import Config, Component
 
 
 class JsonlObjectProcessor:
@@ -45,17 +45,25 @@ class JsonlObjectProcessor:
         return float(str(value).replace('%', ''))
 
 
-class Processor:
+class DeviceProcessor:
+    """
+    A device specific processor, used to transform any templates
+    present within the configuration files.
+    """
 
-    def __init__(self, jsonl_object_processor: JsonlObjectProcessor):
-        self._object_map: Dict[str: dict] = {}
+    def __init__(self, config: Config, jsonl_object_processor: JsonlObjectProcessor):
+        self._device_config = config
+        self._file_object_map: Dict[str: dict] = {}
+        self._id_object_map: Dict[str: dict] = {}
+        self._others: List[Component] = []
+
         self._jsonl_object_processor = jsonl_object_processor
 
-    def process_jsonl(self, device: Device, original_content: str) -> str:
-        return self._normalize_jsonl(device.config, original_content)
+    def add_other(self, component: Component):
+        self._others.append(component)
 
-    def _normalize_jsonl(self, config: Config, original_content: str) -> str:
-        parts = self._split_jsonl_objects(original_content)
+    def add_jsonl(self, component: Component):
+        parts = self._split_jsonl_objects(component.content)
 
         file_object_map = {}
         for part in parts:
@@ -63,17 +71,25 @@ class Processor:
 
             object_key = f"p{loaded.get('page', '0')}b{loaded.get('id', '0')}"
 
-            if object_key in self._object_map:
+            if object_key in self._id_object_map:
                 print(f"WARNING: duplicate object key detected: {object_key}")
 
             file_object_map[object_key] = loaded
-            self._object_map[object_key] = loaded
+            self._id_object_map[object_key] = loaded
 
+    def normalize(self, component: Component) -> str:
+        if component.type == "jsonl":
+            return self._normalize_jsonl(self._device_config, component)
+        else:
+            # no changes necessary
+            return component.content
+
+    def _normalize_jsonl(self, config: Config, component: Component) -> str:
         normalized_objects: List[str] = []
 
-        for key, object in file_object_map.items():
-            processed = self._jsonl_object_processor.process(object, config)
-            p = json.dumps(processed, indent=None)
+        objects = self._split_jsonl_objects(component.content)
+        for ob in objects:
+            p = self._normalize_jsonl_content(config, component, ob)
             normalized_objects.append(p)
 
         return "\n".join(normalized_objects)
@@ -100,3 +116,11 @@ class Processor:
             result.append(part)
 
         return result
+
+    def _normalize_jsonl_content(self, config: Config, component: Component, content: str):
+        parsed = json.loads(content)
+
+        # for key, object in file_object_map.items():
+
+        processed = self._jsonl_object_processor.process(parsed, config)
+        return json.dumps(processed, indent=None)

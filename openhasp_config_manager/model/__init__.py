@@ -77,7 +77,9 @@ class Config:
 @dataclass
 class Component:
     name: str
+    type: str
     path: Path
+    content: str
 
 
 @dataclass
