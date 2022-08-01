@@ -35,7 +35,12 @@ class OpenHaspClient:
 
     def reboot(self, device: Device):
         base_url = self._compute_base_url(device)
-        self._do_request(GET, base_url + "reboot")
+        username = device.config.http.user
+        password = device.config.http.password
+        self._do_request(
+            GET, base_url + "reboot",
+            username=username, password=password
+        )
 
     def set_hasp_config(self, device: Device, config: HaspConfig):
         base_url = self._compute_base_url(device)
@@ -54,9 +59,13 @@ class OpenHaspClient:
         # ignore keys with None value
         data = {k: v for k, v in data.items() if v is not None}
 
+        username = device.config.http.user
+        password = device.config.http.password
+
         self._do_request(
             POST, base_url + "config",
-            data=data
+            data=data,
+            username=username, password=password
         )
 
     def set_http_config(self, device: Device, config: HttpConfig):
@@ -71,9 +80,13 @@ class OpenHaspClient:
         # ignore keys with None value
         data = {k: v for k, v in data.items() if v is not None}
 
+        username = device.config.http.user
+        password = device.config.http.password
+
         self._do_request(
             POST, base_url + "config",
-            data=data
+            data=data,
+            username=username, password=password
         )
 
     def set_mqtt_config(self, device: Device, config: MqttConfig):
@@ -92,9 +105,13 @@ class OpenHaspClient:
         # ignore keys with None value
         data = {k: v for k, v in data.items() if v is not None}
 
+        username = device.config.http.user
+        password = device.config.http.password
+
         self._do_request(
             POST, base_url + "config",
-            data=data
+            data=data,
+            username=username, password=password
         )
 
     def set_gui_config(self, device: Device, config: GuiConfig):
@@ -112,9 +129,13 @@ class OpenHaspClient:
         # ignore keys with None value
         data = {k: v for k, v in data.items() if v is not None}
 
+        username = device.config.http.user
+        password = device.config.http.password
+
         self._do_request(
             POST, base_url + "config",
-            data=data
+            data=data,
+            username=username, password=password
         )
 
     def upload_files(self, device: Device, files: Dict[str, str]):
