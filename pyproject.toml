@@ -40,5 +40,10 @@ Jinja2 = "*"
 [tool.poetry.dev-dependencies]
 pytest = "*"
 
+[tool.pytest.ini_options]
+testpaths = [
+    "tests",
+]
+
 [tool.poetry.scripts]
 openhasp-config-manager = 'openhasp_config_manager.cli:cli'
