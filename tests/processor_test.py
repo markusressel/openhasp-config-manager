@@ -158,7 +158,6 @@ class ProcessorTest(TestBase):
         )
 
         processor.add_jsonl(component)
-
         result = processor.normalize(component)
 
         self.assertEqual(
@@ -166,6 +165,34 @@ class ProcessorTest(TestBase):
                {"id": 0, "page": 1, "x": 0, "y": 0}
                {"id": 1, "page": 1, "x": 0, "y": 0}
                {"id": 2, "page": 1, "x": 0, "y": 0}
+               """).strip(),
+            result
+        )
+
+    def test_config_value_template(self):
+        config = self.default_config
+
+        jsonl_object_processor = JsonlObjectProcessor()
+        processor = DeviceProcessor(config, jsonl_object_processor)
+
+        content = textwrap.dedent("""
+           {
+             "w": "{{ device.screen.width }}"
+           }
+           """)
+
+        component = Component(
+            name="component",
+            type="jsonl",
+            path=None,
+            content=content
+        )
+
+        result = processor.normalize(component)
+
+        self.assertEqual(
+            textwrap.dedent(f"""
+               {{"w": {config.openhasp_config_manager.device.screen.width}}}
                """).strip(),
             result
         )
