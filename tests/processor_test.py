@@ -122,3 +122,50 @@ class ProcessorTest(TestBase):
             {"a": 0, "b": 0}
             """).strip()
         )
+
+    def test_id_template(self):
+        config = self.default_config
+
+        jsonl_object_processor = JsonlObjectProcessor()
+        processor = DeviceProcessor(config, jsonl_object_processor)
+
+        content = textwrap.dedent("""
+           {
+             "id": "{{ p1b1.id - 1 }}",
+             "page": "{{ p1b1.page }}",
+             "x": 0,
+             "y": 0 
+           }
+           { 
+             "id": 1,
+             "page": 1,
+             "x": 0,
+             "y": 0 
+           }
+           {
+             "id": "{{ p1b1.id + 1 }}",
+             "page": "{{ p1b1.page }}",
+             "x": 0,
+             "y": 0 
+           }
+           """)
+
+        component = Component(
+            name="component",
+            type="jsonl",
+            path=None,
+            content=content
+        )
+
+        processor.add_jsonl(component)
+
+        result = processor.normalize(component)
+
+        self.assertEqual(
+            textwrap.dedent("""
+               {"id": 0, "page": 1, "x": 0, "y": 0}
+               {"id": 1, "page": 1, "x": 0, "y": 0}
+               {"id": 2, "page": 1, "x": 0, "y": 0}
+               """).strip(),
+            result
+        )
