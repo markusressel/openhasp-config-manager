@@ -12,12 +12,13 @@ class ConfigUploader:
         self._output_root = output_root
         self._cache_dir = Path(self._output_root, ".cache")
 
-    def upload(self, devices: List[Device]):
-        for device in devices:
-            print(f"Uploading files to device '{device.name}'...")
-            self._upload_files(device)
+    def upload(self, device: Device):
+        self._upload_files(device)
+        self._update_config(device)
 
-            self._update_config(device)
+    def upload_all(self, devices: List[Device]):
+        for device in devices:
+            self.upload(device)
 
     def _upload_files(self, device: Device):
         file_map: Dict[str, bool] = {}

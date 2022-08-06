@@ -94,7 +94,12 @@ def _upload(config_dir: Path, output_dir: Path, device: str):
         devices = list(filter(lambda x: x.name == device, devices))
 
     uploader = ConfigUploader(output_dir)
-    uploader.upload(devices)
+    for device in devices:
+        try:
+            print(f"Uploading files to device '{device.name}'...")
+            uploader.upload(device)
+        except Exception as ex:
+            print(f"Error uploading files to '{device.name}': {ex}")
 
 
 @cli.command(name="deploy")
