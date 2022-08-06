@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Dict
 
 import yaml
+from yaml import Loader
 
 from openhasp_config_manager.const import COMMON_FOLDER_NAME, DEVICES_FOLDER_NAME
 
@@ -11,10 +12,10 @@ class VariableManager:
     device_vars = {}
 
     def __init__(self, cfg_root: Path):
-        self.cfg_root = cfg_root
+        self.cfg_root = Path(cfg_root)
         self._read()
 
-    def get_vars(self, device: str) -> Dict:
+    def get_vars(self, device: str | None) -> Dict:
         if device is not None:
             return self.device_vars.get(device, {})
         else:
@@ -45,4 +46,4 @@ class VariableManager:
     @staticmethod
     def _load_var_file(file: Path):
         content = file.read_text()
-        return yaml.load(content)
+        return yaml.load(content, Loader=Loader)

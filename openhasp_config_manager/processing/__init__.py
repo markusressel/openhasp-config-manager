@@ -5,8 +5,9 @@ from typing import List, Dict
 import jinja2
 from jinja2 import Template
 
-from openhasp_config_manager.model import Config, Component
+from openhasp_config_manager.model import Config, Component, Device
 from openhasp_config_manager.processing.jsonl import JsonlObjectProcessor
+from openhasp_config_manager.processing.variables import VariableManager
 
 
 class DeviceProcessor:
@@ -15,9 +16,9 @@ class DeviceProcessor:
     present within the configuration files.
     """
 
-    def __init__(self, config: Config, jsonl_object_processor: JsonlObjectProcessor):
-        self._device_config = config
-        self._file_object_map: Dict[str, dict] = {}
+    def __init__(self, device: Device, jsonl_object_processor: JsonlObjectProcessor, variable_manager: VariableManager):
+        self._device = device
+
         self._id_object_map: Dict[str, dict] = {}
         self._others: List[Component] = []
 
@@ -25,6 +26,7 @@ class DeviceProcessor:
         self._template_vars: Dict[str, any] = {}
 
         self._jsonl_object_processor = jsonl_object_processor
+        self._variable_manager = variable_manager
 
     def add_other(self, component: Component):
         self._others.append(component)
@@ -53,9 +55,9 @@ class DeviceProcessor:
             self._template_vars = self._compute_template_variables()
 
         if component.type == "jsonl":
-            return self._normalize_jsonl(self._device_config, component)
+            return self._normalize_jsonl(self._device.config, component)
         if component.type == "cmd":
-            return self._normalize_cmd(self._device_config, component)
+            return self._normalize_cmd(self._device.config, component)
         else:
             # no changes necessary
             return component.content
@@ -115,13 +117,16 @@ class DeviceProcessor:
         result = {}
 
         # device specific variables
-        result["device"] = self._device_config.openhasp_config_manager.device
+        result["device"] = self._device.config.openhasp_config_manager.device
 
         # object specific variables
         for key, obj in self._id_object_map.items():
             result[key] = obj
 
         rendered = self._render_dict_recursively(result)
+
+        rendered |= self._variable_manager.get_vars(self._device.name)
+        rendered |= self._variable_manager.get_vars(None)
 
         return rendered
 

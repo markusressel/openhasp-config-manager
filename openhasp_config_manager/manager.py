@@ -123,7 +123,7 @@ class ConfigManager:
         for device in devices:
 
             jsonl_processor = JsonlObjectProcessor()
-            device_processor = DeviceProcessor(device.config, jsonl_processor)
+            device_processor = DeviceProcessor(device, jsonl_processor, self._variable_manager)
 
             jsonl_validator = JsonlObjectValidator()
             device_validator = DeviceValidator(device.config, jsonl_validator)
