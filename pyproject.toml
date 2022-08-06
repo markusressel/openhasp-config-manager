@@ -37,6 +37,7 @@ requests = "*"
 paho-mqtt = "*"
 Jinja2 = "*"
 py-range-parse = "*"
+pyyaml = "*"
 
 [tool.poetry.dev-dependencies]
 pytest = "*"

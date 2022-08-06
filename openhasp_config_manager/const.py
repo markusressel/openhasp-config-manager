@@ -1,0 +1,2 @@
+COMMON_FOLDER_NAME = "common"
+DEVICES_FOLDER_NAME = "devices"
