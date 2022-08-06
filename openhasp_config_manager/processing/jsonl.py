@@ -36,10 +36,10 @@ class JsonlObjectProcessor:
             if key in [
                 "page", "id",
                 "x", "y", "w", "h",
-                "align", "text_font", "value_font"
-                                      "min", "max",
+                "text_font", "value_font",
+                "min", "max",
             ] and isinstance(value, str):
-                result[key] = int(value)
+                result[key] = int(float(value))
 
         return result
 

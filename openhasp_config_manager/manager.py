@@ -141,6 +141,7 @@ class ConfigManager:
                     device_validator.validate(component, output_content)
                 except Exception as ex:
                     print(f"Validation for {component.path} failed: {ex}")
+                    raise ex
 
                 self._write_output(device, component, output_content)
 
