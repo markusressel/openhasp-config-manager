@@ -1,7 +1,8 @@
 import textwrap
 
 from openhasp_config_manager.model import Component
-from openhasp_config_manager.processor import DeviceProcessor, JsonlObjectProcessor
+from openhasp_config_manager.processing import DeviceProcessor
+from openhasp_config_manager.processing.jsonl import JsonlObjectProcessor
 from tests import TestBase
 
 

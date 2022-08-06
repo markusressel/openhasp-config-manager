@@ -5,7 +5,9 @@ from typing import List
 import dacite
 
 from openhasp_config_manager.model import Component, Config, Device
-from openhasp_config_manager.processor import DeviceProcessor, JsonlObjectProcessor
+from openhasp_config_manager.processing import DeviceProcessor
+from openhasp_config_manager.processing.jsonl import JsonlObjectProcessor
+from openhasp_config_manager.validation import DeviceValidator, JsonlObjectValidator
 
 COMMON_FOLDER_NAME = "common"
 DEVICES_FOLDER_NAME = "devices"
@@ -122,6 +124,9 @@ class ConfigManager:
             jsonl_processor = JsonlObjectProcessor()
             device_processor = DeviceProcessor(device.config, jsonl_processor)
 
+            jsonl_validator = JsonlObjectValidator()
+            device_validator = DeviceValidator(device.config, jsonl_validator)
+
             # "fill" the processor with all available data for this device
             for component in device.components:
                 if component.type == "jsonl":
@@ -132,6 +137,10 @@ class ConfigManager:
             # let the processor manage each component
             for component in device.components:
                 output_content = device_processor.normalize(component)
+                try:
+                    device_validator.validate(component, output_content)
+                except Exception as ex:
+                    print(f"Validation for {component.path} failed: {ex}")
 
                 self._write_output(device, component, output_content)
 
