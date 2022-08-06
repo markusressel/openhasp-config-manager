@@ -141,6 +141,76 @@ You can use the full functionality of Jinja2 like f.ex. math operations, functio
 }
 ```
 
+#### Variables
+
+Besides accessing other objects, you can also define custom variables yourself, which can then
+be used inside of templates.
+
+##### Global
+
+Global variables can be specified by creating `*.yaml` files inside of the `common` folder.
+
+Example:
+
+`common/global.vars.yaml`
+
+```yaml
+about_page_title: "About"
+```
+
+`common/about_page.jsonl`
+
+```json lines
+{
+  "page": 9,
+  "id": 1,
+  ...
+  "title": "{{ about_page_title }}",
+  ...
+}
+```
+
+##### Device specific
+
+Device specific variables can be specified by creating `*.yaml` files inside any of the sub-folders
+of the `device` folder.
+
+> **Note**
+>
+> Device specific variables will override global variables, given the same name.
+
+Example:
+
+`device/my_device/device.vars.yaml`
+
+```yaml
+page_title: "My Device"
+```
+
+`device/my_device/some_folder/some_page.jsonl`
+
+```json lines
+{
+  "page": 1,
+  "id": 1,
+  ...
+  "title": "{{ page_title }}",
+  ...
+}
+```
+
+`device/my_device/some_other_folder/some_page.jsonl`
+
+```json lines
+{
+  "page": 2,
+  "id": 1,
+  ...
+  "title": "{{ page_title }}",
+  ...
+}
+```
+
 ## Deployment
 
 To deploy your configurations to the already connected OpenHASP devices, simply use the
