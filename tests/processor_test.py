@@ -6,7 +6,7 @@ from openhasp_config_manager.processing.jsonl import JsonlObjectProcessor
 from tests import TestBase
 
 
-class ProcessorTest(TestBase):
+class TestProcessor(TestBase):
 
     def test_multiline_object_params(self):
         device = Device(
@@ -37,12 +37,9 @@ class ProcessorTest(TestBase):
 
         result = processor.normalize(component)
 
-        self.assertEqual(
-            result,
-            textwrap.dedent("""
+        assert result == textwrap.dedent("""
                {"x": 0, "y": 0}
                """).strip()
-        )
 
     def test_ignore_line_comment_between_object_params(self):
         device = Device(
@@ -74,12 +71,9 @@ class ProcessorTest(TestBase):
 
         result = processor.normalize(component)
 
-        self.assertEqual(
-            result,
-            textwrap.dedent("""
+        assert result == textwrap.dedent("""
                {"x": 0, "y": 0}
                """).strip()
-        )
 
     def test_ignore_line_comment_between_objects(self):
         device = Device(
@@ -109,13 +103,10 @@ class ProcessorTest(TestBase):
 
         result = processor.normalize(component)
 
-        self.assertEqual(
-            result,
-            textwrap.dedent("""
+        assert result == textwrap.dedent("""
                {"x": 0, "y": 0}
                {"a": 0, "b": 0}
                """).strip()
-        )
 
     def test_multiple_objects(self):
         device = Device(
@@ -144,13 +135,10 @@ class ProcessorTest(TestBase):
 
         result = processor.normalize(component)
 
-        self.assertEqual(
-            result,
-            textwrap.dedent("""
+        assert result == textwrap.dedent("""
             {"x": 0, "y": 0}
             {"a": 0, "b": 0}
             """).strip()
-        )
 
     def test_id_template(self):
         device = Device(
@@ -196,14 +184,11 @@ class ProcessorTest(TestBase):
         processor.add_jsonl(component)
         result = processor.normalize(component)
 
-        self.assertEqual(
-            textwrap.dedent("""
+        assert result == textwrap.dedent("""
                {"id": 0, "page": 1, "x": 0, "y": 0}
                {"id": 1, "page": 1, "x": 0, "y": 0}
                {"id": 2, "page": 1, "x": 0, "y": 0}
-               """).strip(),
-            result
-        )
+               """).strip()
 
     def test_config_value_template(self):
         device = Device(
@@ -233,9 +218,6 @@ class ProcessorTest(TestBase):
 
         result = processor.normalize(component)
 
-        self.assertEqual(
-            textwrap.dedent(f"""
+        assert result == textwrap.dedent(f"""
                {{"w": {device.config.openhasp_config_manager.device.screen.width}}}
-               """).strip(),
-            result
-        )
+               """).strip()
