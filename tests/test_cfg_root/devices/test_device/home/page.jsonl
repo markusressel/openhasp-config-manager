@@ -39,7 +39,7 @@
   "y": 5,
   "h": 50,
   "w": 50,
-  "text": "{{ global_var }}",
+  "text": "{{ global.var }}",
   "enabled": true,
   "hidden": false
 }
