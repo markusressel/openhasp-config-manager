@@ -33,8 +33,11 @@ class VariableManager:
             if not device_dir.is_dir():
                 continue
 
-            device_var_files = device_dir.rglob(f"{COMMON_FOLDER_NAME}/*.yaml")
+            device_var_files = device_dir.rglob(f"*.yaml")
             for file in device_var_files:
+                if not file.is_file():
+                    continue
+
                 data = self._load_var_file(file)
 
                 device_name = file.parent.name

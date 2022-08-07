@@ -1,3 +1,6 @@
+import tempfile
+from pathlib import Path
+
 from openhasp_config_manager.manager import ConfigManager
 from tests import TestBase
 
@@ -20,3 +23,19 @@ class ConfigManagerTest(TestBase):
                 self.assertTrue(line.endswith("}"))
 
         self.assertGreater(file_count, 0)
+
+    def test_global_variable(self):
+        # GIVEN
+        with tempfile.TemporaryDirectory() as tmp_path:
+            manager = ConfigManager(self.cfg_root, tmp_path)
+            devices = manager.analyze()
+
+            # WHEN
+            manager.process(devices)
+
+            # THEN
+            home_page_file = Path(tmp_path, "test_device", "home_page.jsonl")
+            content = home_page_file.read_text()
+            self.assertIn("global_var_value", content)
+            self.assertNotIn("global_value", content)
+            self.assertIn("test_device_value", content)

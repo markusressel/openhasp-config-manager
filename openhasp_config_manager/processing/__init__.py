@@ -125,8 +125,8 @@ class DeviceProcessor:
 
         rendered = self._render_dict_recursively(result)
 
-        rendered |= self._variable_manager.get_vars(self._device.name)
         rendered |= self._variable_manager.get_vars(None)
+        rendered |= self._variable_manager.get_vars(self._device.name)
 
         return rendered
 
