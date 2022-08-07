@@ -3,7 +3,7 @@ name = "openhasp-config-manager"
 version = "0.0.1"
 description = "A tool to manage all of your openHASP device configs in a centralized place."
 
-license = "GPLv3+"
+license = "AGPL-3.0-or-later"
 
 authors = [
     "Markus Ressel <mail@markusressel.de>",
