@@ -160,7 +160,7 @@ def _deploy(config_dir: Path, output_dir: Path, device: str):
               help='Command payload.')
 def c_cmd(config_dir: Path, device: str, command: str, payload: str):
     """
-    Run a command on a device
+    Sends a command request to a device.
     """
     _cmd(config_dir, device, command, payload)
 

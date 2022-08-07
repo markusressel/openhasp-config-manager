@@ -226,7 +226,7 @@ Options:
   -h, --help  Show this message and exit.
 
 Commands:
-  cmd
+  cmd       Sends a command request to a device.
   deploy    Combines the generation and upload of a configuration.
   generate  Generates the output files for all devices in the given...
   upload    Uploads the previously generated configuration to their...
