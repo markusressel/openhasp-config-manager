@@ -49,7 +49,7 @@ class ConfigUploader:
         Delete files from the device, which are not present in the currently generated output
         :param device: the target device
         """
-        file_names = []
+        file_names = ["config.json"]
         for file in device.output_dir.iterdir():
             file_names.append(file.name)
 

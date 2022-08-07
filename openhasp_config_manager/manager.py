@@ -46,7 +46,11 @@ class ConfigManager:
                 continue
 
             device_output_dir = Path(output_dir_root, device_path.name)
-            config = self._read_config(device_path)
+            try:
+                config = self._read_config(device_path)
+            except Exception as ex:
+                print(f"Error reading config '{device_path}': {ex}")
+                raise ex
 
             device_components = self._analyze_device(device_path)
 
