@@ -155,7 +155,8 @@ Example:
 `common/global.vars.yaml`
 
 ```yaml
-about_page_title: "About"
+about:
+  page_title: "About"
 ```
 
 `common/about_page.jsonl`
@@ -165,7 +166,7 @@ about_page_title: "About"
   "page": 9,
   "id": 1,
   ...
-  "title": "{{ about_page_title }}",
+  "title": "{{ about.page_title }}",
   ...
 }
 ```
