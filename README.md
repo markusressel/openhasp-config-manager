@@ -84,15 +84,18 @@ openhasp-configs
 
 ### config.json
 
-openhasp-config-manager makes use of the `config.json` on your plate. Since the official
-API doesn't allow uploading the full file, so only some changes are currently supported.
+openhasp-config-manager makes use of the `config.json` on your plate. It can use information 
+to detect things like screen orientation, and also allows you to deploy config changes to your
+plate when you make changes in the config.json file. Since [the official API does not support
+uploading the full file](https://github.com/HASwitchPlate/openHASP/issues/363), only settings 
+which can also be set through the web ui on the plate itself are currently supported.
 
 To retrieve the initial version of the `config.json` file you can use the
-built-in File Browser integrated into the webserver of your OpenHASP plate.
+built-in file browser integrated into the webserver of your OpenHASP plate.
 
 The official `config.json` file doesn't provide enough info for openhasp-config-manager
-to enable all of its features though. To fix that OCM looks for an additional section within
-the file which is not present by default:
+to enable all of its features though. To fix that openhasp-config-manager looks for an 
+additional section within the file which is not present by default:
 
 ```json
 {
@@ -110,6 +113,9 @@ the file which is not present by default:
     ...
   }
 ```
+
+Simply add this section to the `config.json` after you have retrieved it from
+the plate.
 
 ### Preprocessing
 
