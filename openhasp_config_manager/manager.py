@@ -1,4 +1,5 @@
 import json
+import shutil
 from pathlib import Path
 from typing import List
 
@@ -178,6 +179,8 @@ class ConfigManager:
     def _generate_output(self, devices: List[Device]):
         for device in devices:
 
+            self._clear_output(device)
+
             jsonl_processor = JsonlObjectProcessor()
             device_processor = DeviceProcessor(device, jsonl_processor, self._variable_manager)
 
@@ -212,3 +215,8 @@ class ConfigManager:
         )
 
         component_output_file.write_text(output_content)
+
+    @staticmethod
+    def _clear_output(device: Device):
+        if device.output_dir.exists():
+            shutil.rmtree(device.output_dir)

@@ -40,7 +40,7 @@ class ConfigUploader:
                     checksum_file.parent.mkdir(parents=True, exist_ok=True)
                     checksum_file.write_text(new_checksum)
                 except Exception as ex:
-                    print(f"Error uploading file '{file.name}': {ex}")
+                    print(f"Error uploading file '{file.name}' to '{device.name}': {ex}")
             else:
                 print(f"Skipping {file} because it hasn't changed.")
 
