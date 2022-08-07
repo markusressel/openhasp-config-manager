@@ -7,9 +7,52 @@ from openhasp_config_manager.model import Device, MqttConfig, HttpConfig, GuiCon
 
 GET = "GET"
 POST = "POST"
+DELETE = "DELETE"
 
 
 class OpenHaspClient:
+
+    def get_files(self, device: Device) -> List[str]:
+        """
+        Retrieve a list of all file on the device
+        :param device: the device to query
+        :return: a list of all files on the device
+        """
+        base_url = self._compute_base_url(device)
+
+        username = device.config.http.user
+        password = device.config.http.password
+
+        response = self._do_request(
+            GET,
+            base_url + "list?dir=/",
+            username=username, password=password
+        )
+        response_data = json.loads(response.decode('utf-8'))
+
+        files = list(filter(lambda x: x["type"] == "file", response_data))
+        file_names = list(map(lambda x: x["name"], files))
+        return file_names
+
+    def delete_file(self, device: Device, file_name: str):
+        """
+        Delete a file on the device
+        :param device: the target device
+        :param file_name: the name of the file
+        """
+        base_url = self._compute_base_url(device)
+
+        username = device.config.http.user
+        password = device.config.http.password
+
+        self._do_request(
+            DELETE,
+            base_url + "edit",
+            data={
+                "path": "/" + file_name
+            },
+            username=username, password=password
+        )
 
     def command(self, device: Device, name: str, params: dict):
         """

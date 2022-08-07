@@ -5,6 +5,7 @@ import click
 PARAM_CFG_DIR = "cfg_dir"
 PARAM_OUTPUT_DIR = "output_dir"
 PARAM_DEVICE = "device"
+PARAM_PURGE = "purge"
 PARAM_CMD = "cmd"
 PARAM_PAYLOAD = "payload"
 
@@ -14,6 +15,7 @@ CMD_OPTION_NAMES = {
     PARAM_DEVICE: ["--device", "-d"],
     PARAM_CMD: ["--command", "-C"],
     PARAM_PAYLOAD: ["--payload", "-p"],
+    PARAM_PURGE: ["--purge", "-P"]
 }
 
 CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
@@ -76,14 +78,16 @@ def _generate(config_dir: Path, output_dir: Path, device: str):
               help='Root directory of where the generated output files from the "generate" command are located.')
 @click.option(*get_option_names(PARAM_DEVICE), required=False, default=None,
               help='Only upload the generated files for the specified device.')
-def c_upload(config_dir: Path, output_dir: Path, device: str):
+@click.option(*get_option_names(PARAM_PURGE), required=False, default=False,
+              help='Whether to remove files from the device which are not part of the generated output.')
+def c_upload(config_dir: Path, output_dir: Path, device: str, purge: bool):
     """
     Uploads the previously generated configuration to their corresponding devices.
     """
-    _upload(config_dir, output_dir, device)
+    _upload(config_dir, output_dir, device, purge)
 
 
-def _upload(config_dir: Path, output_dir: Path, device: str):
+def _upload(config_dir: Path, output_dir: Path, device: str, purge: bool):
     from openhasp_config_manager.manager import ConfigManager
     from openhasp_config_manager.uploader import ConfigUploader
 
@@ -97,7 +101,7 @@ def _upload(config_dir: Path, output_dir: Path, device: str):
     for device in devices:
         try:
             print(f"Uploading files to device '{device.name}'...")
-            uploader.upload(device)
+            uploader.upload(device, purge)
         except Exception as ex:
             print(f"Error uploading files to '{device.name}': {ex}")
 
@@ -114,11 +118,13 @@ def _upload(config_dir: Path, output_dir: Path, device: str):
               help='Root directory of where to put the generated output files.')
 @click.option(*get_option_names(PARAM_DEVICE), required=False, default=None,
               help='Only deploy the specified device.')
-def c_deploy(config_dir: Path, output_dir: Path, device: str):
+@click.option(*get_option_names(PARAM_PURGE), required=False, default=False,
+              help='Whether to remove files from the device which are not part of the generated output.')
+def c_deploy(config_dir: Path, output_dir: Path, device: str, purge: bool):
     """
     Combines the generation and upload of a configuration.
     """
-    _deploy(config_dir, output_dir, device)
+    _deploy(config_dir, output_dir, device, purge)
 
 
 def _reboot(config_dir, device):
@@ -136,9 +142,9 @@ def _reboot(config_dir, device):
         client.reboot(device)
 
 
-def _deploy(config_dir: Path, output_dir: Path, device: str):
+def _deploy(config_dir: Path, output_dir: Path, device: str, purge: bool):
     _generate(config_dir, output_dir, device)
-    _upload(config_dir, output_dir, device)
+    _upload(config_dir, output_dir, device, purge)
     # _cmd(config_dir, device="touch_down_1", command="reboot", payload="")
     _reboot(config_dir, device)
 

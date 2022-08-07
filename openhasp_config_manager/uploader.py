@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import List, Dict
+from typing import Dict
 
 from openhasp_config_manager.model import Device
 from openhasp_config_manager.openhasp import OpenHaspClient
@@ -12,19 +12,19 @@ class ConfigUploader:
         self._output_root = output_root
         self._cache_dir = Path(self._output_root, ".cache")
 
-    def upload(self, device: Device):
+    def upload(self, device: Device, purge: bool = False):
+        if purge:
+            self.cleanup_device(device)
         self._upload_files(device)
         self._update_config(device)
-
-    def upload_all(self, devices: List[Device]):
-        for device in devices:
-            self.upload(device)
 
     def _upload_files(self, device: Device):
         file_map: Dict[str, bool] = {}
 
+        file_names = []
         for file in device.output_dir.iterdir():
             print(f"Preparing '{file.name}' for upload...")
+            file_names.append(file.name)
 
             if file.name in file_map:
                 raise ValueError(f"Naming clash for file: {file.name}")
@@ -43,6 +43,22 @@ class ConfigUploader:
                     print(f"Error uploading file '{file.name}' to '{device.name}': {ex}")
             else:
                 print(f"Skipping {file} because it hasn't changed.")
+
+    def cleanup_device(self, device: Device):
+        """
+        Delete files from the device, which are not present in the currently generated output
+        :param device: the target device
+        """
+        file_names = []
+        for file in device.output_dir.iterdir():
+            file_names.append(file.name)
+
+        # cleanup files which are on the device, but not present in the generated output
+        files_on_device = self._api_client.get_files(device)
+        for f in files_on_device:
+            if f not in file_names:
+                print(f"Deleting file '{f}' from device '{device.name}'")
+                self._api_client.delete_file(device, f)
 
     def _compare_checksum(self, file: Path, content: str) -> str | None:
         """
