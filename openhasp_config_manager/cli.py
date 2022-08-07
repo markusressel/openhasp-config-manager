@@ -175,7 +175,8 @@ def _cmd(config_dir: Path, device: str, command: str, payload: str):
 
     import json
     for device in devices:
-        payload = json.loads(payload)
+        if len(payload) > 0:
+            payload = json.loads(payload)
         client.command(device, command, payload)
 
 

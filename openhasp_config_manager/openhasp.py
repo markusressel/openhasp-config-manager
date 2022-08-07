@@ -23,15 +23,19 @@ class OpenHaspClient:
 
         topic = f"hasp/{device.config.mqtt.name}/command"
 
-        client = paho.Client(mqtt_client_id)
+        client = paho.Client(client_id=mqtt_client_id, protocol=paho.MQTTv5)
 
-        client.username_pw_set(mqtt_user, mqtt_password)
+        client.username_pw_set(username=mqtt_user, password=mqtt_password)
         client.connect(mqtt_host, mqtt_port)
 
         json_data = json.dumps(params).strip('"')
 
         data = " ".join([name, json_data])
-        client.publish(topic, data)
+        result = client.publish(topic=topic, payload=data)
+        result.wait_for_publish()
+
+        if not result.rc == paho.MQTT_ERR_SUCCESS:
+            print('Code %d while sending message %d: %s' % (result.rc, result.mid, paho.error_string(result.rc)))
 
     def reboot(self, device: Device):
         base_url = self._compute_base_url(device)

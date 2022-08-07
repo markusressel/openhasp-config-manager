@@ -1,2 +1,3 @@
-global_var: "global_var_value"
+global:
+  var: "global_var_value"
 key_also_present_in_device_vars: "global_value"
