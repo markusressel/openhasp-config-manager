@@ -1,5 +1,5 @@
 import json
-from typing import Dict
+from typing import Dict, List
 
 import requests as requests
 
@@ -12,6 +12,12 @@ POST = "POST"
 class OpenHaspClient:
 
     def command(self, device: Device, name: str, params: dict):
+        """
+        Execute a command on a device
+        :param device: the device to request
+        :param name: the name of the command
+        :param params: parameters for the command
+        """
 
         import paho.mqtt.client as paho
 
@@ -38,6 +44,10 @@ class OpenHaspClient:
             print('Code %d while sending message %d: %s' % (result.rc, result.mid, paho.error_string(result.rc)))
 
     def reboot(self, device: Device):
+        """
+        Request a reboot
+        :param device: the target device
+        """
         base_url = self._compute_base_url(device)
         username = device.config.http.user
         password = device.config.http.password
@@ -47,6 +57,11 @@ class OpenHaspClient:
         )
 
     def set_hasp_config(self, device: Device, config: HaspConfig):
+        """
+        Set the "HASP" configuration
+        :param device: the target device
+        :param config: the configuration to set
+        """
         base_url = self._compute_base_url(device)
 
         data = {
@@ -73,6 +88,11 @@ class OpenHaspClient:
         )
 
     def set_http_config(self, device: Device, config: HttpConfig):
+        """
+        Set the HTTP configuration
+        :param device: the target device
+        :param config: the configuration to set
+        """
         base_url = self._compute_base_url(device)
 
         data = {
@@ -94,6 +114,12 @@ class OpenHaspClient:
         )
 
     def set_mqtt_config(self, device: Device, config: MqttConfig):
+        """
+        Set the MQTT configuration
+        :param device: the target device
+        :param config: the configuration to set
+        :return:
+        """
         base_url = self._compute_base_url(device)
 
         data = {
@@ -119,6 +145,12 @@ class OpenHaspClient:
         )
 
     def set_gui_config(self, device: Device, config: GuiConfig):
+        """
+        Set the GUI configuration
+        :param device: the target device
+        :param config: the configuration to set
+        :return:
+        """
         base_url = self._compute_base_url(device)
 
         data = {
@@ -143,10 +175,21 @@ class OpenHaspClient:
         )
 
     def upload_files(self, device: Device, files: Dict[str, str]):
+        """
+        Upload a collection of files
+        :param device: the target device
+        :param files: "target file name"->"file content" mapping
+        """
         for name, content in files.items():
             self.upload_file(device, name, content)
 
     def upload_file(self, device: Device, name: str, content: str):
+        """
+        Upload a single file
+        :param device: the target device
+        :param name: the target name of the file on the device
+        :param content: the file content
+        """
         print(f"Uploading '{name}'...")
 
         url = self._compute_base_url(device)
@@ -197,7 +240,8 @@ class OpenHaspClient:
             else:
                 return response.content
 
-    def _compute_base_url(self, device: Device) -> str:
+    @staticmethod
+    def _compute_base_url(device: Device) -> str:
         url = device.config.openhasp_config_manager.device.ip
         if not url.startswith("http://"):
             url = "http://" + url
