@@ -1,18 +1,25 @@
 import textwrap
 
-from openhasp_config_manager.model import Component
-from openhasp_config_manager.processing import DeviceProcessor
+from openhasp_config_manager.model import Component, Device
+from openhasp_config_manager.processing import DeviceProcessor, VariableManager
 from openhasp_config_manager.processing.jsonl import JsonlObjectProcessor
 from tests import TestBase
 
 
-class ProcessorTest(TestBase):
+class TestProcessor(TestBase):
 
     def test_multiline_object_params(self):
-        config = self.default_config
+        device = Device(
+            name="test_device",
+            path=None,
+            config=self.default_config,
+            components=[],
+            output_dir=None
+        )
 
+        variable_manager = VariableManager(self.cfg_root)
         jsonl_object_processor = JsonlObjectProcessor()
-        processor = DeviceProcessor(config, jsonl_object_processor)
+        processor = DeviceProcessor(device, jsonl_object_processor, variable_manager)
 
         content = textwrap.dedent("""
            { 
@@ -30,18 +37,22 @@ class ProcessorTest(TestBase):
 
         result = processor.normalize(component)
 
-        self.assertEqual(
-            result,
-            textwrap.dedent("""
+        assert result == textwrap.dedent("""
                {"x": 0, "y": 0}
                """).strip()
-        )
 
     def test_ignore_line_comment_between_object_params(self):
-        config = self.default_config
+        device = Device(
+            name="test_device",
+            path=None,
+            config=self.default_config,
+            components=[],
+            output_dir=None
+        )
 
+        variable_manager = VariableManager(self.cfg_root)
         jsonl_object_processor = JsonlObjectProcessor()
-        processor = DeviceProcessor(config, jsonl_object_processor)
+        processor = DeviceProcessor(device, jsonl_object_processor, variable_manager)
 
         content = textwrap.dedent("""
            { 
@@ -60,18 +71,22 @@ class ProcessorTest(TestBase):
 
         result = processor.normalize(component)
 
-        self.assertEqual(
-            result,
-            textwrap.dedent("""
+        assert result == textwrap.dedent("""
                {"x": 0, "y": 0}
                """).strip()
-        )
 
     def test_ignore_line_comment_between_objects(self):
-        config = self.default_config
+        device = Device(
+            name="test_device",
+            path=None,
+            config=self.default_config,
+            components=[],
+            output_dir=None
+        )
 
+        variable_manager = VariableManager(self.cfg_root)
         jsonl_object_processor = JsonlObjectProcessor()
-        processor = DeviceProcessor(config, jsonl_object_processor)
+        processor = DeviceProcessor(device, jsonl_object_processor, variable_manager)
 
         content = textwrap.dedent("""
            { "x": 0, "y": 0 }
@@ -88,19 +103,23 @@ class ProcessorTest(TestBase):
 
         result = processor.normalize(component)
 
-        self.assertEqual(
-            result,
-            textwrap.dedent("""
+        assert result == textwrap.dedent("""
                {"x": 0, "y": 0}
                {"a": 0, "b": 0}
                """).strip()
-        )
 
     def test_multiple_objects(self):
-        config = self.default_config
+        device = Device(
+            name="test_device",
+            path=None,
+            config=self.default_config,
+            components=[],
+            output_dir=None
+        )
 
+        variable_manager = VariableManager(self.cfg_root)
         jsonl_object_processor = JsonlObjectProcessor()
-        processor = DeviceProcessor(config, jsonl_object_processor)
+        processor = DeviceProcessor(device, jsonl_object_processor, variable_manager)
 
         content = textwrap.dedent("""
             { "x": 0, "y": 0 }
@@ -116,19 +135,23 @@ class ProcessorTest(TestBase):
 
         result = processor.normalize(component)
 
-        self.assertEqual(
-            result,
-            textwrap.dedent("""
+        assert result == textwrap.dedent("""
             {"x": 0, "y": 0}
             {"a": 0, "b": 0}
             """).strip()
-        )
 
     def test_id_template(self):
-        config = self.default_config
+        device = Device(
+            name="test_device",
+            path=None,
+            config=self.default_config,
+            components=[],
+            output_dir=None
+        )
 
+        variable_manager = VariableManager(self.cfg_root)
         jsonl_object_processor = JsonlObjectProcessor()
-        processor = DeviceProcessor(config, jsonl_object_processor)
+        processor = DeviceProcessor(device, jsonl_object_processor, variable_manager)
 
         content = textwrap.dedent("""
            {
@@ -161,20 +184,24 @@ class ProcessorTest(TestBase):
         processor.add_jsonl(component)
         result = processor.normalize(component)
 
-        self.assertEqual(
-            textwrap.dedent("""
+        assert result == textwrap.dedent("""
                {"id": 0, "page": 1, "x": 0, "y": 0}
                {"id": 1, "page": 1, "x": 0, "y": 0}
                {"id": 2, "page": 1, "x": 0, "y": 0}
-               """).strip(),
-            result
-        )
+               """).strip()
 
     def test_config_value_template(self):
-        config = self.default_config
+        device = Device(
+            name="test_device",
+            path=None,
+            config=self.default_config,
+            components=[],
+            output_dir=None
+        )
 
+        variable_manager = VariableManager(self.cfg_root)
         jsonl_object_processor = JsonlObjectProcessor()
-        processor = DeviceProcessor(config, jsonl_object_processor)
+        processor = DeviceProcessor(device, jsonl_object_processor, variable_manager)
 
         content = textwrap.dedent("""
            {
@@ -191,9 +218,6 @@ class ProcessorTest(TestBase):
 
         result = processor.normalize(component)
 
-        self.assertEqual(
-            textwrap.dedent(f"""
-               {{"w": {config.openhasp_config_manager.device.screen.width}}}
-               """).strip(),
-            result
-        )
+        assert result == textwrap.dedent(f"""
+               {{"w": {device.config.openhasp_config_manager.device.screen.width}}}
+               """).strip()

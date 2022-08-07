@@ -4,13 +4,12 @@ from typing import List
 
 import dacite
 
+from openhasp_config_manager.const import COMMON_FOLDER_NAME, DEVICES_FOLDER_NAME
 from openhasp_config_manager.model import Component, Config, Device
 from openhasp_config_manager.processing import DeviceProcessor
 from openhasp_config_manager.processing.jsonl import JsonlObjectProcessor
+from openhasp_config_manager.processing.variables import VariableManager
 from openhasp_config_manager.validation import DeviceValidator, JsonlObjectValidator
-
-COMMON_FOLDER_NAME = "common"
-DEVICES_FOLDER_NAME = "devices"
 
 CONFIG_FILE_NAME = "config.json"
 
@@ -20,6 +19,8 @@ class ConfigManager:
     def __init__(self, cfg_root: Path, output_root: Path):
         self._cfg_root = cfg_root
         self._output_root = output_root
+
+        self._variable_manager = VariableManager(cfg_root)
 
     def analyze(self) -> List[Device]:
         """
@@ -122,7 +123,7 @@ class ConfigManager:
         for device in devices:
 
             jsonl_processor = JsonlObjectProcessor()
-            device_processor = DeviceProcessor(device.config, jsonl_processor)
+            device_processor = DeviceProcessor(device, jsonl_processor, self._variable_manager)
 
             jsonl_validator = JsonlObjectValidator()
             device_validator = DeviceValidator(device.config, jsonl_validator)

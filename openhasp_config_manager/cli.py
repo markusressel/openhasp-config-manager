@@ -37,12 +37,12 @@ def get_option_names(parameter: str) -> list:
 @cli.command(name="generate")
 @click.option(*get_option_names(PARAM_CFG_DIR),
               required=True,
-              type=click.Path(exists=True),
+              type=click.Path(exists=True, path_type=Path),
               help='Root directory of your config files.')
 @click.option(*get_option_names(PARAM_OUTPUT_DIR),
               required=True,
               default=Path("./output"),
-              type=click.Path(),
+              type=click.Path(path_type=Path),
               help='Root directory of where to put the generated output files.')
 @click.option(*get_option_names(PARAM_DEVICE), required=False, default=None,
               help='Only generate the output for the specified device.')
@@ -67,12 +67,12 @@ def _generate(config_dir: Path, output_dir: Path, device: str):
 @cli.command(name="upload")
 @click.option(*get_option_names(PARAM_CFG_DIR),
               required=True,
-              type=click.Path(exists=True),
+              type=click.Path(exists=True, path_type=Path),
               help='Root directory of your config files.')
 @click.option(*get_option_names(PARAM_OUTPUT_DIR),
               required=True,
               default=Path("./output"),
-              type=click.Path(),
+              type=click.Path(path_type=Path),
               help='Root directory of where the generated output files from the "generate" command are located.')
 @click.option(*get_option_names(PARAM_DEVICE), required=False, default=None,
               help='Only upload the generated files for the specified device.')
@@ -105,12 +105,12 @@ def _upload(config_dir: Path, output_dir: Path, device: str):
 @cli.command(name="deploy")
 @click.option(*get_option_names(PARAM_CFG_DIR),
               required=True,
-              type=click.Path(exists=True),
+              type=click.Path(exists=True, path_type=Path),
               help='Root directory of your config files.')
 @click.option(*get_option_names(PARAM_OUTPUT_DIR),
               required=True,
               default=Path("./output"),
-              type=click.Path(),
+              type=click.Path(path_type=Path),
               help='Root directory of where to put the generated output files.')
 @click.option(*get_option_names(PARAM_DEVICE), required=False, default=None,
               help='Only deploy the specified device.')
@@ -146,7 +146,7 @@ def _deploy(config_dir: Path, output_dir: Path, device: str):
 @cli.command(name="cmd")
 @click.option(*get_option_names(PARAM_CFG_DIR),
               required=True,
-              type=click.Path(exists=True),
+              type=click.Path(exists=True, path_type=Path),
               help='Root directory of your config files.')
 @click.option(*get_option_names(PARAM_DEVICE),
               required=True,

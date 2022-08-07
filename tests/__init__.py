@@ -1,5 +1,6 @@
 from pathlib import Path
-from unittest import TestCase
+
+import pytest
 
 from openhasp_config_manager.model import Config, OpenhaspConfigManagerConfig, DeviceConfig, ScreenConfig
 
@@ -14,10 +15,10 @@ def _find_test_folder() -> Path:
         return Path(files[0]).absolute()
 
 
-class TestBase(TestCase):
+@pytest.mark.usefixtures('tmp_path')
+class TestBase:
     _test_folder = _find_test_folder()
     cfg_root = Path(_test_folder, Path("test_cfg_root"))
-    output = Path(_test_folder, "test_output")
 
     default_config = Config(
         openhasp_config_manager=OpenhaspConfigManagerConfig(

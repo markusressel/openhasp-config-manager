@@ -30,4 +30,32 @@
   "hidden": false
 }
 
+{
+  // a label using a global variable
+  "page": 1,
+  "id": 3,
+  "obj": "label",
+  "x": 5,
+  "y": 5,
+  "h": 50,
+  "w": 50,
+  "text": "{{ global_var }}",
+  "enabled": true,
+  "hidden": false
+}
+
+{
+  // a label using a local variable
+  "page": 1,
+  "id": 4,
+  "obj": "label",
+  "x": 5,
+  "y": 5,
+  "h": 50,
+  "w": 50,
+  "text": "{{ key_also_present_in_device_vars }}",
+  "enabled": true,
+  "hidden": false
+}
+
 // === END ===

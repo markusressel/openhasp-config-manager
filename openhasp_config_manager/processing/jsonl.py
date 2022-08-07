@@ -37,7 +37,9 @@ class JsonlObjectProcessor:
                 "page", "id",
                 "x", "y", "w", "h",
                 "text_font", "value_font",
+                "radius", "border_side",
                 "min", "max",
+                "prev", "next",
             ] and isinstance(value, str):
                 result[key] = int(float(value))
 
