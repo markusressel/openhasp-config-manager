@@ -35,16 +35,11 @@ class DeviceProcessor:
     def add_jsonl(self, component: Component):
         parts = self._split_jsonl_objects(component.content)
 
-        file_object_map = {}
         for part in parts:
             loaded = json.loads(part)
 
             object_key = f"p{loaded.get('page', '0')}b{loaded.get('id', '0')}"
 
-            if object_key in self._id_object_map:
-                print(f"WARNING: duplicate object key detected: {object_key}")
-
-            file_object_map[object_key] = loaded
             self._id_object_map[object_key] = loaded
 
         self._component_tree_changed = True
@@ -123,10 +118,10 @@ class DeviceProcessor:
         for key, obj in self._id_object_map.items():
             result[key] = obj
 
-        rendered = self._render_dict_recursively(result)
+        result |= self._variable_manager.get_vars(None)
+        result |= self._variable_manager.get_vars(self._device.name)
 
-        rendered |= self._variable_manager.get_vars(None)
-        rendered |= self._variable_manager.get_vars(self._device.name)
+        rendered = self._render_dict_recursively(result)
 
         return rendered
 

@@ -85,7 +85,7 @@ def c_upload(config_dir: Path, output_dir: Path, device: str):
 
 def _upload(config_dir: Path, output_dir: Path, device: str):
     from openhasp_config_manager.manager import ConfigManager
-    from openhasp_config_manager import ConfigUploader
+    from openhasp_config_manager.uploader import ConfigUploader
 
     processor = ConfigManager(config_dir, output_dir)
 
