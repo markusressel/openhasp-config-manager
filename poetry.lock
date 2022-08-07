@@ -59,17 +59,6 @@ optional = false
 python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*"
 
 [[package]]
-name = "dacite"
-version = "1.6.0"
-description = "Simple creation of data classes from dictionaries."
-category = "main"
-optional = false
-python-versions = ">=3.6"
-
-[package.extras]
-dev = ["pylint", "mypy", "black", "coveralls", "pytest-cov", "pytest (>=5)"]
-
-[[package]]
 name = "idna"
 version = "3.3"
 description = "Internationalized Domain Names in Applications (IDNA)"
@@ -239,7 +228,7 @@ socks = ["PySocks (>=1.5.6,!=1.5.7,<2.0)"]
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.10"  # Compatible python versions must be declared here
-content-hash = "8157fd11311de4f001b09b1c952b796a00cc0dbfa1a5edfa144da7902a95fd32"
+content-hash = "bc8bafb5d69d816982c6fd97ee33d5582e9dca5b0bb29528fdff5f9c5a12cf74"
 
 [metadata.files]
 atomicwrites = [
@@ -264,10 +253,6 @@ click = [
 colorama = [
     { file = "colorama-0.4.5-py2.py3-none-any.whl", hash = "sha256:854bf444933e37f5824ae7bfc1e98d5bce2ebe4160d46b5edf346a89358e99da" },
     { file = "colorama-0.4.5.tar.gz", hash = "sha256:e6c6b4334fc50988a639d9b98aa429a0b57da6e17b9a44f0451f930b6967b7a4" },
-]
-dacite = [
-    { file = "dacite-1.6.0-py3-none-any.whl", hash = "sha256:4331535f7aabb505c732fa4c3c094313fc0a1d5ea19907bf4726a7819a68b93f" },
-    { file = "dacite-1.6.0.tar.gz", hash = "sha256:d48125ed0a0352d3de9f493bf980038088f45f3f9d7498f090b50a847daaa6df" },
 ]
 idna = [
     { file = "idna-3.3-py3-none-any.whl", hash = "sha256:84d9dd047ffa80596e0f246e2eab0b391788b0503584e8945f2368256d2735ff" },

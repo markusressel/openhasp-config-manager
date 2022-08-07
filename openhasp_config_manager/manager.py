@@ -1,11 +1,11 @@
 import json
+import shutil
 from pathlib import Path
 from typing import List
 
-import dacite
-
 from openhasp_config_manager.const import COMMON_FOLDER_NAME, DEVICES_FOLDER_NAME
-from openhasp_config_manager.model import Component, Config, Device
+from openhasp_config_manager.model import Component, Config, Device, OpenhaspConfigManagerConfig, MqttConfig, \
+    HttpConfig, GuiConfig, HaspConfig, DeviceConfig, ScreenConfig
 from openhasp_config_manager.processing import DeviceProcessor
 from openhasp_config_manager.processing.jsonl import JsonlObjectProcessor
 from openhasp_config_manager.processing.variables import VariableManager
@@ -93,20 +93,77 @@ class ConfigManager:
 
         return result
 
-    @staticmethod
-    def _read_config(device_path: Path) -> Config | None:
+    def _read_config(self, device_path: Path) -> Config | None:
         config_file = Path(device_path, CONFIG_FILE_NAME)
         if config_file.exists() and config_file.is_file():
             content = config_file.read_text()
             loaded = json.loads(content)
 
-            from dacite import from_dict
-
-            return from_dict(
-                data_class=Config,
-                data=loaded,
-                config=dacite.Config()
+            config = Config(
+                openhasp_config_manager=self._parse_openhasp_config_manager_config(loaded["openhasp_config_manager"]),
+                mqtt=self._parse_mqtt_config(loaded["mqtt"]),
+                http=self._parse_http_config(loaded["http"]),
+                gui=self._parse_gui_config(loaded["gui"]),
+                hasp=self._parse_hasp_config(loaded["hasp"])
             )
+
+            return config
+
+    @staticmethod
+    def _parse_openhasp_config_manager_config(data: dict) -> OpenhaspConfigManagerConfig:
+        return OpenhaspConfigManagerConfig(
+            device=DeviceConfig(
+                ip=data["device"]["ip"],
+                screen=ScreenConfig(
+                    width=data["device"]["screen"]["width"],
+                    height=data["device"]["screen"]["height"]
+                )
+            )
+        )
+
+    @staticmethod
+    def _parse_mqtt_config(data: dict) -> MqttConfig:
+        return MqttConfig(
+            name=data["name"],
+            group=data["group"],
+            host=data["host"],
+            port=data["port"],
+            user=data["user"],
+            password=data["pass"],
+        )
+
+    @staticmethod
+    def _parse_http_config(data: dict) -> HttpConfig:
+        return HttpConfig(
+            port=data["port"],
+            user=data["user"],
+            password=data["pass"],
+        )
+
+    @staticmethod
+    def _parse_gui_config(data: dict) -> GuiConfig:
+        return GuiConfig(
+            idle1=data["idle1"],
+            idle2=data["idle2"],
+            bckl=data["bckl"],
+            bcklinv=data["bcklinv"],
+            rotate=data["rotate"],
+            cursor=data["cursor"],
+            invert=data["invert"],
+            calibration=data["calibration"],
+        )
+
+    @staticmethod
+    def _parse_hasp_config(data: dict) -> HaspConfig:
+        return HaspConfig(
+            startpage=data["startpage"],
+            startdim=data["startdim"],
+            theme=data["theme"],
+            color1=data["color1"],
+            color2=data["color2"],
+            font=data["font"],
+            pages=data["pages"],
+        )
 
     def process(self, devices: List[Device] = None) -> List[Device]:
         """
@@ -121,6 +178,8 @@ class ConfigManager:
 
     def _generate_output(self, devices: List[Device]):
         for device in devices:
+
+            self._clear_output(device)
 
             jsonl_processor = JsonlObjectProcessor()
             device_processor = DeviceProcessor(device, jsonl_processor, self._variable_manager)
@@ -156,3 +215,8 @@ class ConfigManager:
         )
 
         component_output_file.write_text(output_content)
+
+    @staticmethod
+    def _clear_output(device: Device):
+        if device.output_dir.exists():
+            shutil.rmtree(device.output_dir)

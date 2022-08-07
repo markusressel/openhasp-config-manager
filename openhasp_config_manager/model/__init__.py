@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 
 @dataclass
@@ -32,14 +32,14 @@ class MqttConfig:
     host: str
     port: int
     user: str
-    password: Optional[str]
+    password: str
 
 
 @dataclass
 class HttpConfig:
     port: int
     user: str
-    password: Optional[str]
+    password: str
 
 
 @dataclass

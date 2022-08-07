@@ -31,7 +31,6 @@ build-backend = "poetry.core.masonry.api"
 [tool.poetry.dependencies]
 python = "^3.10"  # Compatible python versions must be declared here
 
-dacite = "*"
 click = "*"
 requests = "*"
 paho-mqtt = "*"
