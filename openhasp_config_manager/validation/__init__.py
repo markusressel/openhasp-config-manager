@@ -17,3 +17,5 @@ class DeviceValidator:
         if component.type == "cmd":
             pass
             # self._cmd_file_validator.validate(component)
+        if len(component.name) > 30:
+            raise AssertionError(f"Output file name length must not exceed 30 characters: {component.name}")

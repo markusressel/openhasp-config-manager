@@ -78,7 +78,7 @@ def _generate(config_dir: Path, output_dir: Path, device: str):
               help='Root directory of where the generated output files from the "generate" command are located.')
 @click.option(*get_option_names(PARAM_DEVICE), required=False, default=None,
               help='Only upload the generated files for the specified device.')
-@click.option(*get_option_names(PARAM_PURGE), required=False, default=False,
+@click.option(*get_option_names(PARAM_PURGE), is_flag=True,
               help='Whether to remove files from the device which are not part of the generated output.')
 def c_upload(config_dir: Path, output_dir: Path, device: str, purge: bool):
     """
@@ -118,7 +118,7 @@ def _upload(config_dir: Path, output_dir: Path, device: str, purge: bool):
               help='Root directory of where to put the generated output files.')
 @click.option(*get_option_names(PARAM_DEVICE), required=False, default=None,
               help='Only deploy the specified device.')
-@click.option(*get_option_names(PARAM_PURGE), required=False, default=False,
+@click.option(*get_option_names(PARAM_PURGE), is_flag=True,
               help='Whether to remove files from the device which are not part of the generated output.')
 def c_deploy(config_dir: Path, output_dir: Path, device: str, purge: bool):
     """
