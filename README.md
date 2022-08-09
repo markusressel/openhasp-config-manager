@@ -23,10 +23,12 @@ A tool to manage all of your [openHASP](https://github.com/HASwitchPlate/openHAS
 Since openhasp-config-manager needs some dependencies (see [here](/pyproject.toml)) it is
 recommended to install it inside of a virtualenv:
 
-```
-python3 -m venv ~/path/to/new/virtual/environment
-source ~/path/to/new/virtual/environment/bin/activate
+```bash
+mkdir -p ~/venvs/openhasp-config-manager
+python3 -m venv ~/venvs/openhasp-config-manager
+source ~/venvs/openhasp-config-manager/bin/activate
 pip3 install openhasp-config-manager
+openhasp-config-manager -h
 ```
 
 ## Configuration
