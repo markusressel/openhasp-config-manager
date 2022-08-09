@@ -263,6 +263,16 @@ See: https://openhasp.haswitchplate.com/latest/commands/
 > openhasp-config-manager cmd -c ./openhasp-configs -d plate35 -C backlight -p "{\"state\":\"on\",\"brightness\":128}"
 ```
 
+# FAQ
+
+## How do I see device logs?
+
+With the device connected via USB cable, open a terminal and run:
+
+```shell
+screen -q -L -Logfile device.log /dev/ttyUSB0 115200 &> /dev/null; tail -F device.log; killall screen
+```
+
 # Contributing
 
 GitHub is for social coding: if you want to write code, I encourage contributions
