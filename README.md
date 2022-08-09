@@ -270,7 +270,7 @@ See: https://openhasp.haswitchplate.com/latest/commands/
 With the device connected via USB cable, open a terminal and run:
 
 ```shell
-screen -q -L -Logfile device.log /dev/ttyUSB0 115200 &> /dev/null; tail -F device.log; killall screen
+bash -c "screen -q -L -Logfile device.log /dev/ttyUSB0 115200 &> /dev/null; tail -F device.log; killall screen"
 ```
 
 # Contributing
