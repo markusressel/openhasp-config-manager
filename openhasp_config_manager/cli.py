@@ -199,10 +199,7 @@ def _cmd(config_dir: Path, device: str, command: str, payload: str):
     from openhasp_config_manager.openhasp import OpenHaspClient
     client = OpenHaspClient()
 
-    import json
     for device in devices:
-        if len(payload) > 0:
-            payload = json.loads(payload)
         client.command(device, command, payload)
 
 

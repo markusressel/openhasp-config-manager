@@ -87,7 +87,7 @@ class OpenHaspClient:
         mqtt_user = device.config.mqtt.user
         mqtt_password = device.config.mqtt.password
 
-        topic = f"hasp/{device.config.mqtt.name}/command"
+        topic = f"hasp/{device.config.mqtt.name}/command/{name}"
 
         client = paho.Client(client_id=mqtt_client_id, protocol=paho.MQTTv5)
 
