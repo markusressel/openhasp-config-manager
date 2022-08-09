@@ -127,7 +127,7 @@ def c_deploy(config_dir: Path, output_dir: Path, device: str, purge: bool):
     _deploy(config_dir, output_dir, device, purge)
 
 
-def _reboot(config_dir, device):
+def _reboot(config_dir, device: str):
     from openhasp_config_manager.manager import ConfigManager
     processor = ConfigManager(config_dir, Path("./nonexistent"))
 
@@ -142,10 +142,27 @@ def _reboot(config_dir, device):
         client.reboot(device)
 
 
+def _reload(config_dir: Path, device: str):
+    from openhasp_config_manager.manager import ConfigManager
+    processor = ConfigManager(config_dir, Path("./nonexistent"))
+
+    devices = processor.analyze()
+    if device is not None:
+        devices = list(filter(lambda x: x.name == device, devices))
+
+    from openhasp_config_manager.openhasp import OpenHaspClient
+    client = OpenHaspClient()
+
+    for device in devices:
+        client.command(device, "run", "clearpage all")
+        client.command(device, "run", "L:/boot.cmd")
+
+
 def _deploy(config_dir: Path, output_dir: Path, device: str, purge: bool):
     _generate(config_dir, output_dir, device)
     _upload(config_dir, output_dir, device, purge)
     # _cmd(config_dir, device="touch_down_1", command="reboot", payload="")
+    # _reload(config_dir, device)
     _reboot(config_dir, device)
 
 

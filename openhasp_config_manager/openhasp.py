@@ -34,6 +34,23 @@ class OpenHaspClient:
         file_names = list(map(lambda x: x["name"], files))
         return file_names
 
+    def get_file_content(self, device: Device, file_name: str) -> str or None:
+        base_url = self._compute_base_url(device)
+
+        username = device.config.http.user
+        password = device.config.http.password
+
+        try:
+            response = self._do_request(
+                GET,
+                base_url + file_name,
+                username=username, password=password
+            )
+            response_data = response.decode('utf-8')
+            return response_data
+        except Exception as ex:
+            return None
+
     def delete_file(self, device: Device, file_name: str):
         """
         Delete a file on the device
@@ -54,7 +71,7 @@ class OpenHaspClient:
             username=username, password=password
         )
 
-    def command(self, device: Device, name: str, params: dict):
+    def command(self, device: Device, name: str, params: str):
         """
         Execute a command on a device
         :param device: the device to request
@@ -77,9 +94,7 @@ class OpenHaspClient:
         client.username_pw_set(username=mqtt_user, password=mqtt_password)
         client.connect(mqtt_host, mqtt_port)
 
-        json_data = json.dumps(params).strip('"')
-
-        data = " ".join([name, json_data])
+        data = params.strip('"')
         result = client.publish(topic=topic, payload=data)
         result.wait_for_publish()
 

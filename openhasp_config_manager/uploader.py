@@ -1,6 +1,6 @@
 from pathlib import Path
-from typing import Dict
 
+from openhasp_config_manager import util
 from openhasp_config_manager.model import Device
 from openhasp_config_manager.openhasp import OpenHaspClient
 
@@ -19,21 +19,27 @@ class ConfigUploader:
         self._update_config(device)
 
     def _upload_files(self, device: Device):
-        file_map: Dict[str, bool] = {}
+        existing_files = self._api_client.get_files(device)
 
-        file_names = []
         for file in device.output_dir.iterdir():
             print(f"Preparing '{file.name}' for upload...")
-            file_names.append(file.name)
-
-            if file.name in file_map:
-                raise ValueError(f"Naming clash for file: {file.name}")
 
             content = file.read_text()
 
-            new_checksum = self._compare_checksum(file, content)
+            # check if the checksum of the file has changed on the device
+            if file.name in existing_files:
+                file_content_on_device = self._api_client.get_file_content(device, file.name)
+                device_file_content_checksum = util.calculate_checksum(file_content_on_device)
+            else:
+                device_file_content_checksum = None
+
+            new_checksum = self._check_if_checksum_will_change(
+                file=file,
+                original_checksum=device_file_content_checksum,
+                new_content=content
+            )
+
             if new_checksum is not None:
-                file_map[file.name] = True
                 try:
                     self._api_client.upload_file(device, file.name, content)
                     checksum_file = self._get_checksum_file(file)
@@ -60,25 +66,27 @@ class ConfigUploader:
                 print(f"Deleting file '{f}' from device '{device.name}'")
                 self._api_client.delete_file(device, f)
 
-    def _compare_checksum(self, file: Path, content: str) -> str | None:
+    def _check_if_checksum_will_change(self, file: Path, original_checksum: str, new_content: str) -> str | None:
         """
         Checks if the checksum for the given file has changed since it was last uploaded.
         :param file: the path of the file to check
-        :param content: the content of the new file
+        :param original_checksum: expected checksum of the original content
+        :param new_content: the content of the new file
         :return: new checksum if the checksum changed, None otherwise
         """
-        import hashlib
-        new_hash = hashlib.md5(content.encode('utf-8')).hexdigest()
+        changed = False
 
+        new_content_checksum = util.calculate_checksum(new_content)
         checksum_file = self._get_checksum_file(file)
         if not checksum_file.exists():
             changed = True
         else:
             old_hash = checksum_file.read_text().strip()
-            changed = old_hash != new_hash
+            if old_hash != original_checksum or old_hash != new_content_checksum:
+                changed = True
 
         if changed:
-            return new_hash
+            return new_content_checksum
         else:
             return None
 
