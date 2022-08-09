@@ -154,7 +154,7 @@ def _reload(config_dir: Path, device: str):
     client = OpenHaspClient()
 
     for device in devices:
-        client.command(device, "run", "clearpage all")
+        client.command(device, "clearpage", "all")
         client.command(device, "run", "L:/boot.cmd")
 
 
