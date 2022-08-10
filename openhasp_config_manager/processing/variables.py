@@ -8,43 +8,50 @@ from openhasp_config_manager.const import COMMON_FOLDER_NAME, DEVICES_FOLDER_NAM
 
 
 class VariableManager:
-    global_vars = {}
-    device_vars = {}
+    path_vars = {}
 
     def __init__(self, cfg_root: Path):
         self.cfg_root = Path(cfg_root)
         self._read()
 
-    def get_vars(self, device: str | None) -> Dict:
-        if device is not None:
-            return self.device_vars.get(device, {})
-        else:
-            return self.global_vars
+    def get_vars(self, path: Path) -> Dict:
+        path_vars = self._get_vars_for_path(path)
+        return path_vars
+
+    def _get_vars_for_path(self, path: Path):
+        result = {}
+        current_path = path.relative_to(self.cfg_root).parent
+        while current_path is not None:
+            current_path_str = str(current_path)
+            result |= self.path_vars.get(current_path_str, {})
+            if current_path.parent is None or current_path == current_path.parent:
+                break
+            else:
+                current_path = current_path.parent
+
+        return result
 
     def _read(self):
-
-        global_var_files = self.cfg_root.rglob(f"{COMMON_FOLDER_NAME}/*.yaml")
-        for file in global_var_files:
-            data = self._load_var_file(file)
-            self.global_vars |= data
-
+        common_path = Path(self.cfg_root, COMMON_FOLDER_NAME)
         devices_path = Path(self.cfg_root, DEVICES_FOLDER_NAME)
-        for device_dir in devices_path.iterdir():
-            if not device_dir.is_dir():
-                continue
 
-            device_var_files = device_dir.rglob(f"*.yaml")
-            for file in device_var_files:
-                if not file.is_file():
+        for toplevel_path in [common_path, devices_path]:
+            for path in toplevel_path.glob('**/**'):
+                if not path.is_dir():
                     continue
 
-                data = self._load_var_file(file)
+                path_var_files = path.glob("*.yaml")
+                for file in path_var_files:
+                    if not file.is_file():
+                        continue
 
-                device_name = file.parent.name
-                if device_name not in self.device_vars.keys():
-                    self.device_vars[device_name] = {}
+                    data = self._load_var_file(file)
 
-                self.device_vars[device_name] |= data
+                    sub_path = path.relative_to(self.cfg_root)
+                    sub_path_str = str(sub_path)
+                    if sub_path_str not in self.path_vars.keys():
+                        self.path_vars[sub_path_str] = {}
+                    self.path_vars[sub_path_str] |= data
 
     @staticmethod
     def _load_var_file(file: Path):

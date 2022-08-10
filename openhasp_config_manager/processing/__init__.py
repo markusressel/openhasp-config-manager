@@ -1,5 +1,6 @@
 import json
 import re
+from pathlib import Path
 from typing import List, Dict
 
 import jinja2
@@ -47,7 +48,8 @@ class DeviceProcessor:
     def normalize(self, component: Component) -> str:
         if self._component_tree_changed:
             self._component_tree_changed = False
-            self._template_vars = self._compute_template_variables()
+
+            self._template_vars = self._compute_template_variables(component.path)
 
         if component.type == "jsonl":
             return self._normalize_jsonl(self._device.config, component)
@@ -108,7 +110,7 @@ class DeviceProcessor:
         template = Template(component.content)
         return template.render(self._template_vars)
 
-    def _compute_template_variables(self) -> dict:
+    def _compute_template_variables(self, path: Path) -> dict:
         result = {}
 
         # device specific variables
@@ -118,8 +120,7 @@ class DeviceProcessor:
         for key, obj in self._id_object_map.items():
             result[key] = obj
 
-        result |= self._variable_manager.get_vars(None)
-        result |= self._variable_manager.get_vars(self._device.name)
+        result |= self._variable_manager.get_vars(path)
 
         rendered = self._render_dict_recursively(result)
 
@@ -133,8 +134,8 @@ class DeviceProcessor:
             successful_renders = 0
             changed = False
             tmp = {}
-            for key, value in result.items():
 
+            for key, value in result.items():
                 rendered_key = key
                 try:
                     rendered_key = Template(key).render(result)
