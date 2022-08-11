@@ -18,14 +18,16 @@ class VariableManager:
 
     def _get_vars_for_path(self, path: Path):
         result = {}
-        current_path = path.relative_to(self.cfg_root).parent
-        while current_path is not None:
+        relative_paths = path.relative_to(self.cfg_root).parent.parts
+
+        current_path = self.cfg_root.relative_to(self.cfg_root)
+
+        current_path_str = str(current_path)
+        result |= self.path_vars.get(current_path_str, {})
+        for subfolder in relative_paths:
+            current_path = Path(current_path, subfolder)
             current_path_str = str(current_path)
             result |= self.path_vars.get(current_path_str, {})
-            if current_path.parent is None or current_path == current_path.parent:
-                break
-            else:
-                current_path = current_path.parent
 
         return result
 

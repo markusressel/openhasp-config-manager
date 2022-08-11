@@ -1,4 +1,5 @@
 import textwrap
+from pathlib import Path
 
 from openhasp_config_manager.model import Component, Device
 from openhasp_config_manager.processing import DeviceProcessor, VariableManager
@@ -9,9 +10,10 @@ from tests import TestBase
 class TestProcessor(TestBase):
 
     def test_multiline_object_params(self):
+        # GIVEN
         device = Device(
             name="test_device",
-            path=None,
+            path=Path(self.cfg_root, "devices", "test_device"),
             config=self.default_config,
             components=[],
             output_dir=None
@@ -31,12 +33,14 @@ class TestProcessor(TestBase):
         component = Component(
             name="component",
             type="jsonl",
-            path=None,
+            path=Path(self.cfg_root, "common"),
             content=content
         )
 
+        # WHEN
         result = processor.normalize(component)
 
+        # THEN
         assert result == textwrap.dedent("""
                {"x": 0, "y": 0}
                """).strip()
@@ -44,7 +48,7 @@ class TestProcessor(TestBase):
     def test_ignore_line_comment_between_object_params(self):
         device = Device(
             name="test_device",
-            path=None,
+            path=Path(self.cfg_root, "devices", "test_device"),
             config=self.default_config,
             components=[],
             output_dir=None
@@ -65,7 +69,7 @@ class TestProcessor(TestBase):
         component = Component(
             name="component",
             type="jsonl",
-            path=None,
+            path=Path(self.cfg_root, "devices", "test_device"),
             content=content
         )
 
@@ -78,7 +82,7 @@ class TestProcessor(TestBase):
     def test_ignore_line_comment_between_objects(self):
         device = Device(
             name="test_device",
-            path=None,
+            path=Path(self.cfg_root, "devices", "test_device"),
             config=self.default_config,
             components=[],
             output_dir=None
@@ -97,7 +101,7 @@ class TestProcessor(TestBase):
         component = Component(
             name="component",
             type="jsonl",
-            path=None,
+            path=Path(self.cfg_root, "devices", "test_device"),
             content=content
         )
 
@@ -111,7 +115,7 @@ class TestProcessor(TestBase):
     def test_multiple_objects(self):
         device = Device(
             name="test_device",
-            path=None,
+            path=Path(self.cfg_root, "devices", "test_device"),
             config=self.default_config,
             components=[],
             output_dir=None
@@ -129,7 +133,7 @@ class TestProcessor(TestBase):
         component = Component(
             name="component",
             type="jsonl",
-            path=None,
+            path=Path(self.cfg_root, "devices", "test_device"),
             content=content
         )
 
@@ -143,7 +147,7 @@ class TestProcessor(TestBase):
     def test_id_template(self):
         device = Device(
             name="test_device",
-            path=None,
+            path=Path(self.cfg_root, "devices", "test_device"),
             config=self.default_config,
             components=[],
             output_dir=None
@@ -177,7 +181,7 @@ class TestProcessor(TestBase):
         component = Component(
             name="component",
             type="jsonl",
-            path=None,
+            path=Path(self.cfg_root, "devices", "test_device"),
             content=content
         )
 
@@ -193,7 +197,7 @@ class TestProcessor(TestBase):
     def test_config_value_template(self):
         device = Device(
             name="test_device",
-            path=None,
+            path=Path(self.cfg_root, "devices", "test_device"),
             config=self.default_config,
             components=[],
             output_dir=None
@@ -212,7 +216,7 @@ class TestProcessor(TestBase):
         component = Component(
             name="component",
             type="jsonl",
-            path=None,
+            path=Path(self.cfg_root, "devices", "test_device"),
             content=content
         )
 
