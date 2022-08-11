@@ -23,7 +23,6 @@ class DeviceProcessor:
         self._id_object_map: Dict[str, dict] = {}
         self._others: List[Component] = []
 
-        self._component_tree_changed = True
         self._template_vars: Dict[str, any] = {}
 
         self._jsonl_object_processor = jsonl_object_processor
@@ -31,7 +30,6 @@ class DeviceProcessor:
 
     def add_other(self, component: Component):
         self._others.append(component)
-        self._component_tree_changed = True
 
     def add_jsonl(self, component: Component):
         parts = self._split_jsonl_objects(component.content)
@@ -43,13 +41,8 @@ class DeviceProcessor:
 
             self._id_object_map[object_key] = loaded
 
-        self._component_tree_changed = True
-
     def normalize(self, component: Component) -> str:
-        if self._component_tree_changed:
-            self._component_tree_changed = False
-
-            self._template_vars = self._compute_template_variables(component.path)
+        self._template_vars = self._compute_template_variables(component.path)
 
         if component.type == "jsonl":
             return self._normalize_jsonl(self._device.config, component)
@@ -126,19 +119,18 @@ class DeviceProcessor:
 
         return rendered
 
-    def _render_dict_recursively(self, input: Dict) -> Dict[str, any]:
-        result = input
+    def _render_dict_recursively(self, input: Dict, template_vars: Dict = {}, result: Dict = {}) -> Dict[str, any]:
         last_successful_renders: int or None = None
         changed = True
         while changed:
             successful_renders = 0
             changed = False
             tmp = {}
-
-            for key, value in result.items():
+            for key, value in input.items():
                 rendered_key = key
                 try:
-                    rendered_key = Template(key).render(result)
+                    tv_vars = {**template_vars, **input, **result, **tmp}
+                    rendered_key = Template(key).render(tv_vars)
                     changed = changed and rendered_key != key
                     successful_renders += 1
                 except jinja2.UndefinedError as ex:
@@ -147,13 +139,15 @@ class DeviceProcessor:
                 rendered_val = value
                 if isinstance(value, str):
                     try:
-                        rendered_val = Template(value).render(result)
+                        tv_vars = {**template_vars, **input, **result, **tmp}
+                        rendered_val = Template(value).render(tv_vars)
                         successful_renders += 1
                     except jinja2.UndefinedError as ex:
                         changed = True
                 if isinstance(value, dict):
                     try:
-                        rendered_val = self._render_dict_recursively(value)
+                        tv_vars = {**template_vars, **input, **tmp}
+                        rendered_val = self._render_dict_recursively(value, tv_vars)
                         successful_renders += 1
                     except jinja2.UndefinedError as ex:
                         changed = True
@@ -161,7 +155,7 @@ class DeviceProcessor:
                 changed = changed and rendered_val != value
                 tmp[rendered_key] = rendered_val
 
-            result = tmp
+            result |= tmp
 
             if last_successful_renders is not None and last_successful_renders == successful_renders:
                 raise jinja2.UndefinedError("Unable to progress while rendering")
