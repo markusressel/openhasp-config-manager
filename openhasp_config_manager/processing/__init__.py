@@ -115,50 +115,96 @@ class DeviceProcessor:
 
         result |= self._variable_manager.get_vars(path)
 
-        rendered = self._render_dict_recursively(result)
+        rendered = self._render_dict_recursively(input=result, template_vars=result)
 
         return rendered
 
-    def _render_dict_recursively(self, input: Dict, template_vars: Dict = {}, result: Dict = {}) -> Dict[str, any]:
-        last_successful_renders: int or None = None
-        changed = True
-        while changed:
-            successful_renders = 0
-            changed = False
-            tmp = {}
-            for key, value in input.items():
-                rendered_key = key
+    def _render_dict_recursively(
+            self,
+            input: Dict,
+            template_vars: Dict,
+            result_key_path: List[str] = None,
+    ) -> Dict[str, any]:
+        if result_key_path is None:
+            result_key_path = []
+
+        from jinja2.meta import find_undeclared_variables
+        env = jinja2.Environment(undefined=jinja2.DebugUndefined)
+
+        result = {}
+
+        finished = False
+        progress = 0
+        pending = []
+        last_pending = None
+        while not finished:
+            finished = True
+            keys = list(input.keys())
+            for key in keys:
+                value = input[key]
+                # key
                 try:
-                    tv_vars = {**template_vars, **input, **result, **tmp}
-                    rendered_key = Template(key).render(tv_vars)
-                    changed = changed and rendered_key != key
-                    successful_renders += 1
-                except jinja2.UndefinedError as ex:
-                    changed = True
+                    template = env.from_string(key)
+                    rendered_key = template.render(template_vars)
+                    ast = env.parse(rendered_key)
+                    key_undefined = find_undeclared_variables(ast)
+                except Exception as ex:
+                    print(f"Undefined key: {key_undefined}, value: {key}")
+                    key_undefined = True
 
-                rendered_val = value
-                if isinstance(value, str):
+                # value
+                value_undefined = False
+                rendered_value = value
+                if isinstance(value, dict) and not key_undefined:
+                    rendered_value = self._render_dict_recursively(
+                        value,
+                        template_vars,
+                        result_key_path + [rendered_key]
+                    )
+                elif isinstance(value, str):
                     try:
-                        tv_vars = {**template_vars, **input, **result, **tmp}
-                        rendered_val = Template(value).render(tv_vars)
-                        successful_renders += 1
-                    except jinja2.UndefinedError as ex:
-                        changed = True
-                if isinstance(value, dict):
-                    try:
-                        tv_vars = {**template_vars, **input, **tmp}
-                        rendered_val = self._render_dict_recursively(value, tv_vars)
-                        successful_renders += 1
-                    except jinja2.UndefinedError as ex:
-                        changed = True
+                        template = env.from_string(value)
+                        rendered_value = template.render(template_vars)
+                        ast = env.parse(rendered_value)
+                        value_undefined = find_undeclared_variables(ast)
+                    except Exception as ex:
+                        # print(f"Undefined value: {value_undefined}, value: {value}")
+                        value_undefined = True
 
-                changed = changed and rendered_val != value
-                tmp[rendered_key] = rendered_val
+                if key_undefined:
+                    pending.append(key)
+                if value_undefined:
+                    pending.append(f"{key}__value")
 
-            result |= tmp
+                if key_undefined or value_undefined:
+                    # still has undefined keys
+                    # print(f"Undefined keys: {key_undefined}, Undefined values: {value_undefined}")
+                    finished = False
+                else:
+                    # add it to the template_vars data at the correct location
+                    # which allows later iterations to render the template correctly
+                    tmp = template_vars
+                    for idx, p in enumerate(result_key_path):
+                        if p not in tmp.keys():
+                            tmp[p] = {}
+                        tmp = tmp[p]
+                    tmp.pop(key, None)
+                    tmp[rendered_key] = rendered_value
 
-            if last_successful_renders is not None and last_successful_renders == successful_renders:
-                raise jinja2.UndefinedError("Unable to progress while rendering")
-            last_successful_renders = successful_renders
+                    if rendered_key not in result or result[rendered_key] != rendered_value:
+                        progress += 1
+
+                    # create the resulting (sub-)dictionary
+                    result[rendered_key] = rendered_value
+
+                    finished = finished and True
+
+            if len(pending) <= 0:
+                return result
+            elif pending == last_pending:
+                # No progression while rendering templates, return as is
+                return result
+            else:
+                last_pending = pending
 
         return result

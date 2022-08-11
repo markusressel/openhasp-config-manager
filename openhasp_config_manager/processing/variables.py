@@ -4,8 +4,6 @@ from typing import Dict
 import yaml
 from yaml import Loader
 
-from openhasp_config_manager.const import COMMON_FOLDER_NAME, DEVICES_FOLDER_NAME
-
 
 class VariableManager:
     path_vars = {}
@@ -32,12 +30,12 @@ class VariableManager:
         return result
 
     def _read(self):
-        common_path = Path(self.cfg_root, COMMON_FOLDER_NAME)
-        devices_path = Path(self.cfg_root, DEVICES_FOLDER_NAME)
-
-        for toplevel_path in [common_path, devices_path]:
+        for toplevel_path in [self.cfg_root]:
             for path in toplevel_path.glob('**/**'):
                 if not path.is_dir():
+                    continue
+
+                if path.name.startswith("."):
                     continue
 
                 path_var_files = path.glob("*.yaml")
