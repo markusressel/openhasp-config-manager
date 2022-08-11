@@ -10,8 +10,10 @@ A tool to manage all of your [openHASP](https://github.com/HASwitchPlate/openHAS
   * [x] `//` comments within jsonl files
   * [x] line breaks wherever you like
   * [x] jinja2 templating within object values
+  * [x] local and globally scoped variables
 * [x] output validation
-  * [x] no more weird behavior due to invalid "id" range
+  * [x] object property checks
+  * [x] referenced file existence checks
 * [x] one click configuration upload to the device
   * [x] automatic diffing to only update changed configuration files
 * [x] execute commands directly from the CLI (still needs a connection to the MQTT broker)

@@ -9,7 +9,7 @@ from openhasp_config_manager.model import Component, Config, Device, OpenhaspCon
 from openhasp_config_manager.processing import DeviceProcessor
 from openhasp_config_manager.processing.jsonl import JsonlObjectProcessor
 from openhasp_config_manager.processing.variables import VariableManager
-from openhasp_config_manager.validation import DeviceValidator, JsonlObjectValidator
+from openhasp_config_manager.validation import DeviceValidator, JsonlObjectValidator, CmdFileValidator
 
 CONFIG_FILE_NAME = "config.json"
 
@@ -189,7 +189,8 @@ class ConfigManager:
             device_processor = DeviceProcessor(device, jsonl_processor, self._variable_manager)
 
             jsonl_validator = JsonlObjectValidator()
-            device_validator = DeviceValidator(device.config, jsonl_validator)
+            cmd_file_validator = CmdFileValidator()
+            device_validator = DeviceValidator(device.config, jsonl_validator, cmd_file_validator)
 
             # "fill" the processor with all available data for this device
             for component in device.components:
