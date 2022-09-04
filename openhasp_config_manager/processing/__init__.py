@@ -38,7 +38,9 @@ class DeviceProcessor:
             loaded = json.loads(part)
 
             object_key = f"p{loaded.get('page', '0')}b{loaded.get('id', '0')}"
-
+            # FIXME: this global map doesn't work if templates are used, it needs to be evaluated
+            # for each context, so in this case the sub-path that the jsonl is located in
+            # Or: the any object key (page & id fields) templates must be rendered before creating this map
             self._id_object_map[object_key] = loaded
 
     def normalize(self, component: Component) -> str:
