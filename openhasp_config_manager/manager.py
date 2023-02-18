@@ -9,6 +9,7 @@ from openhasp_config_manager.model import Component, Config, Device, OpenhaspCon
 from openhasp_config_manager.processing import DeviceProcessor
 from openhasp_config_manager.processing.jsonl.jsonl import ObjectDimensionsProcessor
 from openhasp_config_manager.processing.variables import VariableManager
+from openhasp_config_manager.ui.util import echo
 from openhasp_config_manager.validation.cmd import CmdFileValidator
 from openhasp_config_manager.validation.device_validator import DeviceValidator
 from openhasp_config_manager.validation.jsonl import JsonlObjectValidator
@@ -36,7 +37,7 @@ class ConfigManager:
 
         :return: list of devices
         """
-        print(f"Analyzing config files in '{self._cfg_root}'...")
+        echo(f"Analyzing config files in '{self._cfg_root}'...")
         return self._analyze(self._cfg_root, self._output_root)
 
     def _analyze(self, cfg_dir_root: Path, output_dir_root: Path) -> List[Device]:
@@ -58,7 +59,7 @@ class ConfigManager:
             try:
                 config = self._read_config(device_path)
             except Exception as ex:
-                print(f"Error reading config '{device_path}': {ex}")
+                echo(f"Error reading config '{device_path}': {ex}", color="red")
                 raise ex
 
             device_components = self._analyze_device(device_path)
@@ -216,7 +217,7 @@ class ConfigManager:
                 try:
                     device_validator.validate(component, output_content)
                 except Exception as ex:
-                    print(f"Validation for {component.path} failed: {ex}")
+                    echo(f"Validation for {component.path} failed: {ex}", color="red")
                     raise ex
 
                 self._write_output(device, component, output_content)

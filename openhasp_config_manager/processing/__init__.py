@@ -9,6 +9,7 @@ from jinja2 import Template
 from openhasp_config_manager.model import Config, Component, Device
 from openhasp_config_manager.processing.jsonl import JsonlObjectProcessor
 from openhasp_config_manager.processing.variables import VariableManager
+from openhasp_config_manager.ui.util import echo
 
 
 class DeviceProcessor:
@@ -160,7 +161,7 @@ class DeviceProcessor:
                     ast = env.parse(rendered_key)
                     key_undefined = find_undeclared_variables(ast)
                 except Exception as ex:
-                    print(f"Undefined key: {key_undefined}, value: {key}")
+                    echo(f"Undefined key: {key_undefined}, value: {key}", color="red")
                     key_undefined = True
 
                 # value

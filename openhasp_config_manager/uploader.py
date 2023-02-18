@@ -1,8 +1,10 @@
+import difflib
 from pathlib import Path
 
 from openhasp_config_manager import util
 from openhasp_config_manager.model import Device
 from openhasp_config_manager.openhasp import OpenHaspClient
+from openhasp_config_manager.ui.util import print_diff_to_console, echo
 
 
 class ConfigUploader:
@@ -12,21 +14,22 @@ class ConfigUploader:
         self._output_root = output_root
         self._cache_dir = Path(self._output_root, ".cache")
 
-    def upload(self, device: Device, purge: bool = False):
+    def upload(self, device: Device, purge: bool = False, print_diff: bool = False):
         if purge:
             self.cleanup_device(device)
-        self._upload_files(device)
+        self._upload_files(device, print_diff)
         self._update_config(device)
 
-    def _upload_files(self, device: Device):
+    def _upload_files(self, device: Device, print_diff: bool):
         existing_files = self._api_client.get_files(device)
 
         for file in device.output_dir.iterdir():
-            print(f"Preparing '{file.name}' for upload...")
+            echo(f"Preparing '{file.name}' for upload...")
 
             content = file.read_text()
 
             # check if the checksum of the file has changed on the device
+            file_content_on_device = ""
             if file.name in existing_files:
                 file_content_on_device = self._api_client.get_file_content(device, file.name)
                 device_file_content_checksum = util.calculate_checksum(file_content_on_device)
@@ -40,15 +43,22 @@ class ConfigUploader:
             )
 
             if new_checksum is not None:
+                if print_diff:
+                    diff_output = self._calculate_diff(
+                        file_name=file.name,
+                        string1=file_content_on_device,
+                        string2=content
+                    )
+                    print_diff_to_console(diff_output)
                 try:
                     self._api_client.upload_file(device, file.name, content)
                     checksum_file = self._get_checksum_file(file)
                     checksum_file.parent.mkdir(parents=True, exist_ok=True)
                     checksum_file.write_text(new_checksum)
                 except Exception as ex:
-                    print(f"Error uploading file '{file.name}' to '{device.name}': {ex}")
+                    echo(f"Error uploading file '{file.name}' to '{device.name}': {ex}", color="red")
             else:
-                print(f"Skipping {file} because it hasn't changed.")
+                echo(f"Skipping {file} because it hasn't changed.", color="yellow")
 
     def cleanup_device(self, device: Device):
         """
@@ -63,7 +73,7 @@ class ConfigUploader:
         files_on_device = self._api_client.get_files(device)
         for f in files_on_device:
             if f not in file_names:
-                print(f"Deleting file '{f}' from device '{device.name}'")
+                echo(f"Deleting file '{f}' from device '{device.name}'")
                 self._api_client.delete_file(device, f)
 
     def _check_if_checksum_will_change(self, file: Path, original_checksum: str, new_content: str) -> str | None:
@@ -101,3 +111,15 @@ class ConfigUploader:
         self._api_client.set_mqtt_config(device, device.config.mqtt)
         self._api_client.set_http_config(device, device.config.http)
         self._api_client.set_gui_config(device, device.config.gui)
+
+    @staticmethod
+    def _calculate_diff(file_name: str, string1: str, string2: str) -> str:
+        diff = difflib.unified_diff(
+            string1.splitlines(),
+            string2.splitlines(),
+            lineterm="\n",
+            fromfile=f"${file_name}",
+            tofile=f"${file_name}"
+        )
+
+        return "\n".join(list(diff))

@@ -3,11 +3,13 @@ from pathlib import Path
 import click
 
 from openhasp_config_manager.processing import VariableManager
+from openhasp_config_manager.ui.util import echo
 
 PARAM_CFG_DIR = "cfg_dir"
 PARAM_OUTPUT_DIR = "output_dir"
 PARAM_DEVICE = "device"
 PARAM_PURGE = "purge"
+PARAM_SHOW_DIFF = "diff"
 PARAM_CMD = "cmd"
 PARAM_PAYLOAD = "payload"
 
@@ -17,7 +19,8 @@ CMD_OPTION_NAMES = {
     PARAM_DEVICE: ["--device", "-d"],
     PARAM_CMD: ["--command", "-C"],
     PARAM_PAYLOAD: ["--payload", "-p"],
-    PARAM_PURGE: ["--purge", "-P"]
+    PARAM_PURGE: ["--purge", "-P"],
+    PARAM_SHOW_DIFF: ["--diff", "-D"],
 }
 
 CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
@@ -87,14 +90,16 @@ def _generate(config_dir: Path, output_dir: Path, device: str):
               help='Only upload the generated files for the specified device.')
 @click.option(*get_option_names(PARAM_PURGE), is_flag=True,
               help='Whether to remove files from the device which are not part of the generated output.')
-def c_upload(config_dir: Path, output_dir: Path, device: str, purge: bool):
+@click.option(*get_option_names(PARAM_SHOW_DIFF), is_flag=True,
+              help='Whether to show a diff for files uploaded to the target device.')
+def c_upload(config_dir: Path, output_dir: Path, device: str, purge: bool, diff: bool):
     """
     Uploads the previously generated configuration to their corresponding devices.
     """
-    _upload(config_dir, output_dir, device, purge)
+    _upload(config_dir, output_dir, device, purge, diff)
 
 
-def _upload(config_dir: Path, output_dir: Path, device: str, purge: bool):
+def _upload(config_dir: Path, output_dir: Path, device: str, purge: bool, show_diff: bool):
     from openhasp_config_manager.manager import ConfigManager
     from openhasp_config_manager.uploader import ConfigUploader
 
@@ -112,10 +117,10 @@ def _upload(config_dir: Path, output_dir: Path, device: str, purge: bool):
     uploader = ConfigUploader(output_dir)
     for device in devices:
         try:
-            print(f"Uploading files to device '{device.name}'...")
-            uploader.upload(device, purge)
+            echo(f"Uploading files to device '{device.name}'...")
+            uploader.upload(device, purge, show_diff)
         except Exception as ex:
-            print(f"Error uploading files to '{device.name}': {ex}")
+            echo(f"Error uploading files to '{device.name}': {ex}", color="red")
 
 
 @cli.command(name="deploy")
@@ -132,11 +137,13 @@ def _upload(config_dir: Path, output_dir: Path, device: str, purge: bool):
               help='Only deploy the specified device.')
 @click.option(*get_option_names(PARAM_PURGE), is_flag=True,
               help='Whether to remove files from the device which are not part of the generated output.')
-def c_deploy(config_dir: Path, output_dir: Path, device: str, purge: bool):
+@click.option(*get_option_names(PARAM_SHOW_DIFF), is_flag=True,
+              help='Whether to show a diff for files uploaded to the target device.')
+def c_deploy(config_dir: Path, output_dir: Path, device: str, purge: bool, diff: bool):
     """
     Combines the generation and upload of a configuration.
     """
-    _deploy(config_dir, output_dir, device, purge)
+    _deploy(config_dir, output_dir, device, purge, diff)
 
 
 def _reboot(config_dir, device: str):
@@ -180,9 +187,9 @@ def _reload(config_dir: Path, device: str):
         client.command(device, "run", "L:/boot.cmd")
 
 
-def _deploy(config_dir: Path, output_dir: Path, device: str, purge: bool):
+def _deploy(config_dir: Path, output_dir: Path, device: str, purge: bool, show_diff: bool):
     _generate(config_dir, output_dir, device)
-    _upload(config_dir, output_dir, device, purge)
+    _upload(config_dir, output_dir, device, purge, show_diff)
     # _cmd(config_dir, device="touch_down_1", command="reboot", payload="")
     # _reload(config_dir, device)
     _reboot(config_dir, device)

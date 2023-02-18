@@ -4,6 +4,7 @@ from typing import Dict, List
 import requests as requests
 
 from openhasp_config_manager.model import Device, MqttConfig, HttpConfig, GuiConfig, HaspConfig
+from openhasp_config_manager.ui.util import echo
 
 GET = "GET"
 POST = "POST"
@@ -99,7 +100,8 @@ class OpenHaspClient:
         result.wait_for_publish()
 
         if not result.rc == paho.MQTT_ERR_SUCCESS:
-            print('Code %d while sending message %d: %s' % (result.rc, result.mid, paho.error_string(result.rc)))
+            echo(f'Code {result.rc} while sending message {result.mid}: {paho.error_string(result.rc)}',
+                 color="red")
 
     def reboot(self, device: Device):
         """
@@ -248,7 +250,7 @@ class OpenHaspClient:
         :param name: the target name of the file on the device
         :param content: the file content
         """
-        print(f"Uploading '{name}'...")
+        echo(f"Uploading '{name}'...")
 
         url = self._compute_base_url(device)
         url += "edit"
