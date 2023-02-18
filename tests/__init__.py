@@ -7,12 +7,17 @@ from openhasp_config_manager.model import Config, OpenhaspConfigManagerConfig, D
 
 def _find_test_folder() -> Path:
     p = Path("./")
+
     if p.absolute().parts[-1] == "tests":
         return p
     else:
         import glob
-        files = glob.glob(str(Path(p)) + '/**/tests', recursive=True)
-        return Path(files[0]).absolute()
+        while str(p.absolute()) != "/":
+            files = glob.glob(str(Path(p)) + '/**/tests', recursive=True)
+            if len(files) > 0:
+                return Path(files[0]).absolute()
+            else:
+                p = p.parent.absolute()
 
 
 @pytest.mark.usefixtures('tmp_path')

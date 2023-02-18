@@ -30,12 +30,17 @@ class JsonlObjectValidator(Validator):
 
         input_align = input.get("align", None)
         if input_align is not None:
-            if isinstance(input_align, str):
-                if input_align not in ["left", "center", "right"]:
-                    raise AssertionError(f"Invalid 'align' value: {input_align}")
-            if isinstance(input_align, int):
-                if input_align not in [0, 1, 2]:
-                    raise AssertionError(f"Invalid 'align' value: {input_align}")
+            valid_align_int_values = [0, 1, 2]
+            valid_align_str_values = ["left", "center", "right"]
+            valid_align_values = valid_align_str_values + valid_align_int_values
+
+            if input_align not in valid_align_values:
+                if isinstance(input_align, str):
+                    raise AssertionError(
+                        f"Invalid 'align' value: '{input_align}', must be one of: {valid_align_values}")
+                if isinstance(input_align, int):
+                    raise AssertionError(
+                        f"Invalid 'align' integer value: '{input_align}', must be one of: {valid_align_values}")
 
     def __remember_page_id_combo(self, input_page: int, input_id: int):
         key = f"p{input_page}b{input_id}"
