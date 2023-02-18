@@ -1,21 +1,22 @@
 # openhasp-config-manager
 
-A tool to manage all of your [openHASP](https://github.com/HASwitchPlate/openHASP) device configs in a centralized place.
+A tool to manage all of your [openHASP](https://github.com/HASwitchPlate/openHASP) device configs in a centralized
+place.
 
 # Features
 
 * [x] manage as many devices as you like
 * [x] share configuration files between devices
 * [x] jsonl preprocessing, which allows for
-  * [x] `//` comments within jsonl files
-  * [x] line breaks wherever you like
-  * [x] jinja2 templating within object values
-  * [x] local and globally scoped variables
+    * [x] `//` comments within jsonl files
+    * [x] line breaks wherever you like
+    * [x] jinja2 templating within object values
+    * [x] local and globally scoped variables
 * [x] output validation
-  * [x] object property checks
-  * [x] referenced file existence checks
+    * [x] object property checks
+    * [x] referenced file existence checks
 * [x] one click configuration upload to the device
-  * [x] automatic diffing to only update changed configuration files
+    * [x] automatic diffing to only update changed configuration files
 * [x] execute commands directly from the CLI (still needs a connection to the MQTT broker)
 
 # How to use
@@ -41,13 +42,13 @@ config deployment will become trivial.
 
 * `devices`: In the root directory of your configuration, a folder called
   `devices` is expected.
-  * In there you can create as many subfolders as
-    you like, naming them according to the physical devices that you
-    want to manage.
-    * Within those device subfolders you can then create
-      `*.jsonl` and `*.cmd` files.
-    * You must also provide a `config.json` file, see [config.json](#config.json)
-      for more info on how to set it.
+    * In there you can create as many subfolders as
+      you like, naming them according to the physical devices that you
+      want to manage.
+        * Within those device subfolders you can then create
+          `*.jsonl` and `*.cmd` files.
+        * You must also provide a `config.json` file, see [config.json](#config.json)
+          for more info on how to set it.
 * `common`: The `common` directory can be used to put files
   that should be included on _all_ device.
 
@@ -99,17 +100,17 @@ openhasp-configs
 
 ### config.json
 
-openhasp-config-manager makes use of the `config.json` on your plate. It can use information 
+openhasp-config-manager makes use of the `config.json` on your plate. It can use information
 to detect things like screen orientation, and also allows you to deploy config changes to your
 plate when you make changes in the config.json file. Since [the official API does not support
-uploading the full file](https://github.com/HASwitchPlate/openHASP/issues/363), only settings 
+uploading the full file](https://github.com/HASwitchPlate/openHASP/issues/363), only settings
 which can also be set through the web ui on the plate itself are currently supported.
 
 To retrieve the initial version of the `config.json` file you can use the
 built-in file browser integrated into the webserver of your OpenHASP plate.
 
 The official `config.json` file doesn't provide enough info for openhasp-config-manager
-to enable all of its features though. To fix that openhasp-config-manager looks for an 
+to enable all of its features though. To fix that openhasp-config-manager looks for an
 additional section within the file which is not present by default:
 
 ```json
@@ -153,13 +154,13 @@ You can use the full functionality of Jinja2 like f.ex. math operations, functio
   ...
 }
 
-{
-  "page": 1,
-  "id": 2,
-  "x": "{{ p1b1.x }}",
-  "y": "{{ p1b1.y + 10 }}",
-  ...
-}
+  {
+    "page": 1,
+    "id": 2,
+    "x": "{{ p1b1.x }}",
+    "y": "{{ p1b1.y + 10 }}",
+    ...
+  }
 ```
 
 #### Variables
@@ -255,13 +256,13 @@ Commands:
 
 ## Run commands
 
-OpenHasp allows you to run commands on a device by issuing MQTT messages.
 While openhasp-config-manager is first and foremost a config management system,
-it also allows you to run commands on a device without the need to install a separate
-MQTT client first. Note that the MQTT _server_ does need to be running and also has to
-be reachable from your local machine.
+it also allows you to run commands on a device by issuing MQTT messages without the need to install a separate
+MQTT client first. Note that the MQTT _server_ still needs to be running and also has to
+be reachable from your local machine for this to work.
 
-See: https://openhasp.haswitchplate.com/latest/commands/
+For a list of possible commands to send to a device, take a look at the official
+documentation: https://openhasp.haswitchplate.com/latest/commands/
 
 ```shell
 > openhasp-config-manager cmd -c ./openhasp-configs -d plate35 -C backlight -p "{\"state\":\"on\",\"brightness\":128}"
