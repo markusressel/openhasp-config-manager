@@ -19,6 +19,17 @@ place.
     * [x] automatic diffing to only update changed configuration files
 * [x] execute commands directly from the CLI (still needs a connection to the MQTT broker)
 
+# Disclaimer
+
+**This project is still highly experimental.**
+
+I do use openhasp-config-manager exclusively to configure all of my OpenHASP devices. I am in the
+process of adding tests to everything to make it more reliable and have also added lots of features along the way.
+However, there are definitely still a couple of things that do not yet work as intended. If you like the
+project, feel free to open an issue or PR to help me out. Otherwise:
+
+TL;DR: Expect dragons.
+
 # How to use
 
 ## Installation
