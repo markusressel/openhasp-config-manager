@@ -23,6 +23,10 @@ class VariableManager:
         """
         Returns the variable definitions and values for a given path.
 
+        The resulting map will be a combination of all variables available within each
+        of the directories along the given path. Variable definitions found in a lower (longer) path
+        will override the ones that might be present higher up the path.
+
         :param path: the path context to use for variable evaluation
         :return: a map of "variable name" -> "variable value given the path context"
         """
