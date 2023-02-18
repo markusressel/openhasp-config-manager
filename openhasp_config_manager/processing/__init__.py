@@ -108,16 +108,18 @@ class DeviceProcessor:
         """
         result = {}
 
-        # device specific variables
-        result["device"] = self._device.config.openhasp_config_manager.device
-
         # object specific variables for all components that the processor currently knows about
         for c in self._jsonl_components:
             jsonl_objects = self._split_jsonl_objects(c.content)
-            result |= self._compute_object_map(jsonl_objects)
+            c_result = self._variable_manager.get_vars(c.path)
+            c_result["device"] = self._device.config.openhasp_config_manager.device
+            c_result |= self._compute_object_map(jsonl_objects)
+            rendered = render_dict_recursively(input=c_result, template_vars=c_result)
+            result |= rendered
 
+        # device specific variables
+        result["device"] = self._device.config.openhasp_config_manager.device
         result |= self._variable_manager.get_vars(component.path)
-
         rendered = render_dict_recursively(input=result, template_vars=result)
 
         return rendered

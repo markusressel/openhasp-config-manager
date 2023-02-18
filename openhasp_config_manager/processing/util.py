@@ -4,6 +4,8 @@ import jinja2
 
 from openhasp_config_manager.ui.util import echo
 
+_j2_env = jinja2.Environment(undefined=jinja2.DebugUndefined)
+
 
 def render_dict_recursively(
         input: Dict,
@@ -20,26 +22,22 @@ def render_dict_recursively(
     if result_key_path is None:
         result_key_path = []
 
-    from jinja2.meta import find_undeclared_variables
-    env = jinja2.Environment(undefined=jinja2.DebugUndefined)
-
     result = {}
 
     finished = False
     progress = 0
-    pending = []
     last_pending = None
     while not finished:
+        pending = []
         finished = True
         keys = list(input.keys())
         for key in keys:
             value = input[key]
             # key
+            rendered_key = None
             try:
-                template = env.from_string(key)
-                rendered_key = template.render(template_vars)
-                ast = env.parse(rendered_key)
-                key_undefined = find_undeclared_variables(ast)
+                rendered_key = _render_template(key, template_vars)
+                key_undefined = _has_undeclared_variables(rendered_key)
             except Exception as ex:
                 echo(f"Undefined key: {key_undefined}, value: {key}", color="red")
                 key_undefined = True
@@ -47,7 +45,7 @@ def render_dict_recursively(
             # value
             value_undefined = False
             rendered_value = value
-            if isinstance(value, dict) and not key_undefined:
+            if isinstance(value, dict) and rendered_key is not None and not key_undefined:
                 rendered_value = render_dict_recursively(
                     value,
                     template_vars,
@@ -55,18 +53,20 @@ def render_dict_recursively(
                 )
             elif isinstance(value, str):
                 try:
-                    template = env.from_string(value)
-                    rendered_value = template.render(template_vars)
-                    ast = env.parse(rendered_value)
-                    value_undefined = find_undeclared_variables(ast)
+                    rendered_value = _render_template(value, template_vars)
+                    value_undefined = _has_undeclared_variables(rendered_value)
                 except Exception as ex:
                     # print(f"Undefined value: {value_undefined}, value: {value}")
                     value_undefined = True
 
             if key_undefined:
                 pending.append(key)
+            elif key in pending:
+                pending.remove(key)
             if value_undefined:
                 pending.append(f"{key}__value")
+            elif f"{key}__value" in pending:
+                pending.remove(f"{key}__value")
 
             if key_undefined or value_undefined:
                 # still has undefined keys
@@ -94,9 +94,20 @@ def render_dict_recursively(
         if len(pending) <= 0:
             return result
         elif pending == last_pending:
-            # No progression while rendering templates, return as is
+            echo(f"No progression while rendering templates, unable to render: {pending}")
             return result
         else:
             last_pending = pending
 
     return result
+
+
+def _render_template(content: str, template_vars: Dict[str, str]) -> str:
+    template = _j2_env.from_string(content)
+    return template.render(template_vars)
+
+
+def _has_undeclared_variables(rendered_value):
+    from jinja2.meta import find_undeclared_variables
+    ast = _j2_env.parse(rendered_value)
+    return find_undeclared_variables(ast)
