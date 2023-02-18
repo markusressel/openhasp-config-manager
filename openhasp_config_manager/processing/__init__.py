@@ -1,6 +1,5 @@
 import json
 import re
-from pathlib import Path
 from typing import List, Dict
 
 from jinja2 import Template
@@ -21,7 +20,7 @@ class DeviceProcessor:
                  variable_manager: VariableManager):
         self._device = device
 
-        self._id_object_map: Dict[str, dict] = {}
+        self._jsonl_components: List[Component] = []
         self._others: List[Component] = []
 
         self._template_vars: Dict[str, any] = {}
@@ -33,23 +32,14 @@ class DeviceProcessor:
         self._others.append(component)
 
     def add_jsonl(self, component: Component):
-        parts = self._split_jsonl_objects(component.content)
-
-        for part in parts:
-            loaded = json.loads(part)
-
-            object_key = f"p{loaded.get('page', '0')}b{loaded.get('id', '0')}"
-            # TODO: this global map doesn't work if templates are used, it needs to be evaluated
-            # for each context, so in this case the sub-path that the jsonl is located in
-            # Or: the any object key (page & id fields) templates must be rendered before creating this map
-            self._id_object_map[object_key] = loaded
+        self._jsonl_components.append(component)
 
     def normalize(self, component: Component) -> str:
-        self._template_vars = self._compute_template_variables(component.path)
+        self._template_vars = self._compute_template_variables(component)
 
         if component.type == "jsonl":
             return self._normalize_jsonl(self._device.config, component)
-        if component.type == "cmd":
+        elif component.type == "cmd":
             return self._normalize_cmd(self._device.config, component)
         else:
             # no changes necessary
@@ -109,10 +99,11 @@ class DeviceProcessor:
         template = Template(component.content)
         return template.render(self._template_vars)
 
-    def _compute_template_variables(self, path: Path) -> dict:
+    def _compute_template_variables(self, component: Component) -> dict:
         """
-        Computes a map of "variable" -> "evaluated value in the given path context" for the given path.
-        :param path: the path to use as a context for evaluating template variables
+        Computes a map of "variable" -> "evaluated value in the given path context" for the given component.
+
+        :param component: the component to use as a context for evaluating template variables
         :return: map of "variable" -> "evaluated value in the given path context"
         """
         result = {}
@@ -120,12 +111,29 @@ class DeviceProcessor:
         # device specific variables
         result["device"] = self._device.config.openhasp_config_manager.device
 
-        # object specific variables
-        for key, obj in self._id_object_map.items():
-            result[key] = obj
+        # object specific variables for all components that the processor currently knows about
+        for c in self._jsonl_components:
+            jsonl_objects = self._split_jsonl_objects(c.content)
+            result |= self._compute_object_map(jsonl_objects)
 
-        result |= self._variable_manager.get_vars(path)
+        result |= self._variable_manager.get_vars(component.path)
 
         rendered = render_dict_recursively(input=result, template_vars=result)
 
         return rendered
+
+    def _compute_object_map(self, jsonl_objects: List[str]) -> Dict[str, dict]:
+        """
+        :param jsonl_objects:
+        :return: a map
+        """
+        result = {}
+        for o in jsonl_objects:
+            parsed_object = json.loads(o)
+            object_key = self._compute_object_key(parsed_object)
+            result[object_key] = parsed_object
+        return result
+
+    @staticmethod
+    def _compute_object_key(jsonl_object: Dict) -> str:
+        return f"p{jsonl_object.get('page', '0')}b{jsonl_object.get('id', '0')}"
