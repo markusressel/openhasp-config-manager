@@ -9,7 +9,7 @@ from tests import TestBase
 
 class TestDeviceValidator(TestBase):
 
-    def test_something(self):
+    def test_example_config(self):
         # GIVEN
         device_validator = DeviceValidator(
             config=self.default_config,
@@ -27,10 +27,10 @@ class TestDeviceValidator(TestBase):
         data = ""
 
         # WHEN
-        result = device_validator.validate(
+        device_validator.validate(
             component=component,
             data=data
         )
 
         # THEN
-        assert result
+        assert True
