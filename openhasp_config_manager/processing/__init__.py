@@ -3,13 +3,12 @@ import re
 from pathlib import Path
 from typing import List, Dict
 
-import jinja2
 from jinja2 import Template
 
 from openhasp_config_manager.model import Config, Component, Device
 from openhasp_config_manager.processing.jsonl import JsonlObjectProcessor
+from openhasp_config_manager.processing.util import render_dict_recursively
 from openhasp_config_manager.processing.variables import VariableManager
-from openhasp_config_manager.ui.util import echo
 
 
 class DeviceProcessor:
@@ -18,7 +17,7 @@ class DeviceProcessor:
     present within the configuration files.
     """
 
-    def __init__(self, device: Device, jsonl_object_processor: List[JsonlObjectProcessor],
+    def __init__(self, device: Device, jsonl_object_processors: List[JsonlObjectProcessor],
                  variable_manager: VariableManager):
         self._device = device
 
@@ -27,7 +26,7 @@ class DeviceProcessor:
 
         self._template_vars: Dict[str, any] = {}
 
-        self._jsonl_object_processors = jsonl_object_processor
+        self._jsonl_object_processors = jsonl_object_processors
         self._variable_manager = variable_manager
 
     def add_other(self, component: Component):
@@ -40,7 +39,7 @@ class DeviceProcessor:
             loaded = json.loads(part)
 
             object_key = f"p{loaded.get('page', '0')}b{loaded.get('id', '0')}"
-            # FIXME: this global map doesn't work if templates are used, it needs to be evaluated
+            # TODO: this global map doesn't work if templates are used, it needs to be evaluated
             # for each context, so in this case the sub-path that the jsonl is located in
             # Or: the any object key (page & id fields) templates must be rendered before creating this map
             self._id_object_map[object_key] = loaded
@@ -127,96 +126,6 @@ class DeviceProcessor:
 
         result |= self._variable_manager.get_vars(path)
 
-        rendered = self._render_dict_recursively(input=result, template_vars=result)
+        rendered = render_dict_recursively(input=result, template_vars=result)
 
         return rendered
-
-    def _render_dict_recursively(
-            self,
-            input: Dict,
-            template_vars: Dict,
-            result_key_path: List[str] = None,
-    ) -> Dict[str, any]:
-        if result_key_path is None:
-            result_key_path = []
-
-        from jinja2.meta import find_undeclared_variables
-        env = jinja2.Environment(undefined=jinja2.DebugUndefined)
-
-        result = {}
-
-        finished = False
-        progress = 0
-        pending = []
-        last_pending = None
-        while not finished:
-            finished = True
-            keys = list(input.keys())
-            for key in keys:
-                value = input[key]
-                # key
-                try:
-                    template = env.from_string(key)
-                    rendered_key = template.render(template_vars)
-                    ast = env.parse(rendered_key)
-                    key_undefined = find_undeclared_variables(ast)
-                except Exception as ex:
-                    echo(f"Undefined key: {key_undefined}, value: {key}", color="red")
-                    key_undefined = True
-
-                # value
-                value_undefined = False
-                rendered_value = value
-                if isinstance(value, dict) and not key_undefined:
-                    rendered_value = self._render_dict_recursively(
-                        value,
-                        template_vars,
-                        result_key_path + [rendered_key]
-                    )
-                elif isinstance(value, str):
-                    try:
-                        template = env.from_string(value)
-                        rendered_value = template.render(template_vars)
-                        ast = env.parse(rendered_value)
-                        value_undefined = find_undeclared_variables(ast)
-                    except Exception as ex:
-                        # print(f"Undefined value: {value_undefined}, value: {value}")
-                        value_undefined = True
-
-                if key_undefined:
-                    pending.append(key)
-                if value_undefined:
-                    pending.append(f"{key}__value")
-
-                if key_undefined or value_undefined:
-                    # still has undefined keys
-                    # print(f"Undefined keys: {key_undefined}, Undefined values: {value_undefined}")
-                    finished = False
-                else:
-                    # add it to the template_vars data at the correct location
-                    # which allows later iterations to render the template correctly
-                    tmp = template_vars
-                    for idx, p in enumerate(result_key_path):
-                        if p not in tmp.keys():
-                            tmp[p] = {}
-                        tmp = tmp[p]
-                    tmp.pop(key, None)
-                    tmp[rendered_key] = rendered_value
-
-                    if rendered_key not in result or result[rendered_key] != rendered_value:
-                        progress += 1
-
-                    # create the resulting (sub-)dictionary
-                    result[rendered_key] = rendered_value
-
-                    finished = finished and True
-
-            if len(pending) <= 0:
-                return result
-            elif pending == last_pending:
-                # No progression while rendering templates, return as is
-                return result
-            else:
-                last_pending = pending
-
-        return result
