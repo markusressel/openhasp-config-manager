@@ -1,4 +1,7 @@
-class CmdFileValidator:
+from openhasp_config_manager.validation import Validator
+
+
+class CmdFileValidator(Validator):
 
     def validate(self, content: str):
         for line in content.splitlines():

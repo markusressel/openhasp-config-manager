@@ -2,8 +2,13 @@ import json
 
 from py_range_parse import Range
 
+from openhasp_config_manager.validation import Validator
 
-class JsonlObjectValidator:
+
+class JsonlObjectValidator(Validator):
+    """
+    Validates JSONL object definitions.
+    """
 
     def __init__(self):
         self._seen_ids = {}

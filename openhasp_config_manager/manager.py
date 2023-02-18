@@ -7,9 +7,11 @@ from openhasp_config_manager.const import COMMON_FOLDER_NAME, DEVICES_FOLDER_NAM
 from openhasp_config_manager.model import Component, Config, Device, OpenhaspConfigManagerConfig, MqttConfig, \
     HttpConfig, GuiConfig, HaspConfig, DeviceConfig, ScreenConfig
 from openhasp_config_manager.processing import DeviceProcessor
-from openhasp_config_manager.processing.jsonl import JsonlObjectProcessor
+from openhasp_config_manager.processing.jsonl.jsonl import ObjectDimensionsProcessor
 from openhasp_config_manager.processing.variables import VariableManager
-from openhasp_config_manager.validation import DeviceValidator, JsonlObjectValidator, CmdFileValidator
+from openhasp_config_manager.validation.cmd import CmdFileValidator
+from openhasp_config_manager.validation.device_validator import DeviceValidator
+from openhasp_config_manager.validation.jsonl import JsonlObjectValidator
 
 CONFIG_FILE_NAME = "config.json"
 
@@ -192,8 +194,10 @@ class ConfigManager:
 
             self._clear_output(device)
 
-            jsonl_processor = JsonlObjectProcessor()
-            device_processor = DeviceProcessor(device, jsonl_processor, self._variable_manager)
+            jsonl_processors = [
+                ObjectDimensionsProcessor()
+            ]
+            device_processor = DeviceProcessor(device, jsonl_processors, self._variable_manager)
 
             jsonl_validator = JsonlObjectValidator()
             cmd_file_validator = CmdFileValidator()

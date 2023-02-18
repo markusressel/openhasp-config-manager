@@ -3,11 +3,11 @@ from pathlib import Path
 
 from openhasp_config_manager.model import Component, Device
 from openhasp_config_manager.processing import DeviceProcessor, VariableManager
-from openhasp_config_manager.processing.jsonl import JsonlObjectProcessor
+from openhasp_config_manager.processing.jsonl.jsonl import ObjectDimensionsProcessor
 from tests import TestBase
 
 
-class TestProcessor(TestBase):
+class TestDeviceProcessor(TestBase):
 
     def test_multiline_object_params(self):
         # GIVEN
@@ -20,8 +20,10 @@ class TestProcessor(TestBase):
         )
 
         variable_manager = VariableManager(self.cfg_root)
-        jsonl_object_processor = JsonlObjectProcessor()
-        processor = DeviceProcessor(device, jsonl_object_processor, variable_manager)
+        jsonl_object_processors = [
+            ObjectDimensionsProcessor()
+        ]
+        processor = DeviceProcessor(device, jsonl_object_processors, variable_manager)
 
         content = textwrap.dedent("""
            { 
@@ -55,8 +57,10 @@ class TestProcessor(TestBase):
         )
 
         variable_manager = VariableManager(self.cfg_root)
-        jsonl_object_processor = JsonlObjectProcessor()
-        processor = DeviceProcessor(device, jsonl_object_processor, variable_manager)
+        jsonl_object_processors = [
+            ObjectDimensionsProcessor()
+        ]
+        processor = DeviceProcessor(device, jsonl_object_processors, variable_manager)
 
         content = textwrap.dedent("""
            { 
@@ -89,8 +93,10 @@ class TestProcessor(TestBase):
         )
 
         variable_manager = VariableManager(self.cfg_root)
-        jsonl_object_processor = JsonlObjectProcessor()
-        processor = DeviceProcessor(device, jsonl_object_processor, variable_manager)
+        jsonl_object_processors = [
+            ObjectDimensionsProcessor()
+        ]
+        processor = DeviceProcessor(device, jsonl_object_processors, variable_manager)
 
         content = textwrap.dedent("""
            { "x": 0, "y": 0 }
@@ -122,8 +128,10 @@ class TestProcessor(TestBase):
         )
 
         variable_manager = VariableManager(self.cfg_root)
-        jsonl_object_processor = JsonlObjectProcessor()
-        processor = DeviceProcessor(device, jsonl_object_processor, variable_manager)
+        jsonl_object_processors = [
+            ObjectDimensionsProcessor()
+        ]
+        processor = DeviceProcessor(device, jsonl_object_processors, variable_manager)
 
         content = textwrap.dedent("""
             { "x": 0, "y": 0 }
@@ -154,8 +162,10 @@ class TestProcessor(TestBase):
         )
 
         variable_manager = VariableManager(self.cfg_root)
-        jsonl_object_processor = JsonlObjectProcessor()
-        processor = DeviceProcessor(device, jsonl_object_processor, variable_manager)
+        jsonl_object_processors = [
+            ObjectDimensionsProcessor()
+        ]
+        processor = DeviceProcessor(device, jsonl_object_processors, variable_manager)
 
         content = textwrap.dedent("""
            {
@@ -204,8 +214,10 @@ class TestProcessor(TestBase):
         )
 
         variable_manager = VariableManager(self.cfg_root)
-        jsonl_object_processor = JsonlObjectProcessor()
-        processor = DeviceProcessor(device, jsonl_object_processor, variable_manager)
+        jsonl_object_processors = [
+            ObjectDimensionsProcessor()
+        ]
+        processor = DeviceProcessor(device, jsonl_object_processors, variable_manager)
 
         content = textwrap.dedent("""
            {

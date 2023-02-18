@@ -17,7 +17,8 @@ class DeviceProcessor:
     present within the configuration files.
     """
 
-    def __init__(self, device: Device, jsonl_object_processor: JsonlObjectProcessor, variable_manager: VariableManager):
+    def __init__(self, device: Device, jsonl_object_processor: List[JsonlObjectProcessor],
+                 variable_manager: VariableManager):
         self._device = device
 
         self._id_object_map: Dict[str, dict] = {}
@@ -25,7 +26,7 @@ class DeviceProcessor:
 
         self._template_vars: Dict[str, any] = {}
 
-        self._jsonl_object_processor = jsonl_object_processor
+        self._jsonl_object_processors = jsonl_object_processor
         self._variable_manager = variable_manager
 
     def add_other(self, component: Component):
@@ -98,7 +99,10 @@ class DeviceProcessor:
             else:
                 normalized_object[key] = value
 
-        processed = self._jsonl_object_processor.process(normalized_object, config)
+        processed = normalized_object
+        for processor in self._jsonl_object_processors:
+            processed = processor.process(processed, config)
+
         return json.dumps(processed, indent=None)
 
     def _normalize_cmd(self, _device_config, component) -> str:

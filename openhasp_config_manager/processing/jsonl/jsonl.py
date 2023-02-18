@@ -2,9 +2,13 @@ import re
 from typing import Dict
 
 from openhasp_config_manager.model import Config
+from openhasp_config_manager.processing.jsonl import JsonlObjectProcessor
 
 
-class JsonlObjectProcessor:
+class ObjectDimensionsProcessor(JsonlObjectProcessor):
+    """
+    Used to process .jsonl files to add support for additional features.
+    """
     PERCENTAGE_REGEX_PATTERN = re.compile(r"^\d+(\.\d+)?%$")
 
     def process(self, input: Dict, config: Config) -> Dict:
