@@ -4,7 +4,7 @@ from tests import TestBase
 
 class TestUtils(TestBase):
 
-    def test_render_dict_recursively(self):
+    def test_render_dict_recursively__template_rendering_works(self):
         # GIVEN
         input_data = {
             "{{ key }}": "{{ value }}"
@@ -23,4 +23,27 @@ class TestUtils(TestBase):
         # THEN
         assert result == {
             "key_rendered": "value_rendered"
+        }
+
+    def test_render_dict_recursively__two_step_rendering(self):
+        # GIVEN
+        input_data = {
+            "A": "B",
+            "B": "{{ A }}",
+            "C": "{{ B }}",
+        }
+
+        template_vars = {}
+
+        # WHEN
+        result = render_dict_recursively(
+            input=input_data,
+            template_vars=template_vars
+        )
+
+        # THEN
+        assert result == {
+            'A': 'B',
+            'B': 'B',
+            'C': 'B'
         }
