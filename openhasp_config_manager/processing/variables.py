@@ -9,9 +9,6 @@ class VariableManager:
     """
     Used to manage variable definitions found in YAML files inside the configuration
     directory.
-
-    Variable values are resolved by inversely traversing the file path (from bottom to top).
-    The first variable definition found will be used.
     """
     _path_vars = {}
 
