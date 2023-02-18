@@ -23,7 +23,7 @@ def _find_test_folder() -> Path:
 @pytest.mark.usefixtures('tmp_path')
 class TestBase:
     _test_folder = _find_test_folder()
-    cfg_root = Path(_test_folder, Path("test_cfg_root"))
+    cfg_root = Path(_test_folder, Path("_test_cfg_root"))
 
     default_config = Config(
         openhasp_config_manager=OpenhaspConfigManagerConfig(
