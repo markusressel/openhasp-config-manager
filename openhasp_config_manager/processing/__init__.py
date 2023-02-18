@@ -106,6 +106,11 @@ class DeviceProcessor:
         return template.render(self._template_vars)
 
     def _compute_template_variables(self, path: Path) -> dict:
+        """
+        Computes a map of "variable" -> "evaluated value in the given path context" for the given path.
+        :param path: the path to use as a context for evaluating template variables
+        :return: map of "variable" -> "evaluated value in the given path context"
+        """
         result = {}
 
         # device specific variables

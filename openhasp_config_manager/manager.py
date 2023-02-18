@@ -15,6 +15,10 @@ CONFIG_FILE_NAME = "config.json"
 
 
 class ConfigManager:
+    """
+    This class is used to manage multiple device configurations that may be present
+    within a given config directory.
+    """
 
     def __init__(self, cfg_root: Path, output_root: Path, variable_manager: VariableManager):
         self._cfg_root = cfg_root
@@ -24,7 +28,10 @@ class ConfigManager:
 
     def analyze(self) -> List[Device]:
         """
-        Analyze the files in cfg_root
+        Analyze the configuration file tree and the contents of relevant files.
+        The result will be a list of Device object instances, representing the structure
+        and configuration found.
+
         :return: list of devices
         """
         print(f"Analyzing config files in '{self._cfg_root}'...")

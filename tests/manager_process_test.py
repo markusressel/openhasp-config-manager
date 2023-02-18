@@ -1,17 +1,23 @@
 from pathlib import Path
 
 from openhasp_config_manager.manager import ConfigManager
+from openhasp_config_manager.processing import VariableManager
 from tests import TestBase
 
 
 class TestConfigManager(TestBase):
 
     def test_process_whole_config(self, tmp_path):
-        manager = ConfigManager(self.cfg_root, tmp_path)
+        # GIVEN
+        variable_manager = VariableManager(self.cfg_root)
+        manager = ConfigManager(self.cfg_root, tmp_path, variable_manager)
 
         devices = manager.analyze()
+
+        # WHEN
         manager.process(devices)
 
+        # THEN
         file_count = 0
         for file in tmp_path.rglob("*.jsonl"):
             file_count += 1
@@ -25,7 +31,8 @@ class TestConfigManager(TestBase):
 
     def test_global_variable(self, tmp_path):
         # GIVEN
-        manager = ConfigManager(self.cfg_root, tmp_path)
+        variable_manager = VariableManager(self.cfg_root)
+        manager = ConfigManager(self.cfg_root, tmp_path, variable_manager)
         devices = manager.analyze()
 
         # WHEN
