@@ -85,4 +85,21 @@ class TestJsonlObjectValidator(TestBase):
             assert False
         except Exception as ex:
             # THEN
-            assert str(ex) == "Invalid 'align' value: 'wrong', must be one of: ['left', 'center', 'right', 0, 1, 2]"
+            assert str(
+                ex) == "Invalid 'align' string value: 'wrong', must be one of: ['left', 'center', 'right', 0, 1, 2]"
+
+    def test_single_object_invalid_wrong_align_number(self):
+        # GIVEN
+        under_test = JsonlObjectValidator()
+
+        data = textwrap.dedent("""
+        {"page": 0, "id": 5, "obj": "btn", "align": 4 }
+        """).strip()
+
+        try:
+            # WHEN
+            under_test.validate(data=data)
+            assert False
+        except Exception as ex:
+            # THEN
+            assert str(ex) == "Invalid 'align' integer value: '4', must be one of: ['left', 'center', 'right', 0, 1, 2]"

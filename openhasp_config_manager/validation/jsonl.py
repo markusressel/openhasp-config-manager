@@ -37,7 +37,7 @@ class JsonlObjectValidator(Validator):
             if input_align not in valid_align_values:
                 if isinstance(input_align, str):
                     raise AssertionError(
-                        f"Invalid 'align' value: '{input_align}', must be one of: {valid_align_values}")
+                        f"Invalid 'align' string value: '{input_align}', must be one of: {valid_align_values}")
                 if isinstance(input_align, int):
                     raise AssertionError(
                         f"Invalid 'align' integer value: '{input_align}', must be one of: {valid_align_values}")
