@@ -9,7 +9,7 @@ class VariableManager:
     path_vars = {}
 
     def __init__(self, cfg_root: Path):
-        self.cfg_root = Path(cfg_root)
+        self._cfg_root = Path(cfg_root)
         self._read()
 
     def get_vars(self, path: Path) -> Dict:
@@ -18,9 +18,9 @@ class VariableManager:
 
     def _get_vars_for_path(self, path: Path):
         result = {}
-        relative_paths = path.relative_to(self.cfg_root).parent.parts
+        relative_paths = path.relative_to(self._cfg_root).parent.parts
 
-        current_path = self.cfg_root.relative_to(self.cfg_root)
+        current_path = self._cfg_root.relative_to(self._cfg_root)
 
         current_path_str = str(current_path)
         result |= self.path_vars.get(current_path_str, {})
@@ -32,7 +32,7 @@ class VariableManager:
         return result
 
     def _read(self):
-        for toplevel_path in [self.cfg_root]:
+        for toplevel_path in [self._cfg_root]:
             for path in toplevel_path.glob('**/**'):
                 if not path.is_dir():
                     continue
@@ -47,7 +47,7 @@ class VariableManager:
 
                     data = self._load_var_file(file)
 
-                    sub_path = path.relative_to(self.cfg_root)
+                    sub_path = path.relative_to(self._cfg_root)
                     sub_path_str = str(sub_path)
                     if sub_path_str not in self.path_vars.keys():
                         self.path_vars[sub_path_str] = {}

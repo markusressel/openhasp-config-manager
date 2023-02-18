@@ -2,6 +2,8 @@ from pathlib import Path
 
 import click
 
+from openhasp_config_manager.processing import VariableManager
+
 PARAM_CFG_DIR = "cfg_dir"
 PARAM_OUTPUT_DIR = "output_dir"
 PARAM_DEVICE = "device"
@@ -57,7 +59,12 @@ def c_generate(config_dir: Path, output_dir: Path, device: str):
 
 def _generate(config_dir: Path, output_dir: Path, device: str):
     from openhasp_config_manager.manager import ConfigManager
-    processor = ConfigManager(config_dir, output_dir)
+    variable_manager = VariableManager(config_dir)
+    processor = ConfigManager(
+        cfg_root=config_dir,
+        output_root=output_dir,
+        variable_manager=variable_manager
+    )
 
     devices = processor.analyze()
     if device is not None:
@@ -91,7 +98,12 @@ def _upload(config_dir: Path, output_dir: Path, device: str, purge: bool):
     from openhasp_config_manager.manager import ConfigManager
     from openhasp_config_manager.uploader import ConfigUploader
 
-    processor = ConfigManager(config_dir, output_dir)
+    variable_manager = VariableManager(config_dir)
+    processor = ConfigManager(
+        cfg_root=config_dir,
+        output_root=output_dir,
+        variable_manager=variable_manager
+    )
 
     devices = processor.analyze()
     if device is not None:
@@ -129,7 +141,12 @@ def c_deploy(config_dir: Path, output_dir: Path, device: str, purge: bool):
 
 def _reboot(config_dir, device: str):
     from openhasp_config_manager.manager import ConfigManager
-    processor = ConfigManager(config_dir, Path("./nonexistent"))
+    variable_manager = VariableManager(config_dir)
+    processor = ConfigManager(
+        cfg_root=config_dir,
+        output_root=Path("./nonexistent"),
+        variable_manager=variable_manager
+    )
 
     devices = processor.analyze()
     if device is not None:
@@ -144,7 +161,12 @@ def _reboot(config_dir, device: str):
 
 def _reload(config_dir: Path, device: str):
     from openhasp_config_manager.manager import ConfigManager
-    processor = ConfigManager(config_dir, Path("./nonexistent"))
+    variable_manager = VariableManager(config_dir)
+    processor = ConfigManager(
+        cfg_root=config_dir,
+        output_root=Path("./nonexistent"),
+        variable_manager=variable_manager
+    )
 
     devices = processor.analyze()
     if device is not None:
@@ -190,7 +212,12 @@ def c_cmd(config_dir: Path, device: str, command: str, payload: str):
 
 def _cmd(config_dir: Path, device: str, command: str, payload: str):
     from openhasp_config_manager.manager import ConfigManager
-    processor = ConfigManager(config_dir, Path("./nonexistent"))
+    variable_manager = VariableManager(config_dir)
+    processor = ConfigManager(
+        cfg_root=config_dir,
+        output_root=Path("./nonexistent"),
+        variable_manager=variable_manager
+    )
 
     devices = processor.analyze()
     if device is not None:

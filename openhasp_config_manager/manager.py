@@ -16,11 +16,11 @@ CONFIG_FILE_NAME = "config.json"
 
 class ConfigManager:
 
-    def __init__(self, cfg_root: Path, output_root: Path):
+    def __init__(self, cfg_root: Path, output_root: Path, variable_manager: VariableManager):
         self._cfg_root = cfg_root
         self._output_root = output_root
 
-        self._variable_manager = VariableManager(cfg_root)
+        self._variable_manager = variable_manager
 
     def analyze(self) -> List[Device]:
         """
