@@ -204,7 +204,8 @@ class ConfigManager:
             cmd_file_validator = CmdFileValidator()
             device_validator = DeviceValidator(device.config, jsonl_validator, cmd_file_validator)
 
-            # "fill" the processor with all available data for this device
+            # feed device specific data to the processor
+            # Note: this also includes common components
             for component in device.components:
                 if component.type == "jsonl":
                     device_processor.add_jsonl(component)

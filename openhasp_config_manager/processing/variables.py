@@ -4,6 +4,8 @@ from typing import Dict, Any
 import yaml
 from yaml import Loader
 
+from openhasp_config_manager.util import contains_nested_dict_key
+
 
 class VariableManager:
     """
@@ -76,11 +78,19 @@ class VariableManager:
 
                     data = self._load_var_file(file)
 
+                    if data is None:
+                        # file is empty
+                        continue
+
                     sub_path = p.relative_to(path)
                     sub_path_str = str(sub_path)
                     if sub_path_str not in result.keys():
                         result[sub_path_str] = {}
                     result[sub_path_str] |= data
+
+        if contains_nested_dict_key(result, "items"):
+            raise AssertionError(
+                "Variables contain key 'items' which conflics with the built-in function of jinja2. Please choose a different name.")
 
         return result
 

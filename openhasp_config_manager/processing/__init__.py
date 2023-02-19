@@ -6,7 +6,7 @@ from jinja2 import Template
 
 from openhasp_config_manager.model import Config, Component, Device
 from openhasp_config_manager.processing.jsonl import JsonlObjectProcessor
-from openhasp_config_manager.processing.util import render_dict_recursively
+from openhasp_config_manager.processing.util import render_dict_recursively, _render_template
 from openhasp_config_manager.processing.variables import VariableManager
 
 
@@ -84,8 +84,8 @@ class DeviceProcessor:
         normalized_object = {}
         for key, value in parsed.items():
             if isinstance(value, str):
-                template = Template(value)
-                normalized_object[key] = template.render(self._template_vars)
+                rendered_value = _render_template(value, self._template_vars)
+                normalized_object[key] = rendered_value
             else:
                 normalized_object[key] = value
 
