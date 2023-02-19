@@ -237,3 +237,48 @@ class TestDeviceProcessor(TestBase):
         assert result == textwrap.dedent(f"""
                {{"w": {device.config.openhasp_config_manager.device.screen.width}}}
                """).strip()
+
+    def test_id_from_config_through_template(self):
+        device = Device(
+            name="test_device",
+            path=Path(self.cfg_root, "devices", "test_device"),
+            config=self.default_config,
+            components=[],
+            output_dir=None
+        )
+
+        variable_manager = VariableManager(self.cfg_root)
+        variable_manager.add_vars(
+            vars={
+                "id": {
+                    "text": 10
+                }
+            },
+            path=device.path,
+        )
+
+        vars = variable_manager.get_vars(device.path)
+
+        jsonl_object_processors = [
+            ObjectDimensionsProcessor()
+        ]
+        processor = DeviceProcessor(device, jsonl_object_processors, variable_manager)
+
+        content = textwrap.dedent("""
+           {
+             "id": "{{ id.text }}"
+           }
+           """)
+
+        component = Component(
+            name="component",
+            type="jsonl",
+            path=Path(self.cfg_root, "devices", "test_device"),
+            content=content
+        )
+
+        result = processor.normalize(component)
+
+        assert result == textwrap.dedent(f"""
+               {{"id": 10}}
+               """).strip()

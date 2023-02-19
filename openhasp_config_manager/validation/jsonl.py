@@ -43,6 +43,9 @@ class JsonlObjectValidator(Validator):
                         f"Invalid 'align' integer value: '{input_align}', must be one of: {valid_align_values}")
 
     def __remember_page_id_combo(self, input_page: int, input_id: int):
+        if input_page is None or input_id is None:
+            raise AssertionError(f"page or id is None: {input_page}, {input_id}")
+
         key = f"p{input_page}b{input_id}"
         if key in self._seen_ids.keys():
             raise AssertionError(f"Duplicate id detected: {key}")

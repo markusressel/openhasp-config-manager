@@ -12,11 +12,23 @@ class VariableManager:
     Used to manage variable definitions found in YAML files inside the configuration
     directory.
     """
-    _path_vars = {}
 
     def __init__(self, cfg_root: Path):
-        self._cfg_root = Path(cfg_root)
-        self._path_vars = self._read(cfg_root)
+        self._cfg_root: Path = Path(cfg_root)
+        self._path_vars: Dict[str, Dict] = self._read(cfg_root)
+
+    def add_var(self, key: str, value: any, path: Path = None):
+        self.add_vars({key: value}, path)
+
+    def add_vars(self, vars: Dict[str, Any], path: Path = None):
+        if path is None:
+            path = self._cfg_root
+        relative_path = path.relative_to(self._cfg_root)
+        if relative_path.is_file():
+            relative_path = relative_path.parent
+        relative_path_str = str(relative_path)
+        current_vars = self._path_vars.get(relative_path_str, {})
+        self._path_vars[relative_path_str] |= current_vars | vars
 
     def get_vars(self, path: Path) -> [str, Any]:
         """
@@ -44,12 +56,15 @@ class VariableManager:
         :return: a map of "variable name" -> "variable value given the path context"
         """
         result = {}
-        relative_paths = path.relative_to(self._cfg_root).parent.parts
-
         current_path = self._cfg_root.relative_to(self._cfg_root)
-
         current_path_str = str(current_path)
         result |= self._path_vars.get(current_path_str, {})
+
+        relative_path = path.relative_to(self._cfg_root)
+        if relative_path.is_file():
+            relative_path = relative_path.parent
+
+        relative_paths = relative_path.parts
         for subfolder in relative_paths:
             current_path = Path(current_path, subfolder)
             current_path_str = str(current_path)
