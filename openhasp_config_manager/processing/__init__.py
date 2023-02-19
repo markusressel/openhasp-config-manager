@@ -6,7 +6,7 @@ from jinja2 import Template
 
 from openhasp_config_manager.model import Config, Component, Device
 from openhasp_config_manager.processing.jsonl import JsonlObjectProcessor
-from openhasp_config_manager.processing.util import render_dict_recursively, _render_template
+from openhasp_config_manager.processing.util import render_dict_recursive, _render_template
 from openhasp_config_manager.processing.variables import VariableManager
 
 
@@ -114,13 +114,13 @@ class DeviceProcessor:
             c_result = self._variable_manager.get_vars(c.path)
             c_result["device"] = self._device.config.openhasp_config_manager.device
             c_result |= self._compute_object_map(jsonl_objects)
-            rendered = render_dict_recursively(input=c_result, template_vars=c_result)
+            rendered = render_dict_recursive(input=c_result, template_vars=c_result)
             result |= rendered
 
         # device specific variables
         result["device"] = self._device.config.openhasp_config_manager.device
         result |= self._variable_manager.get_vars(component.path)
-        rendered = render_dict_recursively(input=result, template_vars=result)
+        rendered = render_dict_recursive(input=result, template_vars=result)
 
         return rendered
 

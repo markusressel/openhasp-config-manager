@@ -7,7 +7,7 @@ from openhasp_config_manager.ui.util import echo
 _j2_env = jinja2.Environment(undefined=jinja2.DebugUndefined)
 
 
-def render_dict_recursively(
+def render_dict_recursive(
         input: Dict,
         template_vars: Dict,
         result_key_path: List[str] = None,
@@ -46,7 +46,7 @@ def render_dict_recursively(
             value_undefined = False
             rendered_value = value
             if isinstance(value, dict) and rendered_key is not None and not key_undefined:
-                rendered_value = render_dict_recursively(
+                rendered_value = render_dict_recursive(
                     value,
                     template_vars,
                     result_key_path + [rendered_key]

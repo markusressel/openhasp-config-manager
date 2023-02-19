@@ -1,4 +1,4 @@
-from openhasp_config_manager.processing import render_dict_recursively
+from openhasp_config_manager.processing import render_dict_recursive
 from tests import TestBase
 
 
@@ -15,7 +15,7 @@ class TestUtils(TestBase):
         }
 
         # WHEN
-        result = render_dict_recursively(
+        result = render_dict_recursive(
             input=input_data,
             template_vars=template_vars
         )
@@ -36,7 +36,7 @@ class TestUtils(TestBase):
         template_vars = {}
 
         # WHEN
-        result = render_dict_recursively(
+        result = render_dict_recursive(
             input=input_data,
             template_vars=template_vars
         )

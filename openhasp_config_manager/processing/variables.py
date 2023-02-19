@@ -89,6 +89,9 @@ class VariableManager:
                     result[sub_path_str] |= data
 
         if contains_nested_dict_key(result, "items"):
+            # TODO: to avoid this, variables could be accessed by only exposing them
+            #  to jinja2 templates via a custom function like f.ex. "vars('my.key.items.a')".
+            #  This may be cumbersome to use though...
             raise AssertionError(
                 "Variables contain key 'items' which conflics with the built-in function of jinja2. Please choose a different name.")
 
