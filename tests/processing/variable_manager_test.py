@@ -19,6 +19,7 @@ class TestVariableManager(TestBase):
             "global": {
                 "var": "global_var_value"
             },
+            'key_vars2': 'value_vars2',
             "key_also_present_in_device_vars": "test_device_value"
         }
 

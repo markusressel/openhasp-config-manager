@@ -61,17 +61,19 @@ class VariableManager:
         :return: a map of "variable name" -> "variable value given the path context"
         """
         result = {}
-        current_path = self._cfg_root.relative_to(self._cfg_root)
-        current_path_str = str(current_path)
-        result |= self._path_vars.get(current_path_str, {})
 
-        relative_path = path.relative_to(self._cfg_root)
+        toplevel_path = self._cfg_root
+        relative_path = Path(toplevel_path, path.relative_to(toplevel_path))
         if relative_path.is_file():
             relative_path = relative_path.parent
 
+        current_path = None
         relative_paths = relative_path.parts
         for subfolder in relative_paths:
-            current_path = Path(current_path, subfolder)
+            if current_path is None:
+                current_path = Path(subfolder)
+            else:
+                current_path = Path(current_path, subfolder)
             current_path_str = str(current_path)
             result |= self._path_vars.get(current_path_str, {})
 
@@ -84,36 +86,50 @@ class VariableManager:
         """
         result = {}
         for toplevel_path in [path]:
-            for p in toplevel_path.glob('**/**'):
+            for p in list(toplevel_path.glob('**/**')):
                 if not p.is_dir():
                     continue
 
                 if p.name.startswith("."):
                     continue
 
-                path_var_files = p.glob("*.yaml")
-                for file in path_var_files:
-                    if not file.is_file():
-                        continue
+                path_vars = self._create_vars_dict_for_path(p)
 
-                    data = self._load_var_file(file)
+                if contains_nested_dict_key(path_vars, "items"):
+                    # TODO: to avoid this, variables could be accessed by only exposing them
+                    #  to jinja2 templates via a custom function like f.ex. "vars('my.key.items.a')".
+                    #  This may be cumbersome to use though...
+                    raise AssertionError(
+                        "Variables contain key 'items' which conflics with the built-in function of jinja2. Please choose a different name.")
 
-                    if data is None:
-                        # file is empty
-                        continue
+                path_str = str(p)
+                if path_str not in result:
+                    result[path_str] = {}
+                result[path_str] |= self._create_vars_dict_for_path(p)
 
-                    sub_path = p.relative_to(path)
-                    sub_path_str = str(sub_path)
-                    if sub_path_str not in result.keys():
-                        result[sub_path_str] = {}
-                    result[sub_path_str] |= data
+        return result
 
-        if contains_nested_dict_key(result, "items"):
-            # TODO: to avoid this, variables could be accessed by only exposing them
-            #  to jinja2 templates via a custom function like f.ex. "vars('my.key.items.a')".
-            #  This may be cumbersome to use though...
-            raise AssertionError(
-                "Variables contain key 'items' which conflics with the built-in function of jinja2. Please choose a different name.")
+    def _create_vars_dict_for_path(self, path: Path) -> Dict[str, Dict]:
+        """
+        Creates a dictionary containing all the variables for a given path by reading
+        the yaml files in this path. This does _not_ take the path hierarchy
+        into account. Only variables in the exact path will be returned in the result.
+        :param path: the path to use as a context
+        :return: a variable dictionary
+        """
+        result = {}
+        path_var_files = list(path.glob("*.yaml"))
+        for file in path_var_files:
+            if not file.is_file():
+                continue
+
+            data = self._load_var_file(file)
+
+            if data is None:
+                # file is empty
+                continue
+            else:
+                result |= data
 
         return result
 
