@@ -14,13 +14,37 @@ PARAM_CMD = "cmd"
 PARAM_PAYLOAD = "payload"
 
 CMD_OPTION_NAMES = {
-    PARAM_CFG_DIR: ["--config-dir", "-c"],
-    PARAM_OUTPUT_DIR: ["--output-dir", "-o"],
-    PARAM_DEVICE: ["--device", "-d"],
-    PARAM_CMD: ["--command", "-C"],
-    PARAM_PAYLOAD: ["--payload", "-p"],
-    PARAM_PURGE: ["--purge", "-P"],
-    PARAM_SHOW_DIFF: ["--diff", "-D"],
+    PARAM_CFG_DIR: {
+        "names": ["--config-dir", "-c"],
+        "help": """Root directory which contains all of your OpenHASP configuration files.""",
+    },
+    PARAM_OUTPUT_DIR: {
+        "names": ["--output-dir", "-o"],
+        "help": """Target directory to write generated output files to.""",
+    },
+    PARAM_DEVICE: {
+        "names": ["--device", "-d"],
+        "help": """
+            The name of the device to target.
+            Must be one of the device specific folders within the configuration.
+        """
+    },
+    PARAM_CMD: {
+        "names": ["--command", "-C"],
+        "help": """Name of the command to execute, see: https://www.openhasp.com/latest/commands/""",
+    },
+    PARAM_PAYLOAD: {
+        "names": ["--payload", "-p"],
+        "help": """Command payload.""",
+    },
+    PARAM_PURGE: {
+        "names": ["--purge", "-P"],
+        "help": """Whether to cleanup the target device by removing files which are not part of the generated output.""",
+    },
+    PARAM_SHOW_DIFF: {
+        "names": ["--diff", "-D"],
+        "help": """Whether to show a diff for files uploaded to the target device.""",
+    },
 }
 
 CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
@@ -38,21 +62,30 @@ def get_option_names(parameter: str) -> list:
     :param parameter: the parameter to check
     :return: a list of all valid names to use this parameter
     """
-    return CMD_OPTION_NAMES[parameter]
+    return CMD_OPTION_NAMES[parameter]["names"]
+
+
+def get_option_help(parameter: str) -> str:
+    """
+    Returns the help message for a given parameter
+    :param parameter: the parameter to check
+    :return: the help message
+    """
+    return CMD_OPTION_NAMES[parameter]["help"]
 
 
 @cli.command(name="generate")
 @click.option(*get_option_names(PARAM_CFG_DIR),
               required=True,
               type=click.Path(exists=True, path_type=Path),
-              help='Root directory of your config files.')
+              help=get_option_help(PARAM_CFG_DIR))
 @click.option(*get_option_names(PARAM_OUTPUT_DIR),
               required=True,
               default=Path("./output"),
               type=click.Path(path_type=Path),
-              help='Root directory of where to put the generated output files.')
+              help=get_option_help(PARAM_OUTPUT_DIR))
 @click.option(*get_option_names(PARAM_DEVICE), required=False, default=None,
-              help='Only generate the output for the specified device.')
+              help=get_option_help(PARAM_DEVICE))
 def c_generate(config_dir: Path, output_dir: Path, device: str):
     """
     Generates the output files for all devices in the given config directory.
@@ -80,18 +113,18 @@ def _generate(config_dir: Path, output_dir: Path, device: str):
 @click.option(*get_option_names(PARAM_CFG_DIR),
               required=True,
               type=click.Path(exists=True, path_type=Path),
-              help='Root directory of your config files.')
+              help=get_option_help(PARAM_CFG_DIR))
 @click.option(*get_option_names(PARAM_OUTPUT_DIR),
               required=True,
               default=Path("./output"),
               type=click.Path(path_type=Path),
-              help='Root directory of where the generated output files from the "generate" command are located.')
+              help=get_option_help(PARAM_OUTPUT_DIR))
 @click.option(*get_option_names(PARAM_DEVICE), required=False, default=None,
-              help='Only upload the generated files for the specified device.')
+              help=get_option_help(PARAM_DEVICE))
 @click.option(*get_option_names(PARAM_PURGE), is_flag=True,
-              help='Whether to remove files from the device which are not part of the generated output.')
+              help=get_option_help(PARAM_PURGE))
 @click.option(*get_option_names(PARAM_SHOW_DIFF), is_flag=True,
-              help='Whether to show a diff for files uploaded to the target device.')
+              help=get_option_help(PARAM_SHOW_DIFF))
 def c_upload(config_dir: Path, output_dir: Path, device: str, purge: bool, diff: bool):
     """
     Uploads the previously generated configuration to their corresponding devices.
@@ -127,18 +160,18 @@ def _upload(config_dir: Path, output_dir: Path, device: str, purge: bool, show_d
 @click.option(*get_option_names(PARAM_CFG_DIR),
               required=True,
               type=click.Path(exists=True, path_type=Path),
-              help='Root directory of your config files.')
+              help=get_option_help(PARAM_CFG_DIR))
 @click.option(*get_option_names(PARAM_OUTPUT_DIR),
               required=True,
               default=Path("./output"),
               type=click.Path(path_type=Path),
-              help='Root directory of where to put the generated output files.')
+              help=get_option_help(PARAM_OUTPUT_DIR))
 @click.option(*get_option_names(PARAM_DEVICE), required=False, default=None,
-              help='Only deploy the specified device.')
+              help=get_option_help(PARAM_DEVICE))
 @click.option(*get_option_names(PARAM_PURGE), is_flag=True,
-              help='Whether to remove files from the device which are not part of the generated output.')
+              help=get_option_help(PARAM_PURGE))
 @click.option(*get_option_names(PARAM_SHOW_DIFF), is_flag=True,
-              help='Whether to show a diff for files uploaded to the target device.')
+              help=get_option_help(PARAM_SHOW_DIFF))
 def c_deploy(config_dir: Path, output_dir: Path, device: str, purge: bool, diff: bool):
     """
     Combines the generation and upload of a configuration.
@@ -199,20 +232,23 @@ def _deploy(config_dir: Path, output_dir: Path, device: str, purge: bool, show_d
 @click.option(*get_option_names(PARAM_CFG_DIR),
               required=True,
               type=click.Path(exists=True, path_type=Path),
-              help='Root directory of your config files.')
+              help=get_option_help(PARAM_CFG_DIR))
 @click.option(*get_option_names(PARAM_DEVICE),
               required=True,
-              help='Device to send the command to.')
+              help=get_option_help(PARAM_DEVICE))
 @click.option(*get_option_names(PARAM_CMD),
               required=True,
-              help='The name of the command.')
+              help=get_option_help(PARAM_CMD))
 @click.option(*get_option_names(PARAM_PAYLOAD),
               required=False,
               default="",
-              help='Command payload.')
+              help=get_option_help(PARAM_PAYLOAD))
 def c_cmd(config_dir: Path, device: str, command: str, payload: str):
     """
     Sends a command request to a device.
+
+    The list of possible commands can be found on the official OpenHASP
+    documentation: https://www.openhasp.com/latest/commands
     """
     _cmd(config_dir, device, command, payload)
 
