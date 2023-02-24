@@ -12,19 +12,6 @@ LOGGER.setLevel(logging.DEBUG)
 _j2_env = jinja2.Environment(undefined=jinja2.DebugUndefined)
 
 
-def get_var_from_yaml_config(key: str):
-    """
-    Retrieves a variable replacement from the yaml configs
-    :param key: the yaml key, f.ex. "global.statusbar.height"
-    :return: the value associated with this key
-    """
-    # TODO: implement this
-    return key
-
-
-_j2_env.filters["vars"] = get_var_from_yaml_config
-
-
 def render_dict_recursive(
         input: Dict,
         template_vars: Dict,

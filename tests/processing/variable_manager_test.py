@@ -6,28 +6,6 @@ from tests import TestBase
 
 class TestVariableManager(TestBase):
 
-    # def test_vars_function(self, tmp_path):
-    # TODO: implement this?
-    #     # GIVEN
-    #     variable_manager = VariableManager(self.cfg_root)
-    #
-    #     input_data = {
-    #         "A": "{{ vars('global.var') }}",
-    #     }
-    #
-    #     template_vars = {}
-    #
-    #     # WHEN
-    #     result = render_dict_recursive(
-    #         input=input_data,
-    #         template_vars=template_vars
-    #     )
-    #
-    #     # THEN
-    #     assert result == {
-    #         'A': 'global_var_value',
-    #     }
-
     def test_global_variable(self, tmp_path):
         # GIVEN
         variable_manager = VariableManager(self.cfg_root)
