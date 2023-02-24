@@ -2,8 +2,6 @@ import json
 import re
 from typing import List, Dict, Any
 
-from jinja2 import Template
-
 from openhasp_config_manager.model import Config, Component, Device
 from openhasp_config_manager.processing.jsonl import JsonlObjectProcessor
 from openhasp_config_manager.processing.template_rendering import render_dict_recursive, _render_template
@@ -34,11 +32,11 @@ class DeviceProcessor:
         self._jsonl_components.append(component)
 
     def normalize(self, device: Device, component: Component) -> str:
-        template_vars: Dict[str, any] = self._compute_template_variables(device, component)
-
         if component.type == "jsonl":
+            template_vars: Dict[str, any] = self._compute_jsonl_template_variables(device, component)
             return self._normalize_jsonl(self._device.config, component, template_vars)
         elif component.type == "cmd":
+            template_vars: Dict[str, any] = {}
             return self._normalize_cmd(self._device.config, component, template_vars)
         else:
             # no changes necessary
@@ -96,10 +94,9 @@ class DeviceProcessor:
         return json.dumps(processed, indent=None)
 
     def _normalize_cmd(self, _device_config, component, template_vars: Dict[str, any]) -> str:
-        template = Template(component.content)
-        return template.render(template_vars)
+        return _render_template(component.content, template_vars)
 
-    def _compute_template_variables(self, device: Device, component: Component) -> Dict[str, Any]:
+    def _compute_jsonl_template_variables(self, device: Device, component: Component) -> Dict[str, Any]:
         """
         Computes a map of "variable" -> "evaluated value in the given path context" for the given component.
 
@@ -109,29 +106,32 @@ class DeviceProcessor:
         result = {}
 
         # object specific variables for all components that the processor currently knows about
-        for c in self._jsonl_components:
-            if c == component:
-                # render the requested component last
-                continue
+        sorted_components = list(sorted(self._jsonl_components, key=lambda x: x == component))
+        assert sorted_components[-1] == component
+        for c in sorted_components:
             jsonl_objects = self._split_jsonl_objects(c.content)
 
-            template_vars = self._variable_manager.get_vars(c.path)
-            template_vars["device"] = self._device.config.openhasp_config_manager.device
+            component_template_vars = self._variable_manager.get_vars(c.path)
+            component_template_vars["device"] = self._device.config.openhasp_config_manager.device
             if "/common/" in str(c.path):
                 # for common components, also include device specific, top-level variables
                 device_vars = self._variable_manager.get_vars(device.path)
-                template_vars = merge_dict_recursive(template_vars, device_vars)
+                component_template_vars = merge_dict_recursive(component_template_vars, device_vars)
 
             c_result = self._compute_object_map(jsonl_objects)
-            rendered = render_dict_recursive(input=c_result, template_vars=template_vars | c_result | result)
-            result = merge_dict_recursive(result, rendered)
+            merged_template_variables = merge_dict_recursive(result, component_template_vars)
+            merged_template_variables = merge_dict_recursive(merged_template_variables, component_template_vars)
 
-        # device specific variables
-        result["device"] = self._device.config.openhasp_config_manager.device
-        result = merge_dict_recursive(result, self._variable_manager.get_vars(component.path))
-        rendered = render_dict_recursive(input=result, template_vars=result)
+            rendered_template_vars = render_dict_recursive(input=c_result,
+                                                           template_vars=merge_dict_recursive(merged_template_variables,
+                                                                                              c_result))
+            rendered_template_vars = merge_dict_recursive(rendered_template_vars, merged_template_variables)
 
-        return rendered
+            result = merge_dict_recursive(result, rendered_template_vars)
+
+        if result is None:
+            raise AssertionError("Unexpected None value")
+        return result
 
     def _compute_object_map(self, jsonl_objects: List[str]) -> Dict[str, dict]:
         """
