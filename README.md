@@ -12,30 +12,30 @@ place.
     * [x] line breaks wherever you like
     * [x] jinja2 templating within object values
     * [x] local and globally scoped variables
-* [x] output validation
-    * [x] object property checks
-    * [x] referenced file existence checks
+* [x] output validation for
+    * [x] jsonl object
+    * [x] cmd files
 * [x] one click configuration upload to the device
     * [x] automatic diffing to only update changed configuration files
+    * [x] git-style diff output for changed lines
 * [x] execute commands directly from the CLI (still needs a connection to the MQTT broker)
 
 # Disclaimer
 
-**This project is still highly experimental.**
+**TL;DR: This project is still experimental.**
 
-I do use openhasp-config-manager exclusively to configure all of my OpenHASP devices. I am in the
+I do use openhasp-config-manager exclusively to configure all of my openHASP devices. I am in the
 process of adding tests to everything to make it more reliable and have also added lots of features along the way.
-However, there are definitely still a couple of things that do not yet work as intended. If you like the
-project, feel free to open an issue or PR to help me out. Otherwise:
-
-TL;DR: Expect dragons.
+However, there are definitely still a couple of things that do not yet work as intended. Error logs
+might need some love to be able to figure out what you did wrong. If you like the
+project, feel free to open an issue or PR to help me out.
 
 # How to use
 
 ## Installation
 
 Since openhasp-config-manager needs some dependencies (see [here](/pyproject.toml)) it is
-recommended to install it inside of a virtualenv:
+recommended to install it inside a virtualenv:
 
 ```bash
 mkdir -p ~/venvs/openhasp-config-manager
@@ -49,37 +49,31 @@ openhasp-config-manager -h
 
 openhasp-config-manager is first and foremost a configuration
 management system. Simply follow the basic folder structure and
-config deployment will become trivial.
+config deployment will become trivial. **Please read all of this,
+as it is very important to understand the basic structure on
+which everything relies.**
 
-* `devices`: In the root directory of your configuration, a folder called
-  `devices` is expected.
-    * In there you can create as many subfolders as
-      you like, naming them according to the physical devices that you
-      want to manage.
-        * Within those device subfolders you can then create
-          `*.jsonl` and `*.cmd` files.
-        * You must also provide a `config.json` file, see [config.json](#config.json)
-          for more info on how to set it.
-* `common`: The `common` directory can be used to put files
-  that should be included on _all_ device.
+### Folder Structure
 
-You are not limited to a folder depth of one. However, the files
-on openHASP devices cannot be put into subfolders. Therefore, if you put
-`.json` or `.cmd` files into subfolders, the name of the
-resulting file on the openHASP device will be a concatenation of
-the full subpath using an underscore (`_`) as a separator. So f.ex.
-the file in the following structure:
+The following folders should reside inside a single parent
+folder, f.ex. named `openhasp-configs`. This folder can be
+located anywhere you like, but must be accessible to
+openhasp-config-manager when executing.
 
-```text
-openhasp-configs
-└── devices
-    └── touch_down_1
-        └── 0_home
-            └── 0_header.jsonl
-```
-
-would only be uploaded to the `touch_down_1` device and named:
-`0_home_0_header.jsonl`
+* `common`: The `common` subdirectory can be used for files
+  that should be included on _all_ device. This folder is optional.
+* `devices`: The `devices` folder is required. It must contain one
+  subfolder for each openHASP device you want to configure using
+  openhasp-config-maager. It is recommended to name subfolders according
+  to the physical devices associated with them.
+    * `touch_down_1` (example device folder)
+        * A device folder contains `*.jsonl`, `*.cmd` and other files which should
+          only be uploaded to that particular device.
+        * You can create arbitrary nested folder structures for organizing the files.
+          There is a limit to the file name length though,
+          see [FAQ](#output-file-name-length-must-not-exceed-30-characters)
+        * You must provide a `config.json` file, see [config.json](#config.json)
+          for more info.
 
 A more advanced configuration layout could look something like this:
 
@@ -111,18 +105,19 @@ openhasp-configs
 
 ### config.json
 
-openhasp-config-manager makes use of the `config.json` on your plate. It can use information
-to detect things like screen orientation, and also allows you to deploy config changes to your
-plate when you make changes in the config.json file. Since [the official API does not support
+openhasp-config-manager makes use of the `config.json` on your plate. It can extract information
+from it to detect things like screen orientation, and also allows you to deploy changes within the
+`config.json` file. Since [the official API does not support
 uploading the full file](https://github.com/HASwitchPlate/openHASP/issues/363), only settings
 which can also be set through the web ui on the plate itself are currently supported.
 
 To retrieve the initial version of the `config.json` file you can use the
-built-in file browser integrated into the webserver of your OpenHASP plate.
+built-in file browser integrated into the webserver of your openHASP plate, see
+[official docs](https://www.openhasp.com/latest/faq/?h=web#is-there-a-file-browser-built-in).
 
 The official `config.json` file doesn't provide enough info for openhasp-config-manager
-to enable all of its features though. To fix that openhasp-config-manager looks for an
-additional section within the file which is not present by default:
+to enable all of its features though. To fix that simply add a section to the
+file after downloading it:
 
 ```json
 {
@@ -141,9 +136,6 @@ additional section within the file which is not present by default:
   }
 ```
 
-Simply add this section to the `config.json` after you have retrieved it from
-the plate.
-
 ### Preprocessing
 
 openhasp-config-manager runs all configuration files through a preprocessor, which allows us to use
@@ -152,7 +144,7 @@ features the original file format doesn't support, like f.ex. templating.
 #### Templating
 
 You can use Jinja2 templates inside of values. You can access each of the objects using the
-`pXbY` syntax established by OpenHASP, where `X` is the `page` of an object and `Y` is its `id`.
+`pXbY` syntax established by openHASP, where `X` is the `page` of an object and `Y` is its `id`.
 
 You can use the full functionality of Jinja2 like f.ex. math operations, function calls or type conversions.
 
@@ -247,7 +239,7 @@ page_title: "My Device"
 
 ## Deployment
 
-To deploy your configurations to the already connected OpenHASP devices, simply use the
+To deploy your configurations to the already connected openHASP devices, simply use the
 command line tool `openhasp-config-manager`:
 
 ```shell
@@ -288,6 +280,26 @@ With the device connected via USB cable, open a terminal and run:
 ```shell
 bash -c "screen -q -L -Logfile device.log /dev/ttyUSB0 115200 &> /dev/null; tail -F device.log; killall screen"
 ```
+
+## Output file name length must not exceed 30 characters
+
+If you want to organize your files (both common and device-specific ones) you can
+simply create subfolders to achieve your desired structure. However, due to a technical
+limitation openHASP does not support subfolder on the actual device. To overcome
+this limitation openhasp-config-manager will automatically generate a file name for
+files in subfolders before uploading them to the device. `.json` or `.cmd` files within subfolders
+will be renamed by concatenating their full subpath using an underscore (`_`) as a separator. So f.ex.
+the file in the following structure:
+
+```text
+openhasp-configs
+└── devices
+    └── touch_down_1
+        └── 0_home
+            └── 0_header.jsonl
+```
+
+would be uploaded to the `touch_down_1` device with the name `0_home_0_header.jsonl`.
 
 # Contributing
 

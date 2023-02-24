@@ -247,7 +247,7 @@ def c_cmd(config_dir: Path, device: str, command: str, payload: str):
     """
     Sends a command request to a device.
 
-    The list of possible commands can be found on the official OpenHASP
+    The list of possible commands can be found on the official openHASP
     documentation: https://www.openhasp.com/latest/commands
     """
     _cmd(config_dir, device, command, payload)
