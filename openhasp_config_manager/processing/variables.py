@@ -15,7 +15,8 @@ class VariableManager:
 
     def __init__(self, cfg_root: Path):
         self._cfg_root: Path = Path(cfg_root)
-        self._path_vars: Dict[str, Dict] = self._read(cfg_root)
+        self._path_vars: Dict[str, Dict] = {}
+        self._path_vars = self._read(cfg_root)
 
     def add_var(self, key: str, value: any, path: Path = None):
         self.add_vars({key: value}, path)
@@ -23,10 +24,14 @@ class VariableManager:
     def add_vars(self, vars: Dict[str, Any], path: Path = None):
         if path is None:
             path = self._cfg_root
-        relative_path = path.relative_to(self._cfg_root)
+
+        relative_path = Path(self._cfg_root, path.relative_to(self._cfg_root))
         if relative_path.is_file():
             relative_path = relative_path.parent
         relative_path_str = str(relative_path)
+
+        if relative_path_str not in self._path_vars.keys():
+            self._path_vars[relative_path_str] = {}
         current_vars = self._path_vars.get(relative_path_str, {})
         self._path_vars[relative_path_str] |= current_vars | vars
 

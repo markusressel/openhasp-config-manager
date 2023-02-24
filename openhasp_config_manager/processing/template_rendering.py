@@ -1,3 +1,4 @@
+import re
 from typing import Dict, List
 
 import jinja2
@@ -5,6 +6,19 @@ import jinja2
 from openhasp_config_manager.ui.util import echo
 
 _j2_env = jinja2.Environment(undefined=jinja2.DebugUndefined)
+
+
+def get_var_from_yaml_config(key: str):
+    """
+    Retrieves a variable replacement from the yaml configs
+    :param key: the yaml key, f.ex. "global.statusbar.height"
+    :return: the value associated with this key
+    """
+    # TODO: implement this
+    return key
+
+
+_j2_env.filters["vars"] = get_var_from_yaml_config
 
 
 def render_dict_recursive(
@@ -34,13 +48,15 @@ def render_dict_recursive(
         for key in keys:
             value = input[key]
             # key
-            rendered_key = None
-            try:
-                rendered_key = _render_template(key, template_vars)
-                key_undefined = _has_undeclared_variables(rendered_key)
-            except Exception as ex:
-                echo(f"Undefined key: {key_undefined}, value: {key}", color="red")
-                key_undefined = True
+            rendered_key = key
+            key_undefined = False
+            if "{{" in key:
+                try:
+                    rendered_key = _render_template(key, template_vars)
+                    key_undefined = _has_undeclared_variables(rendered_key)
+                except Exception as ex:
+                    echo(f"Undefined key: {key_undefined}, value: {key}", color="red")
+                    key_undefined = True
 
             # value
             value_undefined = False
@@ -103,6 +119,11 @@ def render_dict_recursive(
 
 
 def _render_template(content: str, template_vars: Dict[str, str]) -> str:
+    inner_templates = re.findall(r"\{\{.+\}\}", content[2:-2])
+    for inner_template in inner_templates:
+        if inner_template != content[2:-2]:
+            rendered = _render_template(inner_template, template_vars)
+            content = content.replace(inner_template, rendered)
     template = _j2_env.from_string(content)
     return template.render(template_vars)
 

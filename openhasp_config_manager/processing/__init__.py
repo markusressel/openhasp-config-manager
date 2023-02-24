@@ -6,7 +6,7 @@ from jinja2 import Template
 
 from openhasp_config_manager.model import Config, Component, Device
 from openhasp_config_manager.processing.jsonl import JsonlObjectProcessor
-from openhasp_config_manager.processing.util import render_dict_recursive, _render_template
+from openhasp_config_manager.processing.template_rendering import render_dict_recursive, _render_template
 from openhasp_config_manager.processing.variables import VariableManager
 
 

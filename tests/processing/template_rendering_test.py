@@ -2,7 +2,7 @@ from openhasp_config_manager.processing import render_dict_recursive
 from tests import TestBase
 
 
-class TestUtils(TestBase):
+class TestTemplateRendering(TestBase):
 
     def test_render_dict_recursively__template_rendering_works(self):
         # GIVEN
