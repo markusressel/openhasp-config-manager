@@ -1,6 +1,6 @@
 import json
 import re
-from typing import List, Dict
+from typing import List, Dict, Any
 
 from jinja2 import Template
 
@@ -8,6 +8,7 @@ from openhasp_config_manager.model import Config, Component, Device
 from openhasp_config_manager.processing.jsonl import JsonlObjectProcessor
 from openhasp_config_manager.processing.template_rendering import render_dict_recursive, _render_template
 from openhasp_config_manager.processing.variables import VariableManager
+from openhasp_config_manager.util import merge_dict_recursive
 
 
 class DeviceProcessor:
@@ -23,8 +24,6 @@ class DeviceProcessor:
         self._jsonl_components: List[Component] = []
         self._others: List[Component] = []
 
-        self._template_vars: Dict[str, any] = {}
-
         self._jsonl_object_processors = jsonl_object_processors
         self._variable_manager = variable_manager
 
@@ -34,23 +33,23 @@ class DeviceProcessor:
     def add_jsonl(self, component: Component):
         self._jsonl_components.append(component)
 
-    def normalize(self, component: Component) -> str:
-        self._template_vars = self._compute_template_variables(component)
+    def normalize(self, device: Device, component: Component) -> str:
+        template_vars: Dict[str, any] = self._compute_template_variables(device, component)
 
         if component.type == "jsonl":
-            return self._normalize_jsonl(self._device.config, component)
+            return self._normalize_jsonl(self._device.config, component, template_vars)
         elif component.type == "cmd":
-            return self._normalize_cmd(self._device.config, component)
+            return self._normalize_cmd(self._device.config, component, template_vars)
         else:
             # no changes necessary
             return component.content
 
-    def _normalize_jsonl(self, config: Config, component: Component) -> str:
+    def _normalize_jsonl(self, config: Config, component: Component, template_vars: Dict[str, any]) -> str:
         normalized_objects: List[str] = []
 
         objects = self._split_jsonl_objects(component.content)
         for ob in objects:
-            p = self._normalize_jsonl_object(config, component, ob)
+            p = self._normalize_jsonl_object(config, component, ob, template_vars)
             normalized_objects.append(p)
 
         return "\n".join(normalized_objects)
@@ -78,13 +77,14 @@ class DeviceProcessor:
 
         return result
 
-    def _normalize_jsonl_object(self, config: Config, component: Component, ob: str) -> str:
+    def _normalize_jsonl_object(self, config: Config, component: Component, ob: str,
+                                template_vars: Dict[str, any]) -> str:
         parsed = json.loads(ob)
 
         normalized_object = {}
         for key, value in parsed.items():
             if isinstance(value, str):
-                rendered_value = _render_template(value, self._template_vars)
+                rendered_value = _render_template(value, template_vars)
                 normalized_object[key] = rendered_value
             else:
                 normalized_object[key] = value
@@ -95,11 +95,11 @@ class DeviceProcessor:
 
         return json.dumps(processed, indent=None)
 
-    def _normalize_cmd(self, _device_config, component) -> str:
+    def _normalize_cmd(self, _device_config, component, template_vars: Dict[str, any]) -> str:
         template = Template(component.content)
-        return template.render(self._template_vars)
+        return template.render(template_vars)
 
-    def _compute_template_variables(self, component: Component) -> dict:
+    def _compute_template_variables(self, device: Device, component: Component) -> Dict[str, Any]:
         """
         Computes a map of "variable" -> "evaluated value in the given path context" for the given component.
 
@@ -110,16 +110,25 @@ class DeviceProcessor:
 
         # object specific variables for all components that the processor currently knows about
         for c in self._jsonl_components:
+            if c == component:
+                # render the requested component last
+                continue
             jsonl_objects = self._split_jsonl_objects(c.content)
-            c_result = self._variable_manager.get_vars(c.path)
-            c_result["device"] = self._device.config.openhasp_config_manager.device
-            c_result |= self._compute_object_map(jsonl_objects)
-            rendered = render_dict_recursive(input=c_result, template_vars=c_result)
-            result |= rendered
+
+            template_vars = self._variable_manager.get_vars(c.path)
+            template_vars["device"] = self._device.config.openhasp_config_manager.device
+            if "/common/" in str(c.path):
+                # for common components, also include device specific, top-level variables
+                device_vars = self._variable_manager.get_vars(device.path)
+                template_vars = merge_dict_recursive(template_vars, device_vars)
+
+            c_result = self._compute_object_map(jsonl_objects)
+            rendered = render_dict_recursive(input=c_result, template_vars=template_vars | c_result | result)
+            result = merge_dict_recursive(result, rendered)
 
         # device specific variables
         result["device"] = self._device.config.openhasp_config_manager.device
-        result |= self._variable_manager.get_vars(component.path)
+        result = merge_dict_recursive(result, self._variable_manager.get_vars(component.path))
         rendered = render_dict_recursive(input=result, template_vars=result)
 
         return rendered

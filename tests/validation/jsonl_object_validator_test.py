@@ -69,7 +69,7 @@ class TestJsonlObjectValidator(TestBase):
             assert False
         except Exception as ex:
             # THEN
-            assert str(ex) == "Duplicate id detected: p0b5"
+            assert "Duplicate id detected: p0b5" in str(ex)
 
     def test_single_object_invalid_wrong_align_keyword(self):
         # GIVEN

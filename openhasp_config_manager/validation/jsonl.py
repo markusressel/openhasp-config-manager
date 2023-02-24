@@ -1,4 +1,5 @@
 import json
+from typing import Dict
 
 from py_range_parse import Range
 
@@ -18,10 +19,10 @@ class JsonlObjectValidator(Validator):
             input = json.loads(line)
             self._validate_object(input)
 
-    def _validate_object(self, input):
+    def _validate_object(self, input: Dict):
         input_page = input.get("page", None)
         input_id = input.get("id", None)
-        self.__remember_page_id_combo(input_page, input_id)
+        self.__remember_page_id_combo(input_page, input_id, input)
 
         if input_id is not None:
             valid_range = Range(0, 254)
@@ -42,12 +43,12 @@ class JsonlObjectValidator(Validator):
                     raise AssertionError(
                         f"Invalid 'align' integer value: '{input_align}', must be one of: {valid_align_values}")
 
-    def __remember_page_id_combo(self, input_page: int, input_id: int):
+    def __remember_page_id_combo(self, input_page: int, input_id: int, data: Dict):
         if input_page is None or input_id is None:
             raise AssertionError(f"page or id is None: {input_page}, {input_id}")
 
         key = f"p{input_page}b{input_id}"
         if key in self._seen_ids.keys():
-            raise AssertionError(f"Duplicate id detected: {key}")
+            raise AssertionError(f"Duplicate id detected: {key}, already seen in object: {self._seen_ids[key]}")
         else:
-            self._seen_ids[key] = True
+            self._seen_ids[key] = data

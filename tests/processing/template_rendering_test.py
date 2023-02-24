@@ -51,7 +51,7 @@ class TestTemplateRendering(TestBase):
     def test_render_dict_recursively__inner_template(self):
         # GIVEN
         input_data = {
-            "A": "{{ {{ B }}{{ C }}",
+            "A": "{{ {{ B }}{{ C }} }}",
             "B": "1",
             "C": "2",
         }
@@ -69,4 +69,30 @@ class TestTemplateRendering(TestBase):
             'A': '12',
             "B": "1",
             "C": "2",
+        }
+
+    def test_render_dict_recursively__global_vars(self):
+        # GIVEN
+        input_data = {
+            "A": "{{ header.bar.item_y }}",
+        }
+
+        template_vars = {
+            "header": {
+                "bar": {
+                    "height": 27,
+                    "item_y": "0.5%"
+                }
+            }
+        }
+
+        # WHEN
+        result = render_dict_recursive(
+            input=input_data,
+            template_vars=template_vars
+        )
+
+        # THEN
+        assert result == {
+            'A': '0.5%',
         }

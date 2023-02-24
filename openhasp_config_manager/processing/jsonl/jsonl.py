@@ -1,8 +1,12 @@
+import logging
 import re
 from typing import Dict
 
 from openhasp_config_manager.model import Config
 from openhasp_config_manager.processing.jsonl import JsonlObjectProcessor
+
+LOGGER = logging.getLogger(__name__)
+LOGGER.setLevel(logging.DEBUG)
 
 
 class ObjectDimensionsProcessor(JsonlObjectProcessor):
@@ -37,15 +41,19 @@ class ObjectDimensionsProcessor(JsonlObjectProcessor):
 
         # normalize value types, in case of templates
         for key, value in result.items():
-            if key in [
-                "page", "id",
-                "x", "y", "w", "h",
-                "text_font", "value_font",
-                "radius", "border_side",
-                "min", "max",
-                "prev", "next",
-            ] and isinstance(value, str):
-                result[key] = int(float(value))
+            try:
+                if key in [
+                    "page", "id",
+                    "x", "y", "w", "h",
+                    "text_font", "value_font",
+                    "radius", "border_side",
+                    "min", "max",
+                    "prev", "next",
+                ] and isinstance(value, str):
+                    result[key] = int(float(value))
+            except Exception as ex:
+                LOGGER.exception(ex)
+                print(f"{key}: {value}: {ex}, {input}")
 
         return result
 

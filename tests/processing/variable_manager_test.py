@@ -6,6 +6,28 @@ from tests import TestBase
 
 class TestVariableManager(TestBase):
 
+    # def test_vars_function(self, tmp_path):
+    # TODO: implement this?
+    #     # GIVEN
+    #     variable_manager = VariableManager(self.cfg_root)
+    #
+    #     input_data = {
+    #         "A": "{{ vars('global.var') }}",
+    #     }
+    #
+    #     template_vars = {}
+    #
+    #     # WHEN
+    #     result = render_dict_recursive(
+    #         input=input_data,
+    #         template_vars=template_vars
+    #     )
+    #
+    #     # THEN
+    #     assert result == {
+    #         'A': 'global_var_value',
+    #     }
+
     def test_global_variable(self, tmp_path):
         # GIVEN
         variable_manager = VariableManager(self.cfg_root)
@@ -42,6 +64,7 @@ class TestVariableManager(TestBase):
             "global": {
                 "var": "global_var_value"
             },
+            'key_vars2': 'value_vars2',
             "key_also_present_in_device_vars": "test_device_value"
         }
 
@@ -64,6 +87,7 @@ class TestVariableManager(TestBase):
             "global": {
                 "var": "global_var_value"
             },
+            'key_vars2': 'value_vars2',
             "key_also_present_in_device_vars": "test_device_value"
         }
 
@@ -91,6 +115,7 @@ class TestVariableManager(TestBase):
             "global": {
                 "var": "global_var_value"
             },
+            'key_vars2': 'value_vars2',
             "key_also_present_in_device_vars": "test_device_value"
         }
 
@@ -129,5 +154,6 @@ class TestVariableManager(TestBase):
             "global": {
                 "var": "global_var_value"
             },
+            'key_vars2': 'value_vars2',
             "key_also_present_in_device_vars": "test_device_value"
         }

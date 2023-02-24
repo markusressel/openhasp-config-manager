@@ -4,7 +4,7 @@ from typing import Dict, Any
 import yaml
 from yaml import Loader
 
-from openhasp_config_manager.util import contains_nested_dict_key
+from openhasp_config_manager.util import contains_nested_dict_key, merge_dict_recursive
 
 
 class VariableManager:
@@ -33,7 +33,9 @@ class VariableManager:
         if relative_path_str not in self._path_vars.keys():
             self._path_vars[relative_path_str] = {}
         current_vars = self._path_vars.get(relative_path_str, {})
-        self._path_vars[relative_path_str] |= current_vars | vars
+        combined = merge_dict_recursive(self._path_vars[relative_path_str], current_vars)
+        combined = merge_dict_recursive(combined, vars)
+        self._path_vars[relative_path_str] = combined
 
     def get_vars(self, path: Path) -> [str, Any]:
         """
@@ -75,7 +77,7 @@ class VariableManager:
             else:
                 current_path = Path(current_path, subfolder)
             current_path_str = str(current_path)
-            result |= self._path_vars.get(current_path_str, {})
+            result = merge_dict_recursive(result, self._path_vars.get(current_path_str, {}))
 
         return result
 
@@ -105,7 +107,7 @@ class VariableManager:
                 path_str = str(p)
                 if path_str not in result:
                     result[path_str] = {}
-                result[path_str] |= self._create_vars_dict_for_path(p)
+                result[path_str] = merge_dict_recursive(result[path_str], self._create_vars_dict_for_path(p))
 
         return result
 
@@ -129,7 +131,7 @@ class VariableManager:
                 # file is empty
                 continue
             else:
-                result |= data
+                result = merge_dict_recursive(result, data)
 
         return result
 

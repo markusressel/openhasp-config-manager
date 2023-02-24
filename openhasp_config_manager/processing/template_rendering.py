@@ -1,9 +1,13 @@
+import logging
 import re
 from typing import Dict, List
 
 import jinja2
 
 from openhasp_config_manager.ui.util import echo
+
+LOGGER = logging.getLogger(__name__)
+LOGGER.setLevel(logging.DEBUG)
 
 _j2_env = jinja2.Environment(undefined=jinja2.DebugUndefined)
 
@@ -63,9 +67,9 @@ def render_dict_recursive(
             rendered_value = value
             if isinstance(value, dict) and rendered_key is not None and not key_undefined:
                 rendered_value = render_dict_recursive(
-                    value,
-                    template_vars,
-                    result_key_path + [rendered_key]
+                    input=value,
+                    template_vars=template_vars,
+                    result_key_path=result_key_path + [rendered_key]
                 )
             elif isinstance(value, str):
                 try:
@@ -124,8 +128,14 @@ def _render_template(content: str, template_vars: Dict[str, str]) -> str:
         if inner_template != content[2:-2]:
             rendered = _render_template(inner_template, template_vars)
             content = content.replace(inner_template, rendered)
-    template = _j2_env.from_string(content)
-    return template.render(template_vars)
+    try:
+        template = _j2_env.from_string(content)
+        rendered = template.render(template_vars)
+        return rendered
+    except Exception as ex:
+        LOGGER.exception(ex)
+        print(f"{ex}: \n\n{content}\n\n {template_vars}")
+        raise ex
 
 
 def _has_undeclared_variables(rendered_value):
