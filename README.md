@@ -64,9 +64,9 @@ config deployment will become trivial.
   that should be included on _all_ device.
 
 You are not limited to a folder depth of one. However, the files
-on OpenHasp devices cannot be put into subfolders. Therefore, if you put
+on openHASP devices cannot be put into subfolders. Therefore, if you put
 `.json` or `.cmd` files into subfolders, the name of the
-resulting file on the OpenHasp device will be a concatenation of
+resulting file on the openHASP device will be a concatenation of
 the full subpath using an underscore (`_`) as a separator. So f.ex.
 the file in the following structure:
 

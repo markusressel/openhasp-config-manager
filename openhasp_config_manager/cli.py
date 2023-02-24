@@ -16,7 +16,7 @@ PARAM_PAYLOAD = "payload"
 CMD_OPTION_NAMES = {
     PARAM_CFG_DIR: {
         "names": ["--config-dir", "-c"],
-        "help": """Root directory which contains all of your OpenHASP configuration files.""",
+        "help": """Root directory which contains all of your openHASP configuration files.""",
     },
     PARAM_OUTPUT_DIR: {
         "names": ["--output-dir", "-o"],
