@@ -257,8 +257,6 @@ class TestDeviceProcessor(TestBase):
             path=device.path,
         )
 
-        vars = variable_manager.get_vars(device.path)
-
         jsonl_object_processors = [
             ObjectDimensionsProcessor()
         ]

@@ -9,7 +9,7 @@ class TestVariableManager(TestBase):
     def test_global_variable(self, tmp_path):
         # GIVEN
         variable_manager = VariableManager(self.cfg_root)
-        tested_component_path = Path(self.cfg_root, "devices", "test_device", "home_page.jsonl")
+        tested_component_path = Path(self.cfg_root, "devices", "test_device", "home", "page.jsonl")
 
         # WHEN
         result = variable_manager.get_vars(tested_component_path)
@@ -25,7 +25,7 @@ class TestVariableManager(TestBase):
     def test_add_var(self, tmp_path):
         # GIVEN
         variable_manager = VariableManager(self.cfg_root)
-        tested_component_path = Path(self.cfg_root, "devices", "test_device", "home_page.jsonl")
+        tested_component_path = Path(self.cfg_root, "devices", "test_device", "home", "page.jsonl")
 
         # WHEN
         variable_manager.add_var(
@@ -47,7 +47,7 @@ class TestVariableManager(TestBase):
     def test_add_var_global(self, tmp_path):
         # GIVEN
         variable_manager = VariableManager(self.cfg_root)
-        tested_component_path = Path(self.cfg_root, "devices", "test_device", "home_page.jsonl")
+        tested_component_path = Path(self.cfg_root, "devices", "test_device", "home", "page.jsonl")
 
         # WHEN
         variable_manager.add_var(
@@ -69,7 +69,7 @@ class TestVariableManager(TestBase):
     def test_add_vars(self, tmp_path):
         # GIVEN
         variable_manager = VariableManager(self.cfg_root)
-        tested_component_path = Path(self.cfg_root, "devices", "test_device", "home_page.jsonl")
+        tested_component_path = Path(self.cfg_root, "devices", "test_device", "home", "page.jsonl")
 
         # WHEN
         variable_manager.add_vars(
@@ -96,7 +96,7 @@ class TestVariableManager(TestBase):
     def test_add_vars_merge_with_existing(self, tmp_path):
         # GIVEN
         variable_manager = VariableManager(self.cfg_root)
-        tested_component_path = Path(self.cfg_root, "devices", "test_device", "home_page.jsonl")
+        tested_component_path = Path(self.cfg_root, "devices", "test_device", "home", "page.jsonl")
 
         variable_manager.add_vars(
             vars={

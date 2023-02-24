@@ -19,6 +19,8 @@ def _find_test_folder() -> Path:
             else:
                 p = p.parent.absolute()
 
+    raise AssertionError("test folder not found")
+
 
 @pytest.mark.usefixtures('tmp_path')
 class TestBase:
