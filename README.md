@@ -136,15 +136,17 @@ file after downloading it:
   }
 ```
 
-### Preprocessing
+### Config File Preprocessing
 
-openhasp-config-manager runs all configuration files through a preprocessor, which allows us to use
-features the original file format doesn't support, like f.ex. templating.
+openhasp-config-manager runs all configuration files through various preprocessors, which allow us to use
+features the original file formats do not support by themselves, like f.ex. templating.
 
 #### Templating
 
-You can use Jinja2 templates inside of values. You can access each of the objects using the
-`pXbY` syntax established by openHASP, where `X` is the `page` of an object and `Y` is its `id`.
+You can use Jinja2 templates inside all jsonl object values. To access the value of another object in a
+template, you can use the `pXbY` syntax established by openHASP, where `X` is the `page` of an object and
+`Y` is its `id`. openhasp-config-manager even tries to resolve templates that lead to other templates.
+Be careful not to create loops in this way though.
 
 You can use the full functionality of Jinja2 like f.ex. math operations, function calls or type conversions.
 
@@ -169,22 +171,27 @@ You can use the full functionality of Jinja2 like f.ex. math operations, functio
 #### Variables
 
 Besides accessing other objects, you can also define custom variables yourself, which can then
-be used inside of templates.
+be referenced inside of templates. Variables are defined using `*.yaml` files. If you
+decided to use a subfolder structure to organize your configuration files you can use these folders
+to also set the scope of variables. More specific variable definitions (longer path) will override
+less specific ones.
 
 ##### Global
 
-Global variables can be specified by creating `*.yaml` files inside of the `common` folder.
+Global variables can be specified by creating `*.yaml` files inside the root config folder (f.ex. `openhasp-configs`).
 
 Example:
 
-`common/global.vars.yaml`
+`openhasp-configs/global.vars.yaml`
 
 ```yaml
 about:
   page_title: "About"
 ```
 
-`common/about_page.jsonl`
+To access this variable, use a Jinja2 template:
+
+`openhasp-configs/common/about_page.jsonl`
 
 ```json lines
 {
@@ -199,7 +206,7 @@ about:
 ##### Device specific
 
 Device specific variables can be specified by creating `*.yaml` files inside any of the sub-folders
-of the `device` folder.
+of a `device` folder.
 
 > **Note**
 >
@@ -207,13 +214,13 @@ of the `device` folder.
 
 Example:
 
-`device/my_device/device.vars.yaml`
+`openhasp-configs/device/my_device/device.vars.yaml`
 
 ```yaml
 page_title: "My Device"
 ```
 
-`device/my_device/some_folder/some_page.jsonl`
+`openhasp-configs/device/my_device/some_folder/some_page.jsonl`
 
 ```json lines
 {
@@ -225,7 +232,7 @@ page_title: "My Device"
 }
 ```
 
-`device/my_device/some_other_folder/some_page.jsonl`
+`openhasp-configs/device/my_device/some_other_folder/some_page.jsonl`
 
 ```json lines
 {
