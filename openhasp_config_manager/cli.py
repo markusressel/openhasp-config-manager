@@ -134,6 +134,7 @@ def c_upload(config_dir: Path, output_dir: Path, device: str, purge: bool, diff:
 
 def _upload(config_dir: Path, output_dir: Path, device: str, purge: bool, show_diff: bool):
     from openhasp_config_manager.manager import ConfigManager
+    from openhasp_config_manager.openhasp import OpenHaspClient
     from openhasp_config_manager.uploader import ConfigUploader
 
     variable_manager = VariableManager(config_dir)
@@ -147,8 +148,9 @@ def _upload(config_dir: Path, output_dir: Path, device: str, purge: bool, show_d
     if device is not None:
         devices = list(filter(lambda x: x.name == device, devices))
 
-    uploader = ConfigUploader(output_dir)
     for device in devices:
+        client = OpenHaspClient(device)
+        uploader = ConfigUploader(output_dir, client)
         try:
             echo(f"Uploading files to device '{device.name}'...")
             uploader.upload(device, purge, show_diff)
@@ -193,10 +195,10 @@ def _reboot(config_dir, device: str):
         devices = list(filter(lambda x: x.name == device, devices))
 
     from openhasp_config_manager.openhasp import OpenHaspClient
-    client = OpenHaspClient()
 
     for device in devices:
-        client.reboot(device)
+        client = OpenHaspClient(device)
+        client.reboot()
 
 
 def _reload(config_dir: Path, device: str):
@@ -213,11 +215,11 @@ def _reload(config_dir: Path, device: str):
         devices = list(filter(lambda x: x.name == device, devices))
 
     from openhasp_config_manager.openhasp import OpenHaspClient
-    client = OpenHaspClient()
 
     for device in devices:
-        client.command(device, "clearpage", "all")
-        client.command(device, "run", "L:/boot.cmd")
+        client = OpenHaspClient(device)
+        client.command("clearpage", "all")
+        client.command("run", "L:/boot.cmd")
 
 
 def _deploy(config_dir: Path, output_dir: Path, device: str, purge: bool, show_diff: bool):
@@ -267,10 +269,10 @@ def _cmd(config_dir: Path, device: str, command: str, payload: str):
         devices = list(filter(lambda x: x.name == device, devices))
 
     from openhasp_config_manager.openhasp import OpenHaspClient
-    client = OpenHaspClient()
 
     for device in devices:
-        client.command(device, command, payload)
+        client = OpenHaspClient(device)
+        client.command(command, payload)
 
 
 if __name__ == '__main__':

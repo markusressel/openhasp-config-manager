@@ -9,8 +9,8 @@ from openhasp_config_manager.ui.util import print_diff_to_console, echo
 
 class ConfigUploader:
 
-    def __init__(self, output_root: Path):
-        self._api_client = OpenHaspClient()
+    def __init__(self, output_root: Path, openhasp_client: OpenHaspClient):
+        self._api_client = openhasp_client
         self._output_root = output_root
         self._cache_dir = Path(self._output_root, ".cache")
 
@@ -21,7 +21,7 @@ class ConfigUploader:
         self._update_config(device)
 
     def _upload_files(self, device: Device, print_diff: bool):
-        existing_files = self._api_client.get_files(device)
+        existing_files = self._api_client.get_files()
 
         for file in device.output_dir.iterdir():
             echo(f"Preparing '{file.name}' for upload...")
@@ -31,7 +31,7 @@ class ConfigUploader:
             # check if the checksum of the file has changed on the device
             file_content_on_device = ""
             if file.name in existing_files:
-                file_content_on_device = self._api_client.get_file_content(device, file.name)
+                file_content_on_device = self._api_client.get_file_content(file.name)
                 device_file_content_checksum = util.calculate_checksum(file_content_on_device)
             else:
                 device_file_content_checksum = None
@@ -51,7 +51,7 @@ class ConfigUploader:
                     )
                     print_diff_to_console(diff_output)
                 try:
-                    self._api_client.upload_file(device, file.name, content)
+                    self._api_client.upload_file(file.name, content)
                     checksum_file = self._get_checksum_file(file)
                     checksum_file.parent.mkdir(parents=True, exist_ok=True)
                     checksum_file.write_text(new_checksum)
@@ -70,11 +70,11 @@ class ConfigUploader:
             file_names.append(file.name)
 
         # cleanup files which are on the device, but not present in the generated output
-        files_on_device = self._api_client.get_files(device)
+        files_on_device = self._api_client.get_files()
         for f in files_on_device:
             if f not in file_names:
                 echo(f"Deleting file '{f}' from device '{device.name}'")
-                self._api_client.delete_file(device, f)
+                self._api_client.delete_file(f)
 
     def _check_if_checksum_will_change(self, file: Path, original_checksum: str, new_content: str) -> str | None:
         """
@@ -108,9 +108,9 @@ class ConfigUploader:
         )
 
     def _update_config(self, device: Device):
-        self._api_client.set_mqtt_config(device, device.config.mqtt)
-        self._api_client.set_http_config(device, device.config.http)
-        self._api_client.set_gui_config(device, device.config.gui)
+        self._api_client.set_mqtt_config(device.config.mqtt)
+        self._api_client.set_http_config(device.config.http)
+        self._api_client.set_gui_config(device.config.gui)
 
     @staticmethod
     def _calculate_diff(file_name: str, string1: str, string2: str) -> str:

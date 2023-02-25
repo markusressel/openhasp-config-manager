@@ -4,6 +4,7 @@ from typing import Dict, List
 import requests as requests
 
 from openhasp_config_manager.model import Device, MqttConfig, HttpConfig, GuiConfig, HaspConfig
+from openhasp_config_manager.mqtt_client import MqttClient
 from openhasp_config_manager.ui.util import echo
 
 GET = "GET"
@@ -13,20 +14,31 @@ DELETE = "DELETE"
 
 class OpenHaspClient:
 
-    def get_files(self, device: Device) -> List[str]:
+    def __init__(self, device: Device):
+        """
+        :param device: the device this client can communicate with
+        """
+        self._device = device
+        self._base_url = self._compute_base_url(self._device)
+
+        self._mqtt_client = MqttClient(
+            host=device.config.mqtt.host,
+            port=device.config.mqtt.port,
+            mqtt_user=device.config.mqtt.user,
+            mqtt_password=device.config.mqtt.password
+        )
+
+    def get_files(self) -> List[str]:
         """
         Retrieve a list of all file on the device
-        :param device: the device to query
         :return: a list of all files on the device
         """
-        base_url = self._compute_base_url(device)
-
-        username = device.config.http.user
-        password = device.config.http.password
+        username = self._device.config.http.user
+        password = self._device.config.http.password
 
         response = self._do_request(
-            GET,
-            base_url + "list?dir=/",
+            method=GET,
+            url=self._base_url + "list?dir=/",
             username=username, password=password
         )
         response_data = json.loads(response.decode('utf-8'))
@@ -35,16 +47,14 @@ class OpenHaspClient:
         file_names = list(map(lambda x: x["name"], files))
         return file_names
 
-    def get_file_content(self, device: Device, file_name: str) -> str or None:
-        base_url = self._compute_base_url(device)
-
-        username = device.config.http.user
-        password = device.config.http.password
+    def get_file_content(self, file_name: str) -> str or None:
+        username = self._device.config.http.user
+        password = self._device.config.http.password
 
         try:
             response = self._do_request(
-                GET,
-                base_url + file_name,
+                method=GET,
+                url=self._base_url + file_name,
                 username=username, password=password
             )
             response_data = response.decode('utf-8')
@@ -52,78 +62,54 @@ class OpenHaspClient:
         except Exception as ex:
             return None
 
-    def delete_file(self, device: Device, file_name: str):
+    def delete_file(self, file_name: str):
         """
         Delete a file on the device
-        :param device: the target device
         :param file_name: the name of the file
         """
-        base_url = self._compute_base_url(device)
-
-        username = device.config.http.user
-        password = device.config.http.password
+        username = self._device.config.http.user
+        password = self._device.config.http.password
 
         self._do_request(
-            DELETE,
-            base_url + "edit",
+            method=DELETE,
+            url=self._base_url + "edit",
             data={
                 "path": "/" + file_name
             },
             username=username, password=password
         )
 
-    def command(self, device: Device, name: str, params: str):
+    def watch(self):
+        self._mqtt_client.watch(self._device)
+
+    def command(self, name: str, params: str):
         """
         Execute a command on a device
-        :param device: the device to request
         :param name: the name of the command
         :param params: parameters for the command
         """
-
-        import paho.mqtt.client as paho
-
-        mqtt_host = device.config.mqtt.host
-        mqtt_port = device.config.mqtt.port
-        mqtt_client_id = 'openhasp-config-manager'
-        mqtt_user = device.config.mqtt.user
-        mqtt_password = device.config.mqtt.password
-
-        topic = f"hasp/{device.config.mqtt.name}/command/{name}"
-
-        client = paho.Client(client_id=mqtt_client_id, protocol=paho.MQTTv5)
-
-        client.username_pw_set(username=mqtt_user, password=mqtt_password)
-        client.connect(mqtt_host, mqtt_port)
+        topic = f"hasp/{self._device.config.mqtt.name}/command/{name}"
 
         data = params.strip('"')
-        result = client.publish(topic=topic, payload=data)
-        result.wait_for_publish()
+        self._mqtt_client.publish(topic=topic, payload=data)
 
-        if not result.rc == paho.MQTT_ERR_SUCCESS:
-            echo(f'Code {result.rc} while sending message {result.mid}: {paho.error_string(result.rc)}',
-                 color="red")
-
-    def reboot(self, device: Device):
+    def reboot(self):
         """
         Request a reboot
-        :param device: the target device
         """
-        base_url = self._compute_base_url(device)
-        username = device.config.http.user
-        password = device.config.http.password
+        username = self._device.config.http.user
+        password = self._device.config.http.password
         self._do_request(
-            GET, base_url + "reboot",
+            method=GET,
+            url=self._base_url + "reboot",
             username=username, password=password
         )
 
-    def set_hasp_config(self, device: Device, config: HaspConfig):
+    def set_hasp_config(self, config: HaspConfig):
         """
         Set the "HASP" configuration
-        :param device: the target device
         :param config: the configuration to set
         """
-        base_url = self._compute_base_url(device)
-
         data = {
             "startpage": config.startpage,
             "startdim": config.startdim,
@@ -138,23 +124,21 @@ class OpenHaspClient:
         # ignore keys with None value
         data = {k: v for k, v in data.items() if v is not None}
 
-        username = device.config.http.user
-        password = device.config.http.password
+        username = self._device.config.http.user
+        password = self._device.config.http.password
 
         self._do_request(
-            POST, base_url + "config",
+            method=POST,
+            url=self._base_url + "config",
             data=data,
             username=username, password=password
         )
 
-    def set_http_config(self, device: Device, config: HttpConfig):
+    def set_http_config(self, config: HttpConfig):
         """
         Set the HTTP configuration
-        :param device: the target device
         :param config: the configuration to set
         """
-        base_url = self._compute_base_url(device)
-
         data = {
             "user": config.user,
             "pass": config.password,
@@ -164,24 +148,22 @@ class OpenHaspClient:
         # ignore keys with None value
         data = {k: v for k, v in data.items() if v is not None}
 
-        username = device.config.http.user
-        password = device.config.http.password
+        username = self._device.config.http.user
+        password = self._device.config.http.password
 
         self._do_request(
-            POST, base_url + "config",
+            method=POST,
+            url=self._base_url + "config",
             data=data,
             username=username, password=password
         )
 
-    def set_mqtt_config(self, device: Device, config: MqttConfig):
+    def set_mqtt_config(self, config: MqttConfig):
         """
         Set the MQTT configuration
-        :param device: the target device
         :param config: the configuration to set
         :return:
         """
-        base_url = self._compute_base_url(device)
-
         data = {
             "name": config.name,
             "group": config.group,
@@ -195,24 +177,22 @@ class OpenHaspClient:
         # ignore keys with None value
         data = {k: v for k, v in data.items() if v is not None}
 
-        username = device.config.http.user
-        password = device.config.http.password
+        username = self._device.config.http.user
+        password = self._device.config.http.password
 
         self._do_request(
-            POST, base_url + "config",
+            method=POST,
+            url=self._base_url + "config",
             data=data,
             username=username, password=password
         )
 
-    def set_gui_config(self, device: Device, config: GuiConfig):
+    def set_gui_config(self, config: GuiConfig):
         """
         Set the GUI configuration
-        :param device: the target device
         :param config: the configuration to set
         :return:
         """
-        base_url = self._compute_base_url(device)
-
         data = {
             "idle1": config.idle1,
             "idle2": config.idle2,
@@ -225,40 +205,37 @@ class OpenHaspClient:
         # ignore keys with None value
         data = {k: v for k, v in data.items() if v is not None}
 
-        username = device.config.http.user
-        password = device.config.http.password
+        username = self._device.config.http.user
+        password = self._device.config.http.password
 
         self._do_request(
-            POST, base_url + "config",
+            method=POST,
+            url=self._base_url + "config",
             data=data,
             username=username, password=password
         )
 
-    def upload_files(self, device: Device, files: Dict[str, str]):
+    def upload_files(self, files: Dict[str, str]):
         """
         Upload a collection of files
-        :param device: the target device
         :param files: "target file name"->"file content" mapping
         """
         for name, content in files.items():
-            self.upload_file(device, name, content)
+            self.upload_file(name, content)
 
-    def upload_file(self, device: Device, name: str, content: str):
+    def upload_file(self, name: str, content: str):
         """
         Upload a single file
-        :param device: the target device
         :param name: the target name of the file on the device
         :param content: the file content
         """
         echo(f"Uploading '{name}'...")
 
-        url = self._compute_base_url(device)
-        url += "edit"
-
-        username = device.config.http.user
-        password = device.config.http.password
+        username = self._device.config.http.user
+        password = self._device.config.http.password
         self._do_request(
-            POST, url,
+            method=POST,
+            url=self._base_url + "edit",
             files={
                 f"{name}": content
             },
