@@ -227,7 +227,12 @@ class ConfigManager:
 
             # let the processor manage each component
             for component in device.components:
-                output_content = device_processor.normalize(device, component)
+                try:
+                    output_content = device_processor.normalize(device, component)
+                except Exception as ex:
+                    echo(f"Error normalizing {component.path}: {ex}", color="red")
+                    raise ex
+
                 try:
                     device_validator.validate(component, output_content)
                 except Exception as ex:

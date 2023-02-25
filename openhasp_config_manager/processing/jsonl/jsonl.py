@@ -36,14 +36,12 @@ class ObjectDimensionsProcessor(JsonlObjectProcessor):
         # normalize value types, in case of templates
         for key, value in result.items():
             try:
-                if key in [
-                    "page", "id",
-                    "x", "y", "w", "h",
-                    "text_font", "value_font",
-                    "radius", "border_side",
-                    "min", "max",
-                    "prev", "next",
-                ] and isinstance(value, str):
+                match = re.match(
+                    "^(page|id|x|y|w|h|text_font|value_font|radius|pad_.+|margin_.+|border_width|min|max|prev|next).*$",
+                    string=key,
+                )
+
+                if match and isinstance(value, str):
                     result[key] = int(float(value))
             except Exception as ex:
                 LOGGER.exception(ex)
