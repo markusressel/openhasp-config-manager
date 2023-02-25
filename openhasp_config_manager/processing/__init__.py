@@ -122,9 +122,10 @@ class DeviceProcessor:
             merged_template_variables = merge_dict_recursive(result, component_template_vars)
             merged_template_variables = merge_dict_recursive(merged_template_variables, component_template_vars)
 
-            rendered_template_vars = render_dict_recursive(input=c_result,
-                                                           template_vars=merge_dict_recursive(merged_template_variables,
-                                                                                              c_result))
+            rendered_template_vars = render_dict_recursive(
+                input=c_result,
+                template_vars=merge_dict_recursive(merged_template_variables, c_result)
+            )
             rendered_template_vars = merge_dict_recursive(rendered_template_vars, merged_template_variables)
 
             result = merge_dict_recursive(result, rendered_template_vars)

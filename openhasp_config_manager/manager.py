@@ -113,8 +113,12 @@ class ConfigManager:
             content = config_file.read_text()
             loaded = json.loads(content)
 
+            gui_config = self._parse_gui_config(loaded["gui"])
+            screen_rotated = gui_config.rotate % 2 == 1
+
             config = Config(
-                openhasp_config_manager=self._parse_openhasp_config_manager_config(loaded["openhasp_config_manager"]),
+                openhasp_config_manager=self._parse_openhasp_config_manager_config(loaded["openhasp_config_manager"],
+                                                                                   screen_rotated),
                 mqtt=self._parse_mqtt_config(loaded["mqtt"]),
                 http=self._parse_http_config(loaded["http"]),
                 gui=self._parse_gui_config(loaded["gui"]),
@@ -124,13 +128,22 @@ class ConfigManager:
             return config
 
     @staticmethod
-    def _parse_openhasp_config_manager_config(data: dict) -> OpenhaspConfigManagerConfig:
+    def _parse_openhasp_config_manager_config(data: dict, swap_width_and_height: bool) -> OpenhaspConfigManagerConfig:
+        screen_width_key = "width"
+        screen_height_key = "height"
+
+        if swap_width_and_height:
+            # swap width and height if screen is rotated
+            t = screen_width_key
+            screen_width_key = screen_height_key
+            screen_height_key = t
+
         return OpenhaspConfigManagerConfig(
             device=DeviceConfig(
                 ip=data["device"]["ip"],
                 screen=ScreenConfig(
-                    width=data["device"]["screen"]["width"],
-                    height=data["device"]["screen"]["height"]
+                    width=data["device"]["screen"][screen_width_key],
+                    height=data["device"]["screen"][screen_height_key]
                 )
             )
         )

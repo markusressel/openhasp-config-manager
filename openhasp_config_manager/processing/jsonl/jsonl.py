@@ -24,12 +24,6 @@ class ObjectDimensionsProcessor(JsonlObjectProcessor):
                 total_width = config.openhasp_config_manager.device.screen.width
                 total_height = config.openhasp_config_manager.device.screen.height
 
-                # switch width and height values if screen is rotated an odd amount of times
-                if config.gui.rotate % 2 == 1:
-                    t = total_width
-                    total_width = total_height
-                    total_height = t
-
                 if key in ["x", "w"]:
                     total = total_width
                 else:
