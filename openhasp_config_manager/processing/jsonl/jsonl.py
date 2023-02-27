@@ -18,7 +18,7 @@ class ObjectDimensionsProcessor(JsonlObjectProcessor):
     def process(self, input: Dict, config: Config) -> Dict:
         result: Dict[str, any] = {}
         for key, value in input.items():
-            if isinstance(value, str) and re.match(self.PERCENTAGE_REGEX_PATTERN, value):
+            if isinstance(value, str) and re.match("[xywh]", key) and re.match(self.PERCENTAGE_REGEX_PATTERN, value):
                 numeric_value = self._parse_percentage(value)
 
                 total_width = config.openhasp_config_manager.device.screen.width
