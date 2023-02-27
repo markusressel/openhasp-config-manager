@@ -28,6 +28,10 @@ class ConfigUploader:
 
             content = file.read_text()
 
+            if len(content) <= 0:
+                echo(f"File is empty, skipping upload: {file}")
+                continue
+
             # check if the checksum of the file has changed on the device
             file_content_on_device = ""
             if file.name in existing_files:
