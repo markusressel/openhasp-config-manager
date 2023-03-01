@@ -32,6 +32,23 @@ project, feel free to open an issue or PR to help me out.
 
 # How to use
 
+## Docker
+
+```
+docker run -it --rm \
+  --name openhasp-config-manager \
+  -v "./openhasp-configs:/app/openhasp-configs" \
+  -v "./output:/app/output" \
+  markusressel/openhasp-config-manager
+```
+
+**Note:** Although **barcode-server** will continuously try to detect new devices,
+even when passing through `/dev/input` like shown above, new devices can not be detected
+due to the way docker works. If you need to detect devices in real-time, you have to use
+the native approach.
+
+You can specify the user id and group id using the `PUID` and `PGID` environment variables.
+
 ## Installation
 
 Since openhasp-config-manager needs some dependencies (see [here](/pyproject.toml)) it is

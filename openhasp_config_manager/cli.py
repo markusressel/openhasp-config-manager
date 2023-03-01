@@ -2,6 +2,13 @@ from pathlib import Path
 
 import click
 
+if __name__ == "__main__":
+    import os
+    import sys
+
+    parent_dir = os.path.abspath(os.path.join(os.path.abspath(__file__), "..", ".."))
+    sys.path.append(parent_dir)
+
 from openhasp_config_manager.processing import VariableManager
 from openhasp_config_manager.ui.util import echo
 
@@ -12,6 +19,9 @@ PARAM_PURGE = "purge"
 PARAM_SHOW_DIFF = "diff"
 PARAM_CMD = "cmd"
 PARAM_PAYLOAD = "payload"
+
+DEFAULT_CONFIG_PATH = Path("./openhasp-configs")
+DEFAULT_OUTPUT_PATH = Path("./output")
 
 CMD_OPTION_NAMES = {
     PARAM_CFG_DIR: {
@@ -74,14 +84,21 @@ def get_option_help(parameter: str) -> str:
     return CMD_OPTION_NAMES[parameter]["help"]
 
 
+@cli.command(name="help")
+def c_help():
+    with click.Context(cli) as ctx:
+        click.echo(ctx.get_help())
+
+
 @cli.command(name="generate")
 @click.option(*get_option_names(PARAM_CFG_DIR),
-              required=True,
+              required=False,
+              default=DEFAULT_CONFIG_PATH,
               type=click.Path(exists=True, path_type=Path),
               help=get_option_help(PARAM_CFG_DIR))
 @click.option(*get_option_names(PARAM_OUTPUT_DIR),
               required=True,
-              default=Path("./output"),
+              default=DEFAULT_OUTPUT_PATH,
               type=click.Path(path_type=Path),
               help=get_option_help(PARAM_OUTPUT_DIR))
 @click.option(*get_option_names(PARAM_DEVICE), required=False, default=None,
@@ -111,12 +128,13 @@ def _generate(config_dir: Path, output_dir: Path, device: str):
 
 @cli.command(name="upload")
 @click.option(*get_option_names(PARAM_CFG_DIR),
-              required=True,
+              required=False,
+              default=DEFAULT_CONFIG_PATH,
               type=click.Path(exists=True, path_type=Path),
               help=get_option_help(PARAM_CFG_DIR))
 @click.option(*get_option_names(PARAM_OUTPUT_DIR),
               required=True,
-              default=Path("./output"),
+              default=DEFAULT_OUTPUT_PATH,
               type=click.Path(path_type=Path),
               help=get_option_help(PARAM_OUTPUT_DIR))
 @click.option(*get_option_names(PARAM_DEVICE), required=False, default=None,
@@ -160,12 +178,13 @@ def _upload(config_dir: Path, output_dir: Path, device: str, purge: bool, show_d
 
 @cli.command(name="deploy")
 @click.option(*get_option_names(PARAM_CFG_DIR),
-              required=True,
+              required=False,
+              default=DEFAULT_CONFIG_PATH,
               type=click.Path(exists=True, path_type=Path),
               help=get_option_help(PARAM_CFG_DIR))
 @click.option(*get_option_names(PARAM_OUTPUT_DIR),
               required=True,
-              default=Path("./output"),
+              default=DEFAULT_OUTPUT_PATH,
               type=click.Path(path_type=Path),
               help=get_option_help(PARAM_OUTPUT_DIR))
 @click.option(*get_option_names(PARAM_DEVICE), required=False, default=None,
@@ -232,7 +251,8 @@ def _deploy(config_dir: Path, output_dir: Path, device: str, purge: bool, show_d
 
 @cli.command(name="cmd")
 @click.option(*get_option_names(PARAM_CFG_DIR),
-              required=True,
+              required=False,
+              default=DEFAULT_CONFIG_PATH,
               type=click.Path(exists=True, path_type=Path),
               help=get_option_help(PARAM_CFG_DIR))
 @click.option(*get_option_names(PARAM_DEVICE),
