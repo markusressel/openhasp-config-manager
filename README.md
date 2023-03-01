@@ -39,7 +39,7 @@ docker run -it --rm \
   --name openhasp-config-manager \
   -v "./openhasp-configs:/app/openhasp-configs" \
   -v "./output:/app/output" \
-  markusressel/openhasp-config-manager
+  ghcr.io/markusressel/openhasp-config-manager
 ```
 
 **Note:** Although **barcode-server** will continuously try to detect new devices,
