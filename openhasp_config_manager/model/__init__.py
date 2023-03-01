@@ -81,6 +81,9 @@ class Component:
     path: Path
     content: str
 
+    def __hash__(self):
+        return hash((self.name, self.type, self.path))
+
 
 @dataclass
 class Device:

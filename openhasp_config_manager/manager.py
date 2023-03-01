@@ -1,9 +1,10 @@
 import json
+import re
 import shutil
 from pathlib import Path
-from typing import List
+from typing import List, Set
 
-from openhasp_config_manager.const import COMMON_FOLDER_NAME, DEVICES_FOLDER_NAME
+from openhasp_config_manager.const import COMMON_FOLDER_NAME, DEVICES_FOLDER_NAME, SYSTEM_SCRIPTS
 from openhasp_config_manager.model import Component, Config, Device, OpenhaspConfigManagerConfig, MqttConfig, \
     HttpConfig, GuiConfig, HaspConfig, DeviceConfig, ScreenConfig
 from openhasp_config_manager.processing import DeviceProcessor
@@ -225,8 +226,11 @@ class ConfigManager:
                 else:
                     device_processor.add_other(component)
 
+            # only include files which are referenced in a cmd file
+            relevant_components = self.find_relevant_components(device)
+
             # let the processor manage each component
-            for component in device.components:
+            for component in relevant_components:
                 try:
                     output_content = device_processor.normalize(device, component)
                 except Exception as ex:
@@ -240,6 +244,53 @@ class ConfigManager:
                     raise ex
 
                 self._write_output(device, component, output_content)
+
+    def find_relevant_components(self, device: Device) -> List[Component]:
+        cmd_components = list(filter(lambda x: x.type == "cmd", device.components))
+        jsonl_components = list(filter(lambda x: x.type == "jsonl", device.components))
+
+        referenced_cmd_components = self._find_referenced_cmd_components(cmd_components)
+        referenced_jsonl_components = self._find_referenced_jsonl_components(cmd_components, jsonl_components)
+
+        return list(referenced_jsonl_components) + list(referenced_cmd_components)
+
+    def _find_referenced_cmd_components(self, components: List[Component]) -> Set[Component]:
+        referenced_cmd_components = set()
+        system_components = list(filter(lambda x: x.name in SYSTEM_SCRIPTS, components))
+        referenced_cmd_components.update(system_components)
+
+        # TODO: this should also consider the hirarchy, if a cmd component is not a system component, and
+        #  it is also not referenced anywhere, the component is not relevant
+        for component in components:
+            jsonl_references = self._find_jsonl_references_in_cmd_component(component)
+            for match in jsonl_references:
+                matching_components = list(filter(lambda x: x.name == match, components))
+                referenced_cmd_components.update(matching_components)
+
+        return referenced_cmd_components
+
+    def _find_referenced_jsonl_components(
+            self,
+            cmd_components: List[Component],
+            jsonl_components: List[Component]
+    ) -> Set[Component]:
+        referenced_jsonl_components = set()
+        for component in cmd_components:
+            jsonl_references = self._find_jsonl_references_in_cmd_component(component)
+            for match in jsonl_references:
+                matching_components = list(filter(lambda x: x.name == match, jsonl_components))
+                referenced_jsonl_components.update(matching_components)
+
+        return referenced_jsonl_components
+
+    @staticmethod
+    def _find_jsonl_references_in_cmd_component(component: Component) -> Set[str]:
+        result = set()
+        for line in component.content.splitlines():
+            pattern = re.compile("L:/(.*\.cmd)")
+            matches = re.findall(pattern, line)
+            result.update(matches)
+        return result
 
     @staticmethod
     def _write_output(device: Device, component: Component, output_content: str):
