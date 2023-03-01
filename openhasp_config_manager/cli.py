@@ -86,6 +86,9 @@ def get_option_help(parameter: str) -> str:
 
 @cli.command(name="help")
 def c_help():
+    """
+    Show this message and exit.
+    """
     with click.Context(cli) as ctx:
         click.echo(ctx.get_help())
 

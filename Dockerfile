@@ -16,7 +16,7 @@ RUN apk update \
  && ${VENV_HOME}/bin/pip uninstall -y poetry
 
 # Add Poetry to PATH
-ENV PATH="${VENV_HOME}/bin/openhasp-config-manager:${PATH}"
+ENV PATH="${VENV_HOME}/bin:${PATH}"
 
 COPY openhasp_config_manager openhasp_config_manager
 COPY README.md README.md
