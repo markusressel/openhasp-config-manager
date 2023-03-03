@@ -47,7 +47,7 @@ class JsonlPreProcessor:
             if line.strip().startswith("//"):
                 continue
 
-            parts = re.split(",(\s*//.*)$", line)
+            parts = re.split("(?!,)(\s*//.*)$", line)
             parts = [part.strip() for part in parts if len(part.strip()) > 0]
             keep = parts[0:max(1, len(parts) - 1)]
 

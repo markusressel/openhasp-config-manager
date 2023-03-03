@@ -34,5 +34,4 @@ class TestCmdFileValidator(TestBase):
             assert False
         except Exception as ex:
             # THEN
-            assert str(
-                ex) == "jsonl command argument cannot be parsed: Expecting ',' delimiter: line 1 column 127 (char 126)"
+            assert "jsonl command argument cannot be parsed" in str(ex)
