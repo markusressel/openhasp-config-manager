@@ -79,7 +79,7 @@ class TestJsonlPreProcessor(TestBase):
         { "y": 0 }
         """).strip()
 
-    def test_inline_comment_after_object_param_is_stripped(self):
+    def test_inline_comment_after_object_param_with_comma_is_stripped(self):
         # GIVEN
         underTest = JsonlPreProcessor()
 
@@ -87,6 +87,28 @@ class TestJsonlPreProcessor(TestBase):
         { 
             "x": 0, // comment
             "y": 0
+        }
+        """)
+
+        # WHEN
+        result = underTest.cleanup_object_for_json_parsing(content)
+
+        # THEN
+        assert result == textwrap.dedent("""
+               {
+               "x": 0,
+               "y": 0
+               }
+               """).strip()
+
+    def test_inline_comment_after_object_param_without_comma_is_stripped(self):
+        # GIVEN
+        underTest = JsonlPreProcessor()
+
+        content = textwrap.dedent("""
+        { 
+            "x": 0, 
+            "y": 0 // comment
         }
         """)
 
