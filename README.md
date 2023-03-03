@@ -152,6 +152,51 @@ file after downloading it:
 openhasp-config-manager runs all configuration files through various preprocessors, which allow us to use
 features the original file formats do not support by themselves, like f.ex. templating.
 
+#### Multiline JSONL files
+
+While the JSONL file format requires each object to be on a single line, openhasp-config-manager
+allows you to add as many line breaks as you wish. This makes it much easier to edit, since a config
+like this:
+
+```json
+{
+  "page": 0,
+  "id": 31,
+  "obj": "msgbox",
+  "text": "%ip%",
+  "auto_close": 5000
+}
+```
+
+will be deployed like this:
+
+```json lines
+{
+  "page": 0,
+  "id": 31,
+  "obj": "msgbox",
+  "text": "%ip%",
+  "auto_close": 5000
+}
+```
+
+#### Comments
+
+Neither JSON nor JSONL allows comments, but openhasp-config-manager does!
+You can mark comments by prefixing them with a double forward-slash:
+
+```
+// File description
+{
+  // Object Description
+  "page": 0,
+  "id": 31, // Property Description
+  "obj": "msgbox",
+  "text": "%ip%",
+  "auto_close": 5000
+}
+```
+
 #### Templating
 
 You can use Jinja2 templates inside all jsonl object values. To access the value of another object in a
