@@ -185,12 +185,13 @@ will be deployed like this:
 Neither JSON nor JSONL allows comments, but openhasp-config-manager does!
 You can mark comments by prefixing them with a double forward-slash:
 
-```
+```json
 // File description
 {
   // Object Description
   "page": 0,
-  "id": 31, // Property Description
+  "id": 31,
+  // Property Description
   "obj": "msgbox",
   "text": "%ip%",
   "auto_close": 5000
