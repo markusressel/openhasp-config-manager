@@ -1,4 +1,5 @@
-FROM python:3.11.2-alpine
+# dont use alpine for python builds: https://pythonspeed.com/articles/alpine-docker-python/
+FROM python:3.11-slim-buster
 
 ENV PYTHONUNBUFFERED=1
 ENV POETRY_VERSION="1.4.0"
@@ -7,7 +8,9 @@ ENV VENV_HOME=/opt/poetry
 WORKDIR /app
 
 COPY poetry.lock pyproject.toml ./
-RUN apk update \
+RUN apt-get update \
+ && apt-get -y install python3-pip \
+ && apt-get clean && rm -rf /var/lib/apt/lists/* \
  && python3 -m venv ${VENV_HOME} \
  && ${VENV_HOME}/bin/pip install --upgrade pip \
  && ${VENV_HOME}/bin/pip install "poetry==${POETRY_VERSION}" \
