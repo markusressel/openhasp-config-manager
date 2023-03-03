@@ -49,6 +49,45 @@ class TestDeviceProcessor(TestBase):
                {"x": 0, "y": 0}
                """).strip()
 
+    def test_ignore_inline_comment_after_object_params(self):
+        # GIVEN
+        device = Device(
+            name="test_device",
+            path=Path(self.cfg_root, "devices", "test_device"),
+            config=self.default_config,
+            components=[],
+            output_dir=None
+        )
+
+        variable_manager = VariableManager(self.cfg_root)
+        jsonl_object_processors = [
+            ObjectDimensionsProcessor()
+        ]
+        processor = DeviceProcessor(device, jsonl_object_processors, variable_manager)
+
+        content = textwrap.dedent("""
+           { 
+             "x": 0, // this is a comment
+             "y": 0 
+           }
+           """)
+
+        component = Component(
+            name="component",
+            type="jsonl",
+            path=Path(self.cfg_root, "devices", "test_device"),
+            content=content
+        )
+        processor.add_jsonl(component)
+
+        # WHEN
+        result = processor.normalize(device, component)
+
+        # THEN
+        assert result == textwrap.dedent("""
+               {"x": 0, "y": 0}
+               """).strip()
+
     def test_ignore_line_comment_between_object_params(self):
         # GIVEN
         device = Device(

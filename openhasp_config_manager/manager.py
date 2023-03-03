@@ -1,8 +1,10 @@
-import json
+import re
 import re
 import shutil
 from pathlib import Path
 from typing import List, Set
+
+import orjson
 
 from openhasp_config_manager.const import COMMON_FOLDER_NAME, DEVICES_FOLDER_NAME, SYSTEM_SCRIPTS
 from openhasp_config_manager.model import Component, Config, Device, OpenhaspConfigManagerConfig, MqttConfig, \
@@ -112,7 +114,7 @@ class ConfigManager:
         config_file = Path(device_path, CONFIG_FILE_NAME)
         if config_file.exists() and config_file.is_file():
             content = config_file.read_text()
-            loaded = json.loads(content)
+            loaded = orjson.loads(content)
 
             gui_config = self._parse_gui_config(loaded["gui"])
             screen_rotated = gui_config.rotate % 2 == 1
@@ -287,7 +289,7 @@ class ConfigManager:
     def _find_jsonl_references_in_cmd_component(component: Component) -> Set[str]:
         result = set()
         for line in component.content.splitlines():
-            pattern = re.compile("L:/(.*\.cmd)")
+            pattern = re.compile("L:/(.*\.jsonl)")
             matches = re.findall(pattern, line)
             result.update(matches)
         return result

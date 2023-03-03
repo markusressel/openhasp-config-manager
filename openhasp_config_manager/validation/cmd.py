@@ -1,3 +1,5 @@
+import orjson
+
 from openhasp_config_manager.validation import Validator
 
 
@@ -15,6 +17,6 @@ class CmdFileValidator(Validator):
             command, arg = line.split(sep=" ", maxsplit=1)
             try:
                 import json
-                json.loads(arg)
+                orjson.loads(arg)
             except Exception as ex:
                 raise AssertionError(f"jsonl command argument cannot be parsed: {ex}")

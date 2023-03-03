@@ -1,9 +1,11 @@
 import json
-import re
 from typing import List, Dict, Any
+
+import orjson
 
 from openhasp_config_manager.model import Config, Component, Device
 from openhasp_config_manager.processing.jsonl import JsonlObjectProcessor
+from openhasp_config_manager.processing.preprocessor.jsonl_preprocessor import JsonlPreProcessor
 from openhasp_config_manager.processing.template_rendering import render_dict_recursive, _render_template
 from openhasp_config_manager.processing.variables import VariableManager
 from openhasp_config_manager.util import merge_dict_recursive
@@ -22,6 +24,7 @@ class DeviceProcessor:
         self._jsonl_components: List[Component] = []
         self._others: List[Component] = []
 
+        self._jsonl_preprocessor = JsonlPreProcessor()
         self._jsonl_object_processors = jsonl_object_processors
         self._variable_manager = variable_manager
 
@@ -45,39 +48,17 @@ class DeviceProcessor:
     def _normalize_jsonl(self, config: Config, component: Component, template_vars: Dict[str, any]) -> str:
         normalized_objects: List[str] = []
 
-        objects = self._split_jsonl_objects(component.content)
+        objects = self._jsonl_preprocessor.split_jsonl_objects(component.content)
         for ob in objects:
-            p = self._normalize_jsonl_object(config, component, ob, template_vars)
+            preprocessed = self._jsonl_preprocessor.cleanup_object_for_json_parsing(ob)
+            p = self._normalize_jsonl_object(config, component, preprocessed, template_vars)
             normalized_objects.append(p)
 
         return "\n".join(normalized_objects)
 
-    @staticmethod
-    def _split_jsonl_objects(original_content: str) -> List[str]:
-        pattern_to_find_beginning_of_objects = re.compile(r'^(?!\n)\s*(?=\{)', re.RegexFlag.MULTILINE)
-        parts = pattern_to_find_beginning_of_objects.split(original_content)
-
-        result = []
-        for part in parts:
-            part = part.strip()
-
-            # edge case for first match
-            if "}" not in part:
-                continue
-
-            # ignore lines starting with "//"
-            part = "\n".join([line for line in part.splitlines() if not line.strip().startswith("//")])
-
-            # ignore everything after the last closing bracket
-            part = part.rsplit("}", maxsplit=1)[0] + "}"
-
-            result.append(part)
-
-        return result
-
     def _normalize_jsonl_object(self, config: Config, component: Component, ob: str,
                                 template_vars: Dict[str, any]) -> str:
-        parsed = json.loads(ob)
+        parsed = orjson.loads(ob)
 
         normalized_object = {}
         for key, value in parsed.items():
@@ -109,7 +90,7 @@ class DeviceProcessor:
         sorted_components = list(sorted(self._jsonl_components, key=lambda x: x == component))
         assert sorted_components[-1] == component
         for c in sorted_components:
-            jsonl_objects = self._split_jsonl_objects(c.content)
+            jsonl_objects = self._jsonl_preprocessor.split_jsonl_objects(c.content)
 
             component_template_vars = self._variable_manager.get_vars(c.path)
             component_template_vars["device"] = self._device.config.openhasp_config_manager.device
@@ -141,7 +122,8 @@ class DeviceProcessor:
         """
         result = {}
         for o in jsonl_objects:
-            parsed_object = json.loads(o)
+            o = self._jsonl_preprocessor.cleanup_object_for_json_parsing(o)
+            parsed_object = orjson.loads(o)
             object_key = self._compute_object_key(parsed_object)
             result[object_key] = parsed_object
         return result

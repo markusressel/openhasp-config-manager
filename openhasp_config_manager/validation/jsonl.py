@@ -1,6 +1,6 @@
-import json
 from typing import Dict
 
+import orjson as orjson
 from py_range_parse import Range
 
 from openhasp_config_manager.validation import Validator
@@ -16,7 +16,7 @@ class JsonlObjectValidator(Validator):
 
     def validate(self, data: str):
         for line in data.splitlines():
-            input = json.loads(line)
+            input = orjson.loads(line)
             self._validate_object(input)
 
     def _validate_object(self, input: Dict):

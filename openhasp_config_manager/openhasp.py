@@ -1,6 +1,6 @@
-import json
 from typing import Dict, List
 
+import orjson
 import requests as requests
 
 from openhasp_config_manager.model import Device, MqttConfig, HttpConfig, GuiConfig, HaspConfig
@@ -41,7 +41,7 @@ class OpenHaspClient:
             url=self._base_url + "list?dir=/",
             username=username, password=password
         )
-        response_data = json.loads(response.decode('utf-8'))
+        response_data = orjson.loads(response.decode('utf-8'))
 
         files = list(filter(lambda x: x["type"] == "file", response_data))
         file_names = list(map(lambda x: x["name"], files))
