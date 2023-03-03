@@ -37,6 +37,7 @@ project, feel free to open an issue or PR to help me out.
 ```
 docker run -it --rm \
   --name openhasp-config-manager \
+  --user $USER \
   -v "./openhasp-configs:/app/openhasp-configs" \
   -v "./output:/app/output" \
   ghcr.io/markusressel/openhasp-config-manager
