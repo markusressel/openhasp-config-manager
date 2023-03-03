@@ -233,17 +233,16 @@ class ConfigManager:
 
             # let the processor manage each component
             for component in relevant_components:
+                output_content = None
                 try:
                     output_content = device_processor.normalize(device, component)
                 except Exception as ex:
-                    echo(f"Error normalizing {component.path}: {ex}", color="red")
-                    raise ex
+                    raise Exception(f"Error normalizing {component.path}: {ex}")
 
                 try:
                     device_validator.validate(component, output_content)
                 except Exception as ex:
-                    echo(f"Validation for {component.path} failed: {ex}", color="red")
-                    raise ex
+                    raise Exception(f"Validation for {component.path} failed: {ex}")
 
                 self._write_output(device, component, output_content)
 
@@ -257,19 +256,26 @@ class ConfigManager:
         return list(referenced_jsonl_components) + list(referenced_cmd_components)
 
     def _find_referenced_cmd_components(self, components: List[Component]) -> Set[Component]:
-        referenced_cmd_components = set()
+        result = set()
+
         system_components = list(filter(lambda x: x.name in SYSTEM_SCRIPTS, components))
-        referenced_cmd_components.update(system_components)
+        cmd_components = [c for c in components if c.type == "cmd"] + system_components
 
-        # TODO: this should also consider the hirarchy, if a cmd component is not a system component, and
+        # TODO: this should also consider the hierarchy, if a cmd component is not a system component, and
         #  it is also not referenced anywhere, the component is not relevant
-        for component in components:
-            jsonl_references = self._find_jsonl_references_in_cmd_component(component)
-            for match in jsonl_references:
-                matching_components = list(filter(lambda x: x.name == match, components))
-                referenced_cmd_components.update(matching_components)
 
-        return referenced_cmd_components
+        for component in cmd_components:
+            cmd_references = self._find_cmd_references_in_cmd_component(component)
+            for match in cmd_references:
+                matching_components = list(filter(lambda x: x.name == match, components))
+                if len(matching_components) <= 0:
+                    raise AssertionError(
+                        f"Referenced CMD component not found: {match}, only found: {','.join([c.name for c in cmd_components])}")
+                result.update(matching_components)
+
+        result.update(system_components)
+
+        return result
 
     def _find_referenced_jsonl_components(
             self,
@@ -281,9 +287,21 @@ class ConfigManager:
             jsonl_references = self._find_jsonl_references_in_cmd_component(component)
             for match in jsonl_references:
                 matching_components = list(filter(lambda x: x.name == match, jsonl_components))
+                if len(matching_components) <= 0:
+                    raise AssertionError(
+                        f"Referenced CMD component not found: {match}, only found: {','.join([c.name for c in jsonl_components])}")
                 referenced_jsonl_components.update(matching_components)
 
         return referenced_jsonl_components
+
+    @staticmethod
+    def _find_cmd_references_in_cmd_component(component: Component) -> Set[str]:
+        result = set()
+        for line in component.content.splitlines():
+            pattern = re.compile("L:/(.*\.cmd)")
+            matches = re.findall(pattern, line)
+            result.update(matches)
+        return result
 
     @staticmethod
     def _find_jsonl_references_in_cmd_component(component: Component) -> Set[str]:

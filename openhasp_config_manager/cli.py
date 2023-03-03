@@ -126,7 +126,10 @@ def _generate(config_dir: Path, output_dir: Path, device: str):
     if device is not None:
         devices = list(filter(lambda x: x.name == device, devices))
 
-    processor.process(devices)
+    try:
+        processor.process(devices)
+    except Exception as ex:
+        echo(str(ex), color="red")
 
 
 @cli.command(name="upload")
