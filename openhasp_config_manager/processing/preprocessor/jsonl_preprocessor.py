@@ -32,9 +32,11 @@ class JsonlPreProcessor:
         :param content: original content
         :return: cleaned up content
         """
-        return self.remove_comments(content)
+        result = self._remove_comments(content).strip()
+        result = self._remove_trailing_comma_of_last_property(result)
+        return result
 
-    def remove_comments(self, content: str) -> str:
+    def _remove_comments(self, content: str) -> str:
         """
         Removes comments indicated by "//"
         :param content: original content
@@ -55,4 +57,18 @@ class JsonlPreProcessor:
             result_lines2.append(line)
 
         result = "\n".join(result_lines2)
+        return result.strip()
+
+    def _remove_trailing_comma_of_last_property(self, content: str) -> str:
+        """
+        Removes the "," of the last property within the object.
+        :param content: original content
+        :return: modified content
+        """
+        result = content
+        matches = re.findall(r",\s*}", content, flags=re.MULTILINE)
+        if matches is not None:
+            for match in matches:
+                result = result.replace(match, match[1:])
+
         return result
