@@ -75,7 +75,7 @@ openhasp-config-manager when executing.
   that should be included on _all_ device. This folder is optional.
 * `devices`: The `devices` folder is required. It must contain one
   subfolder for each openHASP device you want to configure using
-  openhasp-config-maager. It is recommended to name subfolders according
+  openhasp-config-manager. It is recommended to name subfolders according
   to the physical devices associated with them.
     * `touch_down_1` (example device folder)
         * A device folder contains `*.jsonl`, `*.cmd` and other files which should
