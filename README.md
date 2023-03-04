@@ -46,17 +46,42 @@ docker run -it --rm \
 ## Installation
 
 Since openhasp-config-manager needs some dependencies (see [here](/pyproject.toml)) it is
-recommended to install it inside a virtualenv:
+**recommended to install it inside a virtualenv**.
+
+### venv-install
+
+[venv-install](https://github.com/markusressel/venv-install) is a little helper tool to eas the
+installation, management and usage of python cli tools in venvs.
+
+```bash
+venv-install openhasp-config-manager openhasp-config-manager
+openhas#-config-manager -h
+```
+
+### Manual
 
 ```bash
 mkdir -p ~/venvs/openhasp-config-manager
 python3 -m venv ~/venvs/openhasp-config-manager
 source ~/venvs/openhasp-config-manager/bin/activate
 pip3 install openhasp-config-manager
-openhasp-config-manager -h
 ```
 
-Alternatively, you can use helpers like [venv-install](https://github.com/markusressel/venv-install).
+And to use it:
+
+```shell
+source ~/venvs/openhasp-config-manager/bin/activate
+openhasp-config-manager -h
+openhasp-config-manager analyze -c "./openhasp-configs"
+...
+```
+
+### Uninstall
+
+```bash
+deactivate
+rm -rf ~/venvs/openhasp-config-manager
+```
 
 ## Configuration
 
