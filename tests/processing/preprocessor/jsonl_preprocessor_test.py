@@ -142,3 +142,63 @@ class TestJsonlPreProcessor(TestBase):
                "x": 0
                }
                """).strip()
+
+    def test_split_objects_empty_content(self):
+        # GIVEN
+        underTest = JsonlPreProcessor()
+
+        content = ""
+
+        # WHEN
+        result = underTest.split_jsonl_objects(content)
+
+        # THEN
+        assert result == []
+
+    def test_split_objects_single_object_with_random_stuff_around_it(self):
+        # GIVEN
+        underTest = JsonlPreProcessor()
+
+        content = textwrap.dedent("""
+        1237!()
+        // comment
+        random text
+        { "x": 0 }
+        random stuff
+        // comment
+        1237!()
+        """).strip()
+
+        # WHEN
+        result = underTest.split_jsonl_objects(content)
+
+        # THEN
+        assert result == ["""{ "x": 0 }"""]
+
+    def test_split_objects_multiple_objects_with_random_stuff_around_them(self):
+        # GIVEN
+        underTest = JsonlPreProcessor()
+
+        content = textwrap.dedent("""
+        1237!()
+        // comment
+        random text
+        { "x": 0 }
+        random stuff
+        // comment
+        1237!()
+        { "y": 1 }
+        random stuff
+        // comment
+        1237!()
+
+        """).strip()
+
+        # WHEN
+        result = underTest.split_jsonl_objects(content)
+
+        # THEN
+        assert result == [
+            """{ "x": 0 }""",
+            """{ "y": 1 }""",
+        ]
