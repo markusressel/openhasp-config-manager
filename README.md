@@ -56,6 +56,8 @@ pip3 install openhasp-config-manager
 openhasp-config-manager -h
 ```
 
+Alternatively, you can use helpers like [venv-install](https://github.com/markusressel/venv-install).
+
 ## Configuration
 
 openhasp-config-manager is first and foremost a configuration
