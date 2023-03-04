@@ -5,20 +5,20 @@ place.
 
 # Features
 
-* [x] manage as many devices as you like
-* [x] share configuration files between devices
+* [x] unlimited multi-device management
+* [x] shared configuration between devices
 * [x] jsonl preprocessing, which allows for
     * [x] `//` comments within jsonl files
     * [x] line breaks wherever you like
     * [x] jinja2 templating within object values
     * [x] local and globally scoped variables
-* [x] output validation for
-    * [x] jsonl object
+* [x] validation of common mistakes for
+    * [x] jsonl objects
     * [x] cmd files
-* [x] one click configuration upload to the device
+* [x] simple configuration upload to the device(s)
     * [x] automatic diffing to only update changed configuration files
     * [x] git-style diff output for changed lines
-* [x] execute commands directly from the CLI (still needs a connection to the MQTT broker)
+* [x] device command execution directly from the CLI (still needs a connection to the MQTT broker)
 
 # Disclaimer
 
