@@ -90,7 +90,7 @@ def c_help():
     Show this message and exit.
     """
     with click.Context(cli) as ctx:
-        click.echo(ctx.get_help())
+        echo(ctx.get_help())
 
 
 @cli.command(name="generate")
