@@ -55,7 +55,7 @@ installation, management and usage of python cli tools in venvs.
 
 ```bash
 venv-install openhasp-config-manager openhasp-config-manager
-openhas#-config-manager -h
+openhasp-config-manager -h
 ```
 
 ### Manual
