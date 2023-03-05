@@ -115,30 +115,33 @@ def c_generate(config_dir: Path, output_dir: Path, device: str):
     Generates the output files for all devices in the given config directory.
     """
     try:
-        _generate(config_dir, output_dir, device)
+        config_manager = _create_config_manager(config_dir, output_dir)
+        filtered_devices, ignored_devices = _analyze_and_filter(config_manager=config_manager, device_filter=device)
+
+        if len(filtered_devices) <= 0:
+            if device is None:
+                raise Exception("No devices found.")
+            else:
+                raise Exception(f"No device matches the filter: {device}")
+
+        if len(ignored_devices) > 0:
+            ignored_devices_names = list(map(lambda x: x.name, ignored_devices))
+            warn(f"Skipping devices: {', '.join(ignored_devices_names)}")
+
+        for device in filtered_devices:
+            _generate(config_manager, device)
+
         success("Done!")
     except Exception as ex:
         error(str(ex))
 
 
-def _generate(config_dir: Path, output_dir: Path, device: str):
-    config_manager = _create_config_manager(config_dir, output_dir)
-    filtered_devices, ignored_devices = _analyze_and_filter(config_manager=config_manager, device_filter=device)
-
-    if len(filtered_devices) <= 0:
-        if device is None:
-            error("No devices found.")
-        else:
-            error(f"No device matches the filter: {device}")
-        return
-
-    if len(ignored_devices) > 0:
-        ignored_devices_names = list(map(lambda x: x.name, ignored_devices))
-        warn(f"Skipping devices: {', '.join(ignored_devices_names)}")
-
-    for device in filtered_devices:
-        info(f"Generating output for '{device.name}'...")
+def _generate(config_manager: ConfigManager, device: Device):
+    info(f"Generating output for '{device.name}'...")
+    try:
         config_manager.process(device)
+    except Exception as ex:
+        raise Exception(f"Error generating output for {device.name}: {ex}")
 
 
 @cli.command(name="upload")
@@ -163,38 +166,25 @@ def c_upload(config_dir: Path, output_dir: Path, device: str, purge: bool, diff:
     Uploads the previously generated configuration to their corresponding devices.
     """
     try:
-        _upload(config_dir, output_dir, device, purge, diff)
+        config_manager = _create_config_manager(config_dir, output_dir)
+        filtered_devices, ignored_devices = _analyze_and_filter(config_manager=config_manager, device_filter=device)
+
+        if len(filtered_devices) <= 0:
+            if device is None:
+                raise Exception("No devices found.")
+            else:
+                raise Exception(f"No device matches the filter: {device}")
+
+        if len(ignored_devices) > 0:
+            ignored_devices_names = list(map(lambda x: x.name, ignored_devices))
+            warn(f"Skipping devices: {', '.join(ignored_devices_names)}")
+
+        for device in filtered_devices:
+            _upload(device, output_dir, purge, diff)
+
         success("Done!")
     except Exception as ex:
         error(str(ex))
-
-
-def _upload(config_dir: Path, output_dir: Path, device: str, purge: bool, show_diff: bool):
-    from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
-    from openhasp_config_manager.uploader import ConfigUploader
-
-    config_manager = _create_config_manager(config_dir, output_dir)
-    filtered_devices, ignored_devices = _analyze_and_filter(config_manager=config_manager, device_filter=device)
-
-    if len(filtered_devices) <= 0:
-        if device is None:
-            error("No devices found.")
-        else:
-            error(f"No device matches the filter: {device}")
-        return
-
-    if len(ignored_devices) > 0:
-        ignored_devices_names = list(map(lambda x: x.name, ignored_devices))
-        warn(f"Skipping devices: {', '.join(ignored_devices_names)}")
-
-    for device in filtered_devices:
-        client = OpenHaspClient(device)
-        uploader = ConfigUploader(output_dir, client)
-        try:
-            info(f"Uploading files to device '{device.name}'...")
-            uploader.upload(device, purge, show_diff)
-        except Exception as ex:
-            error(f"Error uploading files to '{device.name}': {ex}")
 
 
 @cli.command(name="deploy")
@@ -219,47 +209,31 @@ def c_deploy(config_dir: Path, output_dir: Path, device: str, purge: bool, diff:
     Combines the generation and upload of a configuration.
     """
     try:
-        _deploy(config_dir, output_dir, device, purge, diff)
+        config_manager = _create_config_manager(config_dir, output_dir)
+        filtered_devices, ignored_devices = _analyze_and_filter(config_manager=config_manager, device_filter=device)
+
+        if len(filtered_devices) <= 0:
+            if device is None:
+                raise Exception("No devices found.")
+            else:
+                raise Exception(f"No device matches the filter: {device}")
+
+        if len(ignored_devices) > 0:
+            ignored_devices_names = list(map(lambda x: x.name, ignored_devices))
+            warn(f"Skipping devices: {', '.join(ignored_devices_names)}")
+
+        for device in filtered_devices:
+            _deploy(
+                config_manager=config_manager,
+                device=device,
+                output_dir=output_dir,
+                purge=purge,
+                show_diff=diff
+            )
+
         success("Done!")
     except Exception as ex:
         error(str(ex))
-
-
-def _reboot(config_dir, device: str):
-    config_manager = _create_config_manager(config_dir, Path("./nonexistent"))
-
-    filtered_devices, ignored_devices = _analyze_and_filter(config_manager=config_manager, device_filter=device)
-
-    if len(filtered_devices) <= 0:
-        error(f"No device matches the filter: {device}")
-        return
-
-    from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
-
-    for device in filtered_devices:
-        client = OpenHaspClient(device)
-        info(f"Rebooting {device.name}...")
-        client.reboot()
-
-
-def _reload(config_dir: Path, device: str):
-    config_manager = _create_config_manager(config_dir, Path("./nonexistent"))
-    filtered_devices, ignored_devices = _analyze_and_filter(config_manager=config_manager, device_filter=device)
-
-    from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
-
-    for device in filtered_devices:
-        client = OpenHaspClient(device)
-        client.command("clearpage", "all")
-        client.command("run", "L:/boot.cmd")
-
-
-def _deploy(config_dir: Path, output_dir: Path, device: str, purge: bool, show_diff: bool):
-    _generate(config_dir, output_dir, device)
-    _upload(config_dir, output_dir, device, purge, show_diff)
-    # _cmd(config_dir, device="touch_down_1", command="reboot", payload="")
-    # _reload(config_dir, device)
-    _reboot(config_dir, device)
 
 
 @cli.command(name="cmd")
@@ -286,26 +260,62 @@ def c_cmd(config_dir: Path, device: str, command: str, payload: str):
     documentation: https://www.openhasp.com/latest/commands
     """
     try:
-        _cmd(config_dir, device, command, payload)
+        config_manager = _create_config_manager(config_dir, Path("./nonexistent"))
+        filtered_devices, ignored_devices = _analyze_and_filter(config_manager=config_manager, device_filter=device)
+
+        if len(filtered_devices) <= 0:
+            raise Exception(f"No device matches the filter: {device}")
+
+        for device in filtered_devices:
+            _cmd(device, command, payload)
         success("Done!")
     except Exception as ex:
         error(str(ex))
 
 
-def _cmd(config_dir: Path, device: str, command: str, payload: str):
-    config_manager = _create_config_manager(config_dir, Path("./nonexistent"))
-    filtered_devices, ignored_devices = _analyze_and_filter(config_manager=config_manager, device_filter=device)
+def _upload(device: Device, output_dir: Path, purge: bool, show_diff: bool):
+    from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
+    from openhasp_config_manager.uploader import ConfigUploader
 
-    if len(filtered_devices) <= 0:
-        error(f"No device matches the filter: {device}")
-        return
+    client = OpenHaspClient(device)
+    uploader = ConfigUploader(output_dir, client)
+    try:
+        info(f"Uploading files to device '{device.name}'...")
+        uploader.upload(device, purge, show_diff)
+    except Exception as ex:
+        raise Exception(f"Error uploading files to '{device.name}': {ex}")
 
+
+def _deploy(config_manager: ConfigManager, device: Device, output_dir: Path, purge: bool, show_diff: bool):
+    _generate(config_manager, device)
+    _upload(device, output_dir, purge, show_diff)
+    # _cmd(config_dir, device="touch_down_1", command="reboot", payload="")
+    # _reload(config_dir, device)
+    _reboot(device)
+
+
+def _reload(device: Device):
     from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 
-    for device in filtered_devices:
-        client = OpenHaspClient(device)
-        info(f"Sending command {command} to {device.name}...")
-        client.command(command, payload)
+    client = OpenHaspClient(device)
+    client.command("clearpage", "all")
+    client.command("run", "L:/boot.cmd")
+
+
+def _reboot(device: Device):
+    from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
+
+    client = OpenHaspClient(device)
+    info(f"Rebooting {device.name}...")
+    client.reboot()
+
+
+def _cmd(device: Device, command: str, payload: str):
+    from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
+
+    client = OpenHaspClient(device)
+    info(f"Sending command {command} to {device.name}...")
+    client.command(command, payload)
 
 
 def _create_config_manager(config_dir, output_dir) -> ConfigManager:
