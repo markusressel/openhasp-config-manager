@@ -20,8 +20,8 @@ def c_screenshot(config_dir: Path, device: str, output: Path):
             try:
                 info(f"Taking screenshot of device '{device.name}'...")
                 screenshot = client.take_screenshot()
-                # TODO: write screenshot to output dir
-                print(screenshot)
+                image_file_path = Path(output, f"{device.name}.bmp")
+                image_file_path.write_bytes(screenshot)
             except Exception as ex:
                 raise Exception(f"Error taking screenshot of device '{device.name}': {ex}")
 
