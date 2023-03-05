@@ -4,7 +4,7 @@ from typing import Dict, List
 
 import jinja2
 
-from openhasp_config_manager.ui.util import echo
+from openhasp_config_manager.ui.util import echo, error
 
 LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(logging.DEBUG)
@@ -46,7 +46,7 @@ def render_dict_recursive(
                     rendered_key = _render_template(key, template_vars)
                     key_undefined = _has_undeclared_variables(rendered_key)
                 except Exception as ex:
-                    echo(f"Undefined key: {key_undefined}, value: {key}", color="red")
+                    error(f"Undefined key: {key_undefined}, value: {key}")
                     key_undefined = True
 
             # value

@@ -10,7 +10,7 @@ if __name__ == "__main__":
     sys.path.append(parent_dir)
 
 from openhasp_config_manager.processing import VariableManager
-from openhasp_config_manager.ui.util import echo
+from openhasp_config_manager.ui.util import echo, info, error, success
 
 PARAM_CFG_DIR = "cfg_dir"
 PARAM_OUTPUT_DIR = "output_dir"
@@ -110,26 +110,32 @@ def c_generate(config_dir: Path, output_dir: Path, device: str):
     """
     Generates the output files for all devices in the given config directory.
     """
-    _generate(config_dir, output_dir, device)
+    try:
+        _generate(config_dir, output_dir, device)
+        success("Done!")
+    except Exception as ex:
+        error(str(ex))
 
 
 def _generate(config_dir: Path, output_dir: Path, device: str):
     from openhasp_config_manager.manager import ConfigManager
+
+    info(f"Analyzing files in '{config_dir}'...")
+
     variable_manager = VariableManager(config_dir)
-    processor = ConfigManager(
+    config_manager = ConfigManager(
         cfg_root=config_dir,
         output_root=output_dir,
         variable_manager=variable_manager
     )
 
-    devices = processor.analyze()
+    devices = config_manager.analyze()
     if device is not None:
         devices = list(filter(lambda x: x.name == device, devices))
 
-    try:
-        processor.process(devices)
-    except Exception as ex:
-        echo(str(ex), color="red")
+    for device in devices:
+        info(f"Generating output for '{device.name}'")
+        config_manager.process(device)
 
 
 @cli.command(name="upload")
@@ -153,7 +159,11 @@ def c_upload(config_dir: Path, output_dir: Path, device: str, purge: bool, diff:
     """
     Uploads the previously generated configuration to their corresponding devices.
     """
-    _upload(config_dir, output_dir, device, purge, diff)
+    try:
+        _upload(config_dir, output_dir, device, purge, diff)
+        success("Done!")
+    except Exception as ex:
+        error(str(ex))
 
 
 def _upload(config_dir: Path, output_dir: Path, device: str, purge: bool, show_diff: bool):
@@ -176,10 +186,10 @@ def _upload(config_dir: Path, output_dir: Path, device: str, purge: bool, show_d
         client = OpenHaspClient(device)
         uploader = ConfigUploader(output_dir, client)
         try:
-            echo(f"Uploading files to device '{device.name}'...")
+            info(f"Uploading files to device '{device.name}'...")
             uploader.upload(device, purge, show_diff)
         except Exception as ex:
-            echo(f"Error uploading files to '{device.name}': {ex}", color="red")
+            error(f"Error uploading files to '{device.name}': {ex}")
 
 
 @cli.command(name="deploy")
@@ -203,7 +213,11 @@ def c_deploy(config_dir: Path, output_dir: Path, device: str, purge: bool, diff:
     """
     Combines the generation and upload of a configuration.
     """
-    _deploy(config_dir, output_dir, device, purge, diff)
+    try:
+        _deploy(config_dir, output_dir, device, purge, diff)
+        success("Done!")
+    except Exception as ex:
+        error(str(ex))
 
 
 def _reboot(config_dir, device: str):
@@ -278,7 +292,11 @@ def c_cmd(config_dir: Path, device: str, command: str, payload: str):
     The list of possible commands can be found on the official openHASP
     documentation: https://www.openhasp.com/latest/commands
     """
-    _cmd(config_dir, device, command, payload)
+    try:
+        _cmd(config_dir, device, command, payload)
+        success("Done!")
+    except Exception as ex:
+        error(str(ex))
 
 
 def _cmd(config_dir: Path, device: str, command: str, payload: str):

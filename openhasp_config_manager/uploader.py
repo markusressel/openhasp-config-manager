@@ -4,7 +4,7 @@ from pathlib import Path
 from openhasp_config_manager import util
 from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
-from openhasp_config_manager.ui.util import print_diff_to_console, echo
+from openhasp_config_manager.ui.util import print_diff_to_console, info, warn
 
 
 class ConfigUploader:
@@ -24,12 +24,12 @@ class ConfigUploader:
         existing_files = self._api_client.get_files()
 
         for file in device.output_dir.iterdir():
-            echo(f"Preparing '{file.name}' for upload...")
+            info(f"Preparing '{file.name}' for upload...")
 
             content = file.read_text()
 
             if len(content) <= 0:
-                echo(f"File is empty, skipping upload: {file}")
+                warn(f"File is empty, skipping upload: {file}")
                 continue
 
             # check if the checksum of the file has changed on the device
@@ -60,9 +60,9 @@ class ConfigUploader:
                     checksum_file.parent.mkdir(parents=True, exist_ok=True)
                     checksum_file.write_text(new_checksum)
                 except Exception as ex:
-                    echo(f"Error uploading file '{file.name}' to '{device.name}': {ex}", color="red")
+                    raise Exception(f"Error uploading file '{file.name}' to '{device.name}': {ex}")
             else:
-                echo(f"Skipping {file} because it hasn't changed.", color="yellow")
+                warn(f"Skipping {file} because it hasn't changed.")
 
     def cleanup_device(self, device: Device):
         """
@@ -77,7 +77,7 @@ class ConfigUploader:
         files_on_device = self._api_client.get_files()
         for f in files_on_device:
             if f not in file_names:
-                echo(f"Deleting file '{f}' from device '{device.name}'")
+                info(f"Deleting file '{f}' from device '{device.name}'")
                 self._api_client.delete_file(f)
 
     def _check_if_checksum_will_change(self, file: Path, original_checksum: str, new_content: str) -> str | None:

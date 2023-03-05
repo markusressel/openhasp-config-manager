@@ -15,7 +15,8 @@ class TestConfigManager(TestBase):
         devices = manager.analyze()
 
         # WHEN
-        manager.process(devices)
+        for device in devices:
+            manager.process(device)
 
         # THEN
         file_count = 0
@@ -36,7 +37,8 @@ class TestConfigManager(TestBase):
         devices = manager.analyze()
 
         # WHEN
-        manager.process(devices)
+        for device in devices:
+            manager.process(device)
 
         # THEN
         home_page_file = Path(tmp_path, "test_device", "home_page.jsonl")

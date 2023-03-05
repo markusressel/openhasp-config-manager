@@ -19,7 +19,6 @@ from openhasp_config_manager.openhasp_client.model.screen_config import ScreenCo
 from openhasp_config_manager.processing import DeviceProcessor
 from openhasp_config_manager.processing.jsonl.jsonl import ObjectDimensionsProcessor
 from openhasp_config_manager.processing.variables import VariableManager
-from openhasp_config_manager.ui.util import echo
 from openhasp_config_manager.validation.cmd import CmdFileValidator
 from openhasp_config_manager.validation.device_validator import DeviceValidator
 from openhasp_config_manager.validation.jsonl import JsonlObjectValidator
@@ -47,7 +46,6 @@ class ConfigManager:
 
         :return: list of devices
         """
-        echo(f"Analyzing config files in '{self._cfg_root}'...")
         return self._analyze(self._cfg_root, self._output_root)
 
     def _analyze(self, cfg_dir_root: Path, output_dir_root: Path) -> List[Device]:
@@ -69,8 +67,7 @@ class ConfigManager:
             try:
                 config = self._read_config(device_path)
             except Exception as ex:
-                echo(f"Error reading config '{device_path}': {ex}", color="red")
-                raise ex
+                raise Exception(f"Error reading config '{device_path}': {ex}")
 
             device_components = self._analyze_device(device_path)
 
@@ -202,56 +199,50 @@ class ConfigManager:
             pages=data["pages"],
         )
 
-    def process(self, devices: List[Device] = None) -> List[Device]:
+    def process(self, device: Device):
         """
         Process the configuration and generate the corresponding output
         :return:
         """
-        if devices is None:
-            devices = self.analyze()
+        self._generate_output(device)
 
-        self._generate_output(devices)
-        return devices
+    def _generate_output(self, device: Device):
+        self._clear_output(device)
 
-    def _generate_output(self, devices: List[Device]):
-        for device in devices:
+        jsonl_processors = [
+            ObjectDimensionsProcessor()
+        ]
+        device_processor = DeviceProcessor(device, jsonl_processors, self._variable_manager)
 
-            self._clear_output(device)
+        jsonl_validator = JsonlObjectValidator()
+        cmd_file_validator = CmdFileValidator()
+        device_validator = DeviceValidator(device.config, jsonl_validator, cmd_file_validator)
 
-            jsonl_processors = [
-                ObjectDimensionsProcessor()
-            ]
-            device_processor = DeviceProcessor(device, jsonl_processors, self._variable_manager)
+        # feed device specific data to the processor
+        # Note: this also includes common components
+        for component in device.components:
+            if component.type == "jsonl":
+                device_processor.add_jsonl(component)
+            else:
+                device_processor.add_other(component)
 
-            jsonl_validator = JsonlObjectValidator()
-            cmd_file_validator = CmdFileValidator()
-            device_validator = DeviceValidator(device.config, jsonl_validator, cmd_file_validator)
+        # only include files which are referenced in a cmd file
+        relevant_components = self.find_relevant_components(device)
 
-            # feed device specific data to the processor
-            # Note: this also includes common components
-            for component in device.components:
-                if component.type == "jsonl":
-                    device_processor.add_jsonl(component)
-                else:
-                    device_processor.add_other(component)
+        # let the processor manage each component
+        for component in relevant_components:
+            output_content = None
+            try:
+                output_content = device_processor.normalize(device, component)
+            except Exception as ex:
+                raise Exception(f"Error normalizing {component.path}: {ex}")
 
-            # only include files which are referenced in a cmd file
-            relevant_components = self.find_relevant_components(device)
+            try:
+                device_validator.validate(component, output_content)
+            except Exception as ex:
+                raise Exception(f"Validation for {component.path} failed: {ex}")
 
-            # let the processor manage each component
-            for component in relevant_components:
-                output_content = None
-                try:
-                    output_content = device_processor.normalize(device, component)
-                except Exception as ex:
-                    raise Exception(f"Error normalizing {component.path}: {ex}")
-
-                try:
-                    device_validator.validate(component, output_content)
-                except Exception as ex:
-                    raise Exception(f"Validation for {component.path} failed: {ex}")
-
-                self._write_output(device, component, output_content)
+            self._write_output(device, component, output_content)
 
     def find_relevant_components(self, device: Device) -> List[Component]:
         cmd_components = list(filter(lambda x: x.type == "cmd", device.components))

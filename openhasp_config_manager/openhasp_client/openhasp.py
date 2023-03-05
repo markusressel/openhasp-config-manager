@@ -9,7 +9,7 @@ from openhasp_config_manager.openhasp_client.model.hasp_config import HaspConfig
 from openhasp_config_manager.openhasp_client.model.http_config import HttpConfig
 from openhasp_config_manager.openhasp_client.model.mqtt_config import MqttConfig
 from openhasp_config_manager.openhasp_client.mqtt_client import MqttClient
-from openhasp_config_manager.ui.util import echo
+from openhasp_config_manager.ui.util import info
 
 GET = "GET"
 POST = "POST"
@@ -233,7 +233,7 @@ class OpenHaspClient:
         :param name: the target name of the file on the device
         :param content: the file content
         """
-        echo(f"Uploading '{name}'...")
+        info(f"Uploading '{name}'...")
 
         username = self._device.config.http.user
         password = self._device.config.http.password
