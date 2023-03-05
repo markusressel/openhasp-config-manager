@@ -246,11 +246,30 @@ class OpenHaspClient:
             username=username, password=password
         )
 
+    def take_screenshot(self) -> bytes:
+        """
+        Requests a screenshot from the device.
+        :return:
+        """
+        username = self._device.config.http.user
+        password = self._device.config.http.password
+
+        return self._do_request(
+            method=GET,
+            url=self._base_url + "screenshot",
+            params={
+                "q": "0"
+            },
+            stream=True,
+            username=username, password=password
+        )
+
     @staticmethod
     def _do_request(method: str = GET, url: str = "/", params: dict = None,
                     json: any = None, files: any = None, data: any = None,
                     headers: dict = None,
-                    username: str = None, password: str = None) -> list or dict or None:
+                    username: str = None, password: str = None,
+                    stream: bool = None) -> list or dict or None:
         """
         Executes a http request based on the given parameters
 
@@ -268,10 +287,12 @@ class OpenHaspClient:
 
         response = requests.request(
             method, url, headers=_headers,
+            params=params,
             json=json, files=files,
             data=data,
             auth=(username, password),
-            timeout=5
+            timeout=5,
+            stream=stream,
         )
 
         response.raise_for_status()
