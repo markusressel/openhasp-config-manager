@@ -1,6 +1,10 @@
 from pathlib import Path
+from typing import List, Tuple
 
 import click
+
+from openhasp_config_manager.manager import ConfigManager
+from openhasp_config_manager.openhasp_client.model.device import Device
 
 if __name__ == "__main__":
     import os
@@ -118,42 +122,21 @@ def c_generate(config_dir: Path, output_dir: Path, device: str):
 
 
 def _generate(config_dir: Path, output_dir: Path, device: str):
-    from openhasp_config_manager.manager import ConfigManager
-
-    variable_manager = VariableManager(cfg_root=config_dir)
-    config_manager = ConfigManager(
-        cfg_root=config_dir,
-        output_root=output_dir,
-        variable_manager=variable_manager
-    )
-
-    info(f"Analyzing files in '{config_dir}'...")
-    devices = config_manager.analyze()
-    devices = list(sorted(devices, key=lambda x: x.name))
-    device_names = list(map(lambda x: x.name, devices))
-    info(f"Found devices: {', '.join(device_names)}")
-
-    filtered_devices = []
-    ignored_devices = []
-    if device is not None:
-        filtered_devices = list(filter(lambda x: x.name == device, devices))
-        ignored_devices = list(filter(lambda x: x not in filtered_devices, devices))
-    else:
-        filtered_devices = devices
-
-    if len(devices) <= 0:
-        error("No devices found.")
-        return
+    config_manager = _create_config_manager(config_dir, output_dir)
+    filtered_devices, ignored_devices = _analyze_and_filter(config_manager=config_manager, device_filter=device)
 
     if len(filtered_devices) <= 0:
-        error(f"No device matches the filter: {device}")
+        if device is None:
+            error("No devices found.")
+        else:
+            error(f"No device matches the filter: {device}")
         return
 
     if len(ignored_devices) > 0:
         ignored_devices_names = list(map(lambda x: x.name, ignored_devices))
         warn(f"Skipping devices: {', '.join(ignored_devices_names)}")
 
-    for device in devices:
+    for device in filtered_devices:
         info(f"Generating output for '{device.name}'...")
         config_manager.process(device)
 
@@ -187,37 +170,17 @@ def c_upload(config_dir: Path, output_dir: Path, device: str, purge: bool, diff:
 
 
 def _upload(config_dir: Path, output_dir: Path, device: str, purge: bool, show_diff: bool):
-    from openhasp_config_manager.manager import ConfigManager
     from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
     from openhasp_config_manager.uploader import ConfigUploader
 
-    variable_manager = VariableManager(cfg_root=config_dir)
-    config_manager = ConfigManager(
-        cfg_root=config_dir,
-        output_root=output_dir,
-        variable_manager=variable_manager
-    )
-
-    info(f"Analyzing files in '{config_dir}'...")
-    devices = config_manager.analyze()
-    devices = list(sorted(devices, key=lambda x: x.name))
-    device_names = list(map(lambda x: x.name, devices))
-    info(f"Found devices: {', '.join(device_names)}")
-
-    filtered_devices = []
-    ignored_devices = []
-    if device is not None:
-        filtered_devices = list(filter(lambda x: x.name == device, devices))
-        ignored_devices = list(filter(lambda x: x not in filtered_devices, devices))
-    else:
-        filtered_devices = devices
-
-    if len(devices) <= 0:
-        error("No devices found.")
-        return
+    config_manager = _create_config_manager(config_dir, output_dir)
+    filtered_devices, ignored_devices = _analyze_and_filter(config_manager=config_manager, device_filter=device)
 
     if len(filtered_devices) <= 0:
-        error(f"No device matches the filter: {device}")
+        if device is None:
+            error("No devices found.")
+        else:
+            error(f"No device matches the filter: {device}")
         return
 
     if len(ignored_devices) > 0:
@@ -263,29 +226,9 @@ def c_deploy(config_dir: Path, output_dir: Path, device: str, purge: bool, diff:
 
 
 def _reboot(config_dir, device: str):
-    from openhasp_config_manager.manager import ConfigManager
-    variable_manager = VariableManager(cfg_root=config_dir)
-    config_manager = ConfigManager(
-        cfg_root=config_dir,
-        output_root=Path("./nonexistent"),
-        variable_manager=variable_manager
-    )
+    config_manager = _create_config_manager(config_dir, Path("./nonexistent"))
 
-    info(f"Analyzing files in '{config_dir}'...")
-    devices = config_manager.analyze()
-    devices = list(sorted(devices, key=lambda x: x.name))
-    device_names = list(map(lambda x: x.name, devices))
-    info(f"Found devices: {', '.join(device_names)}")
-
-    filtered_devices = []
-    if device is not None:
-        filtered_devices = list(filter(lambda x: x.name == device, devices))
-    else:
-        filtered_devices = devices
-
-    if len(devices) <= 0:
-        error("No devices found.")
-        return
+    filtered_devices, ignored_devices = _analyze_and_filter(config_manager=config_manager, device_filter=device)
 
     if len(filtered_devices) <= 0:
         error(f"No device matches the filter: {device}")
@@ -293,28 +236,19 @@ def _reboot(config_dir, device: str):
 
     from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 
-    for device in devices:
+    for device in filtered_devices:
         client = OpenHaspClient(device)
         info(f"Rebooting {device.name}...")
         client.reboot()
 
 
 def _reload(config_dir: Path, device: str):
-    from openhasp_config_manager.manager import ConfigManager
-    variable_manager = VariableManager(cfg_root=config_dir)
-    processor = ConfigManager(
-        cfg_root=config_dir,
-        output_root=Path("./nonexistent"),
-        variable_manager=variable_manager
-    )
-
-    devices = processor.analyze()
-    if device is not None:
-        devices = list(filter(lambda x: x.name == device, devices))
+    config_manager = _create_config_manager(config_dir, Path("./nonexistent"))
+    filtered_devices, ignored_devices = _analyze_and_filter(config_manager=config_manager, device_filter=device)
 
     from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 
-    for device in devices:
+    for device in filtered_devices:
         client = OpenHaspClient(device)
         client.command("clearpage", "all")
         client.command("run", "L:/boot.cmd")
@@ -359,29 +293,8 @@ def c_cmd(config_dir: Path, device: str, command: str, payload: str):
 
 
 def _cmd(config_dir: Path, device: str, command: str, payload: str):
-    from openhasp_config_manager.manager import ConfigManager
-    variable_manager = VariableManager(cfg_root=config_dir)
-    config_manager = ConfigManager(
-        cfg_root=config_dir,
-        output_root=Path("./nonexistent"),
-        variable_manager=variable_manager
-    )
-
-    info(f"Analyzing files in '{config_dir}'...")
-    devices = config_manager.analyze()
-    devices = list(sorted(devices, key=lambda x: x.name))
-    device_names = list(map(lambda x: x.name, devices))
-    info(f"Found devices: {', '.join(device_names)}")
-
-    filtered_devices = []
-    if device is not None:
-        filtered_devices = list(filter(lambda x: x.name == device, devices))
-    else:
-        filtered_devices = devices
-
-    if len(devices) <= 0:
-        error("No devices found.")
-        return
+    config_manager = _create_config_manager(config_dir, Path("./nonexistent"))
+    filtered_devices, ignored_devices = _analyze_and_filter(config_manager=config_manager, device_filter=device)
 
     if len(filtered_devices) <= 0:
         error(f"No device matches the filter: {device}")
@@ -389,10 +302,44 @@ def _cmd(config_dir: Path, device: str, command: str, payload: str):
 
     from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 
-    for device in devices:
+    for device in filtered_devices:
         client = OpenHaspClient(device)
         info(f"Sending command {command} to {device.name}...")
         client.command(command, payload)
+
+
+def _create_config_manager(config_dir, output_dir) -> ConfigManager:
+    variable_manager = VariableManager(cfg_root=config_dir)
+    config_manager = ConfigManager(
+        cfg_root=config_dir,
+        output_root=output_dir,
+        variable_manager=variable_manager
+    )
+    return config_manager
+
+
+def _analyze_and_filter(config_manager: ConfigManager, device_filter: str or None) -> Tuple[List[Device], List[Device]]:
+    """
+
+    :param config_manager:
+    :param device_filter:
+    :return: (matching_devices, ignored_devices)
+    """
+    info(f"Analyzing files in '{config_manager.cfg_root}'...")
+    devices = config_manager.analyze()
+    devices = list(sorted(devices, key=lambda x: x.name))
+    device_names = list(map(lambda x: x.name, devices))
+    info(f"Found devices: {', '.join(device_names)}")
+
+    filtered_devices = []
+    ignored_devices = []
+    if device_filter is not None:
+        filtered_devices = list(filter(lambda x: x.name == device_filter, devices))
+        ignored_devices = list(filter(lambda x: x not in filtered_devices, devices))
+    else:
+        filtered_devices = devices
+
+    return filtered_devices, ignored_devices
 
 
 if __name__ == '__main__':

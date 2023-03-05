@@ -33,7 +33,7 @@ class ConfigManager:
     """
 
     def __init__(self, cfg_root: Path, output_root: Path, variable_manager: VariableManager):
-        self._cfg_root = cfg_root
+        self.cfg_root = cfg_root
         self._output_root = output_root
 
         self._variable_manager = variable_manager
@@ -46,7 +46,7 @@ class ConfigManager:
 
         :return: list of devices, which can be used in the ConfigManager.process() method
         """
-        return self._analyze(self._cfg_root, self._output_root)
+        return self._analyze(self.cfg_root, self._output_root)
 
     def _analyze(self, cfg_dir_root: Path, output_dir_root: Path) -> List[Device]:
         result: List[Device] = []
