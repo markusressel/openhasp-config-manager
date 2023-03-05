@@ -2,7 +2,10 @@ from pathlib import Path
 
 import pytest
 
-from openhasp_config_manager.model import Config, OpenhaspConfigManagerConfig, DeviceConfig, ScreenConfig
+from openhasp_config_manager.openhasp_client.model.config import Config
+from openhasp_config_manager.openhasp_client.model.device_config import DeviceConfig
+from openhasp_config_manager.openhasp_client.model.openhasp_config_manager_config import OpenhaspConfigManagerConfig
+from openhasp_config_manager.openhasp_client.model.screen_config import ScreenConfig
 
 
 def _find_test_folder() -> Path:

@@ -1,4 +1,5 @@
-from openhasp_config_manager.model import Config, Component
+from openhasp_config_manager.openhasp_client.model.component import Component
+from openhasp_config_manager.openhasp_client.model.config import Config
 from openhasp_config_manager.validation.cmd import CmdFileValidator
 from openhasp_config_manager.validation.jsonl import JsonlObjectValidator
 

@@ -1,7 +1,8 @@
 import textwrap
 from pathlib import Path
 
-from openhasp_config_manager.model import Component, Device
+from openhasp_config_manager.openhasp_client.model.component import Component
+from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.processing import DeviceProcessor, VariableManager
 from openhasp_config_manager.processing.jsonl.jsonl import ObjectDimensionsProcessor
 from tests import TestBase

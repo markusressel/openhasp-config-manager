@@ -158,7 +158,7 @@ def c_upload(config_dir: Path, output_dir: Path, device: str, purge: bool, diff:
 
 def _upload(config_dir: Path, output_dir: Path, device: str, purge: bool, show_diff: bool):
     from openhasp_config_manager.manager import ConfigManager
-    from openhasp_config_manager.openhasp import OpenHaspClient
+    from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
     from openhasp_config_manager.uploader import ConfigUploader
 
     variable_manager = VariableManager(config_dir)
@@ -219,7 +219,7 @@ def _reboot(config_dir, device: str):
     if device is not None:
         devices = list(filter(lambda x: x.name == device, devices))
 
-    from openhasp_config_manager.openhasp import OpenHaspClient
+    from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 
     for device in devices:
         client = OpenHaspClient(device)
@@ -239,7 +239,7 @@ def _reload(config_dir: Path, device: str):
     if device is not None:
         devices = list(filter(lambda x: x.name == device, devices))
 
-    from openhasp_config_manager.openhasp import OpenHaspClient
+    from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 
     for device in devices:
         client = OpenHaspClient(device)
@@ -294,7 +294,7 @@ def _cmd(config_dir: Path, device: str, command: str, payload: str):
     if device is not None:
         devices = list(filter(lambda x: x.name == device, devices))
 
-    from openhasp_config_manager.openhasp import OpenHaspClient
+    from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 
     for device in devices:
         client = OpenHaspClient(device)

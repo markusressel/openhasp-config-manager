@@ -1,6 +1,6 @@
 import paho.mqtt.client as paho
 
-from openhasp_config_manager.model import Device
+from openhasp_config_manager.openhasp_client.model.device import Device
 
 
 class MqttClient:

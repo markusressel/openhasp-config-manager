@@ -3,7 +3,9 @@ from typing import List, Dict, Any
 
 import orjson
 
-from openhasp_config_manager.model import Config, Component, Device
+from openhasp_config_manager.openhasp_client.model.component import Component
+from openhasp_config_manager.openhasp_client.model.config import Config
+from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.processing.jsonl import JsonlObjectProcessor
 from openhasp_config_manager.processing.preprocessor.jsonl_preprocessor import JsonlPreProcessor
 from openhasp_config_manager.processing.template_rendering import render_dict_recursive, _render_template

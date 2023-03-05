@@ -1,5 +1,4 @@
 import re
-import re
 import shutil
 from pathlib import Path
 from typing import List, Set
@@ -7,8 +6,16 @@ from typing import List, Set
 import orjson
 
 from openhasp_config_manager.const import COMMON_FOLDER_NAME, DEVICES_FOLDER_NAME, SYSTEM_SCRIPTS
-from openhasp_config_manager.model import Component, Config, Device, OpenhaspConfigManagerConfig, MqttConfig, \
-    HttpConfig, GuiConfig, HaspConfig, DeviceConfig, ScreenConfig
+from openhasp_config_manager.openhasp_client.model.component import Component
+from openhasp_config_manager.openhasp_client.model.config import Config
+from openhasp_config_manager.openhasp_client.model.device import Device
+from openhasp_config_manager.openhasp_client.model.device_config import DeviceConfig
+from openhasp_config_manager.openhasp_client.model.gui_config import GuiConfig
+from openhasp_config_manager.openhasp_client.model.hasp_config import HaspConfig
+from openhasp_config_manager.openhasp_client.model.http_config import HttpConfig
+from openhasp_config_manager.openhasp_client.model.mqtt_config import MqttConfig
+from openhasp_config_manager.openhasp_client.model.openhasp_config_manager_config import OpenhaspConfigManagerConfig
+from openhasp_config_manager.openhasp_client.model.screen_config import ScreenConfig
 from openhasp_config_manager.processing import DeviceProcessor
 from openhasp_config_manager.processing.jsonl.jsonl import ObjectDimensionsProcessor
 from openhasp_config_manager.processing.variables import VariableManager
