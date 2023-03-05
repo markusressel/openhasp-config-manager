@@ -62,7 +62,7 @@ class ConfigUploader:
                 except Exception as ex:
                     raise Exception(f"Error uploading file '{file.name}' to '{device.name}': {ex}")
             else:
-                warn(f"Skipping {file} because it hasn't changed.")
+                info(f"Skipping {file} because it hasn't changed.")
 
     def cleanup_device(self, device: Device):
         """
