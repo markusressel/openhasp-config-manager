@@ -1,0 +1,94 @@
+from pathlib import Path
+from typing import Tuple, List
+
+from openhasp_config_manager.manager import ConfigManager
+from openhasp_config_manager.openhasp_client.model.device import Device
+from openhasp_config_manager.processing import VariableManager
+from openhasp_config_manager.ui.util import info
+
+
+def _generate(config_manager: ConfigManager, device: Device):
+    info(f"Generating output for '{device.name}'...")
+    try:
+        config_manager.process(device)
+    except Exception as ex:
+        raise Exception(f"Error generating output for {device.name}: {ex}")
+
+
+def _upload(device: Device, output_dir: Path, purge: bool, show_diff: bool):
+    from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
+    from openhasp_config_manager.uploader import ConfigUploader
+
+    client = OpenHaspClient(device)
+    uploader = ConfigUploader(output_dir, client)
+    try:
+        info(f"Uploading files to device '{device.name}'...")
+        uploader.upload(device, purge, show_diff)
+    except Exception as ex:
+        raise Exception(f"Error uploading files to '{device.name}': {ex}")
+
+
+def _deploy(config_manager: ConfigManager, device: Device, output_dir: Path, purge: bool, show_diff: bool):
+    _generate(config_manager, device)
+    _upload(device, output_dir, purge, show_diff)
+    # _cmd(config_dir, device="touch_down_1", command="reboot", payload="")
+    # _reload(config_dir, device)
+    _reboot(device)
+
+
+def _reload(device: Device):
+    from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
+
+    client = OpenHaspClient(device)
+    client.command("clearpage", "all")
+    client.command("run", "L:/boot.cmd")
+
+
+def _reboot(device: Device):
+    from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
+
+    client = OpenHaspClient(device)
+    info(f"Rebooting {device.name}...")
+    client.reboot()
+
+
+def _cmd(device: Device, command: str, payload: str):
+    from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
+
+    client = OpenHaspClient(device)
+    info(f"Sending command {command} to {device.name}...")
+    client.command(command, payload)
+
+
+def _create_config_manager(config_dir, output_dir) -> ConfigManager:
+    variable_manager = VariableManager(cfg_root=config_dir)
+    config_manager = ConfigManager(
+        cfg_root=config_dir,
+        output_root=output_dir,
+        variable_manager=variable_manager
+    )
+    return config_manager
+
+
+def _analyze_and_filter(config_manager: ConfigManager, device_filter: str or None) -> Tuple[List[Device], List[Device]]:
+    """
+
+    :param config_manager:
+    :param device_filter:
+    :return: (matching_devices, ignored_devices)
+    """
+    info(f"Analyzing files in '{config_manager.cfg_root}'...")
+    devices = config_manager.analyze()
+    devices = list(sorted(devices, key=lambda x: x.name))
+    device_names = list(map(lambda x: x.name, devices))
+    info(f"Found devices: {', '.join(device_names)}")
+
+    filtered_devices = []
+    ignored_devices = []
+    if device_filter is not None:
+        filtered_devices = list(filter(lambda x: x.name == device_filter, devices))
+        ignored_devices = list(filter(lambda x: x not in filtered_devices, devices))
+    else:
+        filtered_devices = devices
+
+    return filtered_devices, ignored_devices
