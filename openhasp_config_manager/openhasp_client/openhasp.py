@@ -246,6 +246,23 @@ class OpenHaspClient:
             username=username, password=password
         )
 
+    def take_screenshot(self):
+        """
+        Requests a screenshot from the device.
+        :return:
+        """
+        username = self._device.config.http.user
+        password = self._device.config.http.password
+
+        return self._do_request(
+            method=GET,
+            url=self._base_url + "screenshot",
+            params={
+                "q": "0"
+            },
+            username=username, password=password
+        )
+
     @staticmethod
     def _do_request(method: str = GET, url: str = "/", params: dict = None,
                     json: any = None, files: any = None, data: any = None,

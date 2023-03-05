@@ -1,3 +1,4 @@
+import pathlib
 from pathlib import Path
 
 import click
@@ -5,6 +6,7 @@ import click
 from openhasp_config_manager.cli.cmd import c_cmd
 from openhasp_config_manager.cli.deploy import c_deploy
 from openhasp_config_manager.cli.generate import c_generate
+from openhasp_config_manager.cli.screenshot import c_screenshot
 from openhasp_config_manager.cli.upload import c_upload
 from openhasp_config_manager.ui.util import echo
 
@@ -182,3 +184,28 @@ def cmd(config_dir: Path, device: str, command: str, payload: str):
     documentation: https://www.openhasp.com/latest/commands
     """
     c_cmd(config_dir, device, command, payload)
+
+
+@cli.command(name="screenshot")
+@click.option(*get_option_names(PARAM_CFG_DIR),
+              required=False,
+              default=DEFAULT_CONFIG_PATH,
+              type=click.Path(exists=True, path_type=Path),
+              help=get_option_help(PARAM_CFG_DIR))
+@click.option(*get_option_names(PARAM_DEVICE),
+              required=True,
+              help=get_option_help(PARAM_DEVICE))
+@click.option(*get_option_names(PARAM_CFG_DIR),
+              required=True,
+              type=click.Path(exists=False, path_type=pathlib.Path),
+              help=get_option_help(PARAM_CFG_DIR))
+@click.option(*get_option_names(PARAM_OUTPUT_DIR),
+              required=True,
+              default=DEFAULT_OUTPUT_PATH,
+              type=click.Path(path_type=Path),
+              help=get_option_help(PARAM_OUTPUT_DIR))
+def screenshot(config_dir: Path, device: str, output_dir: Path):
+    """
+    Requests a screenshot from the given device and stores it to the given output directory.
+    """
+    c_screenshot(config_dir, device, output_dir)
