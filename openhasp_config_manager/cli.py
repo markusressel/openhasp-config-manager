@@ -120,7 +120,7 @@ def c_generate(config_dir: Path, output_dir: Path, device: str):
 def _generate(config_dir: Path, output_dir: Path, device: str):
     from openhasp_config_manager.manager import ConfigManager
 
-    variable_manager = VariableManager(config_dir)
+    variable_manager = VariableManager(cfg_root=config_dir)
     config_manager = ConfigManager(
         cfg_root=config_dir,
         output_root=output_dir,
@@ -191,7 +191,7 @@ def _upload(config_dir: Path, output_dir: Path, device: str, purge: bool, show_d
     from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
     from openhasp_config_manager.uploader import ConfigUploader
 
-    variable_manager = VariableManager(config_dir)
+    variable_manager = VariableManager(cfg_root=config_dir)
     config_manager = ConfigManager(
         cfg_root=config_dir,
         output_root=output_dir,
@@ -264,7 +264,7 @@ def c_deploy(config_dir: Path, output_dir: Path, device: str, purge: bool, diff:
 
 def _reboot(config_dir, device: str):
     from openhasp_config_manager.manager import ConfigManager
-    variable_manager = VariableManager(config_dir)
+    variable_manager = VariableManager(cfg_root=config_dir)
     config_manager = ConfigManager(
         cfg_root=config_dir,
         output_root=Path("./nonexistent"),
@@ -301,7 +301,7 @@ def _reboot(config_dir, device: str):
 
 def _reload(config_dir: Path, device: str):
     from openhasp_config_manager.manager import ConfigManager
-    variable_manager = VariableManager(config_dir)
+    variable_manager = VariableManager(cfg_root=config_dir)
     processor = ConfigManager(
         cfg_root=config_dir,
         output_root=Path("./nonexistent"),
@@ -360,7 +360,7 @@ def c_cmd(config_dir: Path, device: str, command: str, payload: str):
 
 def _cmd(config_dir: Path, device: str, command: str, payload: str):
     from openhasp_config_manager.manager import ConfigManager
-    variable_manager = VariableManager(config_dir)
+    variable_manager = VariableManager(cfg_root=config_dir)
     config_manager = ConfigManager(
         cfg_root=config_dir,
         output_root=Path("./nonexistent"),

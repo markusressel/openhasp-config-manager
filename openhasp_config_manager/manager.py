@@ -44,7 +44,7 @@ class ConfigManager:
         The result will be a list of Device object instances, representing the structure
         and configuration found.
 
-        :return: list of devices
+        :return: list of devices, which can be used in the ConfigManager.process() method
         """
         return self._analyze(self._cfg_root, self._output_root)
 
@@ -202,7 +202,6 @@ class ConfigManager:
     def process(self, device: Device):
         """
         Process the configuration and generate the corresponding output
-        :return:
         """
         self._generate_output(device)
 
