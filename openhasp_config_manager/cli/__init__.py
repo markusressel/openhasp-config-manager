@@ -20,6 +20,7 @@ PARAM_PAYLOAD = "payload"
 
 DEFAULT_CONFIG_PATH = Path("./openhasp-configs")
 DEFAULT_OUTPUT_PATH = Path("./output")
+DEFAULT_SCREENSHOT_OUTPUT_PATH = Path("./")
 
 CMD_OPTION_NAMES = {
     PARAM_CFG_DIR: {
@@ -201,7 +202,7 @@ def cmd(config_dir: Path, device: str, command: str, payload: str):
               help=get_option_help(PARAM_CFG_DIR))
 @click.option(*get_option_names(PARAM_OUTPUT_DIR),
               required=True,
-              default=DEFAULT_OUTPUT_PATH,
+              default=DEFAULT_SCREENSHOT_OUTPUT_PATH,
               type=click.Path(path_type=Path),
               help=get_option_help(PARAM_OUTPUT_DIR))
 def screenshot(config_dir: Path, device: str, output_dir: Path):
