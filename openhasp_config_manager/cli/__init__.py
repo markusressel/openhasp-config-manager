@@ -8,6 +8,7 @@ from openhasp_config_manager.cli.deploy import c_deploy
 from openhasp_config_manager.cli.generate import c_generate
 from openhasp_config_manager.cli.screenshot import c_screenshot
 from openhasp_config_manager.cli.upload import c_upload
+from openhasp_config_manager.cli.vars import c_vars
 from openhasp_config_manager.ui.util import echo
 
 PARAM_CFG_DIR = "cfg_dir"
@@ -17,6 +18,7 @@ PARAM_PURGE = "purge"
 PARAM_SHOW_DIFF = "diff"
 PARAM_CMD = "cmd"
 PARAM_PAYLOAD = "payload"
+PARAM_PATH = "path"
 
 DEFAULT_CONFIG_PATH = Path("./openhasp-configs")
 DEFAULT_OUTPUT_PATH = Path("./output")
@@ -54,6 +56,10 @@ CMD_OPTION_NAMES = {
         "names": ["--diff", "-D"],
         "help": """Whether to show a diff for files uploaded to the target device.""",
     },
+    PARAM_PATH: {
+        "names": ["--path", "-p"],
+        "help": """The subpath inside the configuration directory"""
+    }
 }
 
 
@@ -185,6 +191,23 @@ def cmd(config_dir: Path, device: str, command: str, payload: str):
     documentation: https://www.openhasp.com/latest/commands
     """
     c_cmd(config_dir, device, command, payload)
+
+
+@cli.command(name="vars")
+@click.option(*get_option_names(PARAM_CFG_DIR),
+              required=False,
+              default=DEFAULT_CONFIG_PATH,
+              type=click.Path(exists=True, path_type=Path),
+              help=get_option_help(PARAM_CFG_DIR))
+@click.option(*get_option_names(PARAM_PATH),
+              required=False,
+              default="",
+              help=get_option_help(PARAM_PATH))
+def vars(config_dir: Path, path: str):
+    """
+    Prints the variables accessible in a given path.
+    """
+    c_vars(config_dir, path)
 
 
 @cli.command(name="screenshot")
