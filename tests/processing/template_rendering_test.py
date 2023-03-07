@@ -96,3 +96,26 @@ class TestTemplateRendering(TestBase):
         assert result == {
             'A': '0.5%',
         }
+
+    def test_render_dict_recursively__template_in_list_item(self):
+        # GIVEN
+        input_data = {
+            "key": [
+                "{{ variable }}",
+            ]
+        }
+
+        template_vars = {
+            "variable": "value"
+        }
+
+        # WHEN
+        result = render_dict_recursive(
+            input=input_data,
+            template_vars=template_vars
+        )
+
+        # THEN
+        assert result == {
+            'key': ['value'],
+        }

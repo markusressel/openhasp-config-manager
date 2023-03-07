@@ -58,6 +58,13 @@ def render_dict_recursive(
                     template_vars=template_vars,
                     result_key_path=result_key_path + [rendered_key]
                 )
+            elif isinstance(value, list):
+                try:
+                    rendered_value = list(map(lambda x: _render_template(x, template_vars), value))
+                    value_undefined = any(map(lambda x: _has_undeclared_variables(x), rendered_value))
+                except Exception as ex:
+                    # print(f"Undefined value: {value_undefined}, value: {value}")
+                    value_undefined = True
             elif isinstance(value, str):
                 try:
                     rendered_value = _render_template(value, template_vars)
@@ -110,7 +117,7 @@ def render_dict_recursive(
 
 
 def _render_template(content: str, template_vars: Dict[str, str]) -> str:
-    inner_templates = re.findall(r"\{\{.+\}\}", content[2:-2])
+    inner_templates = re.findall(r"\{\{.+}}", content[2:-2])
     for inner_template in inner_templates:
         if inner_template != content[2:-2]:
             rendered = _render_template(inner_template, template_vars)
