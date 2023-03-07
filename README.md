@@ -328,6 +328,20 @@ page_title: "My Device"
 }
 ```
 
+#### Printing variables
+
+If you are not sure what variables are accessible in a given path, you can use the `vars`
+commend, which will give you a copy&paste ready output of all variables for a
+given directory:
+
+```shell
+> openhasp-config-manager vars -c openhasp-configs -p devices/touch_down_1/home
+common.navbar.first_page: 1
+common.navbar.last_page: 4
+...
+header.title: Home
+```
+
 ## Deployment
 
 To deploy your configurations to the already connected openHASP devices, simply use the
