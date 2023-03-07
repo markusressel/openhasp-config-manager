@@ -7,7 +7,8 @@ from openhasp_config_manager.ui.util import error, echo
 
 def _format_variables(variables: Dict) -> str:
     def get_dict_contents(d: Dict, parent_key: str = '', result: List[str] = []):
-        for k, v in d.items():
+        for k in sorted(d.keys()):
+            v = d[k]
             if isinstance(v, dict):
                 get_dict_contents(v, parent_key + k + '.', result)
             elif isinstance(v, list):
