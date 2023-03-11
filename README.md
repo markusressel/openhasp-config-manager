@@ -331,7 +331,7 @@ page_title: "My Device"
 #### Printing variables
 
 If you are not sure what variables are accessible in a given path, you can use the `vars`
-commend, which will give you a copy&paste ready output of all variables for a
+command, which will give you a copy&paste ready output of all variables for a
 given directory:
 
 ```shell
