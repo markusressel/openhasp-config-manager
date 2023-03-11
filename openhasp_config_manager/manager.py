@@ -16,7 +16,7 @@ from openhasp_config_manager.openhasp_client.model.http_config import HttpConfig
 from openhasp_config_manager.openhasp_client.model.mqtt_config import MqttConfig
 from openhasp_config_manager.openhasp_client.model.openhasp_config_manager_config import OpenhaspConfigManagerConfig
 from openhasp_config_manager.openhasp_client.model.screen_config import ScreenConfig
-from openhasp_config_manager.processing import DeviceProcessor
+from openhasp_config_manager.processing.device_processor import DeviceProcessor
 from openhasp_config_manager.processing.jsonl.jsonl import ObjectDimensionsProcessor
 from openhasp_config_manager.processing.variables import VariableManager
 from openhasp_config_manager.validation.cmd import CmdFileValidator

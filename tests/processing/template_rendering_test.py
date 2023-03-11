@@ -1,4 +1,4 @@
-from openhasp_config_manager.processing import render_dict_recursive
+from openhasp_config_manager.processing.template_rendering import render_dict_recursive
 from tests import TestBase
 
 

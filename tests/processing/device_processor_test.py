@@ -3,8 +3,9 @@ from pathlib import Path
 
 from openhasp_config_manager.openhasp_client.model.component import Component
 from openhasp_config_manager.openhasp_client.model.device import Device
-from openhasp_config_manager.processing import DeviceProcessor, VariableManager
+from openhasp_config_manager.processing.device_processor import DeviceProcessor
 from openhasp_config_manager.processing.jsonl.jsonl import ObjectDimensionsProcessor
+from openhasp_config_manager.processing.variables import VariableManager
 from tests import TestBase
 
 

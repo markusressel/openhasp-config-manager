@@ -1,5 +1,5 @@
 from openhasp_config_manager.manager import ConfigManager
-from openhasp_config_manager.processing import VariableManager
+from openhasp_config_manager.processing.variables import VariableManager
 from tests import TestBase
 
 

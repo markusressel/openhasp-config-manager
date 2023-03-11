@@ -1,6 +1,6 @@
 import textwrap
 
-from openhasp_config_manager.processing import JsonlPreProcessor
+from openhasp_config_manager.processing.preprocessor.jsonl_preprocessor import JsonlPreProcessor
 from tests import TestBase
 
 

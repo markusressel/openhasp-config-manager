@@ -3,7 +3,7 @@ from typing import Tuple, List
 
 from openhasp_config_manager.manager import ConfigManager
 from openhasp_config_manager.openhasp_client.model.device import Device
-from openhasp_config_manager.processing import VariableManager
+from openhasp_config_manager.processing.variables import VariableManager
 from openhasp_config_manager.ui.util import info
 
 
