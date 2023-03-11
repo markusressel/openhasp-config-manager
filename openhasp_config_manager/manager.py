@@ -266,10 +266,12 @@ class ConfigManager:
             for match in cmd_references:
                 matching_components = list(filter(lambda x: x.name == match, components))
                 if len(matching_components) <= 0:
+                    found_component_names = ','.join([c.name for c in cmd_components])
                     raise AssertionError(
-                        f"Referenced CMD component not found: {match}, only found: {','.join([c.name for c in cmd_components])}")
+                        f"Referenced CMD component not found: {match}, only found: {found_component_names}")
                 result.update(matching_components)
 
+        # system components should always be included
         result.update(system_components)
 
         return result
@@ -285,8 +287,9 @@ class ConfigManager:
             for match in jsonl_references:
                 matching_components = list(filter(lambda x: x.name == match, jsonl_components))
                 if len(matching_components) <= 0:
+                    found_component_names = ','.join([c.name for c in jsonl_components])
                     raise AssertionError(
-                        f"Referenced CMD component not found: {match}, only found: {','.join([c.name for c in jsonl_components])}")
+                        f"Referenced JSONL component not found: {match}, only found: {found_component_names}")
                 referenced_jsonl_components.update(matching_components)
 
         return referenced_jsonl_components
