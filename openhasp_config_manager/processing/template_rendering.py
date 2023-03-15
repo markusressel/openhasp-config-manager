@@ -4,6 +4,7 @@ from typing import Dict, List
 
 import jinja2
 from jinja2 import BaseLoader
+from line_profiler_pycharm import profile
 
 from openhasp_config_manager.ui.util import echo, error
 
@@ -137,7 +138,15 @@ def _render_template(content: str, template_vars: Dict[str, str]) -> str:
         raise ex
 
 
-def _has_undeclared_variables(rendered_value):
+_template_ast_cache = {}
+
+
+@profile
+def _has_undeclared_variables(rendered_value: str):
     from jinja2.meta import find_undeclared_variables
-    ast = _j2_env.parse(rendered_value)
+
+    if rendered_value not in _template_ast_cache:
+        _template_ast_cache[rendered_value] = _j2_env.parse(rendered_value)
+    ast = _template_ast_cache[rendered_value]
+
     return find_undeclared_variables(ast)
