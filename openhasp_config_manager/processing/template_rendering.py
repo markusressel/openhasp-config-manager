@@ -3,13 +3,12 @@ import re
 from typing import Dict, List
 
 import jinja2
+from jinja2 import BaseLoader
 
 from openhasp_config_manager.ui.util import echo, error
 
 LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(logging.DEBUG)
-
-_j2_env = jinja2.Environment(undefined=jinja2.DebugUndefined)
 
 
 def render_dict_recursive(
@@ -116,6 +115,10 @@ def render_dict_recursive(
     return result
 
 
+_j2_env = jinja2.Environment(loader=BaseLoader(), undefined=jinja2.DebugUndefined)
+_template_cache = {}
+
+
 def _render_template(content: str, template_vars: Dict[str, str]) -> str:
     inner_templates = re.findall(r"\{\{.+}}", content[2:-2])
     for inner_template in inner_templates:
@@ -123,7 +126,9 @@ def _render_template(content: str, template_vars: Dict[str, str]) -> str:
             rendered = _render_template(inner_template, template_vars)
             content = content.replace(inner_template, rendered)
     try:
-        template = _j2_env.from_string(content)
+        if content not in _template_cache:
+            _template_cache[content] = _j2_env.from_string(content)
+        template = _template_cache[content]
         rendered = template.render(template_vars)
         return rendered
     except Exception as ex:

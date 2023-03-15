@@ -5,3 +5,4 @@ output
 openhasp-configs
 
 tests/test_output
+*.pclprof
