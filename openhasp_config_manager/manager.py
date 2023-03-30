@@ -88,17 +88,33 @@ class ConfigManager:
         result = self._read_components(device_cfg_dir_root)
 
         # also read the file referenced by the hasp.pages config property
-        component = self._create_component_from_path(
-            device_cfg_dir_root=device_cfg_dir_root,
-            path=Path(device_cfg_dir_root, config.hasp.pages[1:]).relative_to(device_cfg_dir_root),
-            prefix="",
-        )
-        if component is not None:
-            component_already_exists = any(map(lambda c: c.path == component.path, result))
-            if not component_already_exists:
-                result.append(component)
+        pages_config_component_path = self._compute_component_path_of_pages_config_value(device_cfg_dir_root, config)
+        if pages_config_component_path is not None:
+            component = self._create_component_from_path(
+                device_cfg_dir_root=device_cfg_dir_root,
+                path=pages_config_component_path,
+                prefix="",
+            )
+            if component is not None:
+                component_already_exists = any(map(lambda c: c.path == component.path, result))
+                if not component_already_exists:
+                    result.append(component)
 
         return result
+
+    @staticmethod
+    def _compute_component_path_of_pages_config_value(device_cfg_dir_root: Path, config: Config) -> Path | None:
+        sub_path = config.hasp.pages[1:]
+        sub_path = sub_path.removeprefix("L:/")
+        sub_path = sub_path.removeprefix("/")
+        if len(sub_path) <= 0:
+            return None
+        path = Path(device_cfg_dir_root, sub_path)
+        relative_path = path.relative_to(device_cfg_dir_root)
+        if path.is_file():
+            return relative_path
+        else:
+            return None
 
     def _read_components(self, path: Path, prefix: str = "") -> List[Component]:
         """
@@ -282,7 +298,18 @@ class ConfigManager:
         jsonl_components = list(filter(lambda x: x.type == "jsonl", device.components))
 
         referenced_cmd_components = self._find_referenced_cmd_components(cmd_components)
+
+        # find jsonl files referenced in CMD files
         referenced_jsonl_components = self._find_referenced_jsonl_components(cmd_components, jsonl_components)
+
+        # compute component for jsonl file referenced in config.hasp.pages
+        pages_jsonl_component_path = self._compute_component_path_of_pages_config_value(device.path, device.config)
+        if pages_jsonl_component_path is not None:
+            pages_jsonl_component = self._create_component_from_path(
+                device_cfg_dir_root=device.path,
+                path=pages_jsonl_component_path, prefix=""
+            )
+            referenced_jsonl_components.add(pages_jsonl_component)
 
         return list(referenced_jsonl_components) + list(referenced_cmd_components)
 
