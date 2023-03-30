@@ -19,6 +19,7 @@ from openhasp_config_manager.openhasp_client.model.screen_config import ScreenCo
 from openhasp_config_manager.processing.device_processor import DeviceProcessor
 from openhasp_config_manager.processing.jsonl.jsonl import ObjectDimensionsProcessor
 from openhasp_config_manager.processing.variables import VariableManager
+from openhasp_config_manager.ui.util import warn
 from openhasp_config_manager.validation.cmd import CmdFileValidator
 from openhasp_config_manager.validation.device_validator import DeviceValidator
 from openhasp_config_manager.validation.jsonl import JsonlObjectValidator
@@ -69,7 +70,7 @@ class ConfigManager:
             except Exception as ex:
                 raise Exception(f"Error reading config '{device_path}': {ex}")
 
-            device_components = self._analyze_device(device_path)
+            device_components = self._analyze_device(config, device_path)
 
             device = Device(
                 path=device_path,
@@ -83,36 +84,67 @@ class ConfigManager:
 
         return result
 
-    def _analyze_device(self, device_cfg_dir_root: Path) -> List[Component]:
-        return self._read_components(device_cfg_dir_root)
+    def _analyze_device(self, config: Config, device_cfg_dir_root: Path) -> List[Component]:
+        result = self._read_components(device_cfg_dir_root)
 
-    @staticmethod
-    def _read_components(path: Path, prefix: str = "") -> List[Component]:
-        result: List[Component] = []
-
-        for suffix in [".jsonl", ".cmd"]:
-
-            for file in path.rglob(f"*{suffix}"):
-                if not file.is_file():
-                    continue
-
-                content = file.read_text()
-
-                name_parts = []
-                if len(prefix) > 0:
-                    name_parts.append(prefix)
-                name_parts = name_parts + list(file.relative_to(path).parts)
-
-                name = "_".join(name_parts)
-                component = Component(
-                    name=name,
-                    type=suffix[1:],
-                    path=file,
-                    content=content,
-                )
+        # also read the file referenced by the hasp.pages config property
+        component = self._create_component_from_path(
+            device_cfg_dir_root=device_cfg_dir_root,
+            path=Path(device_cfg_dir_root, config.hasp.pages[1:]).relative_to(device_cfg_dir_root),
+            prefix="",
+        )
+        if component is not None:
+            component_already_exists = any(map(lambda c: c.path == component.path, result))
+            if not component_already_exists:
                 result.append(component)
 
         return result
+
+    def _read_components(self, path: Path, prefix: str = "") -> List[Component]:
+        """
+        Recursively reads all components from the given path.
+        :param path: the root path to read components from
+        :param prefix: a prefix to add to the component name
+        :return: list of components
+        """
+        result: List[Component] = []
+
+        for suffix in [".jsonl", ".cmd"]:
+            for file in path.rglob(f"*{suffix}"):
+                component = self._create_component_from_path(
+                    device_cfg_dir_root=path,
+                    path=Path(path, file.relative_to(path)).relative_to(path),
+                    prefix=prefix
+                )
+                if component is not None:
+                    result.append(component)
+
+        return result
+
+    @staticmethod
+    def _create_component_from_path(device_cfg_dir_root: Path, path: Path, prefix: str) -> Component or None:
+        file = Path(device_cfg_dir_root, path)
+
+        if not file.is_file():
+            warn(f"Not a file, skipping: {file}")
+            return None
+
+        content = file.read_text()
+
+        name_parts = []
+        if len(prefix) > 0:
+            name_parts.append(prefix)
+        name_parts = name_parts + list(file.relative_to(device_cfg_dir_root).parts)
+
+        name = "_".join(name_parts)
+        suffix = file.suffix
+        component = Component(
+            name=name,
+            type=suffix[1:],
+            path=file,
+            content=content,
+        )
+        return component
 
     def _read_config(self, device_path: Path) -> Config | None:
         config_file = Path(device_path, CONFIG_FILE_NAME)
@@ -121,11 +153,13 @@ class ConfigManager:
             loaded = orjson.loads(content)
 
             gui_config = self._parse_gui_config(loaded["gui"])
-            screen_rotated = gui_config.rotate % 2 == 1
+            is_screen_rotated = gui_config.rotate % 2 == 1
 
             config = Config(
-                openhasp_config_manager=self._parse_openhasp_config_manager_config(loaded["openhasp_config_manager"],
-                                                                                   screen_rotated),
+                openhasp_config_manager=self._parse_openhasp_config_manager_config(
+                    data=loaded["openhasp_config_manager"],
+                    swap_width_and_height=is_screen_rotated
+                ),
                 mqtt=self._parse_mqtt_config(loaded["mqtt"]),
                 http=self._parse_http_config(loaded["http"]),
                 gui=self._parse_gui_config(loaded["gui"]),
