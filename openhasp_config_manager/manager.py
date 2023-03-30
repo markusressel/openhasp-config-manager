@@ -19,6 +19,7 @@ from openhasp_config_manager.openhasp_client.model.screen_config import ScreenCo
 from openhasp_config_manager.processing.device_processor import DeviceProcessor
 from openhasp_config_manager.processing.jsonl.jsonl import ObjectDimensionsProcessor
 from openhasp_config_manager.processing.variables import VariableManager
+from openhasp_config_manager.ui.util import warn
 from openhasp_config_manager.validation.cmd import CmdFileValidator
 from openhasp_config_manager.validation.device_validator import DeviceValidator
 from openhasp_config_manager.validation.jsonl import JsonlObjectValidator
@@ -69,7 +70,7 @@ class ConfigManager:
             except Exception as ex:
                 raise Exception(f"Error reading config '{device_path}': {ex}")
 
-            device_components = self._analyze_device(device_path)
+            device_components = self._analyze_device(config, device_path)
 
             device = Device(
                 path=device_path,
@@ -83,36 +84,70 @@ class ConfigManager:
 
         return result
 
-    def _analyze_device(self, device_cfg_dir_root: Path) -> List[Component]:
-        return self._read_components(device_cfg_dir_root)
+    def _analyze_device(self, config: Config, device_cfg_dir_root: Path) -> List[Component]:
+        result = self._read_components(device_cfg_dir_root)
+        return result
 
     @staticmethod
-    def _read_components(path: Path, prefix: str = "") -> List[Component]:
+    def _compute_component_path_of_pages_config_value(device_cfg_dir_root: Path, config: Config) -> Path | None:
+        sub_path = config.hasp.pages[1:]
+        sub_path = sub_path.removeprefix("L:/")
+        sub_path = sub_path.removeprefix("/")
+        if len(sub_path) <= 0:
+            return None
+        path = Path(device_cfg_dir_root, sub_path)
+        relative_path = path.relative_to(device_cfg_dir_root)
+        if path.is_file():
+            return relative_path
+        else:
+            warn(f"Could not find file '{relative_path}' referenced by hasp.pages config property, searched in: {path}")
+            return None
+
+    def _read_components(self, path: Path, prefix: str = "") -> List[Component]:
+        """
+        Recursively reads all components from the given path.
+        :param path: the root path to read components from
+        :param prefix: a prefix to add to the component name
+        :return: list of components
+        """
         result: List[Component] = []
 
         for suffix in [".jsonl", ".cmd"]:
-
             for file in path.rglob(f"*{suffix}"):
-                if not file.is_file():
-                    continue
-
-                content = file.read_text()
-
-                name_parts = []
-                if len(prefix) > 0:
-                    name_parts.append(prefix)
-                name_parts = name_parts + list(file.relative_to(path).parts)
-
-                name = "_".join(name_parts)
-                component = Component(
-                    name=name,
-                    type=suffix[1:],
-                    path=file,
-                    content=content,
+                component = self._create_component_from_path(
+                    device_cfg_dir_root=path,
+                    path=Path(path, file.relative_to(path)).relative_to(path),
+                    prefix=prefix
                 )
-                result.append(component)
+                if component is not None:
+                    result.append(component)
 
         return result
+
+    @staticmethod
+    def _create_component_from_path(device_cfg_dir_root: Path, path: Path, prefix: str) -> Component or None:
+        file = Path(device_cfg_dir_root, path)
+
+        if not file.is_file():
+            warn(f"Not a file, skipping: {file}")
+            return None
+
+        content = file.read_text()
+
+        name_parts = []
+        if len(prefix) > 0:
+            name_parts.append(prefix)
+        name_parts = name_parts + list(file.relative_to(device_cfg_dir_root).parts)
+
+        name = "_".join(name_parts)
+        suffix = file.suffix
+        component = Component(
+            name=name,
+            type=suffix[1:],
+            path=file,
+            content=content,
+        )
+        return component
 
     def _read_config(self, device_path: Path) -> Config | None:
         config_file = Path(device_path, CONFIG_FILE_NAME)
@@ -121,11 +156,13 @@ class ConfigManager:
             loaded = orjson.loads(content)
 
             gui_config = self._parse_gui_config(loaded["gui"])
-            screen_rotated = gui_config.rotate % 2 == 1
+            is_screen_rotated = gui_config.rotate % 2 == 1
 
             config = Config(
-                openhasp_config_manager=self._parse_openhasp_config_manager_config(loaded["openhasp_config_manager"],
-                                                                                   screen_rotated),
+                openhasp_config_manager=self._parse_openhasp_config_manager_config(
+                    data=loaded["openhasp_config_manager"],
+                    swap_width_and_height=is_screen_rotated
+                ),
                 mqtt=self._parse_mqtt_config(loaded["mqtt"]),
                 http=self._parse_http_config(loaded["http"]),
                 gui=self._parse_gui_config(loaded["gui"]),
@@ -248,7 +285,18 @@ class ConfigManager:
         jsonl_components = list(filter(lambda x: x.type == "jsonl", device.components))
 
         referenced_cmd_components = self._find_referenced_cmd_components(cmd_components)
+
+        # find jsonl files referenced in CMD files
         referenced_jsonl_components = self._find_referenced_jsonl_components(cmd_components, jsonl_components)
+
+        # compute component for jsonl file referenced in config.hasp.pages
+        pages_jsonl_component_path = self._compute_component_path_of_pages_config_value(device.path, device.config)
+        if pages_jsonl_component_path is not None:
+            pages_jsonl_component = self._create_component_from_path(
+                device_cfg_dir_root=device.path,
+                path=pages_jsonl_component_path, prefix=""
+            )
+            referenced_jsonl_components.add(pages_jsonl_component)
 
         return list(referenced_jsonl_components) + list(referenced_cmd_components)
 
