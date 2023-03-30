@@ -86,20 +86,6 @@ class ConfigManager:
 
     def _analyze_device(self, config: Config, device_cfg_dir_root: Path) -> List[Component]:
         result = self._read_components(device_cfg_dir_root)
-
-        # also read the file referenced by the hasp.pages config property
-        pages_config_component_path = self._compute_component_path_of_pages_config_value(device_cfg_dir_root, config)
-        if pages_config_component_path is not None:
-            component = self._create_component_from_path(
-                device_cfg_dir_root=device_cfg_dir_root,
-                path=pages_config_component_path,
-                prefix="",
-            )
-            if component is not None:
-                component_already_exists = any(map(lambda c: c.path == component.path, result))
-                if not component_already_exists:
-                    result.append(component)
-
         return result
 
     @staticmethod
@@ -114,6 +100,7 @@ class ConfigManager:
         if path.is_file():
             return relative_path
         else:
+            warn(f"Could not find file '{relative_path}' referenced by hasp.pages config property, searched in: {path}")
             return None
 
     def _read_components(self, path: Path, prefix: str = "") -> List[Component]:
