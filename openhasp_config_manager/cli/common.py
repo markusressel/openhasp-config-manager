@@ -23,17 +23,21 @@ def _upload(device: Device, output_dir: Path, purge: bool, show_diff: bool):
     uploader = ConfigUploader(output_dir, client)
     try:
         info(f"Uploading files to device '{device.name}'...")
-        uploader.upload(device, purge, show_diff)
+        return uploader.upload(device, purge, show_diff)
     except Exception as ex:
         raise Exception(f"Error uploading files to '{device.name}': {ex}")
 
 
 def _deploy(config_manager: ConfigManager, device: Device, output_dir: Path, purge: bool, show_diff: bool):
     _generate(config_manager, device)
-    _upload(device, output_dir, purge, show_diff)
+    changed = _upload(device, output_dir, purge, show_diff)
     # _cmd(config_dir, device="touch_down_1", command="reboot", payload="")
     # _reload(config_dir, device)
-    _reboot(device)
+    if changed:
+        info(f"Rebooting {device.name} to apply changes")
+        _reboot(device)
+    else:
+        info(f"No changes detected for {device.name}, device is already up-to-date")
 
 
 def _reload(device: Device):

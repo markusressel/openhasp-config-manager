@@ -14,14 +14,27 @@ class ConfigUploader:
         self._output_root = output_root
         self._cache_dir = Path(self._output_root, ".cache")
 
-    def upload(self, device: Device, purge: bool = False, print_diff: bool = False):
-        if purge:
-            self.cleanup_device(device)
-        self._upload_files(device, print_diff)
-        self._update_config(device)
+    def upload(self, device: Device, purge: bool = False, print_diff: bool = False) -> bool:
+        """
+        Uploads configuration files and config properties to a device.
+        :param device: The device to upload to.
+        :param purge: If True, removes files from the device, which are not present in the generated output.
+        :param print_diff: If true, a diff will be printed to the console for each file that has changed.
+        :return: True if any files have changed, false otherwise.
+        """
+        result = False
 
-    def _upload_files(self, device: Device, print_diff: bool):
+        if purge:
+            result |= self.cleanup_device(device)
+
+        result |= self._upload_files(device, print_diff)
+        result |= self._update_config(device)
+        return result
+
+    def _upload_files(self, device: Device, print_diff: bool) -> bool:
         existing_files = self._api_client.get_files()
+
+        result = False
 
         for file in device.output_dir.iterdir():
             info(f"Preparing '{file.name}' for upload...")
@@ -47,6 +60,7 @@ class ConfigUploader:
             )
 
             if new_checksum is not None:
+                result = True
                 if print_diff:
                     diff_output = self._calculate_diff(
                         file_name=file.name,
@@ -64,11 +78,16 @@ class ConfigUploader:
             else:
                 info(f"Skipping {file} because it hasn't changed.")
 
-    def cleanup_device(self, device: Device):
+        return result
+
+    def cleanup_device(self, device: Device) -> bool:
         """
         Delete files from the device, which are not present in the currently generated output
         :param device: the target device
+        :return: True if any files have been deleted, false otherwise
         """
+        result = False
+
         file_names = ["config.json"]
         for file in device.output_dir.iterdir():
             file_names.append(file.name)
@@ -77,8 +96,10 @@ class ConfigUploader:
         files_on_device = self._api_client.get_files()
         for f in files_on_device:
             if f not in file_names:
+                result = True
                 info(f"Deleting file '{f}' from device '{device.name}'")
                 self._api_client.delete_file(f)
+        return result
 
     def _check_if_checksum_will_change(self, file: Path, original_checksum: str, new_content: str) -> str | None:
         """
