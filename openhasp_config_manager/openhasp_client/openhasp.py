@@ -1,4 +1,5 @@
-from typing import Dict, List
+import json
+from typing import Dict, List, Any
 
 import orjson
 import requests as requests
@@ -30,6 +31,88 @@ class OpenHaspClient:
             port=device.config.mqtt.port,
             mqtt_user=device.config.mqtt.user,
             mqtt_password=device.config.mqtt.password
+        )
+
+    def send_image(self, image: any, page: int, object_id: int):
+        """
+        Send an image to the device
+        :param image: the image to send
+        :param page: the page to send the image to
+        :param object_id: the object id to send the image to
+        """
+        pass
+
+    def set_text(self, obj: str, text: str):
+        """
+        Set the text of an object
+        :param obj: the object to set the text for
+        :param text: the text to set
+        """
+        self.set_object_properties(obj, {"text": text})
+
+    def set_object_properties(self, obj: str, properties: Dict[str, Any]):
+        """
+        Set the state of a plate
+        :param obj: object to set a state for
+        :param properties: properties to set
+        """
+        for prop, value in properties.items():
+            self.command(
+                name=f"{obj}.{prop}",
+                params=value,
+            )
+
+    def set_idle_state(self, state: str):
+        """
+        Forces the given idle state
+        :param state: one of "off", "short", "long"
+        """
+        return self.command(
+            name="idle",
+            params=state
+        )
+
+    def set_backlight(self, state: bool, brightness: int):
+        """
+        Sets the backlight state and brightness
+        :param state: True to turn on, False to turn off
+        :param brightness: the brightness level in 0..255
+        """
+        return self.command(
+            name="backlight",
+            params=json.dumps({
+                "state": state,
+                "brightness": brightness,
+            })
+        )
+
+    def wakeup(self):
+        """
+        Wakes up the display
+        """
+        return self.set_idle_state(state="off")
+
+    def set_page(self, index: int):
+        """
+        Set the current page
+        :param index: the index of the page to set
+        """
+        return self.command(
+            name="page",
+            params=f"{index}"
+        )
+
+    def set_hidden(self, obj: str, hidden: bool):
+        """
+        Set the "hidden" property of an object
+        :param obj: the object to set the property for
+        :param hidden: True to hide the object, False to show it
+        """
+        return self.set_object_properties(
+            obj=obj,
+            properties={
+                "hidden": "1" if hidden else "0",
+            }
         )
 
     def get_files(self) -> List[str]:
@@ -93,7 +176,6 @@ class OpenHaspClient:
         :param params: parameters for the command
         """
         topic = f"hasp/{self._device.config.mqtt.name}/command/{name}"
-
         data = params.strip('"')
         self._mqtt_client.publish(topic=topic, payload=data)
 
@@ -160,6 +242,25 @@ class OpenHaspClient:
             url=self._base_url + "config",
             data=data,
             username=username, password=password
+        )
+
+    def get_mqtt_config(self) -> MqttConfig:
+        username = self._device.config.http.user
+        password = self._device.config.http.password
+
+        data = self._do_request(
+            method=GET,
+            url=self._base_url + "api/config/mqtt/",
+            username=username, password=password
+        )
+
+        return MqttConfig(
+            name=data["name"],
+            group=data["group"],
+            host=data["host"],
+            port=data["port"],
+            user=data["user"],
+            password=data["pass"]
         )
 
     def set_mqtt_config(self, config: MqttConfig):
