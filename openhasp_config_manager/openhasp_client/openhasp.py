@@ -1,5 +1,5 @@
 import json
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Callable, Union
 
 import orjson
 import requests as requests
@@ -166,8 +166,50 @@ class OpenHaspClient:
             username=username, password=password
         )
 
-    def watch(self):
-        self._mqtt_client.watch(self._device)
+    def listen_state(
+            self,
+            callback: Callable,
+            state: str,
+            plate: str = "+",
+    ) -> Union[str, list]:
+        """
+        Listen to OpenHASP state events
+        :param callback: callback to call when a matching event is received
+        :param plate: name of the plate
+        :param state: state to listen for
+        :return: A handle that can be used to cancel the callback.
+        """
+
+        async def _callback(event_topic, event_payload):
+            event_topic_segments = event_topic.split('/')
+
+            if len(event_topic_segments) != 4 or event_topic_segments[2] != "state":
+                return
+
+            event_plate = event_topic_segments[1]
+            event_state_name = event_topic_segments[3]
+
+            if (plate == "+" or event_plate == plate) and event_state_name == state:
+                await callback(event_topic, event_plate, event_state_name, event_payload)
+
+        self.listen_event(
+            path=f"hasp/{plate}/state/{state}",
+            callback=_callback,
+        )
+
+    def listen_event(self, path: str, callback: Callable):
+        """
+        Listen for an event
+        :param path:
+        :param callback:
+        :return:
+        """
+
+        def _on_message(message: str):
+            callback(message)
+
+        topic = f"hasp/{self._device.config.mqtt.name}/{path}"
+        self._mqtt_client.subscribe(topic, _on_message)
 
     def command(self, name: str, params: str):
         """

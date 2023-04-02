@@ -1,6 +1,6 @@
-import paho.mqtt.client as paho
+from typing import Callable
 
-from openhasp_config_manager.openhasp_client.model.device import Device
+import paho.mqtt.client as paho
 
 
 class MqttClient:
@@ -23,8 +23,13 @@ class MqttClient:
         finally:
             self._client.disconnect()
 
-    def watch(self, device: Device):
-        pass
+    def subscribe(self, topic: str, callback: Callable):
+        # TODO: implement callback
+        self._client.subscribe(
+            topic=topic,
+            qos=0,
+            options=None,
+        )
 
     def _connect(self):
         self._client = paho.Client(client_id=self._mqtt_client_id, protocol=paho.MQTTv5)
