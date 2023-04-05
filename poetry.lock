@@ -231,7 +231,7 @@ socks = ["PySocks (>=1.5.6,!=1.5.7,<2.0)"]
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.10"  # Compatible python versions must be declared here
-content-hash = "f504c2ba69d415e9ad6d5dc20a061e14231ba3cf33b08e1b4356e17ee47b811a"
+content-hash = "d03b85057ea8504bb0f7ff903a8703c244103b41b58a44c4ac7973cd9e9846e0"
 
 [metadata.files]
 asyncio-mqtt = [
