@@ -9,6 +9,7 @@ from openhasp_config_manager.cli.deploy import c_deploy
 from openhasp_config_manager.cli.generate import c_generate
 from openhasp_config_manager.cli.screenshot import c_screenshot
 from openhasp_config_manager.cli.upload import c_upload
+from openhasp_config_manager.cli.state import c_state
 from openhasp_config_manager.cli.vars import c_vars
 from openhasp_config_manager.ui.util import echo
 
@@ -20,6 +21,7 @@ PARAM_SHOW_DIFF = "diff"
 PARAM_CMD = "cmd"
 PARAM_PAYLOAD = "payload"
 PARAM_PATH = "path"
+PARAM_OBJECT = "object"
 
 DEFAULT_CONFIG_PATH = Path("./openhasp-configs")
 DEFAULT_OUTPUT_PATH = Path("./output")
@@ -60,6 +62,14 @@ CMD_OPTION_NAMES = {
     PARAM_PATH: {
         "names": ["--path", "-p"],
         "help": """The subpath inside the configuration directory"""
+    },
+    PARAM_OBJECT: {
+        "names": ["--object", "-o"],
+        "help": """The object identifier, f.ex. p1b15"""
+    },
+    PARAM_STATE: {
+        "names": ["--state", "-s"],
+        "help": """The state to set. Can also be a json object to set multiple properties in one go."""
     }
 }
 
@@ -201,6 +211,30 @@ def cmd(config_dir: Path, device: str, command: str, payload: str):
         c_cmd(config_dir, device, command, payload)
     )
 
+@cli.command(name="state")
+@click.option(*get_option_names(PARAM_CFG_DIR),
+              required=False,
+              default=DEFAULT_CONFIG_PATH,
+              type=click.Path(exists=True, path_type=Path),
+              help=get_option_help(PARAM_CFG_DIR))
+@click.option(*get_option_names(PARAM_DEVICE),
+              required=True,
+              help=get_option_help(PARAM_DEVICE))
+@click.option(*get_option_names(PARAM_OBJECT),
+              required=True,
+              help=get_option_help(PARAM_OBJECT))
+@click.option(*get_option_names(PARAM_STATE),
+              required=False,
+              default="",
+              help=get_option_help(PARAM_STATE))
+def state(config_dir: Path, device: str, object: str, state: str):
+    """
+    Sends a state update request to a device.
+    """
+    asyncio.run(
+        c_state(config_dir, device, object, state)
+    )
+    
 
 @cli.command(name="vars")
 @click.option(*get_option_names(PARAM_CFG_DIR),
