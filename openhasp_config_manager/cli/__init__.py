@@ -224,8 +224,7 @@ def cmd(config_dir: Path, device: str, command: str, payload: str):
               required=True,
               help=get_option_help(PARAM_OBJECT))
 @click.option(*get_option_names(PARAM_STATE),
-              required=False,
-              default="",
+              required=True,
               help=get_option_help(PARAM_STATE))
 def state(config_dir: Path, device: str, object: str, state: str):
     """
