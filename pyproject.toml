@@ -38,6 +38,7 @@ Jinja2 = "*"
 py-range-parse = "*"
 pyyaml = "*"
 orjson = "*"
+asyncio-mqtt = "*"
 
 [tool.poetry.dev-dependencies]
 pytest = "*"
