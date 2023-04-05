@@ -22,6 +22,7 @@ PARAM_CMD = "cmd"
 PARAM_PAYLOAD = "payload"
 PARAM_PATH = "path"
 PARAM_OBJECT = "object"
+PARAM_STATE = "state"
 
 DEFAULT_CONFIG_PATH = Path("./openhasp-configs")
 DEFAULT_OUTPUT_PATH = Path("./output")
