@@ -33,7 +33,6 @@ python = "^3.10"  # Compatible python versions must be declared here
 
 click = "*"
 requests = "*"
-paho-mqtt = "*"
 Jinja2 = "*"
 py-range-parse = "*"
 pyyaml = "*"
