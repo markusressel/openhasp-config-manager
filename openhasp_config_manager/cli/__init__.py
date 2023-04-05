@@ -1,3 +1,4 @@
+import asyncio
 import pathlib
 from pathlib import Path
 
@@ -116,7 +117,9 @@ def generate(config_dir: Path, output_dir: Path, device: str):
     """
     Generates the output files for all devices in the given config directory.
     """
-    c_generate(config_dir, output_dir, device)
+    asyncio.run(
+        c_generate(config_dir, output_dir, device)
+    )
 
 
 @cli.command(name="deploy")
@@ -140,7 +143,9 @@ def deploy(config_dir: Path, output_dir: Path, device: str, purge: bool, diff: b
     """
     Combines the generation and upload of a configuration.
     """
-    c_deploy(config_dir, output_dir, device, purge, diff)
+    asyncio.run(
+        c_deploy(config_dir, output_dir, device, purge, diff)
+    )
 
 
 @cli.command(name="upload")
@@ -164,7 +169,9 @@ def upload(config_dir: Path, output_dir: Path, device: str, purge: bool, diff: b
     """
     Uploads the previously generated configuration to their corresponding devices.
     """
-    c_upload(config_dir, output_dir, device, purge, diff)
+    asyncio.run(
+        c_upload(config_dir, output_dir, device, purge, diff)
+    )
 
 
 @cli.command(name="cmd")
@@ -190,7 +197,9 @@ def cmd(config_dir: Path, device: str, command: str, payload: str):
     The list of possible commands can be found on the official openHASP
     documentation: https://www.openhasp.com/latest/commands
     """
-    c_cmd(config_dir, device, command, payload)
+    asyncio.run(
+        c_cmd(config_dir, device, command, payload)
+    )
 
 
 @cli.command(name="vars")
@@ -207,7 +216,9 @@ def vars(config_dir: Path, path: str):
     """
     Prints the variables accessible in a given path.
     """
-    c_vars(config_dir, path)
+    asyncio.run(
+        c_vars(config_dir, path)
+    )
 
 
 @cli.command(name="screenshot")
@@ -232,4 +243,6 @@ def screenshot(config_dir: Path, device: str, output_dir: Path):
     """
     Requests a screenshot from the given device and stores it to the given output directory.
     """
-    c_screenshot(config_dir, device, output_dir)
+    asyncio.run(
+        c_screenshot(config_dir, device, output_dir)
+    )

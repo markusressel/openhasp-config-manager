@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 
 from openhasp_config_manager.manager import ConfigManager
@@ -5,7 +6,8 @@ from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 from openhasp_config_manager.processing.variables import VariableManager
 from openhasp_config_manager.uploader import ConfigUploader
 
-if __name__ == '__main__':
+
+async def main():
     config_dir = Path("./openhasp-configs")
     output_dir = Path("./output")
 
@@ -27,7 +29,11 @@ if __name__ == '__main__':
     uploader.upload(device=touch_down_1, purge=False, print_diff=True)
 
     # update an object on the device (via MQTT)
-    client.set_text(
+    await client.set_text(
         obj="p1b10",
         text="Hello World!",
     )
+
+
+if __name__ == '__main__':
+    asyncio.run(main())

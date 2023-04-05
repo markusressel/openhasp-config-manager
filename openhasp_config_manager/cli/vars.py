@@ -5,7 +5,7 @@ from openhasp_config_manager.processing.variables import VariableManager
 from openhasp_config_manager.ui.util import error, echo
 
 
-def _format_variables(variables: Dict) -> str:
+async def _format_variables(variables: Dict) -> str:
     def get_dict_contents(d: Dict, parent_key: str = '', result: List[str] = []):
         for k in sorted(d.keys()):
             v = d[k]
@@ -24,11 +24,11 @@ def _format_variables(variables: Dict) -> str:
     return "\n".join(get_dict_contents(variables))
 
 
-def c_vars(config_dir: Path, path: str):
+async def c_vars(config_dir: Path, path: str):
     try:
         variable_manager = VariableManager(cfg_root=config_dir)
         variables = variable_manager.get_vars(Path(config_dir, path))
-        formatted = _format_variables(variables)
+        formatted = await _format_variables(variables)
         echo(formatted)
     except Exception as ex:
         error(str(ex))

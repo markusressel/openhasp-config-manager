@@ -4,7 +4,7 @@ from openhasp_config_manager.cli.common import _create_config_manager, _analyze_
 from openhasp_config_manager.ui.util import error, success, info
 
 
-def c_screenshot(config_dir: Path, device: str, output: Path):
+async def c_screenshot(config_dir: Path, device: str, output: Path):
     try:
         config_manager = _create_config_manager(config_dir, Path("./nonexistent"))
         filtered_devices, ignored_devices = _analyze_and_filter(config_manager=config_manager, device_filter=device)
