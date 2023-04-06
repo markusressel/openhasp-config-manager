@@ -35,6 +35,7 @@ class OpenHaspClient:
 
         self._telnet_client = OpenHaspTelnetClient(
             host=device.config.openhasp_config_manager.device.ip,
+            port=device.config.telnet.port,
             baudrate=device.config.debug.baud,
         )
 

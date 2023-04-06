@@ -17,6 +17,7 @@ from openhasp_config_manager.openhasp_client.model.http_config import HttpConfig
 from openhasp_config_manager.openhasp_client.model.mqtt_config import MqttConfig
 from openhasp_config_manager.openhasp_client.model.openhasp_config_manager_config import OpenhaspConfigManagerConfig
 from openhasp_config_manager.openhasp_client.model.screen_config import ScreenConfig
+from openhasp_config_manager.openhasp_client.model.telnet_config import TelnetConfig
 from openhasp_config_manager.processing.device_processor import DeviceProcessor
 from openhasp_config_manager.processing.jsonl.jsonl import ObjectDimensionsProcessor
 from openhasp_config_manager.processing.variables import VariableManager
@@ -168,7 +169,8 @@ class ConfigManager:
                 http=self._parse_http_config(loaded["http"]),
                 gui=self._parse_gui_config(loaded["gui"]),
                 hasp=self._parse_hasp_config(loaded["hasp"]),
-                debug=self._parse_debug_config(loaded["debug"])
+                debug=self._parse_debug_config(loaded["debug"]),
+                telnet=self._parse_telnet_config(loaded["telnet"])
             )
 
             return config
@@ -248,6 +250,13 @@ class ConfigManager:
             port=data["port"],
             proto=data["proto"],
             log=data["log"],
+        )
+
+    @staticmethod
+    def _parse_telnet_config(data: dict) -> TelnetConfig:
+        return TelnetConfig(
+            enable=data["enable"],
+            port=data["port"],
         )
 
     def process(self, device: Device):
