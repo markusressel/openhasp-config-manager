@@ -372,7 +372,7 @@ To deploy your configurations to the already connected openHASP devices, simply 
 > **Note**
 > openhasp-config-manager needs direct IP access as well as an enabled webservice on the plate
 > to be able to deploy files to the device. To enable the webservice
-> try: `òpenhasp-config-manager cmd -d plate35 -C service -p "start http"`
+> try: `openhasp-config-manager cmd -d plate35 -C service -p "start http"`
 
 ## Run commands
 
