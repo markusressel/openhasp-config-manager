@@ -118,17 +118,16 @@ class OpenHaspClient:
             self,
             callback: Callable,
             state: str,
-            plate: str = "+",
     ):
         """
         Listen to OpenHASP state events
         :param callback: callback to call when a matching event is received
-        :param plate: name of the plate
         :param state: state to listen for
         :return: A handle that can be used to cancel the callback.
         """
+        plate = self._device.config.mqtt.name
 
-        async def _callback(event_topic, event_payload):
+        async def _callback(event_topic: str, event_payload: bytes):
             event_topic_segments = event_topic.split('/')
 
             if len(event_topic_segments) != 4 or event_topic_segments[2] != "state":
@@ -137,7 +136,7 @@ class OpenHaspClient:
             event_plate = event_topic_segments[1]
             event_state_name = event_topic_segments[3]
 
-            if (plate == "+" or event_plate == plate) and event_state_name == state:
+            if (event_plate == plate) and event_state_name == state:
                 await callback(event_topic, event_plate, event_state_name, event_payload)
 
         await self.listen_event(
@@ -153,8 +152,8 @@ class OpenHaspClient:
         :return:
         """
 
-        def _on_message(message: str):
-            callback(message)
+        async def _on_message(topic: str, payload: bytes):
+            await callback(topic, payload)
 
         topic = f"hasp/{self._device.config.mqtt.name}/{path}"
         await self._mqtt_client.subscribe(topic, _on_message)

@@ -7,6 +7,7 @@ import click
 from openhasp_config_manager.cli.cmd import c_cmd
 from openhasp_config_manager.cli.deploy import c_deploy
 from openhasp_config_manager.cli.generate import c_generate
+from openhasp_config_manager.cli.listen import c_listen
 from openhasp_config_manager.cli.screenshot import c_screenshot
 from openhasp_config_manager.cli.state import c_state
 from openhasp_config_manager.cli.upload import c_upload
@@ -23,6 +24,7 @@ PARAM_PAYLOAD = "payload"
 PARAM_PATH = "path"
 PARAM_OBJECT = "object"
 PARAM_STATE = "state"
+PARAM_MQTT_PATH = "mqtt_path"
 
 DEFAULT_CONFIG_PATH = Path("./openhasp-configs")
 DEFAULT_OUTPUT_PATH = Path("./output")
@@ -71,6 +73,10 @@ CMD_OPTION_NAMES = {
     PARAM_STATE: {
         "names": ["--state", "-s"],
         "help": """The state to set. Can also be a json object to set multiple properties in one go."""
+    },
+    PARAM_MQTT_PATH: {
+        "names": ["--path", "-p"],
+        "help": """The MQTT sub-path (hasp/<device>/<path>) to listen to."""
     }
 }
 
@@ -185,6 +191,27 @@ def upload(config_dir: Path, output_dir: Path, device: str, purge: bool, diff: b
     )
 
 
+@cli.command(name="listen")
+@click.option(*get_option_names(PARAM_CFG_DIR),
+              required=False,
+              default=DEFAULT_CONFIG_PATH,
+              type=click.Path(exists=True, path_type=Path),
+              help=get_option_help(PARAM_CFG_DIR))
+@click.option(*get_option_names(PARAM_DEVICE),
+              required=False,
+              help=get_option_help(PARAM_DEVICE))
+@click.option(*get_option_names(PARAM_MQTT_PATH),
+              required=True,
+              help=get_option_help(PARAM_MQTT_PATH))
+def listen(config_dir: Path, device: str, path: str):
+    """
+    Sends a state update request to a device.
+    """
+    asyncio.run(
+        c_listen(config_dir, device, path)
+    )
+
+
 @cli.command(name="cmd")
 @click.option(*get_option_names(PARAM_CFG_DIR),
               required=False,
@@ -192,7 +219,7 @@ def upload(config_dir: Path, output_dir: Path, device: str, purge: bool, diff: b
               type=click.Path(exists=True, path_type=Path),
               help=get_option_help(PARAM_CFG_DIR))
 @click.option(*get_option_names(PARAM_DEVICE),
-              required=True,
+              required=False,
               help=get_option_help(PARAM_DEVICE))
 @click.option(*get_option_names(PARAM_CMD),
               required=True,
@@ -220,7 +247,7 @@ def cmd(config_dir: Path, device: str, command: str, payload: str):
               type=click.Path(exists=True, path_type=Path),
               help=get_option_help(PARAM_CFG_DIR))
 @click.option(*get_option_names(PARAM_DEVICE),
-              required=True,
+              required=False,
               help=get_option_help(PARAM_DEVICE))
 @click.option(*get_option_names(PARAM_OBJECT),
               required=True,

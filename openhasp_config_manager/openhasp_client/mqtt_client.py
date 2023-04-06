@@ -24,7 +24,7 @@ class MqttClient:
                 async with client.messages() as messages:
                     await client.subscribe(topic)
                     async for message in messages:
-                        callback(message.topic, message.payload)
+                        await callback(message.topic, message.payload)
         except MqttError:
             print(f'Connection lost; Reconnecting in {self._reconnect_interval_seconds} seconds ...')
             await asyncio.sleep(self._reconnect_interval_seconds)
