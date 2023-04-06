@@ -7,7 +7,7 @@ from openhasp_config_manager.processing.variables import VariableManager
 from openhasp_config_manager.ui.util import info
 
 
-def _generate(config_manager: ConfigManager, device: Device):
+async def _generate(config_manager: ConfigManager, device: Device):
     info(f"Generating output for '{device.name}'...")
     try:
         config_manager.process(device)
@@ -15,7 +15,7 @@ def _generate(config_manager: ConfigManager, device: Device):
         raise Exception(f"Error generating output for {device.name}: {ex}")
 
 
-def _upload(device: Device, output_dir: Path, purge: bool, show_diff: bool):
+async def _upload(device: Device, output_dir: Path, purge: bool, show_diff: bool):
     from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
     from openhasp_config_manager.uploader import ConfigUploader
 
@@ -23,28 +23,32 @@ def _upload(device: Device, output_dir: Path, purge: bool, show_diff: bool):
     uploader = ConfigUploader(output_dir, client)
     try:
         info(f"Uploading files to device '{device.name}'...")
-        uploader.upload(device, purge, show_diff)
+        return uploader.upload(device, purge, show_diff)
     except Exception as ex:
         raise Exception(f"Error uploading files to '{device.name}': {ex}")
 
 
-def _deploy(config_manager: ConfigManager, device: Device, output_dir: Path, purge: bool, show_diff: bool):
-    _generate(config_manager, device)
-    _upload(device, output_dir, purge, show_diff)
+async def _deploy(config_manager: ConfigManager, device: Device, output_dir: Path, purge: bool, show_diff: bool):
+    await _generate(config_manager, device)
+    changed = _upload(device, output_dir, purge, show_diff)
     # _cmd(config_dir, device="touch_down_1", command="reboot", payload="")
     # _reload(config_dir, device)
-    _reboot(device)
+    if changed:
+        info(f"Rebooting {device.name} to apply changes")
+        await _reboot(device)
+    else:
+        info(f"No changes detected for {device.name}, device is already up-to-date")
 
 
-def _reload(device: Device):
+async def _reload(device: Device):
     from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 
     client = OpenHaspClient(device)
-    client.command("clearpage", "all")
-    client.command("run", "L:/boot.cmd")
+    await client.command("clearpage", "all")
+    await client.command("run", "L:/boot.cmd")
 
 
-def _reboot(device: Device):
+async def _reboot(device: Device):
     from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 
     client = OpenHaspClient(device)
@@ -52,12 +56,12 @@ def _reboot(device: Device):
     client.reboot()
 
 
-def _cmd(device: Device, command: str, payload: str):
+async def _cmd(device: Device, command: str, payload: str):
     from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 
     client = OpenHaspClient(device)
     info(f"Sending command {command} to {device.name}...")
-    client.command(command, payload)
+    await client.command(command, payload)
 
 
 def _create_config_manager(config_dir, output_dir) -> ConfigManager:

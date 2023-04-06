@@ -18,7 +18,29 @@ place.
 * [x] simple configuration upload to the device(s)
     * [x] automatic diffing to only update changed configuration files
     * [x] git-style diff output for changed lines
-* [x] device command execution directly from the CLI (still needs a connection to the MQTT broker)
+* [x] API client (Web + MQTT)
+    * [x] execute commands on a plate
+    * [x] listen to events and state updates
+
+```shell
+> openhasp-config-manager -h
+Usage: cli.py [OPTIONS] COMMAND [ARGS]...
+
+Options:
+  --version   Show the version and exit.
+  -h, --help  Show this message and exit.
+
+Commands:
+  cmd         Sends a command request to a device.
+  deploy      Combines the generation and upload of a configuration.
+  generate    Generates the output files for all devices in the given...
+  help        Show this message and exit.
+  listen      Sends a state update request to a device.
+  screenshot  Requests a screenshot from the given device and stores it...
+  state       Sends a state update request to a device.
+  upload      Uploads the previously generated configuration to their...
+  vars        Prints the variables accessible in a given path.
+```
 
 # Disclaimer
 

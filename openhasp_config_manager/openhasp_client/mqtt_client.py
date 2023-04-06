@@ -1,6 +1,7 @@
-import paho.mqtt.client as paho
+import asyncio
+from typing import Callable
 
-from openhasp_config_manager.openhasp_client.model.device import Device
+from asyncio_mqtt import Client, MqttError
 
 
 class MqttClient:
@@ -11,22 +12,28 @@ class MqttClient:
         self._port = port
         self._mqtt_user = mqtt_user
         self._mqtt_password = mqtt_password
+        self._reconnect_interval_seconds = 5
 
-    def publish(self, topic: str, payload: str):
+    async def publish(self, topic: str, payload: str):
+        async with self._create_mqtt_client() as client:
+            await client.publish(topic, payload=payload)
+
+    async def subscribe(self, topic: str, callback: Callable):
         try:
-            self._connect()
-            result = self._client.publish(topic=topic, payload=payload)
-            result.wait_for_publish()
+            async with self._create_mqtt_client() as client:
+                async with client.messages() as messages:
+                    await client.subscribe(topic)
+                    async for message in messages:
+                        await callback(message.topic, message.payload)
+        except MqttError:
+            print(f'Connection lost; Reconnecting in {self._reconnect_interval_seconds} seconds ...')
+            await asyncio.sleep(self._reconnect_interval_seconds)
 
-            if not result.rc == paho.MQTT_ERR_SUCCESS:
-                raise Exception(f'Code {result.rc} while sending message {result.mid}: {paho.error_string(result.rc)})')
-        finally:
-            self._client.disconnect()
-
-    def watch(self, device: Device):
-        pass
-
-    def _connect(self):
-        self._client = paho.Client(client_id=self._mqtt_client_id, protocol=paho.MQTTv5)
-        self._client.username_pw_set(username=self._mqtt_user, password=self._mqtt_password)
-        self._client.connect(self._host, self._port)
+    def _create_mqtt_client(self) -> Client:
+        return Client(
+            hostname=self._host,
+            port=self._port,
+            username=self._mqtt_user,
+            password=self._mqtt_password,
+            client_id=self._mqtt_client_id
+        )
