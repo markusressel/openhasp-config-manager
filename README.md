@@ -367,22 +367,11 @@ header.title: Home
 ## Deployment
 
 To deploy your configurations to the already connected openHASP devices, simply use the
-command line tool `openhasp-config-manager`:
+`generate`, `upload` or `deploy` commands of `openhasp-config-manager`.
 
-```shell
-> openhasp-config-manager                                                         0 (0.604s) < 02:11:38
-Usage: openhasp-config-manager [OPTIONS] COMMAND [ARGS]...
-
-Options:
-  --version   Show the version and exit.
-  -h, --help  Show this message and exit.
-
-Commands:
-  cmd       Sends a command request to a device.
-  deploy    Combines the generation and upload of a configuration.
-  generate  Generates the output files for all devices in the given...
-  upload    Uploads the previously generated configuration to their...
-```
+> **Note**
+> openhasp-config-manager needs direct IP access as well as an enabled webservice on the plate
+> to be able to deploy files to the device.
 
 ## Run commands
 
