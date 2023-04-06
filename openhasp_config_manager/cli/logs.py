@@ -1,4 +1,3 @@
-import asyncio
 from pathlib import Path
 
 from openhasp_config_manager.cli.common import _create_config_manager, _analyze_and_filter
@@ -19,7 +18,6 @@ async def c_logs(config_dir: Path, device: str):
             client = OpenHaspClient(device)
             await client.logs()
 
-        asyncio.get_event_loop().run_forever()
         success("Done!")
     except Exception as ex:
         error(str(ex))

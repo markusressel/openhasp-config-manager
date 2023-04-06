@@ -1,4 +1,4 @@
-from telnetlib3 import TelnetTerminalClient, open_connection
+from telnetlib3 import TelnetTerminalClient, open_connection, telnet_client_shell
 
 
 class OpenHaspTelnetClient:
@@ -31,7 +31,7 @@ class OpenHaspTelnetClient:
         reader, writer = await open_connection(
             host=self._host, port=self._port,
             tspeed=(115200, 115200),  # TODO: self._device.config.debug.baudrate,
-            shell=telnetlib3.telnet_client_shell,
+            shell=telnet_client_shell,
             client_factory=TelnetTerminalClient
         )
 
