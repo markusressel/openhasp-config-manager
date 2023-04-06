@@ -8,6 +8,7 @@ import orjson
 from openhasp_config_manager.const import COMMON_FOLDER_NAME, DEVICES_FOLDER_NAME, SYSTEM_SCRIPTS
 from openhasp_config_manager.openhasp_client.model.component import Component
 from openhasp_config_manager.openhasp_client.model.config import Config
+from openhasp_config_manager.openhasp_client.model.debug_config import DebugConfig
 from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.openhasp_client.model.device_config import DeviceConfig
 from openhasp_config_manager.openhasp_client.model.gui_config import GuiConfig
@@ -166,7 +167,8 @@ class ConfigManager:
                 mqtt=self._parse_mqtt_config(loaded["mqtt"]),
                 http=self._parse_http_config(loaded["http"]),
                 gui=self._parse_gui_config(loaded["gui"]),
-                hasp=self._parse_hasp_config(loaded["hasp"])
+                hasp=self._parse_hasp_config(loaded["hasp"]),
+                debug=self._parse_debug_config(loaded["debug"])
             )
 
             return config
@@ -234,6 +236,18 @@ class ConfigManager:
             color2=data["color2"],
             font=data["font"],
             pages=data["pages"],
+        )
+
+    @staticmethod
+    def _parse_debug_config(data: dict) -> DebugConfig:
+        return DebugConfig(
+            ansi=data["ansi"],
+            baud=data["baud"],
+            tele=data["tele"],
+            host=data["host"],
+            port=data["port"],
+            proto=data["proto"],
+            log=data["log"],
         )
 
     def process(self, device: Device):

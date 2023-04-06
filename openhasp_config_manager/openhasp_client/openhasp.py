@@ -35,6 +35,7 @@ class OpenHaspClient:
 
         self._telnet_client = OpenHaspTelnetClient(
             host=device.config.openhasp_config_manager.device.ip,
+            baudrate=device.config.debug.baud,
         )
 
     async def send_image(self, image: any, page: int, object_id: int):

@@ -3,9 +3,10 @@ from telnetlib3 import TelnetTerminalClient, open_connection, telnet_client_shel
 
 class OpenHaspTelnetClient:
 
-    def __init__(self, host: str, port: int = 23):
+    def __init__(self, host: str, port: int = 23, baudrate: int = 115200):
         self._host = host
         self._port = port
+        self._baudrate = baudrate
 
     async def shell(self):
         # TODO: get automatic login working
@@ -30,7 +31,7 @@ class OpenHaspTelnetClient:
 
         reader, writer = await open_connection(
             host=self._host, port=self._port,
-            tspeed=(115200, 115200),  # TODO: self._device.config.debug.baudrate,
+            tspeed=(self._baudrate, self._baudrate),
             shell=telnet_client_shell,
             client_factory=TelnetTerminalClient
         )

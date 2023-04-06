@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+from openhasp_config_manager.openhasp_client.model.debug_config import DebugConfig
 from openhasp_config_manager.openhasp_client.model.gui_config import GuiConfig
 from openhasp_config_manager.openhasp_client.model.hasp_config import HaspConfig
 from openhasp_config_manager.openhasp_client.model.http_config import HttpConfig
@@ -14,3 +15,4 @@ class Config:
     http: HttpConfig
     gui: GuiConfig
     hasp: HaspConfig
+    debug: DebugConfig
