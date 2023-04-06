@@ -12,6 +12,7 @@ async def c_listen(config_dir: Path, device: str, path: str):
         filtered_devices, ignored_devices = _analyze_and_filter(config_manager=config_manager, device_filter=device)
         if len(filtered_devices) <= 0:
             raise Exception(f"No device matches the filter: {device}")
+        info(f"Listening to '.../{path}' on devices: {', '.join(map(lambda x: x.name, filtered_devices))}")
         for device in filtered_devices:
             client = OpenHaspClient(device)
 
@@ -19,6 +20,7 @@ async def c_listen(config_dir: Path, device: str, path: str):
                 info(f"{topic}: {payload.decode('utf-8')}")
 
             await client.listen_event(path, on_message)
+
         asyncio.get_event_loop().run_forever()
         success("Done!")
     except Exception as ex:
