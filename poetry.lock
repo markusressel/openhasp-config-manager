@@ -208,6 +208,14 @@ socks = ["PySocks (>=1.5.6,!=1.5.7)"]
 use_chardet_on_py3 = ["chardet (>=3.0.2,<6)"]
 
 [[package]]
+name = "telnetlib3"
+version = "2.0.2"
+description = "Python 3 asyncio Telnet server and client Protocol library"
+category = "main"
+optional = false
+python-versions = ">=3.7"
+
+[[package]]
 name = "tomli"
 version = "2.0.1"
 description = "A lil' TOML parser"
@@ -231,7 +239,7 @@ socks = ["PySocks (>=1.5.6,!=1.5.7,<2.0)"]
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.10"  # Compatible python versions must be declared here
-content-hash = "d03b85057ea8504bb0f7ff903a8703c244103b41b58a44c4ac7973cd9e9846e0"
+content-hash = "520de4c967b26c0fcfa35d18489624c219b926be74c82289c7a6f61d06d3af07"
 
 [metadata.files]
 asyncio-mqtt = [
@@ -313,6 +321,10 @@ pyyaml = [
     { file = "PyYAML-6.0.tar.gz", hash = "sha256:68fb519c14306fec9720a2a5b45bc9f0c8d1b9c72adf45c37baedfcd949c35a2" },
 ]
 requests = []
+telnetlib3 = [
+    { file = "telnetlib3-2.0.2-py2.py3-none-any.whl", hash = "sha256:250d0b293f351e3fc3c12d9365e1fe899ccd27a510045921149d81f54de79f8f" },
+    { file = "telnetlib3-2.0.2.tar.gz", hash = "sha256:27473cdc4010d6a0d435620cf5881d20fe2a3f2c42aa714dcadc8bc8a869ffab" },
+]
 tomli = [
     { file = "tomli-2.0.1-py3-none-any.whl", hash = "sha256:939de3e7a6161af0c887ef91b7d41a53e7c5a1ca976325f429cb46ea9bc30ecc" },
     { file = "tomli-2.0.1.tar.gz", hash = "sha256:de526c12914f0c550d15924c62d72abc48d6fe7364aa87328337a31007fe8a4f" },

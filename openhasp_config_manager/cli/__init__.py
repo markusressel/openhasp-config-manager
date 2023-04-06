@@ -8,7 +8,9 @@ from openhasp_config_manager.cli.cmd import c_cmd
 from openhasp_config_manager.cli.deploy import c_deploy
 from openhasp_config_manager.cli.generate import c_generate
 from openhasp_config_manager.cli.listen import c_listen
+from openhasp_config_manager.cli.logs import c_logs
 from openhasp_config_manager.cli.screenshot import c_screenshot
+from openhasp_config_manager.cli.shell import c_shell
 from openhasp_config_manager.cli.state import c_state
 from openhasp_config_manager.cli.upload import c_upload
 from openhasp_config_manager.cli.vars import c_vars
@@ -188,6 +190,40 @@ def upload(config_dir: Path, output_dir: Path, device: str, purge: bool, diff: b
     """
     asyncio.run(
         c_upload(config_dir, output_dir, device, purge, diff)
+    )
+
+
+@cli.command(name="logs")
+@click.option(*get_option_names(PARAM_CFG_DIR),
+              required=False,
+              default=DEFAULT_CONFIG_PATH,
+              type=click.Path(exists=True, path_type=Path),
+              help=get_option_help(PARAM_CFG_DIR))
+@click.option(*get_option_names(PARAM_DEVICE), required=True, default=None,
+              help=get_option_help(PARAM_DEVICE))
+def logs(config_dir: Path, device: str):
+    """
+    Prints the logs of a device.
+    """
+    asyncio.run(
+        c_logs(config_dir, device)
+    )
+
+
+@cli.command(name="shell")
+@click.option(*get_option_names(PARAM_CFG_DIR),
+              required=False,
+              default=DEFAULT_CONFIG_PATH,
+              type=click.Path(exists=True, path_type=Path),
+              help=get_option_help(PARAM_CFG_DIR))
+@click.option(*get_option_names(PARAM_DEVICE), required=True, default=None,
+              help=get_option_help(PARAM_DEVICE))
+def shell(config_dir: Path, device: str):
+    """
+    Connects to the telnet server of a device.
+    """
+    asyncio.run(
+        c_shell(config_dir, device)
     )
 
 
