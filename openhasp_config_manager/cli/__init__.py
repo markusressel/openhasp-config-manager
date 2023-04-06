@@ -8,8 +8,8 @@ from openhasp_config_manager.cli.cmd import c_cmd
 from openhasp_config_manager.cli.deploy import c_deploy
 from openhasp_config_manager.cli.generate import c_generate
 from openhasp_config_manager.cli.screenshot import c_screenshot
-from openhasp_config_manager.cli.upload import c_upload
 from openhasp_config_manager.cli.state import c_state
+from openhasp_config_manager.cli.upload import c_upload
 from openhasp_config_manager.cli.vars import c_vars
 from openhasp_config_manager.ui.util import echo
 
@@ -212,6 +212,7 @@ def cmd(config_dir: Path, device: str, command: str, payload: str):
         c_cmd(config_dir, device, command, payload)
     )
 
+
 @cli.command(name="state")
 @click.option(*get_option_names(PARAM_CFG_DIR),
               required=False,
@@ -234,7 +235,7 @@ def state(config_dir: Path, device: str, object: str, state: str):
     asyncio.run(
         c_state(config_dir, device, object, state)
     )
-    
+
 
 @cli.command(name="vars")
 @click.option(*get_option_names(PARAM_CFG_DIR),
