@@ -7,6 +7,7 @@ from openhasp_config_manager.openhasp_client.model.hasp_config import HaspConfig
 from openhasp_config_manager.openhasp_client.model.http_config import HttpConfig
 from openhasp_config_manager.openhasp_client.model.mqtt_config import MqttConfig
 from openhasp_config_manager.openhasp_client.mqtt_client import MqttClient
+from openhasp_config_manager.openhasp_client.telnet_client import OpenHaspTelnetClient
 from openhasp_config_manager.openhasp_client.webservice_client import WebserviceClient
 from openhasp_config_manager.ui.util import info
 
@@ -30,6 +31,14 @@ class OpenHaspClient:
             port=device.config.mqtt.port,
             mqtt_user=device.config.mqtt.user,
             mqtt_password=device.config.mqtt.password
+        )
+
+        self._telnet_client = OpenHaspTelnetClient(
+            host=device.config.openhasp_config_manager.device.ip,
+            port=device.config.telnet.port,
+            baudrate=device.config.debug.baud,
+            user=device.config.http.user,
+            password=device.config.http.password,
         )
 
     async def send_image(self, image: any, page: int, object_id: int):
@@ -246,3 +255,9 @@ class OpenHaspClient:
         :return:
         """
         return self._webservice_client.take_screenshot()
+
+    async def shell(self):
+        await self._telnet_client.shell()
+
+    async def logs(self):
+        await self._telnet_client.logs()

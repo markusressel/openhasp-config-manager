@@ -3,10 +3,12 @@ from typing import Dict, List
 import orjson
 import requests
 
+from openhasp_config_manager.openhasp_client.model.debug_config import DebugConfig
 from openhasp_config_manager.openhasp_client.model.gui_config import GuiConfig
 from openhasp_config_manager.openhasp_client.model.hasp_config import HaspConfig
 from openhasp_config_manager.openhasp_client.model.http_config import HttpConfig
 from openhasp_config_manager.openhasp_client.model.mqtt_config import MqttConfig
+from openhasp_config_manager.openhasp_client.model.telnet_config import TelnetConfig
 
 GET = "GET"
 POST = "POST"
@@ -93,7 +95,6 @@ class WebserviceClient:
         """
         Set the MQTT configuration
         :param config: the configuration to set
-        :return:
         """
         data = {
             "name": config.name,
@@ -118,7 +119,6 @@ class WebserviceClient:
         """
         Set the GUI configuration
         :param config: the configuration to set
-        :return:
         """
         data = {
             "idle1": config.idle1,
@@ -127,6 +127,51 @@ class WebserviceClient:
             "cursor": config.cursor,
             "bckl": config.bckl,
             "save": "gui"
+        }
+
+        # ignore keys with None value
+        data = {k: v for k, v in data.items() if v is not None}
+
+        self._do_request(
+            method=POST,
+            url=self._base_url + "config",
+            data=data,
+        )
+
+    def set_telnet_config(self, config: TelnetConfig):
+        """
+        Set the Debug configuration
+        :param config: the configuration to set
+        """
+        data = {
+            "enable": config.enable,
+            "port": config.port,
+            "save": "telnet"
+        }
+
+        # ignore keys with None value
+        data = {k: v for k, v in data.items() if v is not None}
+
+        self._do_request(
+            method=POST,
+            url=self._base_url + "config",
+            data=data,
+        )
+
+    def set_debug_config(self, config: DebugConfig):
+        """
+        Set the Debug configuration
+        :param config: the configuration to set
+        """
+        data = {
+            "ansi": config.ansi,
+            "baud": config.baud,
+            "tele": config.tele,
+            "host": config.host,
+            "port": config.port,
+            "proto": config.proto,
+            "log": config.log,
+            "save": "debug"
         }
 
         # ignore keys with None value

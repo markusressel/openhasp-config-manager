@@ -8,6 +8,7 @@ import orjson
 from openhasp_config_manager.const import COMMON_FOLDER_NAME, DEVICES_FOLDER_NAME, SYSTEM_SCRIPTS
 from openhasp_config_manager.openhasp_client.model.component import Component
 from openhasp_config_manager.openhasp_client.model.config import Config
+from openhasp_config_manager.openhasp_client.model.debug_config import DebugConfig
 from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.openhasp_client.model.device_config import DeviceConfig
 from openhasp_config_manager.openhasp_client.model.gui_config import GuiConfig
@@ -16,6 +17,8 @@ from openhasp_config_manager.openhasp_client.model.http_config import HttpConfig
 from openhasp_config_manager.openhasp_client.model.mqtt_config import MqttConfig
 from openhasp_config_manager.openhasp_client.model.openhasp_config_manager_config import OpenhaspConfigManagerConfig
 from openhasp_config_manager.openhasp_client.model.screen_config import ScreenConfig
+from openhasp_config_manager.openhasp_client.model.telnet_config import TelnetConfig
+from openhasp_config_manager.openhasp_client.model.wifi_config import WifiConfig
 from openhasp_config_manager.processing.device_processor import DeviceProcessor
 from openhasp_config_manager.processing.jsonl.jsonl import ObjectDimensionsProcessor
 from openhasp_config_manager.processing.variables import VariableManager
@@ -163,10 +166,13 @@ class ConfigManager:
                     data=loaded["openhasp_config_manager"],
                     swap_width_and_height=is_screen_rotated
                 ),
+                wifi=self._parse_wifi_config(loaded["wifi"]),
                 mqtt=self._parse_mqtt_config(loaded["mqtt"]),
                 http=self._parse_http_config(loaded["http"]),
                 gui=self._parse_gui_config(loaded["gui"]),
-                hasp=self._parse_hasp_config(loaded["hasp"])
+                hasp=self._parse_hasp_config(loaded["hasp"]),
+                debug=self._parse_debug_config(loaded["debug"]),
+                telnet=self._parse_telnet_config(loaded["telnet"])
             )
 
             return config
@@ -190,6 +196,13 @@ class ConfigManager:
                     height=data["device"]["screen"][screen_height_key]
                 )
             )
+        )
+
+    @staticmethod
+    def _parse_wifi_config(data: dict) -> WifiConfig:
+        return WifiConfig(
+            ssid=data["ssid"],
+            password=data["pass"],
         )
 
     @staticmethod
@@ -234,6 +247,25 @@ class ConfigManager:
             color2=data["color2"],
             font=data["font"],
             pages=data["pages"],
+        )
+
+    @staticmethod
+    def _parse_debug_config(data: dict) -> DebugConfig:
+        return DebugConfig(
+            ansi=data["ansi"],
+            baud=data["baud"],
+            tele=data["tele"],
+            host=data["host"],
+            port=data["port"],
+            proto=data["proto"],
+            log=data["log"],
+        )
+
+    @staticmethod
+    def _parse_telnet_config(data: dict) -> TelnetConfig:
+        return TelnetConfig(
+            enable=data["enable"],
+            port=data["port"],
         )
 
     def process(self, device: Device):

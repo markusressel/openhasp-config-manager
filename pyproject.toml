@@ -38,6 +38,7 @@ py-range-parse = "*"
 pyyaml = "*"
 orjson = "*"
 asyncio-mqtt = "*"
+telnetlib3 = "*"
 
 [tool.poetry.dev-dependencies]
 pytest = "*"
