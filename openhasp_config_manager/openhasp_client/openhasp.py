@@ -260,4 +260,4 @@ class OpenHaspClient:
         await self._telnet_client.shell()
 
     async def logs(self):
-        print("Not yet implemented")
+        await self._telnet_client.logs()
