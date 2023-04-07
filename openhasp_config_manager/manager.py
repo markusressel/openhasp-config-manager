@@ -18,6 +18,7 @@ from openhasp_config_manager.openhasp_client.model.mqtt_config import MqttConfig
 from openhasp_config_manager.openhasp_client.model.openhasp_config_manager_config import OpenhaspConfigManagerConfig
 from openhasp_config_manager.openhasp_client.model.screen_config import ScreenConfig
 from openhasp_config_manager.openhasp_client.model.telnet_config import TelnetConfig
+from openhasp_config_manager.openhasp_client.model.wifi_config import WifiConfig
 from openhasp_config_manager.processing.device_processor import DeviceProcessor
 from openhasp_config_manager.processing.jsonl.jsonl import ObjectDimensionsProcessor
 from openhasp_config_manager.processing.variables import VariableManager
@@ -165,6 +166,7 @@ class ConfigManager:
                     data=loaded["openhasp_config_manager"],
                     swap_width_and_height=is_screen_rotated
                 ),
+                wifi=self._parse_wifi_config(loaded["wifi"]),
                 mqtt=self._parse_mqtt_config(loaded["mqtt"]),
                 http=self._parse_http_config(loaded["http"]),
                 gui=self._parse_gui_config(loaded["gui"]),
@@ -194,6 +196,13 @@ class ConfigManager:
                     height=data["device"]["screen"][screen_height_key]
                 )
             )
+        )
+
+    @staticmethod
+    def _parse_wifi_config(data: dict) -> WifiConfig:
+        return WifiConfig(
+            ssid=data["ssid"],
+            password=data["pass"],
         )
 
     @staticmethod
