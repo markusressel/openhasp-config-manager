@@ -11,7 +11,7 @@ class OpenHaspTelnetClient:
         self._password = password
 
     async def shell(self):
-        async def shell(reader, writer):
+        async def _shell(reader, writer):
             while True:
                 outp = await reader.read(1024)
 
@@ -32,7 +32,7 @@ class OpenHaspTelnetClient:
         reader, writer = await open_connection(
             host=self._host, port=self._port,
             tspeed=(self._baudrate, self._baudrate),
-            shell=shell,
+            shell=_shell,
             client_factory=TelnetTerminalClient
         )
 
