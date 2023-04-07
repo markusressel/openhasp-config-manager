@@ -24,7 +24,7 @@ place.
 
 ```shell
 > openhasp-config-manager -h
-Usage: cli.py [OPTIONS] COMMAND [ARGS]...
+Usage: openhasp-config-manager [OPTIONS] COMMAND [ARGS]...
 
 Options:
   --version   Show the version and exit.
@@ -36,7 +36,9 @@ Commands:
   generate    Generates the output files for all devices in the given...
   help        Show this message and exit.
   listen      Sends a state update request to a device.
+  logs        Prints the logs of a device.
   screenshot  Requests a screenshot from the given device and stores it...
+  shell       Connects to the telnet server of a device.
   state       Sends a state update request to a device.
   upload      Uploads the previously generated configuration to their...
   vars        Prints the variables accessible in a given path.
@@ -392,7 +394,13 @@ documentation: https://openhasp.haswitchplate.com/latest/commands/
 
 ## How do I see device logs?
 
-With the device connected via USB cable, open a terminal and run:
+Try the `logs` command (this does require network access to the device):
+
+```shell
+> openhasp-config-manager logs -d plate35
+```
+
+If that doesn't work, open a terminal and run the following command with the device connected via USB cable:
 
 ```shell
 bash -c "screen -q -L -Logfile device.log /dev/ttyUSB0 115200 &> /dev/null; tail -F device.log; killall screen"
