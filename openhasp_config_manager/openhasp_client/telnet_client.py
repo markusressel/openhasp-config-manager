@@ -29,8 +29,6 @@ class OpenHaspTelnetClient:
             # switch over to interactive shell after automatic login
             await telnet_client_shell(reader, writer)
 
-        # await telnetlib3.client.run_client()
-
         reader, writer = await open_connection(
             host=self._host, port=self._port,
             tspeed=(self._baudrate, self._baudrate),
