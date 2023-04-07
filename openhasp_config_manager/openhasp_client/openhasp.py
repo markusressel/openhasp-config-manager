@@ -37,6 +37,8 @@ class OpenHaspClient:
             host=device.config.openhasp_config_manager.device.ip,
             port=device.config.telnet.port,
             baudrate=device.config.debug.baud,
+            user=device.config.http.user,
+            password=device.config.http.password,
         )
 
     async def send_image(self, image: any, page: int, object_id: int):
