@@ -13,15 +13,11 @@ class OpenHaspTelnetClient:
     async def shell(self):
         async def shell(reader, writer):
             while True:
-                # read stream until '?' mark is found
                 outp = await reader.read(1024)
 
                 if not outp:
                     # End of File
                     break
-
-                # display all server output
-                print(outp, flush=True)
 
                 if 'Username:' in outp:
                     # reply all questions with 'y'.
@@ -30,6 +26,7 @@ class OpenHaspTelnetClient:
                     writer.write(f"{self._password}\n")
                     break
 
+            # switch over to interactive shell after automatic login
             await telnet_client_shell(reader, writer)
 
         # await telnetlib3.client.run_client()
