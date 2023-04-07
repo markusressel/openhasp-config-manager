@@ -3,9 +3,16 @@ from pathlib import Path
 import pytest
 
 from openhasp_config_manager.openhasp_client.model.config import Config
+from openhasp_config_manager.openhasp_client.model.debug_config import DebugConfig
 from openhasp_config_manager.openhasp_client.model.device_config import DeviceConfig
+from openhasp_config_manager.openhasp_client.model.gui_config import GuiConfig
+from openhasp_config_manager.openhasp_client.model.hasp_config import HaspConfig
+from openhasp_config_manager.openhasp_client.model.http_config import HttpConfig
+from openhasp_config_manager.openhasp_client.model.mqtt_config import MqttConfig
 from openhasp_config_manager.openhasp_client.model.openhasp_config_manager_config import OpenhaspConfigManagerConfig
 from openhasp_config_manager.openhasp_client.model.screen_config import ScreenConfig
+from openhasp_config_manager.openhasp_client.model.telnet_config import TelnetConfig
+from openhasp_config_manager.openhasp_client.model.wifi_config import WifiConfig
 
 
 def _find_test_folder() -> Path:
@@ -40,8 +47,59 @@ class TestBase:
                 )
             )
         ),
-        mqtt=None,
-        http=None,
-        gui=None,
-        hasp=None,
+        wifi=WifiConfig(
+            ssid="ssid",
+            password="password",
+        ),
+        mqtt=MqttConfig(
+            name="name",
+            group="plates",
+            host="mqtt.host",
+            port=1883,
+            user="user",
+            password="password",
+        ),
+        http=HttpConfig(
+            port=80,
+            user="user",
+            password="password",
+        ),
+        gui=GuiConfig(
+            idle1=10,
+            idle2=60,
+            bckl=32,
+            bcklinv=0,
+            rotate=1,
+            cursor=0,
+            invert=0,
+            calibration=[
+                0,
+                65535,
+                0,
+                65535,
+                0
+            ],
+        ),
+        hasp=HaspConfig(
+            startpage=1,
+            startdim=255,
+            theme=2,
+            color1="#000000",
+            color2="#000000",
+            font="",
+            pages="/pages_home.jsonl",
+        ),
+        debug=DebugConfig(
+            ansi=1,
+            baud=115200,
+            tele=300,
+            host="",
+            port=541,
+            proto=0,
+            log=0,
+        ),
+        telnet=TelnetConfig(
+            enable=1,
+            port=23,
+        ),
     )
