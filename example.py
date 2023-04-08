@@ -44,13 +44,23 @@ async def main():
     state_listener_task = client.listen_state(obj="p1b22", callback=state_callback)
     asyncio.create_task(state_listener_task)
 
+    state_listener_task = client.listen_state(obj="p1b29", callback=state_callback)
+    asyncio.create_task(state_listener_task)
+
     # update an object on the device (via MQTT)
     await client.set_text(
         obj="p1b10",
-        text="Hello World!",
+        text="Hello!",
     )
 
-    # wait forever
+    await asyncio.sleep(10)
+
+    await client.set_text(
+        obj="p1b10",
+        text="World!",
+    )
+
+    # wait forever (to let "listen_event" and "listen_state" tasks continue)
     await asyncio.Event().wait()
 
 

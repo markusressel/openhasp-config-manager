@@ -1,7 +1,8 @@
 import asyncio
+import uuid
 from typing import Callable
 
-from asyncio_mqtt import Client, MqttError
+from asyncio_mqtt import Client
 
 
 class MqttClient:
@@ -14,8 +15,10 @@ class MqttClient:
         self._mqtt_password = mqtt_password
         self._reconnect_interval_seconds = 5
 
+        self.__mqtt_client: Client = None
+
     async def publish(self, topic: str, payload: str):
-        async with self._create_mqtt_client() as client:
+        async with await self._get_mqtt_client() as client:
             await client.publish(topic, payload=payload)
 
     async def subscribe(self, topic: str, callback: Callable):
@@ -25,9 +28,15 @@ class MqttClient:
                     await client.subscribe(topic)
                     async for message in messages:
                         await callback(message.topic, message.payload)
-        except MqttError:
-            print(f'Connection lost; Reconnecting in {self._reconnect_interval_seconds} seconds ...')
+        except Exception as ex:
+            print(f'Error: {ex}; Reconnecting in {self._reconnect_interval_seconds} seconds ...')
             await asyncio.sleep(self._reconnect_interval_seconds)
+
+    async def _get_mqtt_client(self) -> Client:
+        if self.__mqtt_client is None:
+            self.__mqtt_client = self._create_mqtt_client()
+
+        return self.__mqtt_client
 
     def _create_mqtt_client(self) -> Client:
         return Client(
@@ -35,5 +44,5 @@ class MqttClient:
             port=self._port,
             username=self._mqtt_user,
             password=self._mqtt_password,
-            client_id=self._mqtt_client_id
+            client_id=f"{self._mqtt_client_id}-{uuid.uuid4()}",
         )
