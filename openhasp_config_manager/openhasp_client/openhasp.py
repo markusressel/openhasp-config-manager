@@ -123,16 +123,11 @@ class OpenHaspClient:
             }
         )
 
-    async def listen_state(
-            self,
-            callback: Callable,
-            state: str,
-    ):
+    async def listen_state(self, state: str, callback: Callable):
         """
         Listen to OpenHASP state events
-        :param callback: callback to call when a matching event is received
         :param state: state to listen for
-        :return: A handle that can be used to cancel the callback.
+        :param callback: callback to call when a matching event is received
         """
         plate = self._device.config.mqtt.name
 
@@ -155,17 +150,12 @@ class OpenHaspClient:
 
     async def listen_event(self, path: str, callback: Callable):
         """
-        Listen for an event
-        :param path:
-        :param callback:
-        :return:
+        Listen to OpenHASP events related to this device
+        :param path: MQTT subpath to listen to
+        :param callback: callback to call when a matching event is received
         """
-
-        async def _on_message(topic: str, payload: bytes):
-            await callback(topic, payload)
-
         topic = f"hasp/{self._device.config.mqtt.name}/{path}"
-        await self._mqtt_client.subscribe(topic, _on_message)
+        await self._mqtt_client.subscribe(topic, callback)
 
     async def command(self, name: str, params: str):
         """
