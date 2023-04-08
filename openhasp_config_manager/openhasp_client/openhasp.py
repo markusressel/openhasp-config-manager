@@ -1,6 +1,8 @@
 import json
 from typing import Dict, List, Any, Callable
 
+from asyncio_mqtt import Topic
+
 from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.openhasp_client.model.gui_config import GuiConfig
 from openhasp_config_manager.openhasp_client.model.hasp_config import HaspConfig
@@ -123,28 +125,18 @@ class OpenHaspClient:
             }
         )
 
-    async def listen_state(self, state: str, callback: Callable):
+    async def listen_state(self, obj: str, callback: Callable):
         """
         Listen to OpenHASP state events
-        :param state: state to listen for
+        :param obj: object to listen to
         :param callback: callback to call when a matching event is received
         """
-        plate = self._device.config.mqtt.name
 
-        async def _callback(event_topic: str, event_payload: bytes):
-            event_topic_segments = event_topic.split('/')
-
-            if len(event_topic_segments) != 4 or event_topic_segments[2] != "state":
-                return
-
-            event_plate = event_topic_segments[1]
-            event_state_name = event_topic_segments[3]
-
-            if (event_plate == plate) and event_state_name == state:
-                await callback(event_topic, event_plate, event_state_name, event_payload)
+        async def _callback(event_topic: Topic, event_payload: bytes):
+            await callback(str(event_topic), event_payload)
 
         await self.listen_event(
-            path=f"hasp/{plate}/state/{state}",
+            path=f"state/{obj}",
             callback=_callback,
         )
 
