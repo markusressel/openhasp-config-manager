@@ -12,7 +12,7 @@ async def _generate(config_manager: ConfigManager, device: Device):
     try:
         config_manager.process(device)
     except Exception as ex:
-        raise Exception(f"Error generating output for {device.name}: {ex}")
+        raise Exception(f"Error generating output for {device.name}: {ex.__class__.__name__} {ex}")
 
 
 async def _upload(device: Device, output_dir: Path, purge: bool, show_diff: bool):
@@ -21,11 +21,9 @@ async def _upload(device: Device, output_dir: Path, purge: bool, show_diff: bool
 
     client = OpenHaspClient(device)
     uploader = ConfigUploader(output_dir, client)
-    try:
-        info(f"Uploading files to device '{device.name}'...")
-        return uploader.upload(device, purge, show_diff)
-    except Exception as ex:
-        raise Exception(f"Error uploading files to '{device.name}': {ex}")
+
+    info(f"Uploading files to device '{device.name}'...")
+    return uploader.upload(device, purge, show_diff)
 
 
 async def _deploy(config_manager: ConfigManager, device: Device, output_dir: Path, purge: bool, show_diff: bool):
