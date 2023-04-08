@@ -30,7 +30,7 @@ async def _upload(device: Device, output_dir: Path, purge: bool, show_diff: bool
 
 async def _deploy(config_manager: ConfigManager, device: Device, output_dir: Path, purge: bool, show_diff: bool):
     await _generate(config_manager, device)
-    changed = _upload(device, output_dir, purge, show_diff)
+    changed = await _upload(device, output_dir, purge, show_diff)
     # _cmd(config_dir, device="touch_down_1", command="reboot", payload="")
     # _reload(config_dir, device)
     if changed:
