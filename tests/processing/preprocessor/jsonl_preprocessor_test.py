@@ -202,3 +202,19 @@ class TestJsonlPreProcessor(TestBase):
             """{ "x": 0 }""",
             """{ "y": 1 }""",
         ]
+
+    def test_src_is_url(self):
+        # GIVEN
+        underTest = JsonlPreProcessor()
+
+        content = """
+        { "x": 0, "url": "https://upload.wikimedia.org/wikipedia/commons/b/bf/Test_card.png", }
+        """
+
+        # WHEN
+        result = underTest.cleanup_object_for_json_parsing(content)
+
+        # THEN
+        assert result == textwrap.dedent("""
+        { "x": 0, "url": "https://upload.wikimedia.org/wikipedia/commons/b/bf/Test_card.png" }
+        """).strip()
