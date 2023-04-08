@@ -133,7 +133,7 @@ class ConfigUploader:
         )
 
     def _update_config(self, device: Device):
-        current_mqtt_config = self._api_client.get_mqtt_config()
+        # current_mqtt_config = self._api_client.get_mqtt_config()
         # TODO: compare existing config with new config and only update if necessary
 
         self._api_client.set_mqtt_config(device.config.mqtt)
