@@ -42,21 +42,23 @@ class JsonlPreProcessor:
         :param content: original content
         :return: modified content without comments
         """
-        result_lines1 = [line for line in content.splitlines() if not line.strip().startswith("//")]
-
-        result_lines2 = []
-        for line in result_lines1:
-            if line.strip().startswith("//"):
-                continue
-
-            parts = re.split("(?!,)(\s*//.*)$", line)
-            parts = [part.strip() for part in parts if len(part.strip()) > 0]
-            keep = parts[0:max(1, len(parts) - 1)]
-
-            line = "".join(keep)
-            result_lines2.append(line)
-
-        result = "\n".join(result_lines2)
+        result_lines = []
+        for line in content.splitlines():
+            quote_count = 0
+            new_line = []
+            i = 0
+            while i < len(line):
+                char = line[i]
+                if char == '"':
+                    quote_count += 1
+                if char == '/' and i + 1 < len(line) and line[i + 1] == '/' and quote_count % 2 == 0:
+                    break
+                new_line.append(char)
+                i += 1
+            cleaned_line = "".join(new_line).strip()
+            if cleaned_line:  # Only append non-empty lines
+                result_lines.append(cleaned_line)
+        result = "\n".join(result_lines)
         return result.strip()
 
     def _remove_trailing_comma_of_last_property(self, content: str) -> str:

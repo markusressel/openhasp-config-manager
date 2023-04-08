@@ -17,6 +17,4 @@ class TestConfigManager(TestBase):
         assert len(devices) == 1
 
         components = devices[0].components
-        assert len(components) == 6
-
-
+        assert len(components) == 7
