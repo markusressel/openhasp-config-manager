@@ -1,4 +1,3 @@
-import json
 from typing import Dict, List, Any, Callable
 
 from asyncio_mqtt import Topic
@@ -90,10 +89,10 @@ class OpenHaspClient:
         """
         return await self.command(
             name="backlight",
-            params=json.dumps({
+            params={
                 "state": state,
                 "brightness": brightness,
-            })
+            }
         )
 
     async def wakeup(self):
@@ -149,15 +148,14 @@ class OpenHaspClient:
         topic = f"hasp/{self._device.config.mqtt.name}/{path}"
         await self._mqtt_client.subscribe(topic, callback)
 
-    async def command(self, name: str, params: str):
+    async def command(self, name: str, params: any):
         """
         Execute a command on a device
         :param name: the name of the command
         :param params: parameters for the command
         """
         topic = f"hasp/{self._device.config.mqtt.name}/command/{name}"
-        data = params.strip('"')
-        await self._mqtt_client.publish(topic=topic, payload=data)
+        await self._mqtt_client.publish(topic=topic, payload=params)
 
     def get_files(self) -> List[str]:
         """

@@ -1,4 +1,5 @@
 import asyncio
+import json
 import uuid
 from typing import Callable
 
@@ -17,8 +18,11 @@ class MqttClient:
 
         self.__mqtt_client: Client = None
 
-    async def publish(self, topic: str, payload: str):
+    async def publish(self, topic: str, payload: any):
         async with await self._get_mqtt_client() as client:
+            if isinstance(payload, dict):
+                payload = json.dumps(payload)
+
             await client.publish(topic, payload=payload)
 
     async def subscribe(self, topic: str, callback: Callable):
