@@ -19,7 +19,7 @@ class MqttClient:
         self.__mqtt_client: Client = None
 
     async def publish(self, topic: str, payload: any):
-        async with await self._get_mqtt_client() as client:
+        async with self._create_mqtt_client() as client:
             if isinstance(payload, dict):
                 payload = json.dumps(payload)
 
@@ -35,12 +35,6 @@ class MqttClient:
         except Exception as ex:
             print(f'Error: {ex}; Reconnecting in {self._reconnect_interval_seconds} seconds ...')
             await asyncio.sleep(self._reconnect_interval_seconds)
-
-    async def _get_mqtt_client(self) -> Client:
-        if self.__mqtt_client is None:
-            self.__mqtt_client = self._create_mqtt_client()
-
-        return self.__mqtt_client
 
     def _create_mqtt_client(self) -> Client:
         return Client(
