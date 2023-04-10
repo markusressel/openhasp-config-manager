@@ -67,7 +67,8 @@ class OpenHaspClient:
     async def set_image(
         self, obj: str, image,
         size: Tuple[int or None, int or None] = (None, None),
-        fitscreen: bool = False
+        fitscreen: bool = False,
+        timeout: int = 10,
     ):
         """
         Sets the image of an object
@@ -75,6 +76,7 @@ class OpenHaspClient:
         :param image: the image to set
         :param size: the size of the image
         :param fitscreen: if True, the image will be resized to fit the screen
+        :param timeout: the timeout in seconds to wait for the image to be fetched by the plate
         """
         import temppathlib
         with temppathlib.NamedTemporaryFile() as out_image:
@@ -84,9 +86,9 @@ class OpenHaspClient:
                 size=size,
                 fitscreen=fitscreen
             )
-            await self._serve_image(obj=obj, image_file=out_image, timeout=60)
+            await self._serve_image(obj=obj, image_file=out_image, timeout=timeout)
 
-    async def _serve_image(self, obj: str, image_file, timeout: int = 5):
+    async def _serve_image(self, obj: str, image_file, timeout: int):
         """
         Serves an image using a temporary webserver
         :param image_file: the image to serve
