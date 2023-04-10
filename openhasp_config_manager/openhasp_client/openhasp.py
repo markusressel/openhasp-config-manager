@@ -1,7 +1,10 @@
-from typing import Dict, List, Any, Callable
+import asyncio
+import random
+from typing import Dict, List, Any, Callable, Tuple
 
 from asyncio_mqtt import Topic
 
+from openhasp_config_manager.openhasp_client.image_processor import OpenHaspImageProcessor
 from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.openhasp_client.model.gui_config import GuiConfig
 from openhasp_config_manager.openhasp_client.model.hasp_config import HaspConfig
@@ -20,6 +23,8 @@ class OpenHaspClient:
         :param device: the device this client can communicate with
         """
         self._device = device
+
+        self._image_processor = OpenHaspImageProcessor()
 
         self._webservice_client = WebserviceClient(
             url=device.config.openhasp_config_manager.device.ip,
@@ -58,6 +63,87 @@ class OpenHaspClient:
         :param text: the text to set
         """
         await self.set_object_properties(obj, {"text": text})
+
+    async def set_image(
+        self, obj: str, image,
+        size: Tuple[int or None, int or None] = (None, None),
+        fitscreen: bool = False
+    ):
+        """
+        Sets the image of an object
+        :param obj: the object to set the image for
+        :param image: the image to set
+        :param size: the size of the image
+        :param fitscreen: if True, the image will be resized to fit the screen
+        """
+        import temppathlib
+        with temppathlib.NamedTemporaryFile() as out_image:
+            self._image_processor.image_to_rgb565(
+                in_image=image,
+                out_image=out_image.file,
+                size=size,
+                fitscreen=fitscreen
+            )
+            await self._serve_image(obj=obj, image_file=out_image, timeout=60)
+
+    async def _serve_image(self, obj: str, image_file, timeout: int = 5):
+        """
+        Serves an image using a temporary webserver
+        :param image_file: the image to serve
+        :param timeout: the timeout in seconds after which the webserver will be stopped
+        :return: the URL to retrieve the image
+        """
+        from aiohttp import web
+
+        async def serve_file(request):
+            response = web.FileResponse(image_file.path)
+            request.app["served"].set_result(True)
+            return response
+
+        async def start_server(app, listen_host, access_host, port, timeout):
+            runner = web.AppRunner(app)
+            await runner.setup()
+            site = web.TCPSite(runner, host, port)
+            await site.start()
+
+            listen_url = f"http://{listen_host}:{port}/"
+            access_url = f"http://{access_host}:{port}/"
+            print(f"Serving on {listen_url}, accessible via {access_url}")
+
+            await asyncio.sleep(1)
+
+            await self.set_object_properties(
+                obj=obj,
+                properties={
+                    "src": access_url
+                }
+            )
+
+            try:
+                await asyncio.wait_for(app["served"], timeout)
+            except asyncio.TimeoutError:
+                print(f"Timeout reached after {timeout} seconds. Server stopped.")
+            finally:
+                await runner.cleanup()
+
+            return listen_url
+
+        app = web.Application()
+        app["served"] = asyncio.Future()
+
+        app.router.add_route("GET", "/", serve_file)
+
+        target_ip = "192.168.2.185"
+        host = "0.0.0.0"
+        port = random.randint(1024, 65535)
+
+        await start_server(
+            app=app,
+            listen_host=host,
+            access_host=target_ip,
+            port=port,
+            timeout=timeout
+        )
 
     async def set_object_properties(self, obj: str, properties: Dict[str, Any]):
         """
