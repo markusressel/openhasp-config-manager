@@ -282,6 +282,17 @@ optional = false
 python-versions = ">=3.7"
 
 [[package]]
+name = "temppathlib"
+version = "1.2.0"
+description = "Wrap tempfile to give you pathlib.Path."
+category = "main"
+optional = false
+python-versions = "*"
+
+[package.extras]
+dev = ["mypy (==0.941)", "pylint (==2.12.2)", "yapf (==0.20.2)", "tox (>=3,<4)", "coverage (>=5,<6)", "pydocstyle (>=5,<6)", "twine"]
+
+[[package]]
 name = "tomli"
 version = "2.0.1"
 description = "A lil' TOML parser"
@@ -317,7 +328,7 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.10"  # Compatible python versions must be declared here
-content-hash = "e07db405a76d49479e625614b00edbb89891d51b9c5aa6f3005e59dac4b5599b"
+content-hash = "752b4c7b2ed58ab4953281c0622cd3cf1da47503565ca9f6200533fe49219a53"
 
 [metadata.files]
 aiohttp = [
@@ -921,6 +932,9 @@ requests = [
 telnetlib3 = [
     { file = "telnetlib3-2.0.2-py2.py3-none-any.whl", hash = "sha256:250d0b293f351e3fc3c12d9365e1fe899ccd27a510045921149d81f54de79f8f" },
     { file = "telnetlib3-2.0.2.tar.gz", hash = "sha256:27473cdc4010d6a0d435620cf5881d20fe2a3f2c42aa714dcadc8bc8a869ffab" },
+]
+temppathlib = [
+    { file = "temppathlib-1.2.0.tar.gz", hash = "sha256:993356dce9544b432a6202227640fc8b5aced3fbd828dff0f5d5ebaac2330f58" },
 ]
 tomli = [
     { file = "tomli-2.0.1-py3-none-any.whl", hash = "sha256:939de3e7a6161af0c887ef91b7d41a53e7c5a1ca976325f429cb46ea9bc30ecc" },
