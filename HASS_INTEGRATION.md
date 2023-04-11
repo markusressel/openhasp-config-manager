@@ -9,12 +9,13 @@ While this works pretty well, it has some limitations:
 
 1. Home Assistant needs to be restarted after a configuration change
 2. The integration only supports service calls as actions
-3. Integrating this into appdaemon is cumbersome because of the required boilerplate
+3. Integrating this with [AppDaemon](https://github.com/AppDaemon/appdaemon) is cumbersome because of
+   the required boilerplate
 
-To work around these, we can skip the integration entirely and simply "convert" any MQTT event we receive
-from any of the OpenHASP plates into an Home Assistant "event". This event can then be used in automations as well
-as appdaemon. Updates to the configuration of the plate are immediately propagated, so there is no need
-to restart Home Assistant to make changes in automations or appdaemon work.
+To work around these, we can skip the OpenHasp custom integration for Home Assistant
+entirely and simply "convert" any MQTT event we receive from any of the OpenHASP plates into an Home Assistant "event".
+This event can then be used in automations as well as appdaemon. Updates to the configuration of the plate are
+immediately propagated, so there is no need to restart Home Assistant to make changes in automations or appdaemon work.
 
 ```yaml
 alias: OpenHASP MQTT to Event Bridge
@@ -22,7 +23,6 @@ description: "Sends an event for each message received on the hasp/# topic, whic
 trigger:
   - platform: mqtt
     topic: hasp/#
-condition: [ ]
 action:
   - event: custom.openhasp.mqtt_event
     event_data:
