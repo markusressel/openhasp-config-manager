@@ -1,5 +1,4 @@
 import asyncio
-import random
 from typing import Dict, List, Any, Callable, Tuple
 
 from asyncio_mqtt import Topic
@@ -65,18 +64,28 @@ class OpenHaspClient:
         await self.set_object_properties(obj, {"text": text})
 
     async def set_image(
-        self, obj: str, image,
-        size: Tuple[int or None, int or None] = (None, None),
-        fitscreen: bool = False,
-        timeout: int = 10,
+            self,
+            obj: str,
+            image,
+            access_host: str,
+            listen_host: str = "0.0.0.0",
+            timeout: int = 10,
+            size: Tuple[int or None, int or None] = (None, None),
+            fitscreen: bool = False,
     ):
         """
-        Sets the image of an object
+        Sets the image of an object.
+        If the image is a URL, it will be fetched first.
+        The image will then be converted to RGB565 and
+        served by a temporary webserver for the plate to fetch it.
+
         :param obj: the object to set the image for
         :param image: the image to set
+        :param access_host: the address at which the device this webserver is running on is accessible to the plate
+        :param listen_host: the address to bind the webserver to
+        :param timeout: the timeout in seconds to wait for the image to be fetched by the plate
         :param size: the size of the image
         :param fitscreen: if True, the image will be resized to fit the screen
-        :param timeout: the timeout in seconds to wait for the image to be fetched by the plate
         """
         import temppathlib
         with temppathlib.NamedTemporaryFile() as out_image:
@@ -86,12 +95,20 @@ class OpenHaspClient:
                 size=size,
                 fitscreen=fitscreen
             )
-            await self._serve_image(obj=obj, image_file=out_image, timeout=timeout)
+            await self._serve_image(
+                obj=obj,
+                image_file=out_image,
+                listen_host=listen_host,
+                access_host=access_host,
+                timeout=timeout
+            )
 
-    async def _serve_image(self, obj: str, image_file, timeout: int):
+    async def _serve_image(self, obj: str, image_file, listen_host: str, access_host: str, timeout: int):
         """
         Serves an image using a temporary webserver
         :param image_file: the image to serve
+        :param listen_host: the address to bind the webserver to
+        :param access_host: the address at which the device this webserver is running on is accessible to the plate
         :param timeout: the timeout in seconds after which the webserver will be stopped
         :return: the URL to retrieve the image
         """
@@ -105,8 +122,10 @@ class OpenHaspClient:
         async def start_server(app, listen_host, access_host, port, timeout):
             runner = web.AppRunner(app)
             await runner.setup()
-            site = web.TCPSite(runner, host, port)
+            site = web.TCPSite(runner, listen_host, port)
             await site.start()
+
+            port = site._server.sockets[0].getsockname()[1]
 
             listen_url = f"http://{listen_host}:{port}/"
             access_url = f"http://{access_host}:{port}/"
@@ -135,15 +154,11 @@ class OpenHaspClient:
 
         app.router.add_route("GET", "/", serve_file)
 
-        target_ip = "192.168.2.185"
-        host = "0.0.0.0"
-        port = random.randint(1024, 65535)
-
         await start_server(
             app=app,
-            listen_host=host,
-            access_host=target_ip,
-            port=port,
+            listen_host=listen_host,
+            access_host=access_host,
+            port=0,  # let the system pick a random free port for us
             timeout=timeout
         )
 
