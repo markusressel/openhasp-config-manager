@@ -52,8 +52,7 @@ class OpenHaspTelnetClient:
                 buffer = buffer + await reader.read(2048)
 
                 if not buffer:
-                    # End of File
-                    break
+                    raise EOFError("Connection closed by remote host")
 
                 if login_done:
                     buffer = buffer.replace('Prompt >', '')

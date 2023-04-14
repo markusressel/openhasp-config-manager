@@ -2,7 +2,7 @@ from pathlib import Path
 
 from openhasp_config_manager.cli.common import _create_config_manager, _analyze_and_filter
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
-from openhasp_config_manager.ui.util import success, error, info
+from openhasp_config_manager.ui.util import error, info
 
 
 async def c_logs(config_dir: Path, device: str):
@@ -17,8 +17,5 @@ async def c_logs(config_dir: Path, device: str):
         for device in filtered_devices:
             client = OpenHaspClient(device)
             await client.logs()
-
-        success("Done!")
     except Exception as ex:
         error(str(ex))
-        raise ex
