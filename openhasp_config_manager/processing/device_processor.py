@@ -3,7 +3,8 @@ from typing import List, Dict, Any
 
 import orjson
 
-from openhasp_config_manager.openhasp_client.model.component import Component
+from openhasp_config_manager.openhasp_client.model.component import Component, JsonlComponent, CmdComponent, \
+    TextComponent, RawComponent
 from openhasp_config_manager.openhasp_client.model.config import Config
 from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.processing.jsonl import JsonlObjectProcessor
@@ -23,29 +24,40 @@ class DeviceProcessor:
                  variable_manager: VariableManager):
         self._device = device
 
-        self._jsonl_components: List[Component] = []
+        self._jsonl_components: List[JsonlComponent] = []
         self._others: List[Component] = []
 
         self._jsonl_preprocessor = JsonlPreProcessor()
         self._jsonl_object_processors = jsonl_object_processors
         self._variable_manager = variable_manager
 
-    def add_other(self, component: Component):
+    def add_component(self, component: Component):
+        if isinstance(component, JsonlComponent):
+            self._add_jsonl(component)
+        else:
+            self._add_other(component)
+
+    def _add_other(self, component: Component):
         self._others.append(component)
 
-    def add_jsonl(self, component: Component):
+    def _add_jsonl(self, component: JsonlComponent):
         self._jsonl_components.append(component)
 
     def normalize(self, device: Device, component: Component) -> str:
-        if component.type == "jsonl":
+        if isinstance(component, JsonlComponent):
             template_vars: Dict[str, any] = self._compute_jsonl_template_variables(device, component)
             return self._normalize_jsonl(self._device.config, component, template_vars)
-        elif component.type == "cmd":
+        elif isinstance(component, CmdComponent):
             template_vars: Dict[str, any] = {}
             return self._normalize_cmd(self._device.config, component, template_vars)
-        else:
+        elif isinstance(component, TextComponent):
             # no changes necessary
             return component.content
+        elif isinstance(component, RawComponent):
+            # no changes necessary
+            return component.content
+        elif isinstance(component, Component):
+            raise NotImplementedError(f"Unknown component type: {component.type}")
 
     def _normalize_jsonl(self, config: Config, component: Component, template_vars: Dict[str, any]) -> str:
         normalized_objects: List[str] = []
@@ -76,7 +88,7 @@ class DeviceProcessor:
 
         return json.dumps(processed, indent=None)
 
-    def _normalize_cmd(self, _device_config, component, template_vars: Dict[str, any]) -> str:
+    def _normalize_cmd(self, _device_config, component: CmdComponent, template_vars: Dict[str, any]) -> str:
         return _render_template(component.content, template_vars)
 
     def _compute_jsonl_template_variables(self, device: Device, component: Component) -> Dict[str, Any]:

@@ -16,5 +16,8 @@ class TestConfigManager(TestBase):
         # THEN
         assert len(devices) == 1
 
-        components = devices[0].components
-        assert len(components) == 7
+        device = devices[0]
+        assert len(device.cmd) == 3
+        assert len(device.jsonl) == 4
+        assert len(device.images) == 1
+        assert len(device.fonts) == 0

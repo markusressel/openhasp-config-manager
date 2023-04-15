@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from openhasp_config_manager.openhasp_client.model.component import Component
+from openhasp_config_manager.openhasp_client.model.component import TextComponent
 from openhasp_config_manager.validation.cmd import CmdFileValidator
 from openhasp_config_manager.validation.device_validator import DeviceValidator
 from openhasp_config_manager.validation.jsonl import JsonlObjectValidator
@@ -18,7 +18,7 @@ class TestDeviceValidator(TestBase):
             cmd_file_validator=CmdFileValidator()
         )
 
-        component = Component(
+        component = TextComponent(
             name="name",
             type="",
             path=Path(),

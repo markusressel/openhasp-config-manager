@@ -1,7 +1,7 @@
 import textwrap
 from pathlib import Path
 
-from openhasp_config_manager.openhasp_client.model.component import Component
+from openhasp_config_manager.openhasp_client.model.component import JsonlComponent
 from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.processing.device_processor import DeviceProcessor
 from openhasp_config_manager.processing.jsonl.jsonl import ObjectDimensionsProcessor
@@ -17,7 +17,10 @@ class TestDeviceProcessor(TestBase):
             name="test_device",
             path=Path(self.cfg_root, "devices", "test_device"),
             config=self.default_config,
-            components=[],
+            cmd=[],
+            jsonl=[],
+            images=[],
+            fonts=[],
             output_dir=None
         )
 
@@ -34,14 +37,14 @@ class TestDeviceProcessor(TestBase):
            }
            """)
 
-        component = Component(
+        component = JsonlComponent(
             name="component",
             type="jsonl",
             path=Path(self.cfg_root, "common"),
             content=content
         )
 
-        processor.add_jsonl(component)
+        processor._add_jsonl(component)
 
         # WHEN
         result = processor.normalize(device, component)
@@ -57,7 +60,10 @@ class TestDeviceProcessor(TestBase):
             name="test_device",
             path=Path(self.cfg_root, "devices", "test_device"),
             config=self.default_config,
-            components=[],
+            cmd=[],
+            jsonl=[],
+            images=[],
+            fonts=[],
             output_dir=None
         )
 
@@ -72,13 +78,13 @@ class TestDeviceProcessor(TestBase):
             { "a": 0, "b": 0 }
             """)
 
-        component = Component(
+        component = JsonlComponent(
             name="component",
             type="jsonl",
             path=Path(self.cfg_root, "devices", "test_device"),
             content=content
         )
-        processor.add_jsonl(component)
+        processor._add_jsonl(component)
 
         # WHEN
         result = processor.normalize(device, component)
@@ -95,7 +101,10 @@ class TestDeviceProcessor(TestBase):
             name="test_device",
             path=Path(self.cfg_root, "devices", "test_device"),
             config=self.default_config,
-            components=[],
+            cmd=[],
+            jsonl=[],
+            images=[],
+            fonts=[],
             output_dir=None
         )
 
@@ -126,13 +135,13 @@ class TestDeviceProcessor(TestBase):
            }
            """)
 
-        component = Component(
+        component = JsonlComponent(
             name="component",
             type="jsonl",
             path=Path(self.cfg_root, "devices", "test_device"),
             content=content
         )
-        processor.add_jsonl(component)
+        processor._add_jsonl(component)
 
         # WHEN
         result = processor.normalize(device, component)
@@ -150,7 +159,10 @@ class TestDeviceProcessor(TestBase):
             name="test_device",
             path=Path(self.cfg_root, "devices", "test_device"),
             config=self.default_config,
-            components=[],
+            cmd=[],
+            jsonl=[],
+            images=[],
+            fonts=[],
             output_dir=None
         )
 
@@ -166,13 +178,13 @@ class TestDeviceProcessor(TestBase):
            }
            """)
 
-        component = Component(
+        component = JsonlComponent(
             name="component",
             type="jsonl",
             path=Path(self.cfg_root, "devices", "test_device"),
             content=content
         )
-        processor.add_jsonl(component)
+        processor._add_jsonl(component)
 
         # WHEN
         result = processor.normalize(device, component)
@@ -188,7 +200,10 @@ class TestDeviceProcessor(TestBase):
             name="test_device",
             path=Path(self.cfg_root, "devices", "test_device"),
             config=self.default_config,
-            components=[],
+            cmd=[],
+            jsonl=[],
+            images=[],
+            fonts=[],
             output_dir=None
         )
 
@@ -213,13 +228,13 @@ class TestDeviceProcessor(TestBase):
            }
            """)
 
-        component = Component(
+        component = JsonlComponent(
             name="component",
             type="jsonl",
             path=Path(self.cfg_root, "devices", "test_device"),
             content=content
         )
-        processor.add_jsonl(component)
+        processor._add_jsonl(component)
 
         # WHEN
         result = processor.normalize(device, component)

@@ -6,7 +6,8 @@ from typing import List, Set
 import orjson
 
 from openhasp_config_manager.const import COMMON_FOLDER_NAME, DEVICES_FOLDER_NAME, SYSTEM_SCRIPTS
-from openhasp_config_manager.openhasp_client.model.component import Component
+from openhasp_config_manager.openhasp_client.model.component import Component, TextComponent, RawComponent, \
+    ImageComponent, JsonlComponent, CmdComponent, FontComponent
 from openhasp_config_manager.openhasp_client.model.config import Config
 from openhasp_config_manager.openhasp_client.model.debug_config import DebugConfig
 from openhasp_config_manager.openhasp_client.model.device import Device
@@ -75,10 +76,15 @@ class ConfigManager:
 
             device_components = self._analyze_device(config, device_path)
 
+            combined_components = common_components + device_components
+
             device = Device(
                 path=device_path,
                 name=device_path.name,
-                components=common_components + device_components,
+                jsonl=[c for c in combined_components if isinstance(c, JsonlComponent)],
+                cmd=[c for c in combined_components if isinstance(c, CmdComponent)],
+                images=[c for c in combined_components if isinstance(c, ImageComponent)],
+                fonts=[c for c in combined_components if isinstance(c, FontComponent)],
                 config=config,
                 output_dir=device_output_dir,
             )
@@ -115,20 +121,72 @@ class ConfigManager:
         """
         result: List[Component] = []
 
-        for suffix in [".jsonl", ".cmd"]:
+        result.extend(self._read_jsonl_components(path, prefix))
+        result.extend(self._read_cmd_components(path, prefix))
+        result.extend(self._read_image_components(path, prefix))
+
+        return result
+
+    def _read_jsonl_components(self, path, prefix) -> List[Component]:
+        result = []
+        suffix = ".jsonl"
+        for file in path.rglob(f"*{suffix}"):
+            component = self._create_text_component_from_path(
+                device_cfg_dir_root=path,
+                path=Path(path, file.relative_to(path)).relative_to(path),
+                prefix=prefix
+            )
+            if component is not None:
+                jsonl_component = JsonlComponent(
+                    name=component.name,
+                    type=component.type,
+                    path=component.path,
+                    content=component.content,
+                )
+                result.append(jsonl_component)
+        return result
+
+    def _read_cmd_components(self, path, prefix) -> List[Component]:
+        result = []
+        suffix = ".cmd"
+        for file in path.rglob(f"*{suffix}"):
+            component = self._create_text_component_from_path(
+                device_cfg_dir_root=path,
+                path=Path(path, file.relative_to(path)).relative_to(path),
+                prefix=prefix
+            )
+            if component is not None:
+                cmd_component = CmdComponent(
+                    name=component.name,
+                    type=component.type,
+                    path=component.path,
+                    content=component.content,
+                )
+                result.append(cmd_component)
+        return result
+
+    def _read_image_components(self, path, prefix) -> List[Component]:
+        result = []
+        image_suffixes = [".png", ".bin"]
+        for suffix in image_suffixes:
             for file in path.rglob(f"*{suffix}"):
-                component = self._create_component_from_path(
+                component = self._create_raw_component_from_path(
                     device_cfg_dir_root=path,
                     path=Path(path, file.relative_to(path)).relative_to(path),
                     prefix=prefix
                 )
                 if component is not None:
-                    result.append(component)
-
+                    image_component = ImageComponent(
+                        name=component.name,
+                        type=component.type,
+                        path=component.path,
+                        content=component.content,
+                    )
+                    result.append(image_component)
         return result
 
     @staticmethod
-    def _create_component_from_path(device_cfg_dir_root: Path, path: Path, prefix: str) -> Component or None:
+    def _create_text_component_from_path(device_cfg_dir_root: Path, path: Path, prefix: str) -> Component or None:
         file = Path(device_cfg_dir_root, path)
 
         if not file.is_file():
@@ -144,7 +202,32 @@ class ConfigManager:
 
         name = "_".join(name_parts)
         suffix = file.suffix
-        component = Component(
+        component = TextComponent(
+            name=name,
+            type=suffix[1:],
+            path=file,
+            content=content,
+        )
+        return component
+
+    @staticmethod
+    def _create_raw_component_from_path(device_cfg_dir_root: Path, path: Path, prefix: str) -> Component or None:
+        file = Path(device_cfg_dir_root, path)
+
+        if not file.is_file():
+            warn(f"Not a file, skipping: {file}")
+            return None
+
+        content = file.read_bytes()
+
+        name_parts = []
+        if len(prefix) > 0:
+            name_parts.append(prefix)
+        name_parts = name_parts + list(file.relative_to(device_cfg_dir_root).parts)
+
+        name = "_".join(name_parts)
+        suffix = file.suffix
+        component = RawComponent(
             name=name,
             type=suffix[1:],
             path=file,
@@ -288,11 +371,9 @@ class ConfigManager:
 
         # feed device specific data to the processor
         # Note: this also includes common components
-        for component in device.components:
-            if component.type == "jsonl":
-                device_processor.add_jsonl(component)
-            else:
-                device_processor.add_other(component)
+        components: List[Component] = device.jsonl + device.cmd + device.images + device.fonts
+        for component in components:
+            device_processor.add_component(component)
 
         # only include files which are referenced in a cmd file
         relevant_components = self.find_relevant_components(device)
@@ -313,8 +394,10 @@ class ConfigManager:
             self._write_output(device, component, output_content)
 
     def find_relevant_components(self, device: Device) -> List[Component]:
-        cmd_components = list(filter(lambda x: x.type == "cmd", device.components))
-        jsonl_components = list(filter(lambda x: x.type == "jsonl", device.components))
+        result: List[Component] = []
+        cmd_components = device.cmd
+        jsonl_components = device.jsonl
+        image_components = device.images
 
         referenced_cmd_components = self._find_referenced_cmd_components(cmd_components)
 
@@ -324,19 +407,23 @@ class ConfigManager:
         # compute component for jsonl file referenced in config.hasp.pages
         pages_jsonl_component_path = self._compute_component_path_of_pages_config_value(device.path, device.config)
         if pages_jsonl_component_path is not None:
-            pages_jsonl_component = self._create_component_from_path(
+            pages_jsonl_component = self._create_text_component_from_path(
                 device_cfg_dir_root=device.path,
                 path=pages_jsonl_component_path, prefix=""
             )
             referenced_jsonl_components.add(pages_jsonl_component)
 
-        return list(referenced_jsonl_components) + list(referenced_cmd_components)
+        result.extend(referenced_jsonl_components)
+        result.extend(referenced_cmd_components)
+        # TODO: filter these by actual usage
+        result.extend(image_components)
+        return result
 
-    def _find_referenced_cmd_components(self, components: List[Component]) -> Set[Component]:
+    def _find_referenced_cmd_components(self, cmd_components: List[CmdComponent]) -> Set[CmdComponent]:
         result = set()
 
-        system_components = list(filter(lambda x: x.name in SYSTEM_SCRIPTS, components))
-        cmd_components = [c for c in components if c.type == "cmd"] + system_components
+        system_components = list(filter(lambda x: x.name in SYSTEM_SCRIPTS, cmd_components))
+        cmd_components = cmd_components + system_components
 
         # TODO: this should also consider the hierarchy, if a cmd component is not a system component, and
         #  it is also not referenced anywhere, the component is not relevant
@@ -344,7 +431,7 @@ class ConfigManager:
         for component in cmd_components:
             cmd_references = self._find_cmd_references_in_cmd_component(component)
             for match in cmd_references:
-                matching_components = list(filter(lambda x: x.name == match, components))
+                matching_components = list(filter(lambda x: x.name == match, cmd_components))
                 if len(matching_components) <= 0:
                     found_component_names = ','.join([c.name for c in cmd_components])
                     raise AssertionError(
@@ -357,10 +444,10 @@ class ConfigManager:
         return result
 
     def _find_referenced_jsonl_components(
-            self,
-            cmd_components: List[Component],
-            jsonl_components: List[Component]
-    ) -> Set[Component]:
+        self,
+        cmd_components: List[CmdComponent],
+        jsonl_components: List[JsonlComponent]
+    ) -> Set[JsonlComponent]:
         referenced_jsonl_components = set()
         for component in cmd_components:
             jsonl_references = self._find_jsonl_references_in_cmd_component(component)
@@ -375,7 +462,7 @@ class ConfigManager:
         return referenced_jsonl_components
 
     @staticmethod
-    def _find_cmd_references_in_cmd_component(component: Component) -> Set[str]:
+    def _find_cmd_references_in_cmd_component(component: TextComponent) -> Set[str]:
         result = set()
         pattern = re.compile("L:/(.*\.cmd)")
         for line in component.content.splitlines():
@@ -384,7 +471,7 @@ class ConfigManager:
         return result
 
     @staticmethod
-    def _find_jsonl_references_in_cmd_component(component: Component) -> Set[str]:
+    def _find_jsonl_references_in_cmd_component(component: TextComponent) -> Set[str]:
         result = set()
         pattern = re.compile("L:/(.*\.jsonl)")
         for line in component.content.splitlines():
@@ -393,7 +480,7 @@ class ConfigManager:
         return result
 
     @staticmethod
-    def _write_output(device: Device, component: Component, output_content: str):
+    def _write_output(device: Device, component: Component, output_content: str | bytes):
         device.output_dir.mkdir(parents=True, exist_ok=True)
 
         component_output_file = Path(
@@ -401,7 +488,12 @@ class ConfigManager:
             component.name
         )
 
-        component_output_file.write_text(output_content)
+        if isinstance(output_content, bytes):
+            component_output_file.write_bytes(output_content)
+        elif isinstance(output_content, str):
+            component_output_file.write_text(output_content)
+        else:
+            raise AssertionError(f"Unsupported output type: {type(output_content)}")
 
     @staticmethod
     def _clear_output(device: Device):

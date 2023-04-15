@@ -45,7 +45,7 @@ class TestConfigManager(TestBase):
         file_count = 0
         for file in tmp_path.rglob("*.png"):
             file_count += 1
-            content = file.read_text()
+            content = file.read_bytes()
             assert len(content) > 0
 
         assert file_count > 0
