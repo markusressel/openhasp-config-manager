@@ -1,4 +1,5 @@
 {
+  // URL test
   "page": 2,
   "id": 2,
   "obj": "img",
@@ -7,5 +8,18 @@
   "h": 250,
   "w": 250,
   "src": "https://upload.wikimedia.org/wikipedia/commons/b/bf/Test_card.png",
+  "auto_size": 1
+}
+
+{
+  // local file test
+  "page": 2,
+  "id": 3,
+  "obj": "img",
+  "x": 35,
+  "y": 40,
+  "h": 250,
+  "w": 250,
+  "src": "L:/home_image.png",
   "auto_size": 1
 }
