@@ -64,14 +64,14 @@ class OpenHaspClient:
         await self.set_object_properties(obj, {"text": text})
 
     async def set_image(
-            self,
-            obj: str,
-            image,
-            access_host: str,
-            listen_host: str = "0.0.0.0",
-            timeout: int = 10,
-            size: Tuple[int or None, int or None] = (None, None),
-            fitscreen: bool = False,
+        self,
+        obj: str,
+        image,
+        access_host: str,
+        listen_host: str = "0.0.0.0",
+        timeout: int = 10,
+        size: Tuple[int or None, int or None] = (None, None),
+        fitscreen: bool = False,
     ):
         """
         Sets the image of an object.
@@ -250,6 +250,13 @@ class OpenHaspClient:
         """
         topic = f"hasp/{self._device.config.mqtt.name}/{path}"
         await self._mqtt_client.subscribe(topic, callback)
+
+    async def cancel_callback(self, callback: Callable = None):
+        """
+        Cancel a callback which was previously registered, f.ex. via listen_event (or listen_state)
+        :param callback: the specific callback to cancel
+        """
+        await self._mqtt_client.cancel_callback(callback=callback)
 
     async def command(self, name: str, params: any):
         """

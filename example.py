@@ -39,6 +39,9 @@ async def main():
     # subscribe to state changes of object p1b22 (async)
     await client.listen_state(obj="p1b22", callback=state_callback)
     await client.listen_state(obj="p1b29", callback=state_callback)
+    # cancel a previously registered callback
+    # note: this will effect both previously registered lines
+    await client.cancel_callback(callback=state_callback)
 
     # subscribe to all MQTT events (async)
     await client.listen_event(path="#", callback=event_callback)

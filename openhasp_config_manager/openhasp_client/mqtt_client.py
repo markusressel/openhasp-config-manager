@@ -21,6 +21,11 @@ class MqttClient:
         self.__mqtt_client: Client = None
 
     async def publish(self, topic: str, payload: any):
+        """
+        Publish a message to a topic
+        :param topic: topic to publish to
+        :param payload: payload to publish
+        """
         async with self._create_mqtt_client() as client:
             if isinstance(payload, dict):
                 payload = json.dumps(payload)
@@ -28,14 +33,38 @@ class MqttClient:
             await client.publish(topic, payload=payload)
 
     async def subscribe(self, topic: str, callback: Callable):
+        """
+        Subscribe to a topic and call the callback when a message is received
+        :param topic: topic to subscribe to
+        :param callback: function to call when a message is received
+        """
         if topic not in self._callbacks:
             self._callbacks[topic] = []
         if callback not in self._callbacks[topic]:
             self._callbacks[topic].append(callback)
 
-        if self._callbacks:
+        if self._mqtt_client_task is None:
             await self._start_mqtt_client_task()
+
+    async def cancel_callback(self, topic: str = None, callback: Callable = None):
+        """
+        Cancel a single subscription callback or all callbacks for a specific topic
+        :param topic: the topic to cancel all callbacks for
+        :param callback: the specific callback to cancel
+        """
+        if topic is None and callback is None:
+            raise ValueError('Must specify either topic, callback or both')
+
+        if topic is not None and callback is not None:
+            self._callbacks[topic] = list(filter(lambda x: x != callback, self._callbacks[topic]))
+
+        elif topic is not None and topic in self._callbacks:
+            self._callbacks.pop(topic)
         else:
+            for topic in self._callbacks.keys():
+                self._callbacks[topic] = list(filter(lambda x: x != callback, self._callbacks[topic]))
+
+        if not any(self._callbacks.values()):
             await self._stop_mqtt_client_task()
 
     def _create_mqtt_client(self) -> Client:
@@ -48,8 +77,7 @@ class MqttClient:
         )
 
     async def _start_mqtt_client_task(self):
-        if self._mqtt_client_task is None:
-            self._mqtt_client_task = asyncio.create_task(self._mqtt_client_task_function())
+        self._mqtt_client_task = asyncio.create_task(self._mqtt_client_task_function())
 
     async def _stop_mqtt_client_task(self):
         if self._mqtt_client_task is not None:
