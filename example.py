@@ -36,16 +36,12 @@ async def main():
     # deploy the local config to the device
     uploader.upload(device=device, purge=False, print_diff=True)
 
-    # subscribe to all MQTT events (async)
-    event_listener_task = client.listen_event(path="#", callback=event_callback)
-    asyncio.create_task(event_listener_task)
-
     # subscribe to state changes of object p1b22 (async)
-    state_listener_task = client.listen_state(obj="p1b22", callback=state_callback)
-    asyncio.create_task(state_listener_task)
+    await client.listen_state(obj="p1b22", callback=state_callback)
+    await client.listen_state(obj="p1b29", callback=state_callback)
 
-    state_listener_task = client.listen_state(obj="p1b29", callback=state_callback)
-    asyncio.create_task(state_listener_task)
+    # subscribe to all MQTT events (async)
+    await client.listen_event(path="#", callback=event_callback)
 
     # update an object on the device (via MQTT)
     await client.set_text(
