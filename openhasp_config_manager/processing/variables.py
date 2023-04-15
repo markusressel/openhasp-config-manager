@@ -18,10 +18,27 @@ class VariableManager:
         self._path_vars: Dict[str, Dict] = {}
         self._path_vars = self._read(cfg_root)
 
+    def read(self):
+        """
+        Reads all variable definitions from the configuration directory.
+        """
+        self._path_vars = self._read(self._cfg_root)
+
     def add_var(self, key: str, value: any, path: Path = None):
+        """
+        Registers a variable to a path
+        :param key: the variable key
+        :param value: the variable value
+        :param path: the path this variable should apply to
+        """
         self.add_vars({key: value}, path)
 
     def add_vars(self, vars: Dict[str, Any], path: Path = None):
+        """
+        Registers a set of variables to a path
+        :param vars: the variables
+        :param path: the path the variables should apply to
+        """
         if path is None:
             path = self._cfg_root
 
