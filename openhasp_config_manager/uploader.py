@@ -114,8 +114,7 @@ class ConfigUploader:
         if new_checksum is not None:
             result = True
             if print_diff:
-                # TODO: not sure what to output here, a text diff of binary data doesn't make much sense
-                pass
+                info(f"Binary file '{file.name}' has changed ({device_file_content_checksum} -> {new_checksum}.")
             try:
                 self._api_client.upload_file(file.name, content)
                 checksum_file = self._get_checksum_file(file)
