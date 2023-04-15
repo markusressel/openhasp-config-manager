@@ -274,7 +274,7 @@ class OpenHaspClient:
         """
         return self._webservice_client.get_files()
 
-    def get_file_content(self, file_name: str) -> str or None:
+    def get_file_content(self, file_name: str) -> bytes or None:
         return self._webservice_client.get_file_content(file_name)
 
     def delete_file(self, file_name: str):
@@ -323,14 +323,14 @@ class OpenHaspClient:
         """
         self._webservice_client.set_gui_config(config)
 
-    def upload_files(self, files: Dict[str, str]):
+    def upload_files(self, files: Dict[str, bytes]):
         """
         Upload a collection of files
         :param files: "target file name"->"file content" mapping
         """
         self._webservice_client.upload_files(files)
 
-    def upload_file(self, name: str, content: str):
+    def upload_file(self, name: str, content: bytes):
         """
         Upload a single file
         :param name: the target name of the file on the device

@@ -183,7 +183,7 @@ class WebserviceClient:
             data=data,
         )
 
-    def upload_files(self, files: Dict[str, str]):
+    def upload_files(self, files: Dict[str, bytes]):
         """
         Upload a collection of files
         :param files: "target file name"->"file content" mapping
@@ -191,7 +191,7 @@ class WebserviceClient:
         for name, content in files.items():
             self.upload_file(name, content)
 
-    def upload_file(self, name: str, content: str):
+    def upload_file(self, name: str, content: bytes):
         """
         Upload a single file
         :param name: the target name of the file on the device
@@ -220,13 +220,13 @@ class WebserviceClient:
         file_names = list(map(lambda x: x["name"], files))
         return file_names
 
-    def get_file_content(self, file_name: str) -> str or None:
+    def get_file_content(self, file_name: str) -> bytes or None:
         try:
             response = self._do_request(
                 method=GET,
                 url=self._base_url + file_name,
             )
-            response_data = response.decode('utf-8')
+            response_data = response
             return response_data
         except Exception as ex:
             return None
