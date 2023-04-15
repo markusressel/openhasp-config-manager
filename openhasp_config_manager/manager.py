@@ -51,6 +51,7 @@ class ConfigManager:
 
         :return: list of devices, which can be used in the ConfigManager.process() method
         """
+        self._variable_manager.read()
         return self._analyze(self.cfg_root, self._output_root)
 
     def _analyze(self, cfg_dir_root: Path, output_dir_root: Path) -> List[Device]:

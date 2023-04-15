@@ -16,7 +16,6 @@ class VariableManager:
     def __init__(self, cfg_root: Path):
         self._cfg_root: Path = Path(cfg_root)
         self._path_vars: Dict[str, Dict] = {}
-        self._path_vars = self._read(cfg_root)
 
     def read(self):
         """
