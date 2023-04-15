@@ -55,10 +55,10 @@ class ConfigUploader:
             return result
 
         # check if the checksum of the file has changed on the device
-        file_content_on_device = b""
+        file_content_on_device = ""
         if file.name in existing_files:
-            file_content_on_device = self._api_client.get_file_content(file.name)
-            device_file_content_checksum = util.calculate_checksum(file_content_on_device)
+            file_content_on_device = self._api_client.get_file_content(file.name).decode("utf-8")
+            device_file_content_checksum = util.calculate_checksum(file_content_on_device.encode("utf-8"))
         else:
             device_file_content_checksum = None
 
