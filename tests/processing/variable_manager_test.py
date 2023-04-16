@@ -9,6 +9,7 @@ class TestVariableManager(TestBase):
     def test_global_variable(self, tmp_path):
         # GIVEN
         variable_manager = VariableManager(self.cfg_root)
+        variable_manager.read()
         tested_component_path = Path(self.cfg_root, "devices", "test_device", "home", "page.jsonl")
 
         # WHEN
@@ -26,6 +27,7 @@ class TestVariableManager(TestBase):
     def test_add_var(self, tmp_path):
         # GIVEN
         variable_manager = VariableManager(self.cfg_root)
+        variable_manager.read()
         tested_component_path = Path(self.cfg_root, "devices", "test_device", "home", "page.jsonl")
 
         # WHEN
@@ -49,6 +51,7 @@ class TestVariableManager(TestBase):
     def test_add_var_global(self, tmp_path):
         # GIVEN
         variable_manager = VariableManager(self.cfg_root)
+        variable_manager.read()
         tested_component_path = Path(self.cfg_root, "devices", "test_device", "home", "page.jsonl")
 
         # WHEN
@@ -72,6 +75,7 @@ class TestVariableManager(TestBase):
     def test_add_vars(self, tmp_path):
         # GIVEN
         variable_manager = VariableManager(self.cfg_root)
+        variable_manager.read()
         tested_component_path = Path(self.cfg_root, "devices", "test_device", "home", "page.jsonl")
 
         # WHEN
@@ -100,6 +104,7 @@ class TestVariableManager(TestBase):
     def test_add_vars_merge_with_existing(self, tmp_path):
         # GIVEN
         variable_manager = VariableManager(self.cfg_root)
+        variable_manager.read()
         tested_component_path = Path(self.cfg_root, "devices", "test_device", "home", "page.jsonl")
 
         variable_manager.add_vars(

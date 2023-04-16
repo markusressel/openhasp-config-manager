@@ -30,6 +30,26 @@ class TestConfigManager(TestBase):
 
         assert file_count > 0
 
+    def test_image_file_is_copied_when_referenced_in_jsonl_src(self, tmp_path):
+        # GIVEN
+        variable_manager = VariableManager(self.cfg_root)
+        manager = ConfigManager(self.cfg_root, tmp_path, variable_manager)
+
+        devices = manager.analyze()
+
+        # WHEN
+        for device in devices:
+            manager.process(device)
+
+        # THEN
+        file_count = 0
+        for file in tmp_path.rglob("*.png"):
+            file_count += 1
+            content = file.read_bytes()
+            assert len(content) > 0
+
+        assert file_count > 0
+
     def test_global_variable(self, tmp_path):
         # GIVEN
         variable_manager = VariableManager(self.cfg_root)

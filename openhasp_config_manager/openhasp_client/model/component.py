@@ -7,7 +7,50 @@ class Component:
     name: str
     type: str
     path: Path
-    content: str
 
     def __hash__(self):
         return hash((self.name, self.type, self.path))
+
+
+@dataclass
+class TextComponent(Component):
+    content: str
+
+    def __hash__(self):
+        return super().__hash__()
+
+
+@dataclass
+class CmdComponent(TextComponent):
+
+    def __hash__(self):
+        return super().__hash__()
+
+
+@dataclass
+class JsonlComponent(TextComponent):
+
+    def __hash__(self):
+        return super().__hash__()
+
+
+@dataclass
+class RawComponent(Component):
+    content: bytes
+
+    def __hash__(self):
+        return super().__hash__()
+
+
+@dataclass
+class ImageComponent(RawComponent):
+
+    def __hash__(self):
+        return super().__hash__()
+
+
+@dataclass
+class FontComponent(RawComponent):
+
+    def __hash__(self):
+        return super().__hash__()

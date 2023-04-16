@@ -39,44 +39,91 @@ class ConfigUploader:
         for file in device.output_dir.iterdir():
             info(f"Preparing '{file.name}' for upload...")
 
-            content = file.read_text()
-
-            if len(content) <= 0:
-                warn(f"File is empty, skipping upload: {file}")
-                continue
-
-            # check if the checksum of the file has changed on the device
-            file_content_on_device = ""
-            if file.name in existing_files:
-                file_content_on_device = self._api_client.get_file_content(file.name)
-                device_file_content_checksum = util.calculate_checksum(file_content_on_device)
+            if file.suffix in [".cmd", ".jsonl"]:
+                result &= self._upload_text_file(device, print_diff, file, existing_files)
             else:
-                device_file_content_checksum = None
+                result &= self._upload_binary_file(device, print_diff, file, existing_files)
 
-            new_checksum = self._check_if_checksum_will_change(
-                file=file,
-                original_checksum=device_file_content_checksum,
-                new_content=content
-            )
+        return result
 
-            if new_checksum is not None:
-                result = True
-                if print_diff:
-                    diff_output = self._calculate_diff(
-                        file_name=file.name,
-                        string1=file_content_on_device,
-                        string2=content
-                    )
-                    print_diff_to_console(diff_output)
-                try:
-                    self._api_client.upload_file(file.name, content)
-                    checksum_file = self._get_checksum_file(file)
-                    checksum_file.parent.mkdir(parents=True, exist_ok=True)
-                    checksum_file.write_text(new_checksum)
-                except Exception as ex:
-                    raise Exception(f"Error uploading file '{file.name}' to '{device.name}': {ex}")
-            else:
-                info(f"Skipping {file} because it hasn't changed.")
+    def _upload_text_file(self, device, print_diff, file, existing_files) -> bool:
+        result = False
+
+        content = file.read_text()
+        if len(content) <= 0:
+            warn(f"File is empty, skipping upload: {file}")
+            return result
+
+        # check if the checksum of the file has changed on the device
+        file_content_on_device = ""
+        if file.name in existing_files:
+            file_content_on_device = self._api_client.get_file_content(file.name).decode("utf-8")
+            device_file_content_checksum = util.calculate_checksum(file_content_on_device.encode("utf-8"))
+        else:
+            device_file_content_checksum = None
+
+        new_checksum = self._check_if_checksum_will_change(
+            file=file,
+            original_checksum=device_file_content_checksum,
+            new_content=content.encode("utf-8")
+        )
+
+        if new_checksum is not None:
+            result = True
+            if print_diff:
+                diff_output = self._calculate_diff(
+                    file_name=file.name,
+                    string1=file_content_on_device,
+                    string2=content
+                )
+                print_diff_to_console(diff_output)
+            try:
+                self._api_client.upload_file(file.name, content.encode("utf-8"))
+                checksum_file = self._get_checksum_file(file)
+                checksum_file.parent.mkdir(parents=True, exist_ok=True)
+                checksum_file.write_text(new_checksum)
+            except Exception as ex:
+                raise Exception(f"Error uploading file '{file.name}' to '{device.name}': {ex}")
+        else:
+            info(f"Skipping {file} because it hasn't changed.")
+
+        return result
+
+    def _upload_binary_file(self, device, print_diff, file, existing_files) -> bool:
+        result = False
+
+        content = file.read_bytes()
+        if len(content) <= 0:
+            warn(f"File is empty, skipping upload: {file}")
+            return result
+
+        # check if the checksum of the file has changed on the device
+        file_content_on_device = b""
+        if file.name in existing_files:
+            file_content_on_device: bytes = self._api_client.get_file_content(file.name)
+            device_file_content_checksum = util.calculate_checksum(file_content_on_device)
+        else:
+            device_file_content_checksum = None
+
+        new_checksum = self._check_if_checksum_will_change(
+            file=file,
+            original_checksum=device_file_content_checksum,
+            new_content=content
+        )
+
+        if new_checksum is not None:
+            result = True
+            if print_diff:
+                info(f"Binary file '{file.name}' has changed ({device_file_content_checksum} -> {new_checksum})")
+            try:
+                self._api_client.upload_file(file.name, content)
+                checksum_file = self._get_checksum_file(file)
+                checksum_file.parent.mkdir(parents=True, exist_ok=True)
+                checksum_file.write_text(new_checksum)
+            except Exception as ex:
+                raise Exception(f"Error uploading file '{file.name}' to '{device.name}': {ex}")
+        else:
+            info(f"Skipping {file} because it hasn't changed.")
 
         return result
 
@@ -101,7 +148,7 @@ class ConfigUploader:
                 self._api_client.delete_file(f)
         return result
 
-    def _check_if_checksum_will_change(self, file: Path, original_checksum: str, new_content: str) -> str | None:
+    def _check_if_checksum_will_change(self, file: Path, original_checksum: str, new_content: bytes) -> str | None:
         """
         Checks if the checksum for the given file has changed since it was last uploaded.
         :param file: the path of the file to check

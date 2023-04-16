@@ -1,9 +1,9 @@
 from typing import Dict
 
 
-def calculate_checksum(content: str) -> str:
+def calculate_checksum(content: bytes) -> str:
     import hashlib
-    hash_value = hashlib.md5(content.encode('utf-8')).hexdigest()
+    hash_value = hashlib.md5(content).hexdigest()
     return hash_value
 
 

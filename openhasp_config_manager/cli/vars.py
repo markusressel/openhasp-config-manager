@@ -27,6 +27,7 @@ async def _format_variables(variables: Dict) -> str:
 async def c_vars(config_dir: Path, path: str):
     try:
         variable_manager = VariableManager(cfg_root=config_dir)
+        variable_manager.read()
         variables = variable_manager.get_vars(Path(config_dir, path))
         formatted = await _format_variables(variables)
         echo(formatted)
