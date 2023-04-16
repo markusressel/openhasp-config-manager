@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "openhasp-config-manager"
-version = "0.4.8"
+version = "0.5.0"
 description = "A tool to manage all of your openHASP device configs in a centralized place."
 
 license = "AGPL-3.0-or-later"
