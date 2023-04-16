@@ -40,9 +40,9 @@ class ConfigUploader:
             info(f"Preparing '{file.name}' for upload...")
 
             if file.suffix in [".cmd", ".jsonl"]:
-                result &= self._upload_text_file(device, print_diff, file, existing_files)
+                result |= self._upload_text_file(device, print_diff, file, existing_files)
             else:
-                result &= self._upload_binary_file(device, print_diff, file, existing_files)
+                result |= self._upload_binary_file(device, print_diff, file, existing_files)
 
         return result
 
