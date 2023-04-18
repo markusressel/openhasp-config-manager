@@ -1,5 +1,4 @@
 import asyncio
-import pathlib
 from pathlib import Path
 
 import click
@@ -328,10 +327,6 @@ def vars(config_dir: Path, path: str):
 @click.option(*get_option_names(PARAM_DEVICE),
               required=True,
               help=get_option_help(PARAM_DEVICE))
-@click.option(*get_option_names(PARAM_CFG_DIR),
-              required=True,
-              type=click.Path(exists=False, path_type=pathlib.Path),
-              help=get_option_help(PARAM_CFG_DIR))
 @click.option(*get_option_names(PARAM_OUTPUT_DIR),
               required=True,
               default=DEFAULT_SCREENSHOT_OUTPUT_PATH,
