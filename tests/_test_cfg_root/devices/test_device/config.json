@@ -15,11 +15,16 @@
   },
   "mqtt": {
     "name": "mqtt_name",
-    "group": "plates",
     "host": "5.6.7.8",
     "port": 1883,
     "user": "mqtt_user",
-    "pass": "mqtt_pass"
+    "pass": "mqtt_pass",
+    "topic": {
+      "node": "hasp/%hostname%/%topic%",
+      "group": "hasp/plates/%topic%",
+      "broadcast": "hasp/broadcast/%topic%",
+      "hass": "homeassistant/status"
+    }
   },
   "telnet": {
     "enable": 1,

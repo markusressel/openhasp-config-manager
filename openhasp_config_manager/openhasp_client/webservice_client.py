@@ -7,7 +7,7 @@ from openhasp_config_manager.openhasp_client.model.debug_config import DebugConf
 from openhasp_config_manager.openhasp_client.model.gui_config import GuiConfig
 from openhasp_config_manager.openhasp_client.model.hasp_config import HaspConfig
 from openhasp_config_manager.openhasp_client.model.http_config import HttpConfig
-from openhasp_config_manager.openhasp_client.model.mqtt_config import MqttConfig
+from openhasp_config_manager.openhasp_client.model.mqtt_config import MqttConfig, MqttTopicConfig
 from openhasp_config_manager.openhasp_client.model.telnet_config import TelnetConfig
 
 GET = "GET"
@@ -84,11 +84,16 @@ class WebserviceClient:
 
         return MqttConfig(
             name=data["name"],
-            group=data["group"],
             host=data["host"],
             port=data["port"],
             user=data["user"],
-            password=data["pass"]
+            password=data["pass"],
+            topic=MqttTopicConfig(
+                node=data["topic"]["node"],
+                group=data["topic"]["group"],
+                broadcast=data["topic"]["broadcast"],
+                hass=data["topic"]["hass"],
+            )
         )
 
     def set_mqtt_config(self, config: MqttConfig):
@@ -98,7 +103,12 @@ class WebserviceClient:
         """
         data = {
             "name": config.name,
-            "group": config.group,
+            "topic": {
+                "node": config.topic.node,
+                "group": config.topic.group,
+                "broadcast": config.topic.broadcast,
+                "hass": config.topic.hass,
+            },
             "host": config.host,
             "port": config.port,
             "user": config.user,

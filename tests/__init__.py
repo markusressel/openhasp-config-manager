@@ -8,7 +8,7 @@ from openhasp_config_manager.openhasp_client.model.device_config import DeviceCo
 from openhasp_config_manager.openhasp_client.model.gui_config import GuiConfig
 from openhasp_config_manager.openhasp_client.model.hasp_config import HaspConfig
 from openhasp_config_manager.openhasp_client.model.http_config import HttpConfig
-from openhasp_config_manager.openhasp_client.model.mqtt_config import MqttConfig
+from openhasp_config_manager.openhasp_client.model.mqtt_config import MqttConfig, MqttTopicConfig
 from openhasp_config_manager.openhasp_client.model.openhasp_config_manager_config import OpenhaspConfigManagerConfig
 from openhasp_config_manager.openhasp_client.model.screen_config import ScreenConfig
 from openhasp_config_manager.openhasp_client.model.telnet_config import TelnetConfig
@@ -53,7 +53,12 @@ class TestBase:
         ),
         mqtt=MqttConfig(
             name="name",
-            group="plates",
+            topic=MqttTopicConfig(
+                node="node",
+                group="group",
+                broadcast="broadcast",
+                hass="hass",
+            ),
             host="mqtt.host",
             port=1883,
             user="user",

@@ -15,7 +15,7 @@ from openhasp_config_manager.openhasp_client.model.device_config import DeviceCo
 from openhasp_config_manager.openhasp_client.model.gui_config import GuiConfig
 from openhasp_config_manager.openhasp_client.model.hasp_config import HaspConfig
 from openhasp_config_manager.openhasp_client.model.http_config import HttpConfig
-from openhasp_config_manager.openhasp_client.model.mqtt_config import MqttConfig
+from openhasp_config_manager.openhasp_client.model.mqtt_config import MqttConfig, MqttTopicConfig
 from openhasp_config_manager.openhasp_client.model.openhasp_config_manager_config import OpenhaspConfigManagerConfig
 from openhasp_config_manager.openhasp_client.model.screen_config import ScreenConfig
 from openhasp_config_manager.openhasp_client.model.telnet_config import TelnetConfig
@@ -293,7 +293,12 @@ class ConfigManager:
     def _parse_mqtt_config(data: dict) -> MqttConfig:
         return MqttConfig(
             name=data["name"],
-            group=data["group"],
+            topic=MqttTopicConfig(
+                node=data["topic"]["node"],
+                group=data["topic"]["group"],
+                broadcast=data["topic"]["broadcast"],
+                hass=data["topic"]["hass"],
+            ),
             host=data["host"],
             port=data["port"],
             user=data["user"],
