@@ -92,6 +92,8 @@ class MqttClient:
                         await client.subscribe("hasp/#")
                         async for message in messages:
                             await self._handle_message(message)
+            except asyncio.CancelledError:
+                break
             except Exception as ex:
                 # TODO: use logger instead of print
                 print(f'Error: {ex}; Reconnecting in {self._reconnect_interval_seconds} seconds ...')
