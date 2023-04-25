@@ -77,7 +77,7 @@ class MqttClient:
         )
 
     async def _start_mqtt_client_task(self):
-        self._mqtt_client_task = asyncio.create_task(self._mqtt_client_task_function())
+        self._mqtt_client_task = asyncio.ensure_future(self._mqtt_client_task_function())
 
     async def _stop_mqtt_client_task(self):
         if self._mqtt_client_task is not None:
