@@ -45,6 +45,7 @@ pillow = "*"
 
 [tool.poetry.dev-dependencies]
 pytest = "*"
+pytest_asyncio = "*"
 
 [tool.pytest.ini_options]
 testpaths = [
