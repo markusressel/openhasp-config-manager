@@ -39,7 +39,7 @@ Jinja2 = "*"
 py-range-parse = "*"
 pyyaml = "*"
 orjson = "*"
-asyncio-mqtt = "*"
+aiomqtt = "*"
 telnetlib3 = "*"
 pillow = "*"
 

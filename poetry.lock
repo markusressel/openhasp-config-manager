@@ -97,6 +97,20 @@ yarl = ">=1.0,<2.0"
 speedups = ["Brotli", "aiodns", "brotlicffi"]
 
 [[package]]
+name = "aiomqtt"
+version = "2.0.0"
+description = "The idiomatic asyncio MQTT client, wrapped around paho-mqtt"
+optional = false
+python-versions = ">=3.8,<4.0"
+files = [
+    { file = "aiomqtt-2.0.0-py3-none-any.whl", hash = "sha256:f3b97eca4a5a2c40769ed14f660520f733be1d2ec383a9976153fe49141e2fa2" },
+    { file = "aiomqtt-2.0.0.tar.gz", hash = "sha256:3d480429334bdba4e4b9936c6cc198ea4f76a94d36cf294e0f713ec59f6a2120" },
+]
+
+[package.dependencies]
+paho-mqtt = ">=1.6.0,<2.0.0"
+
+[[package]]
 name = "aiosignal"
 version = "1.3.1"
 description = "aiosignal: a list of registered asynchronous callbacks"
@@ -120,24 +134,6 @@ files = [
     { file = "async-timeout-4.0.3.tar.gz", hash = "sha256:4640d96be84d82d02ed59ea2b7105a0f7b33abe8703703cd0ab0bf87c427522f" },
     { file = "async_timeout-4.0.3-py3-none-any.whl", hash = "sha256:7405140ff1230c310e51dc27b3145b9092d659ce68ff733fb0cefe3ee42be028" },
 ]
-
-[[package]]
-name = "asyncio-mqtt"
-version = "0.16.2"
-description = "Idiomatic asyncio wrapper around paho-mqtt"
-optional = false
-python-versions = ">=3.7"
-files = [
-    { file = "asyncio_mqtt-0.16.2-py3-none-any.whl", hash = "sha256:fe70ea2c648b248779a7ff3d9218262cdd739083743dfaa7c0d52ba458a8ad71" },
-]
-
-[package.dependencies]
-paho-mqtt = ">=1.6.0"
-
-[package.extras]
-format = ["black (>=22.10.0)"]
-lint = ["mypy (>=0.991)", "ruff (>=0.0.158)", "types-paho-mqtt (>=1.6.0.1)"]
-tests = ["anyio (>=3.6.2)", "pytest (>=7.2.0)", "pytest-cov (>=4.0.0)"]
 
 [[package]]
 name = "attrs"
@@ -672,17 +668,16 @@ files = [
 
 [[package]]
 name = "paho-mqtt"
-version = "2.0.0"
+version = "1.6.1"
 description = "MQTT version 5.0/3.1.1 client class"
 optional = false
-python-versions = ">=3.7"
+python-versions = "*"
 files = [
-    { file = "paho_mqtt-2.0.0-py3-none-any.whl", hash = "sha256:2ef745073dfc9aa68bfec30d0b9b6f0304ea75182bae85a7c77a80cefce1eff5" },
-    { file = "paho_mqtt-2.0.0.tar.gz", hash = "sha256:13b205f29251e4f2c66a6c923c31fc4fd780561e03b2d775cff8e4f2915cf947" },
+    { file = "paho-mqtt-1.6.1.tar.gz", hash = "sha256:2a8291c81623aec00372b5a85558a372c747cbca8e9934dfe218638b8eefc26f" },
 ]
 
 [package.extras]
-proxy = ["pysocks"]
+proxy = ["PySocks"]
 
 [[package]]
 name = "pillow"
@@ -1056,4 +1051,4 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "752b4c7b2ed58ab4953281c0622cd3cf1da47503565ca9f6200533fe49219a53"
+content-hash = "5a077c899620750d174edf52365acb874c87bb89e7d1a48093b4509ea30463da"

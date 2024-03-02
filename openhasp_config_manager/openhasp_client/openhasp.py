@@ -1,7 +1,7 @@
 import asyncio
 from typing import Dict, List, Any, Callable, Tuple
 
-from asyncio_mqtt import Topic
+from aiomqtt import Topic
 
 from openhasp_config_manager.openhasp_client.image_processor import OpenHaspImageProcessor
 from openhasp_config_manager.openhasp_client.model.device import Device
