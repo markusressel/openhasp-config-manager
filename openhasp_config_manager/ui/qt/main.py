@@ -4,6 +4,7 @@ from PyQt6.QtWidgets import QWidget, QMainWindow, QPushButton, QVBoxLayout
 
 from openhasp_config_manager.manager import ConfigManager
 from openhasp_config_manager.openhasp_client.model.device import Device
+from openhasp_config_manager.ui.qt.util import clear_layout
 
 
 class DeviceListWidget(QWidget):
@@ -14,13 +15,13 @@ class DeviceListWidget(QWidget):
         self.setLayout(self.layout)
         self.create_entries()
 
-    def on_device_label_clicked(self, device):
-        print(f"Clicked on device: {device.name}")
-
     def set_devices(self, devices: List[Device]):
         self.devices = devices
         self.clear_entries()
         self.create_entries()
+
+    def clear_entries(self):
+        clear_layout(self.layout)
 
     def create_entries(self):
         for device in sorted(self.devices, key=lambda d: d.name):
@@ -28,9 +29,8 @@ class DeviceListWidget(QWidget):
             button.clicked.connect(lambda _, d=device: self.on_device_label_clicked(d))
             self.layout.addWidget(button)
 
-    def clear_entries(self):
-        for i in reversed(range(self.layout.count())):
-            self.layout.itemAt(i).widget().setParent(None)
+    def on_device_label_clicked(self, device):
+        print(f"Clicked on device: {device.name}")
 
 
 class MainWindow(QMainWindow):
