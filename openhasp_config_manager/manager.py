@@ -419,6 +419,16 @@ class ConfigManager:
         return device_validator
 
     def find_relevant_components(self, device: Device) -> List[Component]:
+        """
+        Find all components that are relevant for the given device.
+        This includes all components that are referenced in the CMD files,
+        as well as all components that are referenced in the JSONL files.
+
+        TODO: allow the user to explicitly include specific components
+
+        :param device: the device to find components for
+        :return: a list of relevant components
+        """
         result: List[Component] = []
         cmd_components = device.cmd
         jsonl_components = device.jsonl
