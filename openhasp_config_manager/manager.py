@@ -366,27 +366,14 @@ class ConfigManager:
     def _generate_output(self, device: Device):
         self._clear_output(device)
 
-        jsonl_processors = [
-            ObjectDimensionsProcessor()
-        ]
-        device_processor = DeviceProcessor(device, jsonl_processors, self._variable_manager)
-
-        jsonl_validator = JsonlObjectValidator()
-        cmd_file_validator = CmdFileValidator()
-        device_validator = DeviceValidator(device.config, jsonl_validator, cmd_file_validator)
-
-        # feed device specific data to the processor
-        # Note: this also includes common components
-        components: List[Component] = device.jsonl + device.cmd + device.images + device.fonts
-        for component in components:
-            device_processor.add_component(component)
+        device_processor = self.create_device_processor(device)
+        device_validator = self.create_device_validator(device)
 
         # only include files which are referenced in a cmd file
         relevant_components = self.find_relevant_components(device)
 
         # let the processor manage each component
         for component in relevant_components:
-            output_content = None
             try:
                 output_content = device_processor.normalize(device, component)
             except Exception as ex:
@@ -398,6 +385,38 @@ class ConfigManager:
                 raise Exception(f"Validation for {component.path} failed: {ex}")
 
             self._write_output(device, component, output_content)
+
+    def create_device_processor(self, device: Device):
+        """
+        Creates a DeviceProcessor for the given device.
+        :param device: the device to create the processor for
+        :return: a DeviceProcessor instance
+        """
+        # prepare DeviceProcessor
+        jsonl_processors = [
+            ObjectDimensionsProcessor()
+        ]
+        device_processor = DeviceProcessor(device, jsonl_processors, self._variable_manager)
+
+        # feed device specific data to the processor
+        # Note: this also includes common components
+        components: List[Component] = device.jsonl + device.cmd + device.images + device.fonts
+        for component in components:
+            device_processor.add_component(component)
+
+        return device_processor
+
+    def create_device_validator(self, device: Device):
+        """
+        Creates a DeviceValidator for the given device.
+        :param device: the device to create the validator for
+        :return: a DeviceValidator instance
+        """
+        # prepare DeviceValidator
+        jsonl_validator = JsonlObjectValidator()
+        cmd_file_validator = CmdFileValidator()
+        device_validator = DeviceValidator(device.config, jsonl_validator, cmd_file_validator)
+        return device_validator
 
     def find_relevant_components(self, device: Device) -> List[Component]:
         result: List[Component] = []

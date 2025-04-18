@@ -3,6 +3,7 @@ from PyQt6.QtWidgets import QWidget, QMainWindow, QVBoxLayout
 from openhasp_config_manager.manager import ConfigManager
 from openhasp_config_manager.ui.qt.device_list import DeviceListWidget
 from openhasp_config_manager.ui.qt.file_browser import FileBrowserWidget
+from openhasp_config_manager.ui.qt.page_layout_editor import PageLayoutEditorWidget
 
 
 class MainWindow(QMainWindow):
@@ -25,6 +26,8 @@ class MainWindow(QMainWindow):
 
         self.file_browser_widget = FileBrowserWidget(self.config_manager.cfg_root)
         self.layout.addWidget(self.file_browser_widget)
+
+        self.page_layout_editor_widget = PageLayoutEditorWidget()
 
         self.setCentralWidget(self.container)
 

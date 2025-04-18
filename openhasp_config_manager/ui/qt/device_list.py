@@ -1,6 +1,6 @@
 from typing import List
 
-from PyQt6.QtWidgets import QWidget, QPushButton, QVBoxLayout
+from PyQt6.QtWidgets import QWidget, QPushButton, QHBoxLayout
 
 from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.ui.qt.util import clear_layout
@@ -10,7 +10,7 @@ class DeviceListWidget(QWidget):
     def __init__(self, devices):
         super().__init__()
         self.devices = devices
-        self.layout = QVBoxLayout()
+        self.layout = QHBoxLayout()
         self.setLayout(self.layout)
         self.create_entries()
 
