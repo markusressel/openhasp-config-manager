@@ -43,7 +43,7 @@ asyncio-mqtt = "*"
 telnetlib3 = "*"
 pillow = "*"
 
-[tool.poetry.dev-dependencies]
+[tool.poetry.group.dev.dependencies]
 pytest = "*"
 pytest_asyncio = "*"
 
