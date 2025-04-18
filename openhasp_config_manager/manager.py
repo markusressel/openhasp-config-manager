@@ -470,7 +470,7 @@ class ConfigManager:
     @staticmethod
     def _find_cmd_references_in_cmd_component(component: TextComponent) -> Set[str]:
         result = set()
-        pattern = re.compile("L:/(.*\.cmd)")
+        pattern = re.compile(r"L:/(.*\.cmd)")
         for line in component.content.splitlines():
             matches = re.findall(pattern, line)
             result.update(matches)
@@ -479,7 +479,7 @@ class ConfigManager:
     @staticmethod
     def _find_jsonl_references_in_cmd_component(component: TextComponent) -> Set[str]:
         result = set()
-        pattern = re.compile("L:/(.*\.jsonl)")
+        pattern = re.compile(r"L:/(.*\.jsonl)")
         for line in component.content.splitlines():
             matches = re.findall(pattern, line)
             result.update(matches)
