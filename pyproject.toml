@@ -17,7 +17,6 @@ homepage = "https://github.com/markusressel/openhasp-config-manager"
 keywords = ['openhasp', 'config', 'management']
 
 classifiers = [
-    "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
     "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
@@ -29,19 +28,24 @@ requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.dependencies]
-python = "^3.10"  # Compatible python versions must be declared here
+python = "^3.12"  # Compatible python versions must be declared here
 
-click = "*"
-requests = "*"
-aiohttp = "*"
-temppathlib = "*"
-Jinja2 = "*"
-py-range-parse = "*"
-pyyaml = "*"
-orjson = "*"
-asyncio-mqtt = "*"
-telnetlib3 = "*"
-pillow = "*"
+click = "8.1.8"
+requests = "2.32.3"
+aiohttp = "3.11.16"
+temppathlib = "1.2.0"
+Jinja2 = "3.1.6"
+py-range-parse = "1.0.5"
+pyyaml = "6.0.2"
+
+multidict = "6.4.3"
+frozenlist = "1.6.0"
+yarl = "1.20.0"
+
+orjson = "3.10.16"
+aiomqtt = "2.3.2"
+telnetlib3 = "2.0.4"
+pillow = "11.2.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "*"
