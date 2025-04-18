@@ -3,7 +3,7 @@ import json
 import uuid
 from typing import Callable, List, Dict
 
-from asyncio_mqtt import Client, Message
+from aiomqtt import Client, Message
 
 
 class MqttClient:
