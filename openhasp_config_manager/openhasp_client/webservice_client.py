@@ -56,6 +56,18 @@ class WebserviceClient:
             data=data,
         )
 
+    def get_http_config(self) -> HttpConfig:
+        data = self._do_request(
+            method=GET,
+            url=self._base_url + "api/config/http/",
+        )
+
+        return HttpConfig(
+            port=data["port"],
+            user=data["user"],
+            password=data["pass"],
+        )
+
     def set_http_config(self, config: HttpConfig):
         """
         Set the HTTP configuration
@@ -123,6 +135,23 @@ class WebserviceClient:
             method=POST,
             url=self._base_url + "config",
             data=data,
+        )
+
+    def get_gui_config(self) -> GuiConfig:
+        data = self._do_request(
+            method=GET,
+            url=self._base_url + "api/config/gui/",
+        )
+
+        return GuiConfig(
+            idle1=data["idle1"],
+            idle2=data["idle2"],
+            rotate=data["rotate"],
+            cursor=data["cursor"],
+            bckl=data["bckl"],
+            bcklinv=data["bcklinv"],
+            invert=data["invert"],
+            calibration=data["calibration"]
         )
 
     def set_gui_config(self, config: GuiConfig):

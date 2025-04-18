@@ -297,6 +297,13 @@ class OpenHaspClient:
         """
         self._webservice_client.set_hasp_config(config)
 
+    def get_http_config(self) -> HttpConfig:
+        """
+        Get the HTTP configuration
+        :return: the HTTP configuration
+        """
+        return self._webservice_client.get_http_config()
+
     def set_http_config(self, config: HttpConfig):
         """
         Set the HTTP configuration
@@ -314,6 +321,13 @@ class OpenHaspClient:
         :return:
         """
         self._webservice_client.set_mqtt_config(config)
+
+    def get_gui_config(self) -> GuiConfig:
+        """
+        Get the GUI configuration
+        :return: the GUI configuration
+        """
+        return self._webservice_client.get_gui_config()
 
     def set_gui_config(self, config: GuiConfig):
         """
