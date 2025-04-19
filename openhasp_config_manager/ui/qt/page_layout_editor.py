@@ -1,7 +1,8 @@
 from typing import List
 
+from PyQt6 import QtCore
 from PyQt6.QtCore import QSize, Qt, QRect
-from PyQt6.QtGui import QPainter, QBrush, QColor
+from PyQt6.QtGui import QPainter, QBrush, QColor, QMouseEvent
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QSizePolicy
 from orjson import orjson
 
@@ -30,6 +31,7 @@ class PageLayoutEditorWidget(QWidget):
 
     def clear_layout(self):
         clear_layout(self.layout)
+        self.current_index = 0
 
     def set_page(self, page: OpenHaspPage or None):
         self.page = page
@@ -37,12 +39,26 @@ class PageLayoutEditorWidget(QWidget):
         if page is None:
             return
         self.device_processor = self.config_manager.create_device_processor(page.device)
-        page_objects = self.get_page_objects(page)
+        page_objects = self.get_page_objects(index=self.current_index)
         self.page_preview_widget = PagePreviewWidget(page, page_objects)
+        self.page_preview_widget.clickedValue.connect(self.on_clicked_value)
         self.layout.addWidget(self.page_preview_widget)
         self.page_preview_widget.set_objects(page_objects)
 
-    def get_page_objects(self, page) -> List[dict]:
+    def on_clicked_value(self):
+        self.cycle_index()
+
+    def set_index(self, index: int):
+        self.current_index = index
+        self.page_objects = self.get_page_objects(index=index)
+        self.page_preview_widget.set_objects(self.page_objects)
+
+    def get_page_objects(self, index: int, include_global: bool = True) -> List[dict]:
+        """
+        Get the page objects for the given page index.
+        :param index: the index of the page
+        :return: a list of objects for the page
+        """
         if self.page is None:
             return []
 
@@ -53,15 +69,25 @@ class PageLayoutEditorWidget(QWidget):
             loaded_objects = list(map(orjson.loads, objects_in_jsonl))
             result = result + loaded_objects
 
+        # Filter the objects based on the index
+        result = [obj for obj in result if
+                  obj.get("page") == index or (obj.get("page") == 0 if include_global else False)]
+
         return result
+
+    def cycle_index(self):
+        self.set_index((self.current_index + 1) % 10)
 
 
 class PagePreviewWidget(QWidget):
+    clickedValue = QtCore.pyqtSignal(int)
 
     def __init__(self, page: OpenHaspPage, page_objects: List[dict], *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.page = page
         self.objects: List[dict] = page_objects
+
+        self._padding = 0
 
         self.setSizePolicy(
             QSizePolicy.Policy.MinimumExpanding,
@@ -85,6 +111,22 @@ class PagePreviewWidget(QWidget):
     def set_objects(self, loaded_objects: List[dict]):
         self.objects = loaded_objects
         self._trigger_refresh()
+
+    def _calculate_clicked_value(self, e: QMouseEvent):
+        parent = self.parent()
+        vmin, vmax = parent.minimumHeight(), parent.maximumHeight()
+        d_height = self.size().height() + (self._padding * 2)
+        click_y = e.pos().y() - self._padding
+
+        pc = (d_height - click_y) / d_height
+        value = vmin + pc * (vmax - vmin)
+        self.clickedValue.emit(value)
+
+    def mouseMoveEvent(self, e: QMouseEvent):
+        self._calculate_clicked_value(e)
+
+    def mousePressEvent(self, e: QMouseEvent):
+        self._calculate_clicked_value(e)
 
     def paintEvent(self, e):
         painter = QPainter(self)

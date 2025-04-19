@@ -48,14 +48,13 @@ class MainWindow(QMainWindow):
         device_validator = self.config_manager.create_device_validator(device)
         relevant_components = self.config_manager.find_relevant_components(device)
 
-        device_pages = list(filter(lambda x: isinstance(x, JsonlComponent) and "page" in x.name, relevant_components))
-
-        sample_page = device_pages[0] if device_pages else None
+        device_jsonl_components = list(filter(lambda x: isinstance(x, JsonlComponent), relevant_components))
+        name = device_jsonl_components[0].name if device_jsonl_components else "N/A"
         self.page_layout_editor_widget.set_page(
             OpenHaspPage(
                 device=self.device,
-                name=sample_page.name,
-                jsonl_components=device_pages
+                name=name,
+                jsonl_components=device_jsonl_components
             )
         )
 
