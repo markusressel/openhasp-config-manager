@@ -439,6 +439,10 @@ class ConfigManager:
         # find jsonl files referenced in CMD files
         referenced_jsonl_components = self._find_referenced_jsonl_components(cmd_components, jsonl_components)
 
+        # find image files referenced in CMD files and JSONL files
+        referenced_image_components = self._find_referenced_image_components(cmd_components, jsonl_components,
+                                                                             image_components)
+
         # compute component for jsonl file referenced in config.hasp.pages
         pages_jsonl_component_path = self._compute_component_path_of_pages_config_value(device.path, device.config)
         if pages_jsonl_component_path is not None:
@@ -450,11 +454,12 @@ class ConfigManager:
 
         result.extend(referenced_jsonl_components)
         result.extend(referenced_cmd_components)
-        # TODO: filter these by actual usage
-        result.extend(image_components)
+        result.extend(referenced_image_components)
         return result
 
-    def _find_referenced_cmd_components(self, cmd_components: List[CmdComponent]) -> Set[CmdComponent]:
+    def _find_referenced_cmd_components(
+        self, cmd_components: List[CmdComponent]
+    ) -> Set[CmdComponent]:
         result = set()
 
         system_components = list(filter(lambda x: x.name in SYSTEM_SCRIPTS, cmd_components))
@@ -478,6 +483,15 @@ class ConfigManager:
 
         return result
 
+    @staticmethod
+    def _find_cmd_references_in_cmd_component(component: TextComponent) -> Set[str]:
+        result = set()
+        pattern = re.compile(r"L:/(.*\.cmd)")
+        for line in component.content.splitlines():
+            matches = re.findall(pattern, line)
+            result.update(matches)
+        return result
+
     def _find_referenced_jsonl_components(
         self,
         cmd_components: List[CmdComponent],
@@ -497,18 +511,62 @@ class ConfigManager:
         return referenced_jsonl_components
 
     @staticmethod
-    def _find_cmd_references_in_cmd_component(component: TextComponent) -> Set[str]:
+    def _find_jsonl_references_in_cmd_component(component: TextComponent) -> Set[str]:
         result = set()
-        pattern = re.compile(r"L:/(.*\.cmd)")
+        pattern = re.compile(r"L:/(.*\.jsonl)")
+        for line in component.content.splitlines():
+            matches = re.findall(pattern, line)
+            result.update(matches)
+        return result
+
+    def _find_referenced_image_components(
+        self, cmd_components: List[CmdComponent],
+        jsonl_components: List[JsonlComponent],
+        image_components: List[ImageComponent]
+    ) -> Set[ImageComponent]:
+        """
+        Find all image components that are referenced in the given cmd and jsonl components.
+        :param cmd_components:
+        :param jsonl_components:
+        :param image_components:
+        :return: set of referenced image components
+        """
+        referenced_image_components = set()
+        for component in cmd_components:
+            image_references = self._find_image_references_in_cmd_component(component)
+            for match in image_references:
+                matching_components = list(filter(lambda x: x.name == match, image_components))
+                if len(matching_components) <= 0:
+                    found_component_names = ','.join([c.name for c in image_components])
+                    raise AssertionError(
+                        f"Referenced image component not found: {match}, only found: {found_component_names}")
+                referenced_image_components.update(matching_components)
+
+        for component in jsonl_components:
+            image_references = self._find_image_references_in_jsonl_component(component)
+            for match in image_references:
+                matching_components = list(filter(lambda x: x.name == match, image_components))
+                if len(matching_components) <= 0:
+                    found_component_names = ','.join([c.name for c in image_components])
+                    raise AssertionError(
+                        f"Referenced image component not found: {match}, only found: {found_component_names}")
+                referenced_image_components.update(matching_components)
+
+        return referenced_image_components
+
+    @staticmethod
+    def _find_image_references_in_cmd_component(component: TextComponent) -> Set[str]:
+        result = set()
+        pattern = re.compile(r"L:/(.*\.(?:png|bin))")
         for line in component.content.splitlines():
             matches = re.findall(pattern, line)
             result.update(matches)
         return result
 
     @staticmethod
-    def _find_jsonl_references_in_cmd_component(component: TextComponent) -> Set[str]:
+    def _find_image_references_in_jsonl_component(component: TextComponent) -> Set[str]:
         result = set()
-        pattern = re.compile(r"L:/(.*\.jsonl)")
+        pattern = re.compile(r"L:/(.*\.(?:png|bin))")
         for line in component.content.splitlines():
             matches = re.findall(pattern, line)
             result.update(matches)
