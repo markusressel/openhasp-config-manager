@@ -55,7 +55,7 @@ class MainWindow(QMainWindow):
             OpenHaspPage(
                 device=self.device,
                 name=sample_page.name,
-                jsonl_components=[sample_page]
+                jsonl_components=device_pages
             )
         )
 

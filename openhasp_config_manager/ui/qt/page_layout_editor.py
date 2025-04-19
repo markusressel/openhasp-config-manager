@@ -42,14 +42,18 @@ class PageLayoutEditorWidget(QWidget):
         self.layout.addWidget(self.page_preview_widget)
         self.page_preview_widget.set_objects(page_objects)
 
-    def get_page_objects(self, page):
+    def get_page_objects(self, page) -> List[dict]:
         if self.page is None:
-            return
+            return []
+
+        result = []
         for jsonl_component in self.page.jsonl_components:
             output_content = self.device_processor.normalize(self.page.device, jsonl_component)
             objects_in_jsonl = output_content.splitlines()
             loaded_objects = list(map(orjson.loads, objects_in_jsonl))
-            return loaded_objects
+            result = result + loaded_objects
+
+        return result
 
 
 class PagePreviewWidget(QWidget):
@@ -74,8 +78,8 @@ class PagePreviewWidget(QWidget):
 
     def sizeHint(self):
         return QSize(
-            200,
-            100
+            self.page_width,
+            self.page_height,
         )
 
     def set_objects(self, loaded_objects: List[dict]):
@@ -106,6 +110,12 @@ class PagePreviewWidget(QWidget):
                 self._draw_label(painter, obj, padding, d_width, d_height)
             elif object_type == "slider":
                 self._draw_slider(painter, obj, padding, d_width, d_height)
+            elif object_type == "switch":
+                self._draw_switch(painter, obj, padding, d_width, d_height)
+            elif object_type == "img":
+                self._draw_image(painter, obj, padding, d_width, d_height)
+            elif object_type == "bar":
+                self._draw_bar(painter, obj, padding, d_width, d_height)
             else:  # Handle unknown object types
                 print(f"Unknown object type: {object_type}")
 
@@ -193,6 +203,72 @@ class PagePreviewWidget(QWidget):
         #     height * d_height
         # )
         # painter.fillRect(value_rect, QColor('yellow'))
+
+    def _draw_switch(self, painter, obj, padding, d_width, d_height):
+        """
+        Draws a switch on the canvas.
+        :param painter: the painter to use for drawing
+        :param obj: the object to draw
+        :param padding: the padding around the canvas
+        :param d_width: the width of the canvas
+        :param d_height: the height of the canvas
+        :return:
+        """
+        object_bg_color = obj.get("bg_color", "green")
+
+        x = obj.get("x", 0)
+        y = obj.get("y", 0)
+        width = obj.get("w", 50)
+        height = obj.get("h", 50)
+
+        self._draw_scaled_square(painter, x, y, width, height, padding, d_width, d_height, color=object_bg_color)
+
+        # Draw the text
+        # painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, obj["text"])
+
+    def _draw_image(self, painter, obj, padding, d_width, d_height):
+        """
+        Draws an image on the canvas.
+        :param painter: the painter to use for drawing
+        :param obj: the object to draw
+        :param padding: the padding around the canvas
+        :param d_width: the width of the canvas
+        :param d_height: the height of the canvas
+        :return:
+        """
+        object_bg_color = obj.get("bg_color", "yellow")
+
+        x = obj.get("x", 0)
+        y = obj.get("y", 0)
+        width = obj.get("w", 50)
+        height = obj.get("h", 50)
+
+        self._draw_scaled_square(painter, x, y, width, height, padding, d_width, d_height, color=object_bg_color)
+
+        # Draw the text
+        # painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, obj["text"])
+
+    def _draw_bar(self, painter, obj, padding, d_width, d_height):
+        """
+        Draws a bar on the canvas.
+        :param painter: the painter to use for drawing
+        :param obj: the object to draw
+        :param padding: the padding around the canvas
+        :param d_width: the width of the canvas
+        :param d_height: the height of the canvas
+        :return:
+        """
+        object_bg_color = obj.get("bg_color", "purple")
+
+        x = obj.get("x", 0)
+        y = obj.get("y", 0)
+        width = obj.get("w", 50)
+        height = obj.get("h", 50)
+
+        self._draw_scaled_square(painter, x, y, width, height, padding, d_width, d_height, color=object_bg_color)
+
+        # Draw the text
+        # painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, obj["text"])
 
     def _draw_scaled_square(self, painter, x, y, width, height, padding, d_width, d_height, color):
         """
