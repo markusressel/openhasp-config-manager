@@ -73,6 +73,9 @@ class PageLayoutEditorWidget(QWidget):
         result = [obj for obj in result if
                   obj.get("page") == index or (obj.get("page") == 0 if include_global else False)]
 
+        # Sort page 0 objects to the end
+        result.sort(key=lambda obj: obj.get("page") == 0)
+
         return result
 
     def cycle_index(self):
