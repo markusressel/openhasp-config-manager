@@ -37,34 +37,46 @@ class PageLayoutEditorWidget(QWidget):
         if page is None:
             return
         self.device_processor = self.config_manager.create_device_processor(page.device)
-        self.page_preview_widget = PagePreviewWidget()
+        page_objects = self.get_page_objects(page)
+        self.page_preview_widget = PagePreviewWidget(page, page_objects)
         self.layout.addWidget(self.page_preview_widget)
-        self._create_page_content_widgets()
+        self.page_preview_widget.set_objects(page_objects)
 
-    def _create_page_content_widgets(self):
+    def get_page_objects(self, page):
         if self.page is None:
             return
         for jsonl_component in self.page.jsonl_components:
             output_content = self.device_processor.normalize(self.page.device, jsonl_component)
             objects_in_jsonl = output_content.splitlines()
             loaded_objects = list(map(orjson.loads, objects_in_jsonl))
-            self.page_preview_widget.set_objects(loaded_objects)
+            return loaded_objects
 
 
 class PagePreviewWidget(QWidget):
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, page: OpenHaspPage, page_objects: List[dict], *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.objects: List[dict] = []
+        self.page = page
+        self.objects: List[dict] = page_objects
 
         self.setSizePolicy(
             QSizePolicy.Policy.MinimumExpanding,
             QSizePolicy.Policy.MinimumExpanding
         )
 
+    @property
+    def page_width(self) -> int:
+        return self.page.device.config.openhasp_config_manager.device.screen.width
+
+    @property
+    def page_height(self) -> int:
+        return self.page.device.config.openhasp_config_manager.device.screen.height
+
     def sizeHint(self):
-        # TODO: use screen dimensions from device config
-        return QSize(40, 120)
+        return QSize(
+            200,
+            100
+        )
 
     def set_objects(self, loaded_objects: List[dict]):
         self.objects = loaded_objects
@@ -105,41 +117,33 @@ class PagePreviewWidget(QWidget):
     def _draw_label(self, painter, obj, padding, d_width, d_height):
         """
         Draws a label on the canvas.
-        :param painter:
-        :param obj:
-        :param padding:
-        :param d_width:
-        :param d_height:
+        :param painter: the painter to use for drawing
+        :param obj: the object to draw
+        :param padding: the padding around the canvas
+        :param d_width: the width of the canvas
+        :param d_height: the height of the canvas
         :return:
         """
-        object_bg_color = obj.get("bg_color", "white")
+        object_bg_color = obj.get("bg_color", "red")
 
-        brush = QBrush()
-        brush.setColor(QColor(object_bg_color))
-        brush.setStyle(Qt.BrushStyle.SolidPattern)
-
+        x = obj.get("x", 0)
+        y = obj.get("y", 0)
         width = obj.get("w", 50)
         height = obj.get("h", 50)
 
-        rect = QRect(
-            padding,
-            padding + d_height - height - (obj["y"] * d_height),
-            width * d_width,
-            height * d_height
-        )
-        painter.fillRect(rect, brush)
+        self._draw_scaled_square(painter, x, y, width, height, padding, d_width, d_height, color=object_bg_color)
 
         # Draw the text
-        painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, obj["text"])
+        # painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, obj["text"])
 
     def _draw_button(self, painter, obj, padding, d_width, d_height):
         """
         Draws a button on the canvas.
-        :param painter:
-        :param obj:
-        :param padding:
-        :param d_width:
-        :param d_height:
+        :param painter: the painter to use for drawing
+        :param obj: the object to draw
+        :param padding: the padding around the canvas
+        :param d_width: the width of the canvas
+        :param d_height: the height of the canvas
         :return:
         """
         object_bg_color = obj.get("bg_color", "blue")
@@ -148,57 +152,72 @@ class PagePreviewWidget(QWidget):
         brush.setColor(QColor(object_bg_color))
         brush.setStyle(Qt.BrushStyle.SolidPattern)
 
+        x = obj.get("x", 0)
+        y = obj.get("y", 0)
         width = obj.get("w", 50)
         height = obj.get("h", 50)
 
-        rect = QRect(
-            padding,
-            padding + d_height - height - (obj["y"] * d_height),
-            width * d_width,
-            height * d_height
-        )
-        painter.fillRect(rect, brush)
+        self._draw_scaled_square(painter, x, y, width, height, padding, d_width, d_height, color=object_bg_color)
 
         # Draw the text
-        painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, obj["text"])
+        # painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, obj["text"])
 
     def _draw_slider(self, painter, obj, padding, d_width, d_height):
         """
         Draws a slider on the canvas.
-        :param painter:
-        :param obj:
-        :param padding:
-        :param d_width:
-        :param d_height:
+        :param painter: the painter to use for drawing
+        :param obj: the object to draw
+        :param padding: the padding around the canvas
+        :param d_width: the width of the canvas
+        :param d_height: the height of the canvas
         :return:
         """
-
         object_bg_color = obj.get("bg_color", "gray")
 
-        brush = QBrush()
-        brush.setColor(QColor(object_bg_color))
-        brush.setStyle(Qt.BrushStyle.SolidPattern)
-
+        x = obj.get("x", 0)
+        y = obj.get("y", 0)
         width = obj.get("w", 50)
         height = obj.get("h", 50)
 
+        self._draw_scaled_square(painter, x, y, width, height, padding, d_width, d_height, color=object_bg_color)
+
+        # slider_min = obj.get("min", 0)
+        # slider_max = obj.get("max", 100)
+        # slider_value = obj.get("value", 50)
+        #
+        # # Draw the slider value
+        # value_rect = QRect(
+        #     padding,
+        #     padding + d_height - height - (obj["y"] * d_height),
+        #     (slider_value - slider_min) / (slider_max - slider_min) * width * d_width,
+        #     height * d_height
+        # )
+        # painter.fillRect(value_rect, QColor('yellow'))
+
+    def _draw_scaled_square(self, painter, x, y, width, height, padding, d_width, d_height, color):
+        """
+        Draws a scaled square on the canvas.
+        :param painter:
+        :param width:
+        :param height:
+        :param padding:
+        :param d_width:
+        :param d_height:
+        :param color:
+        :return:
+        """
+        scaled_x = int((x / self.page_width) * d_width)
+        scaled_y = int((y / self.page_height) * d_height)
+        scaled_width = int((width / self.page_width) * d_width)
+        scaled_height = int((height / self.page_height) * d_height)
+
         rect = QRect(
-            padding,
-            padding + d_height - height - (obj["y"] * d_height),
-            width * d_width,
-            height * d_height
+            padding + scaled_x,
+            padding + scaled_y,
+            scaled_width,
+            scaled_height
         )
+        brush = QBrush()
+        brush.setColor(QColor(color))
+        brush.setStyle(Qt.BrushStyle.SolidPattern)
         painter.fillRect(rect, brush)
-
-        slider_min = obj.get("min", 0)
-        slider_max = obj.get("max", 100)
-        slider_value = obj.get("value", 50)
-
-        # Draw the slider value
-        value_rect = QRect(
-            padding,
-            padding + d_height - height - (obj["y"] * d_height),
-            (slider_value - slider_min) / (slider_max - slider_min) * width * d_width,
-            height * d_height
-        )
-        painter.fillRect(value_rect, QColor('yellow'))

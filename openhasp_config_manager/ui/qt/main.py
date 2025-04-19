@@ -62,5 +62,3 @@ class MainWindow(QMainWindow):
     def load_plates(self):
         self.devices = self.config_manager.analyze()
         self.device_list_widget.set_devices(self.devices)
-
-        self.page_layout_editor_widget.set_page(None)
