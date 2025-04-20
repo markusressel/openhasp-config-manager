@@ -69,13 +69,9 @@ class PageLayoutEditorWidget(QWidget):
             self.jsonl_component_objects[jsonl_component.name] = loaded_objects
 
         self.page_preview_widget = PagePreviewWidget(device_pages_data, [])
-        self.page_preview_widget.clickedValue.connect(self.on_clicked_value)
         self.preview_container.layout().addWidget(self.page_preview_widget)
 
         self.set_page_index(index=1)
-
-    def on_clicked_value(self):
-        self.next_page_index()
 
     def set_page_index(self, index: int):
         print("Setting page index", index)
@@ -175,10 +171,9 @@ class PagePreviewWidget(QWidget):
 
         self._padding = 0
 
-        self.setSizePolicy(
-            QSizePolicy.Policy.MinimumExpanding,
-            QSizePolicy.Policy.MinimumExpanding
-        )
+        size_policy = QSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+        size_policy.setHeightForWidth(True)
+        self.setSizePolicy(size_policy)
 
     @property
     def page_width(self) -> int:
@@ -193,6 +188,10 @@ class PagePreviewWidget(QWidget):
             self.page_width,
             self.page_height,
         )
+
+    def heightForWidth(self, width):
+        # ratio = self.page_width / self.page_height
+        return int((width / self.page_width) * self.page_height)
 
     def set_objects(self, loaded_objects: List[dict]):
         self.objects = loaded_objects
