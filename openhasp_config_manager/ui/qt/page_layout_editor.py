@@ -4,7 +4,7 @@ from typing import List, Tuple, Dict, Set
 from PyQt6 import QtCore
 from PyQt6.QtCore import QSize, Qt, QRect, QRectF
 from PyQt6.QtGui import QPainter, QBrush, QColor, QMouseEvent, QPainterPath
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QSizePolicy
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QSizePolicy, QPushButton, QHBoxLayout
 from orjson import orjson
 
 from openhasp_config_manager.manager import ConfigManager
@@ -27,13 +27,30 @@ class PageLayoutEditorWidget(QWidget):
         self.device_processor = None
         # map of <json component name, list of objects>
         self.jsonl_component_objects: OrderedDict[str, List[Dict]] = OrderedDict()
+
+        self.device_pages_data = None
+        self.current_index = 1
+
         self.create_layout()
 
     def create_layout(self):
         self.layout = QVBoxLayout(self)
 
+        self.page_selector = self._create_page_selector()
+        self.layout.addWidget(self.page_selector)
+
+        self.preview_container = QWidget()
+        self.preview_container.setLayout(QVBoxLayout())
+        self.layout.addWidget(self.preview_container)
+
+    def _on_previous_page_clicked(self):
+        self.previous_page_index()
+
+    def _on_next_page_clicked(self):
+        self.next_page_index()
+
     def clear(self):
-        clear_layout(self.layout)
+        clear_layout(self.preview_container.layout())
         self.current_index = 1
         self.jsonl_component_objects.clear()
 
@@ -53,7 +70,7 @@ class PageLayoutEditorWidget(QWidget):
 
         self.page_preview_widget = PagePreviewWidget(device_pages_data, [])
         self.page_preview_widget.clickedValue.connect(self.on_clicked_value)
-        self.layout.addWidget(self.page_preview_widget)
+        self.preview_container.layout().addWidget(self.page_preview_widget)
 
         self.set_page_index(index=1)
 
@@ -66,6 +83,26 @@ class PageLayoutEditorWidget(QWidget):
         self.page_objects = self.get_page_objects(index=index)
         print(f"Page objects: {self.page_objects}")
         self.page_preview_widget.set_objects(self.page_objects)
+
+    def next_page_index(self):
+        """
+        Cycle to the next available page index, skipping page 0 and rolling over to the first page.
+        """
+        usable_page_indices = self.get_used_page_indices() - {0}
+        usable_page_indices = list(sorted(usable_page_indices))
+        current_page_index_position_in_set = usable_page_indices.index(self.current_index)
+        new_page_index_position_in_set = (current_page_index_position_in_set + 1) % len(usable_page_indices)
+        self.set_page_index(usable_page_indices[new_page_index_position_in_set])
+
+    def previous_page_index(self):
+        """
+        Cycle to the previous available page index, skipping page 0 and rolling over to the last page.
+        """
+        usable_page_indices = self.get_used_page_indices() - {0}
+        usable_page_indices = list(sorted(usable_page_indices))
+        current_page_index_position_in_set = usable_page_indices.index(self.current_index)
+        new_page_index_position_in_set = (current_page_index_position_in_set - 1) % len(usable_page_indices)
+        self.set_page_index(usable_page_indices[new_page_index_position_in_set])
 
     def get_used_page_indices(self) -> Set[int]:
         """
@@ -113,12 +150,19 @@ class PageLayoutEditorWidget(QWidget):
 
         return result
 
-    def next_page_index(self):
-        usable_page_indices = self.get_used_page_indices() - {0}
-        usable_page_indices = list(sorted(usable_page_indices))
-        current_page_index_position_in_set = usable_page_indices.index(self.current_index)
-        new_page_index_position_in_set = (current_page_index_position_in_set + 1) % len(usable_page_indices)
-        self.set_page_index(usable_page_indices[new_page_index_position_in_set])
+    def _create_page_selector(self) -> QWidget:
+        page_selector_widget = QWidget()
+        page_selector_widget.setLayout(QHBoxLayout())
+
+        self._previous_page_button_widget = QPushButton("Previous Page")
+        self._previous_page_button_widget.clicked.connect(self._on_previous_page_clicked)
+        page_selector_widget.layout().addWidget(self._previous_page_button_widget)
+
+        self._next_page_button_widget = QPushButton("Next Page")
+        self._next_page_button_widget.clicked.connect(self._on_next_page_clicked)
+        page_selector_widget.layout().addWidget(self._next_page_button_widget)
+
+        return page_selector_widget
 
 
 class PagePreviewWidget(QWidget):
@@ -242,11 +286,11 @@ class PagePreviewWidget(QWidget):
             fill_color=object_bg_color
         )
 
-        text_alignment_flag = Qt.AlignmentFlag.AlignLeft
+        text_alignment_flag = Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft
         if text_align == "center":
             text_alignment_flag = Qt.AlignmentFlag.AlignCenter
         elif text_align == "right":
-            text_alignment_flag = Qt.AlignmentFlag.AlignRight
+            text_alignment_flag = Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight
         self._draw_scaled_text(
             painter, x, y, width, height, padding, d_width, d_height,
             text=text, text_color=text_color, pixel_size=text_font,
@@ -373,7 +417,6 @@ class PagePreviewWidget(QWidget):
         width = obj.get("w", 50)
         height = obj.get("h", 50)
         object_bg_color = obj.get("bg_color", "yellow")
-
 
         self._draw_scaled_square(
             painter, x, y, width, height, padding, d_width, d_height,
