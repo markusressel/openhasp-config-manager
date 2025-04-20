@@ -1,6 +1,7 @@
 from collections import OrderedDict
 from typing import List, Tuple, Dict, Set
 
+import qtawesome as qta
 from PyQt6 import QtCore
 from PyQt6.QtCore import QSize, Qt, QRect, QRectF
 from PyQt6.QtGui import QPainter, QBrush, QColor, QMouseEvent, QPainterPath, QFont
@@ -10,6 +11,7 @@ from orjson import orjson
 from openhasp_config_manager.manager import ConfigManager
 from openhasp_config_manager.openhasp_client.model.component import JsonlComponent
 from openhasp_config_manager.openhasp_client.model.device import Device
+from openhasp_config_manager.openhasp_client.openhasp import IntegratedIcon
 from openhasp_config_manager.ui.qt.util import clear_layout
 
 
@@ -577,6 +579,9 @@ class PagePreviewWidget(QWidget):
         scale_factor = d_width / self.page_width
         scaled_pixel_size = int(pixel_size * scale_factor)
 
+        # replace unicode chars with icons from material design icons
+        text = self._replace_unicode_with_icons(text)
+
         rect = QRect(
             padding + scaled_x,
             padding + scaled_y,
@@ -585,8 +590,8 @@ class PagePreviewWidget(QWidget):
         )
         painter.setPen(QColor(text_color))
         font = QFont("Roboto Condensed", scaled_pixel_size, QFont.Weight.Normal)
-        print(font.family())
-        print(font.exactMatch())
+        # print(font.family())
+        # print(font.exactMatch())
         painter.setFont(font)
         painter.drawText(rect, flags, text)
 
@@ -608,3 +613,16 @@ class PagePreviewWidget(QWidget):
         scaled_height = int((height / self.page_height) * d_height)
 
         return scaled_x, scaled_y, scaled_width, scaled_height
+
+    def _replace_unicode_with_icons(self, text: str) -> str:
+        """
+        Replaces unicode characters in the text with icons from material design icons.
+        :param text: the text to process
+        :return: the text with unicode characters replaced with icons
+        """
+        for unicode_char, icon_name in IntegratedIcon.entries():
+            icon_charmap = qta.charmap(f"mdi6.{icon_name}")
+            print("Replacing", unicode_char, "with", icon_charmap)
+            text = text.replace(unicode_char, icon_charmap)
+
+        return text
