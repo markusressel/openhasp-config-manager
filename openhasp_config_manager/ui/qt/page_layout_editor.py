@@ -515,6 +515,9 @@ class PagePreviewWidget(QWidget):
             x, y, width, height, padding, d_width, d_height
         )
 
+        scale_factor = d_width / self.page_width
+        scaled_pixel_size = int(pixel_size * scale_factor)
+
         rect = QRect(
             padding + scaled_x,
             padding + scaled_y,
@@ -523,7 +526,7 @@ class PagePreviewWidget(QWidget):
         )
         painter.setPen(QColor(text_color))
         font = painter.font()
-        font.setPixelSize(pixel_size)
+        font.setPixelSize(scaled_pixel_size)
         painter.setFont(font)
         painter.drawText(rect, flags, text)
 
