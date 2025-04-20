@@ -31,6 +31,23 @@ from openhasp_config_manager.validation.jsonl import JsonlObjectValidator
 CONFIG_FILE_NAME = "config.json"
 
 
+def parse_cmd_commands(content) -> List[str]:
+    """
+    Parses the commands from the given cmd component content.
+    :param content: the content of the cmd component
+    :return: list of commands
+    """
+    result = []
+    for line in content.splitlines():
+        line = line.strip()
+        if len(line) <= 0:
+            continue
+        if line.startswith("//"):
+            continue
+        result.append(line)
+    return result
+
+
 class ConfigManager:
     """
     This class is used to manage multiple device configurations that may be present
@@ -162,6 +179,7 @@ class ConfigManager:
                     type=component.type,
                     path=component.path,
                     content=component.content,
+                    commands=parse_cmd_commands(component.content)
                 )
                 result.append(cmd_component)
         return result
@@ -463,7 +481,7 @@ class ConfigManager:
         result = set()
 
         system_components = list(filter(lambda x: x.name in SYSTEM_SCRIPTS, cmd_components))
-        cmd_components = cmd_components + system_components
+        cmd_components = system_components + cmd_components
 
         # TODO: this should also consider the hierarchy, if a cmd component is not a system component, and
         #  it is also not referenced anywhere, the component is not relevant
