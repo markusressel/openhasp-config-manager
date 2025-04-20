@@ -3,7 +3,7 @@ from typing import List, Tuple, Dict, Set
 
 from PyQt6 import QtCore
 from PyQt6.QtCore import QSize, Qt, QRect, QRectF
-from PyQt6.QtGui import QPainter, QBrush, QColor, QMouseEvent, QPainterPath
+from PyQt6.QtGui import QPainter, QBrush, QColor, QMouseEvent, QPainterPath, QFont
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QSizePolicy, QPushButton, QHBoxLayout
 from orjson import orjson
 
@@ -578,8 +578,7 @@ class PagePreviewWidget(QWidget):
             scaled_height
         )
         painter.setPen(QColor(text_color))
-        font = painter.font()
-        font.setPixelSize(scaled_pixel_size)
+        font = QFont("Roboto Condensed", scaled_pixel_size, QFont.Weight.Normal)
         painter.setFont(font)
         painter.drawText(rect, flags, text)
 
