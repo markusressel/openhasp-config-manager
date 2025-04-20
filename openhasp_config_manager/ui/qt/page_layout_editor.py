@@ -313,6 +313,7 @@ class PagePreviewWidget(QWidget):
         width = obj.get("w", 50)
         height = obj.get("h", 50)
         object_bg_color = obj.get("bg_color", "blue")
+        text = obj.get("text", "")
         text_font = obj.get("text_font", 25)
         text_color = obj.get("text_color", None)
         radius = obj.get("radius", 0)
@@ -326,10 +327,9 @@ class PagePreviewWidget(QWidget):
             fill_color=object_bg_color, corner_radius=radius,
         )
 
-        # Draw the text
         self._draw_scaled_text(
             painter, x, y, width, height, padding, d_width, d_height,
-            text=obj.get("text", ""), text_color=text_color, pixel_size=text_font
+            text=text, text_color=text_color, pixel_size=text_font
         )
 
     def _draw_slider(self, painter, obj, padding, d_width, d_height):
@@ -349,10 +349,11 @@ class PagePreviewWidget(QWidget):
         width = obj.get("w", 50)
         height = obj.get("h", 50)
         object_bg_color = obj.get("bg_color", "gray")
+        radius = obj.get("radius", 0)
 
         self._draw_scaled_square(
             painter, x, y, width, height, padding, d_width, d_height,
-            fill_color=object_bg_color
+            fill_color=object_bg_color, corner_radius=radius,
         )
 
         # slider_min = obj.get("min", 0)
@@ -444,7 +445,7 @@ class PagePreviewWidget(QWidget):
 
         self._draw_scaled_square(
             painter, x, y, width, height, padding, d_width, d_height,
-            fill_color=object_bg_color
+            fill_color=object_bg_color, corner_radius=10
         )
 
         # Draw the text
@@ -532,6 +533,9 @@ class PagePreviewWidget(QWidget):
             x, y, width, height, padding, d_width, d_height
         )
 
+        scale_factor = d_height / self.page_height
+        scaled_corner_radius = int(corner_radius * scale_factor)
+
         rect = QRectF(
             padding + scaled_x,
             padding + scaled_y,
@@ -543,7 +547,7 @@ class PagePreviewWidget(QWidget):
 
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         path = QPainterPath()
-        path.addRoundedRect(rect, corner_radius, corner_radius)
+        path.addRoundedRect(rect, scaled_corner_radius, scaled_corner_radius)
         painter.fillPath(path, brush)
 
     def _draw_scaled_text(self, painter, x, y, width, height, padding, d_width, d_height, text: str = "",
@@ -561,6 +565,8 @@ class PagePreviewWidget(QWidget):
         :param text: the text to draw
         :param text_color: the color of the text
         """
+        if not text:
+            return
         if text_color is None:
             text_color = "white"
 
@@ -579,6 +585,8 @@ class PagePreviewWidget(QWidget):
         )
         painter.setPen(QColor(text_color))
         font = QFont("Roboto Condensed", scaled_pixel_size, QFont.Weight.Normal)
+        print(font.family())
+        print(font.exactMatch())
         painter.setFont(font)
         painter.drawText(rect, flags, text)
 
