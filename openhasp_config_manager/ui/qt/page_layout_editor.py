@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Tuple, Dict, Set
 
 from PyQt6 import QtCore
 from PyQt6.QtCore import QSize, Qt, QRect
@@ -12,7 +12,7 @@ from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.ui.qt.util import clear_layout
 
 
-class OpenHaspPage:
+class OpenHaspDevicePagesData:
     def __init__(self, device: Device, name: str, jsonl_components: List[JsonlComponent]):
         self.device = device
         self.name = name
@@ -24,34 +24,65 @@ class PageLayoutEditorWidget(QWidget):
         super().__init__()
         self.config_manager = config_manager
         self.device_processor = None
+        # map of <json component name, list of objects>
+        self.jsonl_component_objects: Dict[str, List[Dict]] = {}
         self.create_layout()
 
     def create_layout(self):
         self.layout = QVBoxLayout(self)
 
-    def clear_layout(self):
+    def clear(self):
         clear_layout(self.layout)
-        self.current_index = 0
+        self.current_index = 1
+        self.jsonl_component_objects.clear()
 
-    def set_page(self, page: OpenHaspPage or None):
-        self.page = page
-        self.clear_layout()
-        if page is None:
+    def set_data(self, device_pages_data: OpenHaspDevicePagesData or None):
+        self.device_pages_data = device_pages_data
+        self.clear()
+        if device_pages_data is None:
             return
-        self.device_processor = self.config_manager.create_device_processor(page.device)
-        page_objects = self.get_page_objects(index=self.current_index)
-        self.page_preview_widget = PagePreviewWidget(page, page_objects)
+        self.device_processor = self.config_manager.create_device_processor(device_pages_data.device)
+
+        # load jsonl component objects
+        for jsonl_component in self.device_pages_data.jsonl_components:
+            normalized_jsonl_component = self.device_processor.normalize(self.device_pages_data.device, jsonl_component)
+            objects_in_jsonl = normalized_jsonl_component.splitlines()
+            loaded_objects = list(map(orjson.loads, objects_in_jsonl))
+            self.jsonl_component_objects[jsonl_component.name] = loaded_objects
+
+        self.page_preview_widget = PagePreviewWidget(device_pages_data, [])
         self.page_preview_widget.clickedValue.connect(self.on_clicked_value)
         self.layout.addWidget(self.page_preview_widget)
-        self.page_preview_widget.set_objects(page_objects)
+
+        self.set_page_index(index=1)
 
     def on_clicked_value(self):
         self.cycle_index()
 
-    def set_index(self, index: int):
+    def set_page_index(self, index: int):
+        print("Setting page index", index)
         self.current_index = index
         self.page_objects = self.get_page_objects(index=index)
         self.page_preview_widget.set_objects(self.page_objects)
+
+    def get_used_page_indices(self) -> Set[int]:
+        """
+        Get the used page indices from the jsonl component objects.
+        :return: a list of used page indices
+        """
+        if self.device_pages_data is None:
+            return set()
+
+        used_page_indices = set()
+        for jsonl_component_name, objects_in_jsonl in self.jsonl_component_objects.items():
+            for obj in objects_in_jsonl:
+                object_page_index = obj.get("page", None)
+                if object_page_index is not None:
+                    used_page_indices.add(object_page_index)
+
+        print(f"Used page indices: {used_page_indices}")
+
+        return used_page_indices
 
     def get_page_objects(self, index: int, include_global: bool = True) -> List[dict]:
         """
@@ -59,33 +90,39 @@ class PageLayoutEditorWidget(QWidget):
         :param index: the index of the page
         :return: a list of objects for the page
         """
-        if self.page is None:
+        if self.device_pages_data is None:
             return []
 
         result = []
-        for jsonl_component in self.page.jsonl_components:
-            output_content = self.device_processor.normalize(self.page.device, jsonl_component)
-            objects_in_jsonl = output_content.splitlines()
-            loaded_objects = list(map(orjson.loads, objects_in_jsonl))
-            result = result + loaded_objects
+        for jsonl_component_name, objects_in_jsonl in self.jsonl_component_objects.items():
+            result = result + objects_in_jsonl
 
         # Filter the objects based on the index
-        result = [obj for obj in result if
-                  obj.get("page") == index or (obj.get("page") == 0 if include_global else False)]
+        result = [
+            obj for obj in result if
+            obj.get("page") == index or (obj.get("page") == 0 if include_global else False)
+        ]
 
-        # Sort page 0 objects to the end
+        # Filter hidden objects
+        result = [obj for obj in result if not obj.get("hidden", False)]
+
+        # Draw objects on page 0 last (on top)
         result.sort(key=lambda obj: obj.get("page") == 0)
 
         return result
 
     def cycle_index(self):
-        self.set_index((self.current_index + 1) % 10)
+        usable_page_indices = self.get_used_page_indices() - {0}
+        usable_page_indices = list(sorted(usable_page_indices))
+        current_page_index_position_in_set = usable_page_indices.index(self.current_index)
+        new_page_index_position_in_set = (current_page_index_position_in_set + 1) % len(usable_page_indices)
+        self.set_page_index(usable_page_indices[new_page_index_position_in_set])
 
 
 class PagePreviewWidget(QWidget):
     clickedValue = QtCore.pyqtSignal(int)
 
-    def __init__(self, page: OpenHaspPage, page_objects: List[dict], *args, **kwargs):
+    def __init__(self, page: OpenHaspDevicePagesData, page_objects: List[dict], *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.page = page
         self.objects: List[dict] = page_objects
@@ -148,8 +185,10 @@ class PagePreviewWidget(QWidget):
 
         # Draw the objects
         for i, obj in enumerate(self.objects):
-            object_type = obj.get("obj", "unknown")
-            if object_type == "btn":
+            object_type = obj.get("obj", None)
+            if object_type is None:
+                continue
+            elif object_type == "btn":
                 self._draw_button(painter, obj, padding, d_width, d_height)
             elif object_type == "label":
                 self._draw_label(painter, obj, padding, d_width, d_height)
@@ -161,7 +200,11 @@ class PagePreviewWidget(QWidget):
                 self._draw_image(painter, obj, padding, d_width, d_height)
             elif object_type == "bar":
                 self._draw_bar(painter, obj, padding, d_width, d_height)
-            else:  # Handle unknown object types
+            elif object_type == "msgbox":
+                self._draw_messagebox(painter, obj, padding, d_width, d_height)
+            elif object_type == "obj":
+                self._draw_obj(painter, obj, padding, d_width, d_height)
+            else:
                 print(f"Unknown object type: {object_type}")
 
         painter.end()
@@ -177,7 +220,6 @@ class PagePreviewWidget(QWidget):
         :param padding: the padding around the canvas
         :param d_width: the width of the canvas
         :param d_height: the height of the canvas
-        :return:
         """
         object_bg_color = obj.get("bg_color", "red")
 
@@ -186,7 +228,15 @@ class PagePreviewWidget(QWidget):
         width = obj.get("w", 50)
         height = obj.get("h", 50)
 
+        text = obj.get("text", "")
+        text_color = obj.get("text_color", "white")
+        text_font = obj.get("text_font", 25)
+
         self._draw_scaled_square(painter, x, y, width, height, padding, d_width, d_height, color=object_bg_color)
+        self._draw_scaled_text(
+            painter, x, y, width, height, padding, d_width, d_height,
+            text=text, text_color=text_color, pixel_size=text_font,
+        )
 
         # Draw the text
         # painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, obj["text"])
@@ -199,7 +249,6 @@ class PagePreviewWidget(QWidget):
         :param padding: the padding around the canvas
         :param d_width: the width of the canvas
         :param d_height: the height of the canvas
-        :return:
         """
         object_bg_color = obj.get("bg_color", "blue")
 
@@ -225,7 +274,6 @@ class PagePreviewWidget(QWidget):
         :param padding: the padding around the canvas
         :param d_width: the width of the canvas
         :param d_height: the height of the canvas
-        :return:
         """
         object_bg_color = obj.get("bg_color", "gray")
 
@@ -257,7 +305,6 @@ class PagePreviewWidget(QWidget):
         :param padding: the padding around the canvas
         :param d_width: the width of the canvas
         :param d_height: the height of the canvas
-        :return:
         """
         object_bg_color = obj.get("bg_color", "green")
 
@@ -279,7 +326,6 @@ class PagePreviewWidget(QWidget):
         :param padding: the padding around the canvas
         :param d_width: the width of the canvas
         :param d_height: the height of the canvas
-        :return:
         """
         object_bg_color = obj.get("bg_color", "yellow")
 
@@ -301,7 +347,6 @@ class PagePreviewWidget(QWidget):
         :param padding: the padding around the canvas
         :param d_width: the width of the canvas
         :param d_height: the height of the canvas
-        :return:
         """
         object_bg_color = obj.get("bg_color", "purple")
 
@@ -315,22 +360,61 @@ class PagePreviewWidget(QWidget):
         # Draw the text
         # painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, obj["text"])
 
+    def _draw_messagebox(self, painter, obj, padding, d_width, d_height):
+        """
+        Draws a messagebox on the canvas.
+        :param painter: the painter to use for drawing
+        :param obj: the object to draw
+        :param padding: the padding around the canvas
+        :param d_width: the width of the canvas
+        :param d_height: the height of the canvas
+        """
+        object_bg_color = obj.get("bg_color", "orange")
+
+        x = obj.get("x", 0)
+        y = obj.get("y", 0)
+        width = obj.get("w", 50)
+        height = obj.get("h", 50)
+
+        self._draw_scaled_square(painter, x, y, width, height, padding, d_width, d_height, color=object_bg_color)
+
+        # Draw the text
+        # painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, obj["text"])
+
+    def _draw_obj(self, painter, obj, padding, d_width, d_height):
+        """
+        Draws a generic object on the canvas.
+        :param painter: the painter to use for drawing
+        :param obj: the object to draw
+        :param padding: the padding around the canvas
+        :param d_width: the width of the canvas
+        :param d_height: the height of the canvas
+        """
+        object_bg_color = obj.get("bg_color", "gray")
+
+        x = obj.get("x", 0)
+        y = obj.get("y", 0)
+        width = obj.get("w", 50)
+        height = obj.get("h", 50)
+
+        self._draw_scaled_square(painter, x, y, width, height, padding, d_width, d_height, color=object_bg_color)
+
     def _draw_scaled_square(self, painter, x, y, width, height, padding, d_width, d_height, color):
         """
-        Draws a scaled square on the canvas.
-        :param painter:
-        :param width:
-        :param height:
-        :param padding:
-        :param d_width:
-        :param d_height:
-        :param color:
-        :return:
+        Helper method to draw a scaled square on the canvas.
+        :param painter: the painter to use for drawing
+        :param x: the x position of the square
+        :param y: the y position of the square
+        :param width: the width of the square
+        :param height: the height of the square
+        :param padding: the padding around the canvas
+        :param d_width: the width of the canvas
+        :param d_height: the height of the canvas
+        :param color: the color of the square
         """
-        scaled_x = int((x / self.page_width) * d_width)
-        scaled_y = int((y / self.page_height) * d_height)
-        scaled_width = int((width / self.page_width) * d_width)
-        scaled_height = int((height / self.page_height) * d_height)
+        scaled_x, scaled_y, scaled_width, scaled_height = self.__get_scaled_rect(
+            x, y, width, height, padding, d_width, d_height
+        )
 
         rect = QRect(
             padding + scaled_x,
@@ -342,3 +426,53 @@ class PagePreviewWidget(QWidget):
         brush.setColor(QColor(color))
         brush.setStyle(Qt.BrushStyle.SolidPattern)
         painter.fillRect(rect, brush)
+
+    def _draw_scaled_text(self, painter, x, y, width, height, padding, d_width, d_height, text: str = "",
+                          text_color: str = "white", pixel_size: int = 48):
+        """
+        Helper method to draw scaled text on the canvas.
+        :param painter: the painter to use for drawing
+        :param x: the x position of the text
+        :param y: the y position of the text
+        :param width: the width of the text
+        :param height: the height of the text
+        :param padding: the padding around the canvas
+        :param d_width: the width of the canvas
+        :param d_height: the height of the canvas
+        :param text: the text to draw
+        :param text_color: the color of the text
+        """
+        scaled_x, scaled_y, scaled_width, scaled_height = self.__get_scaled_rect(
+            x, y, width, height, padding, d_width, d_height
+        )
+
+        rect = QRect(
+            padding + scaled_x,
+            padding + scaled_y,
+            scaled_width,
+            scaled_height
+        )
+        painter.setPen(QColor(text_color))
+        font = painter.font()
+        font.setPixelSize(pixel_size)
+        painter.setFont(font)
+        painter.drawText(rect, 0, text)
+
+    def __get_scaled_rect(self, x, y, width, height, padding, d_width, d_height) -> Tuple[int, int, int, int]:
+        """
+        Helper method to get the scaled rectangle for the given parameters.
+        :param x: the x position of the rectangle
+        :param y: the y position of the rectangle
+        :param width: the width of the rectangle
+        :param height: the height of the rectangle
+        :param padding: the padding around the canvas
+        :param d_width: the width of the canvas
+        :param d_height: the height of the canvas
+        :return: a tuple of (x, y, width, height) for the scaled rectangle
+        """
+        scaled_x = int((x / self.page_width) * d_width)
+        scaled_y = int((y / self.page_height) * d_height)
+        scaled_width = int((width / self.page_width) * d_width)
+        scaled_height = int((height / self.page_height) * d_height)
+
+        return scaled_x, scaled_y, scaled_width, scaled_height
