@@ -48,6 +48,7 @@ telnetlib3 = "2.0.4"
 pillow = "11.2.1"
 
 PyQt6 = "6.9.0"
+QtAwesome = "1.4.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "*"
