@@ -1,3 +1,4 @@
+from collections import OrderedDict
 from typing import List, Tuple, Dict, Set
 
 from PyQt6 import QtCore
@@ -25,7 +26,7 @@ class PageLayoutEditorWidget(QWidget):
         self.config_manager = config_manager
         self.device_processor = None
         # map of <json component name, list of objects>
-        self.jsonl_component_objects: Dict[str, List[Dict]] = {}
+        self.jsonl_component_objects: OrderedDict[str, List[Dict]] = OrderedDict()
         self.create_layout()
 
     def create_layout(self):
@@ -222,6 +223,9 @@ class PagePreviewWidget(QWidget):
         :param d_width: the width of the canvas
         :param d_height: the height of the canvas
         """
+        object_id = obj.get("id", None)
+        print(f"Drawing label with id {object_id}: {obj}")
+
         x = obj.get("x", 0)
         y = obj.get("y", 0)
         width = obj.get("w", 50)
@@ -258,19 +262,21 @@ class PagePreviewWidget(QWidget):
         :param d_width: the width of the canvas
         :param d_height: the height of the canvas
         """
-        object_bg_color = obj.get("bg_color", "blue")
-
-        brush = QBrush()
-        brush.setColor(QColor(object_bg_color))
-        brush.setStyle(Qt.BrushStyle.SolidPattern)
+        object_id = obj.get("id", None)
+        print(f"Drawing button with id {object_id}: {obj}")
 
         x = obj.get("x", 0)
         y = obj.get("y", 0)
         width = obj.get("w", 50)
         height = obj.get("h", 50)
+        object_bg_color = obj.get("bg_color", "blue")
         text_font = obj.get("text_font", 25)
         text_color = obj.get("text_color", None)
         radius = obj.get("radius", 0)
+
+        brush = QBrush()
+        brush.setColor(QColor(object_bg_color))
+        brush.setStyle(Qt.BrushStyle.SolidPattern)
 
         self._draw_scaled_square(
             painter, x, y, width, height, padding, d_width, d_height,
@@ -292,12 +298,14 @@ class PagePreviewWidget(QWidget):
         :param d_width: the width of the canvas
         :param d_height: the height of the canvas
         """
-        object_bg_color = obj.get("bg_color", "gray")
+        object_id = obj.get("id", None)
+        print(f"Drawing slider with id {object_id}: {obj}")
 
         x = obj.get("x", 0)
         y = obj.get("y", 0)
         width = obj.get("w", 50)
         height = obj.get("h", 50)
+        object_bg_color = obj.get("bg_color", "gray")
 
         self._draw_scaled_square(
             painter, x, y, width, height, padding, d_width, d_height,
@@ -326,12 +334,14 @@ class PagePreviewWidget(QWidget):
         :param d_width: the width of the canvas
         :param d_height: the height of the canvas
         """
-        object_bg_color = obj.get("bg_color", "green")
+        object_id = obj.get("id", None)
+        print(f"Drawing switch with id {object_id}: {obj}")
 
         x = obj.get("x", 0)
         y = obj.get("y", 0)
         width = obj.get("w", 50)
         height = obj.get("h", 50)
+        object_bg_color = obj.get("bg_color", "green")
         text_font = obj.get("text_font", 25)
         text_color = obj.get("text_color", None)
 
@@ -355,12 +365,15 @@ class PagePreviewWidget(QWidget):
         :param d_width: the width of the canvas
         :param d_height: the height of the canvas
         """
-        object_bg_color = obj.get("bg_color", "yellow")
+        object_id = obj.get("id", None)
+        print(f"Drawing image with id {object_id}: {obj}")
 
         x = obj.get("x", 0)
         y = obj.get("y", 0)
         width = obj.get("w", 50)
         height = obj.get("h", 50)
+        object_bg_color = obj.get("bg_color", "yellow")
+
 
         self._draw_scaled_square(
             painter, x, y, width, height, padding, d_width, d_height,
@@ -376,7 +389,8 @@ class PagePreviewWidget(QWidget):
         :param d_width: the width of the canvas
         :param d_height: the height of the canvas
         """
-        object_bg_color = obj.get("bg_color", "purple")
+        object_id = obj.get("id", None)
+        print(f"Drawing bar with id {object_id}: {obj}")
 
         x = obj.get("x", 0)
         y = obj.get("y", 0)
@@ -384,6 +398,7 @@ class PagePreviewWidget(QWidget):
         height = obj.get("h", 50)
         text_font = obj.get("text_font", 25)
         text_color = obj.get("text_color", None)
+        object_bg_color = obj.get("bg_color", "purple")
 
         self._draw_scaled_square(
             painter, x, y, width, height, padding, d_width, d_height,
@@ -405,7 +420,8 @@ class PagePreviewWidget(QWidget):
         :param d_width: the width of the canvas
         :param d_height: the height of the canvas
         """
-        object_bg_color = obj.get("bg_color", "orange")
+        object_id = obj.get("id", None)
+        print(f"Drawing messagebox with id {object_id}: {obj}")
 
         x = obj.get("x", 0)
         y = obj.get("y", 0)
@@ -413,6 +429,7 @@ class PagePreviewWidget(QWidget):
         height = obj.get("h", 50)
         text_font = obj.get("text_font", 25)
         text_color = obj.get("text_color", None)
+        object_bg_color = obj.get("bg_color", "orange")
 
         self._draw_scaled_square(
             painter, x, y, width, height, padding, d_width, d_height,
@@ -434,12 +451,14 @@ class PagePreviewWidget(QWidget):
         :param d_width: the width of the canvas
         :param d_height: the height of the canvas
         """
-        object_bg_color = obj.get("bg_color", "gray")
+        object_id = obj.get("id", None)
+        print(f"Drawing object with id {object_id}: {obj}")
 
         x = obj.get("x", 0)
         y = obj.get("y", 0)
         width = obj.get("w", 50)
         height = obj.get("h", 50)
+        object_bg_color = obj.get("bg_color", "gray")
 
         self._draw_scaled_square(
             painter, x, y, width, height, padding, d_width, d_height,
@@ -482,16 +501,8 @@ class PagePreviewWidget(QWidget):
 
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         path = QPainterPath()
-        painter.setBrush(brush)
-
-        # Add the rect to path.
         path.addRoundedRect(rect, corner_radius, corner_radius)
-        painter.setClipPath(path)
-
-        # Fill shape, draw the border and center the text.
         painter.fillPath(path, brush)
-
-        # painter.fillRect(rect, brush)
 
     def _draw_scaled_text(self, painter, x, y, width, height, padding, d_width, d_height, text: str = "",
                           text_color: str = "white", pixel_size: int = 48, flags: int = Qt.AlignmentFlag.AlignCenter):

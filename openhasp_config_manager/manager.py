@@ -481,7 +481,6 @@ class ConfigManager:
         result = set()
 
         system_components = list(filter(lambda x: x.name in SYSTEM_SCRIPTS, cmd_components))
-        cmd_components = system_components + cmd_components
 
         # TODO: this should also consider the hierarchy, if a cmd component is not a system component, and
         #  it is also not referenced anywhere, the component is not relevant
