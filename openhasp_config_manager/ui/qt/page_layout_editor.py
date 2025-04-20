@@ -1,8 +1,8 @@
 from typing import List, Tuple, Dict, Set
 
 from PyQt6 import QtCore
-from PyQt6.QtCore import QSize, Qt, QRect
-from PyQt6.QtGui import QPainter, QBrush, QColor, QMouseEvent
+from PyQt6.QtCore import QSize, Qt, QRect, QRectF
+from PyQt6.QtGui import QPainter, QBrush, QColor, QMouseEvent, QPainterPath
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QSizePolicy
 from orjson import orjson
 
@@ -57,12 +57,13 @@ class PageLayoutEditorWidget(QWidget):
         self.set_page_index(index=1)
 
     def on_clicked_value(self):
-        self.cycle_index()
+        self.next_page_index()
 
     def set_page_index(self, index: int):
         print("Setting page index", index)
         self.current_index = index
         self.page_objects = self.get_page_objects(index=index)
+        print(f"Page objects: {self.page_objects}")
         self.page_preview_widget.set_objects(self.page_objects)
 
     def get_used_page_indices(self) -> Set[int]:
@@ -111,7 +112,7 @@ class PageLayoutEditorWidget(QWidget):
 
         return result
 
-    def cycle_index(self):
+    def next_page_index(self):
         usable_page_indices = self.get_used_page_indices() - {0}
         usable_page_indices = list(sorted(usable_page_indices))
         current_page_index_position_in_set = usable_page_indices.index(self.current_index)
@@ -163,7 +164,8 @@ class PagePreviewWidget(QWidget):
         self.clickedValue.emit(value)
 
     def mouseMoveEvent(self, e: QMouseEvent):
-        self._calculate_clicked_value(e)
+        pass
+        # self._calculate_clicked_value(e)
 
     def mousePressEvent(self, e: QMouseEvent):
         self._calculate_clicked_value(e)
@@ -175,6 +177,7 @@ class PagePreviewWidget(QWidget):
         brush.setColor(QColor('black'))
         brush.setStyle(Qt.BrushStyle.SolidPattern)
         rect = QRect(0, 0, painter.device().width(), painter.device().height())
+        painter.eraseRect(rect)
         painter.fillRect(rect, brush)
 
         padding = 0
@@ -207,8 +210,6 @@ class PagePreviewWidget(QWidget):
             else:
                 print(f"Unknown object type: {object_type}")
 
-        painter.end()
-
     def _trigger_refresh(self):
         self.update()
 
@@ -221,25 +222,32 @@ class PagePreviewWidget(QWidget):
         :param d_width: the width of the canvas
         :param d_height: the height of the canvas
         """
-        object_bg_color = obj.get("bg_color", "red")
-
         x = obj.get("x", 0)
         y = obj.get("y", 0)
         width = obj.get("w", 50)
         height = obj.get("h", 50)
 
         text = obj.get("text", "")
-        text_color = obj.get("text_color", "white")
+        text_color = obj.get("text_color", None)
         text_font = obj.get("text_font", 25)
+        text_align = obj.get("align", "left")
+        object_bg_color = obj.get("bg_color", None)
 
-        self._draw_scaled_square(painter, x, y, width, height, padding, d_width, d_height, color=object_bg_color)
+        self._draw_scaled_square(
+            painter, x, y, width, height, padding, d_width, d_height,
+            fill_color=object_bg_color
+        )
+
+        text_alignment_flag = Qt.AlignmentFlag.AlignLeft
+        if text_align == "center":
+            text_alignment_flag = Qt.AlignmentFlag.AlignCenter
+        elif text_align == "right":
+            text_alignment_flag = Qt.AlignmentFlag.AlignRight
         self._draw_scaled_text(
             painter, x, y, width, height, padding, d_width, d_height,
             text=text, text_color=text_color, pixel_size=text_font,
+            flags=text_alignment_flag
         )
-
-        # Draw the text
-        # painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, obj["text"])
 
     def _draw_button(self, painter, obj, padding, d_width, d_height):
         """
@@ -260,11 +268,20 @@ class PagePreviewWidget(QWidget):
         y = obj.get("y", 0)
         width = obj.get("w", 50)
         height = obj.get("h", 50)
+        text_font = obj.get("text_font", 25)
+        text_color = obj.get("text_color", None)
+        radius = obj.get("radius", 0)
 
-        self._draw_scaled_square(painter, x, y, width, height, padding, d_width, d_height, color=object_bg_color)
+        self._draw_scaled_square(
+            painter, x, y, width, height, padding, d_width, d_height,
+            fill_color=object_bg_color, corner_radius=radius,
+        )
 
         # Draw the text
-        # painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, obj["text"])
+        self._draw_scaled_text(
+            painter, x, y, width, height, padding, d_width, d_height,
+            text=obj.get("text", ""), text_color=text_color, pixel_size=text_font
+        )
 
     def _draw_slider(self, painter, obj, padding, d_width, d_height):
         """
@@ -282,7 +299,10 @@ class PagePreviewWidget(QWidget):
         width = obj.get("w", 50)
         height = obj.get("h", 50)
 
-        self._draw_scaled_square(painter, x, y, width, height, padding, d_width, d_height, color=object_bg_color)
+        self._draw_scaled_square(
+            painter, x, y, width, height, padding, d_width, d_height,
+            fill_color=object_bg_color
+        )
 
         # slider_min = obj.get("min", 0)
         # slider_max = obj.get("max", 100)
@@ -312,11 +332,19 @@ class PagePreviewWidget(QWidget):
         y = obj.get("y", 0)
         width = obj.get("w", 50)
         height = obj.get("h", 50)
+        text_font = obj.get("text_font", 25)
+        text_color = obj.get("text_color", None)
 
-        self._draw_scaled_square(painter, x, y, width, height, padding, d_width, d_height, color=object_bg_color)
+        self._draw_scaled_square(
+            painter, x, y, width, height, padding, d_width, d_height,
+            fill_color=object_bg_color
+        )
 
         # Draw the text
-        # painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, obj["text"])
+        self._draw_scaled_text(
+            painter, x, y, width, height, padding, d_width, d_height,
+            text=obj.get("text", ""), text_color=text_color, pixel_size=text_font
+        )
 
     def _draw_image(self, painter, obj, padding, d_width, d_height):
         """
@@ -334,10 +362,10 @@ class PagePreviewWidget(QWidget):
         width = obj.get("w", 50)
         height = obj.get("h", 50)
 
-        self._draw_scaled_square(painter, x, y, width, height, padding, d_width, d_height, color=object_bg_color)
-
-        # Draw the text
-        # painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, obj["text"])
+        self._draw_scaled_square(
+            painter, x, y, width, height, padding, d_width, d_height,
+            fill_color=object_bg_color
+        )
 
     def _draw_bar(self, painter, obj, padding, d_width, d_height):
         """
@@ -354,11 +382,19 @@ class PagePreviewWidget(QWidget):
         y = obj.get("y", 0)
         width = obj.get("w", 50)
         height = obj.get("h", 50)
+        text_font = obj.get("text_font", 25)
+        text_color = obj.get("text_color", None)
 
-        self._draw_scaled_square(painter, x, y, width, height, padding, d_width, d_height, color=object_bg_color)
+        self._draw_scaled_square(
+            painter, x, y, width, height, padding, d_width, d_height,
+            fill_color=object_bg_color
+        )
 
         # Draw the text
-        # painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, obj["text"])
+        self._draw_scaled_text(
+            painter, x, y, width, height, padding, d_width, d_height,
+            text=obj.get("text", ""), text_color=text_color, pixel_size=text_font
+        )
 
     def _draw_messagebox(self, painter, obj, padding, d_width, d_height):
         """
@@ -375,11 +411,19 @@ class PagePreviewWidget(QWidget):
         y = obj.get("y", 0)
         width = obj.get("w", 50)
         height = obj.get("h", 50)
+        text_font = obj.get("text_font", 25)
+        text_color = obj.get("text_color", None)
 
-        self._draw_scaled_square(painter, x, y, width, height, padding, d_width, d_height, color=object_bg_color)
+        self._draw_scaled_square(
+            painter, x, y, width, height, padding, d_width, d_height,
+            fill_color=object_bg_color
+        )
 
         # Draw the text
-        # painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, obj["text"])
+        self._draw_scaled_text(
+            painter, x, y, width, height, padding, d_width, d_height,
+            text=obj.get("text", ""), text_color=text_color, pixel_size=text_font
+        )
 
     def _draw_obj(self, painter, obj, padding, d_width, d_height):
         """
@@ -397,9 +441,16 @@ class PagePreviewWidget(QWidget):
         width = obj.get("w", 50)
         height = obj.get("h", 50)
 
-        self._draw_scaled_square(painter, x, y, width, height, padding, d_width, d_height, color=object_bg_color)
+        self._draw_scaled_square(
+            painter, x, y, width, height, padding, d_width, d_height,
+            fill_color=object_bg_color
+        )
 
-    def _draw_scaled_square(self, painter, x, y, width, height, padding, d_width, d_height, color):
+    def _draw_scaled_square(
+        self,
+        painter, x, y, width, height, padding, d_width, d_height,
+        fill_color, corner_radius: int = 0,
+    ):
         """
         Helper method to draw a scaled square on the canvas.
         :param painter: the painter to use for drawing
@@ -410,25 +461,40 @@ class PagePreviewWidget(QWidget):
         :param padding: the padding around the canvas
         :param d_width: the width of the canvas
         :param d_height: the height of the canvas
-        :param color: the color of the square
+        :param fill_color: the fill color of the square
+        :param corner_radius: the corner radius of the square
         """
+        if fill_color is None:
+            return
+
         scaled_x, scaled_y, scaled_width, scaled_height = self.__get_scaled_rect(
             x, y, width, height, padding, d_width, d_height
         )
 
-        rect = QRect(
+        rect = QRectF(
             padding + scaled_x,
             padding + scaled_y,
             scaled_width,
             scaled_height
         )
-        brush = QBrush()
-        brush.setColor(QColor(color))
+        brush = QBrush(QColor(fill_color))
         brush.setStyle(Qt.BrushStyle.SolidPattern)
-        painter.fillRect(rect, brush)
+
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        path = QPainterPath()
+        painter.setBrush(brush)
+
+        # Add the rect to path.
+        path.addRoundedRect(rect, corner_radius, corner_radius)
+        painter.setClipPath(path)
+
+        # Fill shape, draw the border and center the text.
+        painter.fillPath(path, brush)
+
+        # painter.fillRect(rect, brush)
 
     def _draw_scaled_text(self, painter, x, y, width, height, padding, d_width, d_height, text: str = "",
-                          text_color: str = "white", pixel_size: int = 48):
+                          text_color: str = "white", pixel_size: int = 48, flags: int = Qt.AlignmentFlag.AlignCenter):
         """
         Helper method to draw scaled text on the canvas.
         :param painter: the painter to use for drawing
@@ -442,6 +508,9 @@ class PagePreviewWidget(QWidget):
         :param text: the text to draw
         :param text_color: the color of the text
         """
+        if text_color is None:
+            text_color = "white"
+
         scaled_x, scaled_y, scaled_width, scaled_height = self.__get_scaled_rect(
             x, y, width, height, padding, d_width, d_height
         )
@@ -456,7 +525,7 @@ class PagePreviewWidget(QWidget):
         font = painter.font()
         font.setPixelSize(pixel_size)
         painter.setFont(font)
-        painter.drawText(rect, 0, text)
+        painter.drawText(rect, flags, text)
 
     def __get_scaled_rect(self, x, y, width, height, padding, d_width, d_height) -> Tuple[int, int, int, int]:
         """
