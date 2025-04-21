@@ -213,7 +213,7 @@ class OpenHaspClient:
         :param page: the page to send the image to
         :param object_id: the object id to send the image to
         """
-        pass
+        raise NotImplementedError("send_image is not implemented yet")
 
     async def set_text(self, obj: str, text: str):
         """
@@ -372,6 +372,51 @@ class OpenHaspClient:
         return await self.command(
             name="page",
             params=f"{index}"
+        )
+
+    async def next_page(self):
+        """
+        Set the next page
+        """
+        return await self.command(
+            name="page",
+            params="next"
+        )
+
+    async def previous_page(self):
+        """
+        Set the previous page
+        """
+        return await self.command(
+            name="page",
+            params="prev"
+        )
+
+    async def clear_current_page(self):
+        """
+        Clear the current page
+        """
+        return await self.command(
+            name="clearpage",
+        )
+
+    async def clear_page(self, page: int):
+        """
+        Clear the given page
+        :param page: the page index to clear
+        """
+        return await self.command(
+            name="clearpage",
+            params=page
+        )
+
+    async def clear_all_pages(self):
+        """
+        Clear all pages
+        """
+        return await self.command(
+            name="clearpage",
+            params="all"
         )
 
     async def set_hidden(self, obj: str, hidden: bool):
