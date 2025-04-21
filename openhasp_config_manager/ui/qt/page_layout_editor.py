@@ -516,7 +516,7 @@ class PagePreviewWidget(QWidget):
         self,
         painter, x, y, width, height, padding, d_width, d_height,
         fill_color: str, corner_radius: int = 0,
-        border_width: int = 0, border_color: str = None
+        border_width: int = 0, border_color: str = "#FFFFFF"
     ):
         """
         Helper method to draw a scaled rectangle on the canvas.
@@ -535,6 +535,8 @@ class PagePreviewWidget(QWidget):
         """
         if fill_color is None:
             return
+        if border_color is None:
+            border_color = "#FFFFFF"
 
         scaled_x, scaled_y, scaled_width, scaled_height = self.__get_scaled_rect(
             x, y, width, height, padding, d_width, d_height
@@ -556,13 +558,23 @@ class PagePreviewWidget(QWidget):
         path = QPainterPath()
         path.addRoundedRect(rect, scaled_corner_radius, scaled_corner_radius)
         painter.fillPath(path, brush)
+
         # draw border
-        if border_width > 0:
-            border_brush = QBrush(QColor(border_color))
-            border_brush.setStyle(Qt.BrushStyle.SolidPattern)
+        if border_width == 0:
+            scaled_border_width = int(border_width * scale_factor)
+            border_pen = QPen(QColor(border_color))
+            border_pen.setWidth(scaled_border_width)
             path = QPainterPath()
-            path.addRoundedRect(rect, scaled_corner_radius, scaled_corner_radius)
-            painter.strokePath(path, border_brush)
+
+            # inset rect to account for border width
+            border_rect = QRectF(
+                padding + scaled_x + scaled_border_width,
+                padding + scaled_y + scaled_border_width,
+                scaled_width - (scaled_border_width * 2),
+                scaled_height - (scaled_border_width * 2)
+            )
+            path.addRoundedRect(border_rect, scaled_corner_radius, scaled_corner_radius)
+            painter.strokePath(path, border_pen)
 
     def _draw_scaled_circle(self, painter, x, y, width, height, padding, d_width, d_height, fill_color, radius):
         """
