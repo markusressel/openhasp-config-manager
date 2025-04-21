@@ -622,7 +622,6 @@ class PagePreviewWidget(QWidget):
         """
         for unicode_char, icon_name in IntegratedIcon.entries():
             icon_charmap = qta.charmap(f"mdi6.{icon_name}")
-            print("Replacing", unicode_char, "with", icon_charmap)
             text = text.replace(unicode_char, icon_charmap)
 
         return text
