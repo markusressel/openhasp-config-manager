@@ -351,9 +351,9 @@ class PagePreviewWidget(QWidget):
         width = obj.get("w", 50)
         height = obj.get("h", 50)
         object_bg_color = obj.get("bg_color", "gray")
-        handle_color = obj.get("bg_color04", "lightgray")
+        knob_color = obj.get("bg_color20", "lightgray")
         radius = obj.get("radius", 0)
-        handle_radius = obj.get("radius20", 0)
+        knob_radius = obj.get("radius20", 0)
         slider_min = obj.get("min", 0)
         slider_max = obj.get("max", 100)
         slider_value = obj.get("value", 0)
@@ -367,7 +367,7 @@ class PagePreviewWidget(QWidget):
         # Draw the slider value
         self._draw_scaled_circle(
             painter, x, y, width, height, padding, d_width, d_height,
-            fill_color=handle_color, radius=handle_radius,
+            fill_color=knob_color, radius=knob_radius,
         )
 
     def _draw_switch(self, painter, obj, padding, d_width, d_height):
