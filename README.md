@@ -12,12 +12,16 @@ place.
     * [x] line breaks wherever you like
     * [x] jinja2 templating within object values
     * [x] local and globally scoped variables
+  * [ ] default theming for all object types
 * [x] validation of common mistakes for
     * [x] jsonl objects
     * [x] cmd files
 * [x] simple configuration upload to the device(s)
     * [x] automatic diffing to only update changed configuration files
     * [x] git-style diff output for changed lines
+* [x] GUI Preview (WIP)
+    * [x] Inspect individual plate screens before deploying to an actual device
+    * [x] Speedup prototyping by using the preview to test your changes
 * [x] API client (Web + MQTT)
     * [x] execute commands on a plate
     * [x] listen to events and state updates
