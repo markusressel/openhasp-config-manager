@@ -5,7 +5,7 @@ import orjson
 
 from openhasp_config_manager.openhasp_client.model.component import Component, JsonlComponent, CmdComponent, \
     TextComponent, RawComponent
-from openhasp_config_manager.openhasp_client.model.config import Config
+from openhasp_config_manager.openhasp_client.model.configuration.config import Config
 from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.processing.jsonl import JsonlObjectProcessor
 from openhasp_config_manager.processing.preprocessor.jsonl_preprocessor import JsonlPreProcessor

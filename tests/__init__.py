@@ -2,17 +2,17 @@ from pathlib import Path
 
 import pytest
 
-from openhasp_config_manager.openhasp_client.model.config import Config
-from openhasp_config_manager.openhasp_client.model.debug_config import DebugConfig
-from openhasp_config_manager.openhasp_client.model.device_config import DeviceConfig
-from openhasp_config_manager.openhasp_client.model.gui_config import GuiConfig
-from openhasp_config_manager.openhasp_client.model.hasp_config import HaspConfig
-from openhasp_config_manager.openhasp_client.model.http_config import HttpConfig
-from openhasp_config_manager.openhasp_client.model.mqtt_config import MqttConfig, MqttTopicConfig
+from openhasp_config_manager.openhasp_client.model.configuration.config import Config
+from openhasp_config_manager.openhasp_client.model.configuration.debug_config import DebugConfig
+from openhasp_config_manager.openhasp_client.model.configuration.device_config import DeviceConfig
+from openhasp_config_manager.openhasp_client.model.configuration.gui_config import GuiConfig
+from openhasp_config_manager.openhasp_client.model.configuration.hasp_config import HaspConfig
+from openhasp_config_manager.openhasp_client.model.configuration.http_config import HttpConfig
+from openhasp_config_manager.openhasp_client.model.configuration.mqtt_config import MqttConfig, MqttTopicConfig
+from openhasp_config_manager.openhasp_client.model.configuration.screen_config import ScreenConfig
+from openhasp_config_manager.openhasp_client.model.configuration.telnet_config import TelnetConfig
+from openhasp_config_manager.openhasp_client.model.configuration.wifi_config import WifiConfig
 from openhasp_config_manager.openhasp_client.model.openhasp_config_manager_config import OpenhaspConfigManagerConfig
-from openhasp_config_manager.openhasp_client.model.screen_config import ScreenConfig
-from openhasp_config_manager.openhasp_client.model.telnet_config import TelnetConfig
-from openhasp_config_manager.openhasp_client.model.wifi_config import WifiConfig
 
 
 def _find_test_folder() -> Path:

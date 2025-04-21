@@ -5,11 +5,11 @@ from typing import Dict, List, Any, Callable, Tuple
 from aiomqtt import Topic
 
 from openhasp_config_manager.openhasp_client.image_processor import OpenHaspImageProcessor
+from openhasp_config_manager.openhasp_client.model.configuration.gui_config import GuiConfig
+from openhasp_config_manager.openhasp_client.model.configuration.hasp_config import HaspConfig
+from openhasp_config_manager.openhasp_client.model.configuration.http_config import HttpConfig
+from openhasp_config_manager.openhasp_client.model.configuration.mqtt_config import MqttConfig
 from openhasp_config_manager.openhasp_client.model.device import Device
-from openhasp_config_manager.openhasp_client.model.gui_config import GuiConfig
-from openhasp_config_manager.openhasp_client.model.hasp_config import HaspConfig
-from openhasp_config_manager.openhasp_client.model.http_config import HttpConfig
-from openhasp_config_manager.openhasp_client.model.mqtt_config import MqttConfig
 from openhasp_config_manager.openhasp_client.mqtt_client import MqttClient
 from openhasp_config_manager.openhasp_client.telnet_client import OpenHaspTelnetClient
 from openhasp_config_manager.openhasp_client.webservice_client import WebserviceClient

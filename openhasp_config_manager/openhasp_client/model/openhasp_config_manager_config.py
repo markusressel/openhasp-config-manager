@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from openhasp_config_manager.openhasp_client.model.device_config import DeviceConfig
+from openhasp_config_manager.openhasp_client.model.configuration.device_config import DeviceConfig
 
 
 @dataclass

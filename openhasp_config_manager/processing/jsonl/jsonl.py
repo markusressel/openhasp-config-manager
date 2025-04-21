@@ -2,7 +2,7 @@ import logging
 import re
 from typing import Dict
 
-from openhasp_config_manager.openhasp_client.model.config import Config
+from openhasp_config_manager.openhasp_client.model.configuration.config import Config
 from openhasp_config_manager.processing.jsonl import JsonlObjectProcessor
 
 LOGGER = logging.getLogger(__name__)
