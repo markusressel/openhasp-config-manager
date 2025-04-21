@@ -351,25 +351,24 @@ class PagePreviewWidget(QWidget):
         width = obj.get("w", 50)
         height = obj.get("h", 50)
         object_bg_color = obj.get("bg_color", "gray")
+        handle_color = obj.get("bg_color04", "lightgray")
         radius = obj.get("radius", 0)
+        handle_radius = obj.get("radius20", 0)
+        slider_min = obj.get("min", 0)
+        slider_max = obj.get("max", 100)
+        slider_value = obj.get("value", 0)
+
 
         self._draw_scaled_square(
             painter, x, y, width, height, padding, d_width, d_height,
             fill_color=object_bg_color, corner_radius=radius,
         )
 
-        # slider_min = obj.get("min", 0)
-        # slider_max = obj.get("max", 100)
-        # slider_value = obj.get("value", 50)
-        #
-        # # Draw the slider value
-        # value_rect = QRect(
-        #     padding,
-        #     padding + d_height - height - (obj["y"] * d_height),
-        #     (slider_value - slider_min) / (slider_max - slider_min) * width * d_width,
-        #     height * d_height
-        # )
-        # painter.fillRect(value_rect, QColor('yellow'))
+        # Draw the slider value
+        self._draw_scaled_circle(
+            painter, x, y, width, height, padding, d_width, d_height,
+            fill_color=handle_color, radius=handle_radius,
+        )
 
     def _draw_switch(self, painter, obj, padding, d_width, d_height):
         """
@@ -535,7 +534,7 @@ class PagePreviewWidget(QWidget):
             x, y, width, height, padding, d_width, d_height
         )
 
-        scale_factor = d_height / self.page_height
+        scale_factor = 0.8 * (d_height / self.page_height)
         scaled_corner_radius = int(corner_radius * scale_factor)
 
         rect = QRectF(
@@ -550,6 +549,44 @@ class PagePreviewWidget(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         path = QPainterPath()
         path.addRoundedRect(rect, scaled_corner_radius, scaled_corner_radius)
+        painter.fillPath(path, brush)
+
+    def _draw_scaled_circle(self, painter, x, y, width, height, padding, d_width, d_height, fill_color, radius):
+        """
+        Helper method to draw a scaled circle on the canvas.
+        :param painter: the painter to use for drawing
+        :param x: the x position of the circle
+        :param y: the y position of the circle
+        :param width: the width of the circle
+        :param height: the height of the circle
+        :param padding: the padding around the canvas
+        :param d_width: the width of the canvas
+        :param d_height: the height of the canvas
+        :param fill_color: the fill color of the circle
+        :param radius: the radius of the circle
+        """
+        if fill_color is None:
+            return
+
+        scaled_x, scaled_y, scaled_width, scaled_height = self.__get_scaled_rect(
+            x, y, width, height, padding, d_width, d_height
+        )
+
+        scale_factor = 0.8 * (d_height / self.page_height)
+        scaled_radius = int(radius * scale_factor)
+
+        rect = QRectF(
+            padding + scaled_x,
+            padding + scaled_y,
+            scaled_radius * 2,
+            scaled_radius * 2
+        )
+        brush = QBrush(QColor(fill_color))
+        brush.setStyle(Qt.BrushStyle.SolidPattern)
+
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        path = QPainterPath()
+        path.addEllipse(rect)
         painter.fillPath(path, brush)
 
     def _draw_scaled_text(self, painter, x, y, width, height, padding, d_width, d_height, text: str = "",
@@ -576,7 +613,7 @@ class PagePreviewWidget(QWidget):
             x, y, width, height, padding, d_width, d_height
         )
 
-        scale_factor = d_width / self.page_width
+        scale_factor = 0.7 * (d_height / self.page_height)
         scaled_pixel_size = int(pixel_size * scale_factor)
 
         # replace unicode chars with icons from material design icons
