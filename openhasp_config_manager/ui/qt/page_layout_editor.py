@@ -4,7 +4,7 @@ from typing import List, Tuple, Dict, Set
 import qtawesome as qta
 from PyQt6 import QtCore
 from PyQt6.QtCore import QSize, Qt, QRect, QRectF
-from PyQt6.QtGui import QPainter, QBrush, QColor, QMouseEvent, QPainterPath, QFont
+from PyQt6.QtGui import QPainter, QBrush, QColor, QMouseEvent, QPainterPath, QFont, QPen
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QSizePolicy, QPushButton, QHBoxLayout
 from orjson import orjson
 
@@ -281,10 +281,13 @@ class PagePreviewWidget(QWidget):
         text_font = obj.get("text_font", 25)
         text_align = obj.get("align", "left")
         object_bg_color = obj.get("bg_color", None)
+        border_width = obj.get("border_width", 0)
+        border_color = obj.get("border_color", None)
 
-        self._draw_scaled_square(
+        self._draw_scaled_rect(
             painter, x, y, width, height, padding, d_width, d_height,
-            fill_color=object_bg_color
+            fill_color=object_bg_color,
+            border_width=border_width, border_color=border_color,
         )
 
         text_alignment_flag = Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft
@@ -295,7 +298,8 @@ class PagePreviewWidget(QWidget):
         self._draw_scaled_text(
             painter, x, y, width, height, padding, d_width, d_height,
             text=text, text_color=text_color, pixel_size=text_font,
-            flags=text_alignment_flag
+            flags=text_alignment_flag,
+            border_width=border_width, border_color=border_color,
         )
 
     def _draw_button(self, painter, obj, padding, d_width, d_height):
@@ -324,7 +328,7 @@ class PagePreviewWidget(QWidget):
         brush.setColor(QColor(object_bg_color))
         brush.setStyle(Qt.BrushStyle.SolidPattern)
 
-        self._draw_scaled_square(
+        self._draw_scaled_rect(
             painter, x, y, width, height, padding, d_width, d_height,
             fill_color=object_bg_color, corner_radius=radius,
         )
@@ -358,8 +362,7 @@ class PagePreviewWidget(QWidget):
         slider_max = obj.get("max", 100)
         slider_value = obj.get("value", 0)
 
-
-        self._draw_scaled_square(
+        self._draw_scaled_rect(
             painter, x, y, width, height, padding, d_width, d_height,
             fill_color=object_bg_color, corner_radius=radius,
         )
@@ -390,7 +393,7 @@ class PagePreviewWidget(QWidget):
         text_font = obj.get("text_font", 25)
         text_color = obj.get("text_color", None)
 
-        self._draw_scaled_square(
+        self._draw_scaled_rect(
             painter, x, y, width, height, padding, d_width, d_height,
             fill_color=object_bg_color
         )
@@ -419,7 +422,7 @@ class PagePreviewWidget(QWidget):
         height = obj.get("h", 50)
         object_bg_color = obj.get("bg_color", "yellow")
 
-        self._draw_scaled_square(
+        self._draw_scaled_rect(
             painter, x, y, width, height, padding, d_width, d_height,
             fill_color=object_bg_color
         )
@@ -444,7 +447,7 @@ class PagePreviewWidget(QWidget):
         text_color = obj.get("text_color", None)
         object_bg_color = obj.get("bg_color", "purple")
 
-        self._draw_scaled_square(
+        self._draw_scaled_rect(
             painter, x, y, width, height, padding, d_width, d_height,
             fill_color=object_bg_color, corner_radius=10
         )
@@ -475,7 +478,7 @@ class PagePreviewWidget(QWidget):
         text_color = obj.get("text_color", None)
         object_bg_color = obj.get("bg_color", "orange")
 
-        self._draw_scaled_square(
+        self._draw_scaled_rect(
             painter, x, y, width, height, padding, d_width, d_height,
             fill_color=object_bg_color
         )
@@ -504,28 +507,31 @@ class PagePreviewWidget(QWidget):
         height = obj.get("h", 50)
         object_bg_color = obj.get("bg_color", "gray")
 
-        self._draw_scaled_square(
+        self._draw_scaled_rect(
             painter, x, y, width, height, padding, d_width, d_height,
             fill_color=object_bg_color
         )
 
-    def _draw_scaled_square(
+    def _draw_scaled_rect(
         self,
         painter, x, y, width, height, padding, d_width, d_height,
-        fill_color, corner_radius: int = 0,
+        fill_color: str, corner_radius: int = 0,
+        border_width: int = 0, border_color: str = None
     ):
         """
-        Helper method to draw a scaled square on the canvas.
+        Helper method to draw a scaled rectangle on the canvas.
         :param painter: the painter to use for drawing
-        :param x: the x position of the square
-        :param y: the y position of the square
-        :param width: the width of the square
-        :param height: the height of the square
+        :param x: the x position of the rectangle
+        :param y: the y position of the rectangle
+        :param width: the width of the rectangle
+        :param height: the height of the rectangle
         :param padding: the padding around the canvas
         :param d_width: the width of the canvas
         :param d_height: the height of the canvas
-        :param fill_color: the fill color of the square
-        :param corner_radius: the corner radius of the square
+        :param fill_color: the fill color of the rectangle
+        :param corner_radius: the corner radius of the rectangle
+        :param border_width: the border width of the rectangle
+        :param border_color: the border color of the rectangle
         """
         if fill_color is None:
             return
@@ -550,6 +556,13 @@ class PagePreviewWidget(QWidget):
         path = QPainterPath()
         path.addRoundedRect(rect, scaled_corner_radius, scaled_corner_radius)
         painter.fillPath(path, brush)
+        # draw border
+        if border_width > 0:
+            border_brush = QBrush(QColor(border_color))
+            border_brush.setStyle(Qt.BrushStyle.SolidPattern)
+            path = QPainterPath()
+            path.addRoundedRect(rect, scaled_corner_radius, scaled_corner_radius)
+            painter.strokePath(path, border_brush)
 
     def _draw_scaled_circle(self, painter, x, y, width, height, padding, d_width, d_height, fill_color, radius):
         """
@@ -589,8 +602,11 @@ class PagePreviewWidget(QWidget):
         path.addEllipse(rect)
         painter.fillPath(path, brush)
 
-    def _draw_scaled_text(self, painter, x, y, width, height, padding, d_width, d_height, text: str = "",
-                          text_color: str = "white", pixel_size: int = 48, flags: int = Qt.AlignmentFlag.AlignCenter):
+    def _draw_scaled_text(
+        self, painter, x, y, width, height, padding, d_width, d_height, text: str = "",
+        text_color: str = "white", pixel_size: int = 48, flags: int = Qt.AlignmentFlag.AlignCenter,
+        border_width: int = 0, border_color: str = None
+    ):
         """
         Helper method to draw scaled text on the canvas.
         :param painter: the painter to use for drawing
@@ -603,6 +619,10 @@ class PagePreviewWidget(QWidget):
         :param d_height: the height of the canvas
         :param text: the text to draw
         :param text_color: the color of the text
+        :param pixel_size: the pixel size of the text
+        :param flags: the text alignment flags
+        :param border_width: the border width of the text
+        :param border_color: the border color of the text
         """
         if not text:
             return
@@ -616,10 +636,28 @@ class PagePreviewWidget(QWidget):
         scale_factor = 0.7 * (d_height / self.page_height)
         scaled_pixel_size = int(pixel_size * scale_factor)
 
+        # draw border first
+        if border_width > 0:
+            scaled_border_width = int(border_width * scale_factor)
+            border_pen = QPen(QColor(border_color))
+            border_pen.setWidth(scaled_border_width)
+            path = QPainterPath()
+
+            # inset rect to account for border width
+            border_rect = QRectF(
+                padding + scaled_x + scaled_border_width,
+                padding + scaled_y + scaled_border_width,
+                scaled_width - (scaled_border_width * 2),
+                scaled_height - (scaled_border_width * 2)
+            )
+
+            path.addRect(border_rect)
+            painter.strokePath(path, border_pen)
+
         # replace unicode chars with icons from material design icons
         text = self._replace_unicode_with_icons(text)
 
-        rect = QRect(
+        rect = QRectF(
             padding + scaled_x,
             padding + scaled_y,
             scaled_width,
