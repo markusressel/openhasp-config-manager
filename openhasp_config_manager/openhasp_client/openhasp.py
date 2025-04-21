@@ -17,6 +17,9 @@ from openhasp_config_manager.ui.util import info
 
 
 class IntegratedIcon(Enum):
+    """
+    Definition of the integrated icons used in OpenHASP.
+    """
     ARROW_DOWN = ("\uE045", "arrow-down")
     BATTERY_HIGH = ("\uF2A3", "battery-high")
     ARROW_DOWN_BOX = ("\uE6C0", "arrow-down-box")
@@ -165,58 +168,11 @@ class IntegratedIcon(Enum):
     TRANSMISSION_TOWER_EXPORT = ("\uF92C", "transmission-tower-export")
 
     @classmethod
-    def get_name_by_unicode(cls, unicode_value: str) -> str | None:
-        """
-        Finds the name of the enum member by its unicode value.
-
-        Args:
-            unicode_value: The unicode representation of the icon.
-
-        Returns:
-            The name of the enum member if found, otherwise None.
-        """
-        for member in cls:
-            if member.value[0] == unicode_value:
-                return member.name
-        return None
-
-    @classmethod
-    def unicode_values(cls) -> List[str]:
-        """
-        Returns a list of unicode values for all enum members.
-        """
-        return [member.value[0] for member in cls]
-
-    @classmethod
     def entries(cls) -> List[Tuple[str, str]]:
         """
         Returns a list of tuples containing the unicode value and the name of icon in mdi.
         """
         return [(member.value[0], member.value[1]) for member in cls]
-
-
-#
-# # Example usage:
-# unicode_to_find = "\uE141"
-# icon_name = Icon.get_name_by_unicode(unicode_to_find)
-# if icon_name:
-#     print(f"The icon name for '{unicode_to_find}' is: {icon_name}")
-# else:
-#     print(f"No icon found with unicode: {unicode_to_find}")
-#
-# unicode_to_find = "\uF2A3"
-# icon_name = Icon.get_name_by_unicode(unicode_to_find)
-# if icon_name:
-#     print(f"The icon name for '{unicode_to_find}' is: {icon_name}")
-# else:
-#     print(f"No icon found with unicode: {unicode_to_find}")
-#
-# unicode_to_find = "\uE999" # An example of a non-existent unicode
-# icon_name = Icon.get_name_by_unicode(unicode_to_find)
-# if icon_name:
-#     print(f"The icon name for '{unicode_to_find}' is: {icon_name}")
-# else:
-#     print(f"No icon found with unicode: {unicode_to_find}")
 
 
 class OpenHaspClient:
