@@ -21,7 +21,7 @@ from openhasp_config_manager.openhasp_client.model.configuration.wifi_config imp
 from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.openhasp_client.model.openhasp_config_manager_config import OpenhaspConfigManagerConfig
 from openhasp_config_manager.processing.device_processor import DeviceProcessor
-from openhasp_config_manager.processing.jsonl.jsonl import ObjectDimensionsProcessor
+from openhasp_config_manager.processing.jsonl.jsonl import ObjectDimensionsProcessor, ObjectThemeProcessor
 from openhasp_config_manager.processing.variables import VariableManager
 from openhasp_config_manager.ui.util import warn
 from openhasp_config_manager.validation.cmd import CmdFileValidator
@@ -412,7 +412,8 @@ class ConfigManager:
         """
         # prepare DeviceProcessor
         jsonl_processors = [
-            ObjectDimensionsProcessor()
+            ObjectDimensionsProcessor(),
+            ObjectThemeProcessor()
         ]
         device_processor = DeviceProcessor(device, jsonl_processors, self._variable_manager)
 

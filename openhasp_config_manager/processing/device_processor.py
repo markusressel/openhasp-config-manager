@@ -72,8 +72,9 @@ class DeviceProcessor:
 
         return "\n".join(normalized_objects)
 
-    def _normalize_jsonl_object(self, config: Config, component: JsonlComponent, ob: str,
-                                template_vars: Dict[str, any]) -> str:
+    def _normalize_jsonl_object(
+        self, config: Config, component: JsonlComponent, ob: str, template_vars: Dict[str, any]
+    ) -> str:
         parsed = orjson.loads(ob)
 
         normalized_object = {}
@@ -86,7 +87,7 @@ class DeviceProcessor:
 
         processed = normalized_object
         for processor in self._jsonl_object_processors:
-            processed = processor.process(processed, config)
+            processed = processor.process(processed, config, template_vars)
 
         return json.dumps(processed, indent=None)
 

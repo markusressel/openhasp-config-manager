@@ -10,5 +10,5 @@ class JsonlObjectProcessor(metaclass=abc.ABCMeta):
     """
 
     @abc.abstractmethod
-    def process(self, input: Dict, config: Config) -> Dict:
+    def process(self, input: Dict, config: Config, template_vars: Dict[str, any]) -> Dict:
         raise NotImplementedError
