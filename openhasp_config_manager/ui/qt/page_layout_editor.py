@@ -5,7 +5,7 @@ import qtawesome as qta
 from PyQt6 import QtCore
 from PyQt6.QtCore import QSize, Qt, QRect, QRectF
 from PyQt6.QtGui import QPainter, QBrush, QColor, QMouseEvent, QPainterPath, QFont, QPen
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QSizePolicy, QPushButton, QHBoxLayout
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QSizePolicy, QPushButton, QHBoxLayout, QTextEdit
 from orjson import orjson
 
 from openhasp_config_manager.manager import ConfigManager
@@ -73,6 +73,9 @@ class PageLayoutEditorWidget(QWidget):
         self.page_preview_widget = PagePreviewWidget(device_pages_data, [])
         self.preview_container.layout().addWidget(self.page_preview_widget)
 
+        self.page_jsonl_preview = PageJsonlPreviewWidget(device_pages_data)
+        self.preview_container.layout().addWidget(self.page_jsonl_preview)
+
         self.set_page_index(index=1)
 
     def set_page_index(self, index: int):
@@ -81,6 +84,8 @@ class PageLayoutEditorWidget(QWidget):
         self.page_objects = self.get_page_objects(index=index)
         print(f"Page objects: {self.page_objects}")
         self.page_preview_widget.set_objects(self.page_objects)
+
+        self.page_jsonl_preview.set_objects(self.page_objects)
 
     def next_page_index(self):
         """
@@ -161,6 +166,31 @@ class PageLayoutEditorWidget(QWidget):
         page_selector_widget.layout().addWidget(self._next_page_button_widget)
 
         return page_selector_widget
+
+
+class PageJsonlPreviewWidget(QTextEdit):
+    def __init__(self, page: OpenHaspDevicePagesData, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.setReadOnly(True)
+        self.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
+        self.setFont(QFont("Roboto Mono", 10))
+
+        self.set_page(page)
+
+    def set_page(self, page: OpenHaspDevicePagesData):
+        self.page = page
+        self.setText(page.jsonl_components[0].content)
+
+    def set_objects(self, page_objects: List[dict]):
+        """
+        Set the objects for the page.
+        :param page_objects: the list of objects to set
+        """
+        sorted_page_objects = sorted(page_objects, key=lambda obj: (
+        obj.get("page", 0), obj.get("id", 0), obj.get("y", ""), obj.get("x", "")))
+
+        content = "\n".join(map(lambda x: orjson.dumps(x).decode(), sorted_page_objects))
+        self.setText(content)
 
 
 class PagePreviewWidget(QWidget):
