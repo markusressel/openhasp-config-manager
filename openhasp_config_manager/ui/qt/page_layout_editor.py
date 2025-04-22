@@ -560,7 +560,7 @@ class PagePreviewWidget(QWidget):
         painter.fillPath(path, brush)
 
         # draw border
-        if border_width == 0:
+        if border_width > 0:
             scaled_border_width = int(border_width * scale_factor)
             border_pen = QPen(QColor(border_color))
             border_pen.setWidth(scaled_border_width)
