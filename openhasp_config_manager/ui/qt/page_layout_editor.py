@@ -323,6 +323,7 @@ class PagePreviewWidget(QWidget):
         text_font = obj.get("text_font", 25)
         text_color = obj.get("text_color", None)
         radius = obj.get("radius", 0)
+        action = obj.get("action", None)
 
         brush = QBrush()
         brush.setColor(QColor(object_bg_color))
