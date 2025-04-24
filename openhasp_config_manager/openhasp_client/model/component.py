@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from pathlib import Path
+from typing import List
 
 
 @dataclass
@@ -22,10 +23,10 @@ class TextComponent(Component):
 
 @dataclass
 class CmdComponent(TextComponent):
+    commands: List[str]
 
     def __hash__(self):
         return super().__hash__()
-
 
 @dataclass
 class JsonlComponent(TextComponent):

@@ -2,7 +2,7 @@ import logging
 import re
 from typing import Dict
 
-from openhasp_config_manager.openhasp_client.model.config import Config
+from openhasp_config_manager.openhasp_client.model.configuration.config import Config
 from openhasp_config_manager.processing.jsonl import JsonlObjectProcessor
 
 LOGGER = logging.getLogger(__name__)
@@ -15,7 +15,9 @@ class ObjectDimensionsProcessor(JsonlObjectProcessor):
     """
     PERCENTAGE_REGEX_PATTERN = re.compile(r"^\d+(\.\d+)?%$")
 
-    def process(self, input: Dict, config: Config) -> Dict:
+    def process(
+        self, input: Dict, config: Config, template_vars: Dict[str, any]
+    ) -> Dict:
         result: Dict[str, any] = {}
         for key, value in input.items():
             if isinstance(value, str) and re.match("[xywh]", key) and re.match(self.PERCENTAGE_REGEX_PATTERN, value):
@@ -61,3 +63,23 @@ class ObjectDimensionsProcessor(JsonlObjectProcessor):
     @staticmethod
     def _parse_percentage(value: str) -> float:
         return float(str(value).replace('%', ''))
+
+
+class ObjectThemeProcessor(JsonlObjectProcessor):
+    """
+    Used to apply default theming from "theme.obj.*" values
+    """
+
+    def process(
+        self, input: Dict, config: Config, template_vars: Dict[str, any]
+    ) -> Dict:
+        obj_key = input.get("obj", None)
+        if obj_key is None:
+            return input
+
+        theme_values = template_vars.get("theme", {}).get("obj", {}).get(obj_key, {})
+        for key, value in theme_values.items():
+            if key not in input:
+                input[key] = value
+
+        return input

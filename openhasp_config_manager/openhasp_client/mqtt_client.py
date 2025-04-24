@@ -16,9 +16,9 @@ class MqttClient:
         self._mqtt_password = mqtt_password
         self._reconnect_interval_seconds = 5
 
-        self._mqtt_client_task: asyncio.Task = None
+        self._mqtt_client_task: asyncio.Task | None = None
         self._callbacks: Dict[str, List[callable]] = {}
-        self.__mqtt_client: Client = None
+        self.__mqtt_client: Client | None = None
 
     async def publish(self, topic: str, payload: any):
         """
@@ -73,11 +73,11 @@ class MqttClient:
             port=self._port,
             username=self._mqtt_user,
             password=self._mqtt_password,
-            client_id=f"{self._mqtt_client_id}-{uuid.uuid4()}",
+            identifier=f"{self._mqtt_client_id}-{uuid.uuid4()}",
         )
 
     async def _start_mqtt_client_task(self):
-        self._mqtt_client_task = asyncio.create_task(self._mqtt_client_task_function())
+        self._mqtt_client_task = asyncio.ensure_future(self._mqtt_client_task_function())
 
     async def _stop_mqtt_client_task(self):
         if self._mqtt_client_task is not None:
@@ -88,10 +88,12 @@ class MqttClient:
         while True:
             try:
                 async with self._create_mqtt_client() as client:
-                    async with client.messages() as messages:
+                    async with client.messages as messages:
                         await client.subscribe("hasp/#")
                         async for message in messages:
                             await self._handle_message(message)
+            except asyncio.CancelledError:
+                break
             except Exception as ex:
                 # TODO: use logger instead of print
                 print(f'Error: {ex}; Reconnecting in {self._reconnect_interval_seconds} seconds ...')

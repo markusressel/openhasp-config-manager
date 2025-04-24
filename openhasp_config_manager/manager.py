@@ -8,20 +8,20 @@ import orjson
 from openhasp_config_manager.const import COMMON_FOLDER_NAME, DEVICES_FOLDER_NAME, SYSTEM_SCRIPTS
 from openhasp_config_manager.openhasp_client.model.component import Component, TextComponent, RawComponent, \
     ImageComponent, JsonlComponent, CmdComponent, FontComponent
-from openhasp_config_manager.openhasp_client.model.config import Config
-from openhasp_config_manager.openhasp_client.model.debug_config import DebugConfig
+from openhasp_config_manager.openhasp_client.model.configuration.config import Config
+from openhasp_config_manager.openhasp_client.model.configuration.debug_config import DebugConfig
+from openhasp_config_manager.openhasp_client.model.configuration.device_config import DeviceConfig
+from openhasp_config_manager.openhasp_client.model.configuration.gui_config import GuiConfig
+from openhasp_config_manager.openhasp_client.model.configuration.hasp_config import HaspConfig
+from openhasp_config_manager.openhasp_client.model.configuration.http_config import HttpConfig
+from openhasp_config_manager.openhasp_client.model.configuration.mqtt_config import MqttConfig, MqttTopicConfig
+from openhasp_config_manager.openhasp_client.model.configuration.screen_config import ScreenConfig
+from openhasp_config_manager.openhasp_client.model.configuration.telnet_config import TelnetConfig
+from openhasp_config_manager.openhasp_client.model.configuration.wifi_config import WifiConfig
 from openhasp_config_manager.openhasp_client.model.device import Device
-from openhasp_config_manager.openhasp_client.model.device_config import DeviceConfig
-from openhasp_config_manager.openhasp_client.model.gui_config import GuiConfig
-from openhasp_config_manager.openhasp_client.model.hasp_config import HaspConfig
-from openhasp_config_manager.openhasp_client.model.http_config import HttpConfig
-from openhasp_config_manager.openhasp_client.model.mqtt_config import MqttConfig
 from openhasp_config_manager.openhasp_client.model.openhasp_config_manager_config import OpenhaspConfigManagerConfig
-from openhasp_config_manager.openhasp_client.model.screen_config import ScreenConfig
-from openhasp_config_manager.openhasp_client.model.telnet_config import TelnetConfig
-from openhasp_config_manager.openhasp_client.model.wifi_config import WifiConfig
 from openhasp_config_manager.processing.device_processor import DeviceProcessor
-from openhasp_config_manager.processing.jsonl.jsonl import ObjectDimensionsProcessor
+from openhasp_config_manager.processing.jsonl.jsonl import ObjectDimensionsProcessor, ObjectThemeProcessor
 from openhasp_config_manager.processing.variables import VariableManager
 from openhasp_config_manager.ui.util import warn
 from openhasp_config_manager.validation.cmd import CmdFileValidator
@@ -29,6 +29,23 @@ from openhasp_config_manager.validation.device_validator import DeviceValidator
 from openhasp_config_manager.validation.jsonl import JsonlObjectValidator
 
 CONFIG_FILE_NAME = "config.json"
+
+
+def parse_cmd_commands(content) -> List[str]:
+    """
+    Parses the commands from the given cmd component content.
+    :param content: the content of the cmd component
+    :return: list of commands
+    """
+    result = []
+    for line in content.splitlines():
+        line = line.strip()
+        if len(line) <= 0:
+            continue
+        if line.startswith("//"):
+            continue
+        result.append(line)
+    return result
 
 
 class ConfigManager:
@@ -162,6 +179,7 @@ class ConfigManager:
                     type=component.type,
                     path=component.path,
                     content=component.content,
+                    commands=parse_cmd_commands(component.content)
                 )
                 result.append(cmd_component)
         return result
@@ -293,7 +311,12 @@ class ConfigManager:
     def _parse_mqtt_config(data: dict) -> MqttConfig:
         return MqttConfig(
             name=data["name"],
-            group=data["group"],
+            topic=MqttTopicConfig(
+                node=data["topic"]["node"],
+                group=data["topic"]["group"],
+                broadcast=data["topic"]["broadcast"],
+                hass=data["topic"]["hass"],
+            ),
             host=data["host"],
             port=data["port"],
             user=data["user"],
@@ -361,27 +384,14 @@ class ConfigManager:
     def _generate_output(self, device: Device):
         self._clear_output(device)
 
-        jsonl_processors = [
-            ObjectDimensionsProcessor()
-        ]
-        device_processor = DeviceProcessor(device, jsonl_processors, self._variable_manager)
-
-        jsonl_validator = JsonlObjectValidator()
-        cmd_file_validator = CmdFileValidator()
-        device_validator = DeviceValidator(device.config, jsonl_validator, cmd_file_validator)
-
-        # feed device specific data to the processor
-        # Note: this also includes common components
-        components: List[Component] = device.jsonl + device.cmd + device.images + device.fonts
-        for component in components:
-            device_processor.add_component(component)
+        device_processor = self.create_device_processor(device)
+        device_validator = self.create_device_validator(device)
 
         # only include files which are referenced in a cmd file
         relevant_components = self.find_relevant_components(device)
 
         # let the processor manage each component
         for component in relevant_components:
-            output_content = None
             try:
                 output_content = device_processor.normalize(device, component)
             except Exception as ex:
@@ -394,7 +404,50 @@ class ConfigManager:
 
             self._write_output(device, component, output_content)
 
+    def create_device_processor(self, device: Device):
+        """
+        Creates a DeviceProcessor for the given device.
+        :param device: the device to create the processor for
+        :return: a DeviceProcessor instance
+        """
+        # prepare DeviceProcessor
+        jsonl_processors = [
+            ObjectDimensionsProcessor(),
+            ObjectThemeProcessor()
+        ]
+        device_processor = DeviceProcessor(device, jsonl_processors, self._variable_manager)
+
+        # feed device specific data to the processor
+        # Note: this also includes common components
+        components: List[Component] = device.jsonl + device.cmd + device.images + device.fonts
+        for component in components:
+            device_processor.add_component(component)
+
+        return device_processor
+
+    def create_device_validator(self, device: Device):
+        """
+        Creates a DeviceValidator for the given device.
+        :param device: the device to create the validator for
+        :return: a DeviceValidator instance
+        """
+        # prepare DeviceValidator
+        jsonl_validator = JsonlObjectValidator()
+        cmd_file_validator = CmdFileValidator()
+        device_validator = DeviceValidator(device.config, jsonl_validator, cmd_file_validator)
+        return device_validator
+
     def find_relevant_components(self, device: Device) -> List[Component]:
+        """
+        Find all components that are relevant for the given device.
+        This includes all components that are referenced in the CMD files,
+        as well as all components that are referenced in the JSONL files.
+
+        TODO: allow the user to explicitly include specific components
+
+        :param device: the device to find components for
+        :return: a list of relevant components
+        """
         result: List[Component] = []
         cmd_components = device.cmd
         jsonl_components = device.jsonl
@@ -404,6 +457,10 @@ class ConfigManager:
 
         # find jsonl files referenced in CMD files
         referenced_jsonl_components = self._find_referenced_jsonl_components(cmd_components, jsonl_components)
+
+        # find image files referenced in CMD files and JSONL files
+        referenced_image_components = self._find_referenced_image_components(cmd_components, jsonl_components,
+                                                                             image_components)
 
         # compute component for jsonl file referenced in config.hasp.pages
         pages_jsonl_component_path = self._compute_component_path_of_pages_config_value(device.path, device.config)
@@ -416,15 +473,15 @@ class ConfigManager:
 
         result.extend(referenced_jsonl_components)
         result.extend(referenced_cmd_components)
-        # TODO: filter these by actual usage
-        result.extend(image_components)
+        result.extend(referenced_image_components)
         return result
 
-    def _find_referenced_cmd_components(self, cmd_components: List[CmdComponent]) -> Set[CmdComponent]:
+    def _find_referenced_cmd_components(
+        self, cmd_components: List[CmdComponent]
+    ) -> Set[CmdComponent]:
         result = set()
 
         system_components = list(filter(lambda x: x.name in SYSTEM_SCRIPTS, cmd_components))
-        cmd_components = cmd_components + system_components
 
         # TODO: this should also consider the hierarchy, if a cmd component is not a system component, and
         #  it is also not referenced anywhere, the component is not relevant
@@ -442,6 +499,15 @@ class ConfigManager:
         # system components should always be included
         result.update(system_components)
 
+        return result
+
+    @staticmethod
+    def _find_cmd_references_in_cmd_component(component: TextComponent) -> Set[str]:
+        result = set()
+        pattern = re.compile(r"L:/(.*\.cmd)")
+        for line in component.content.splitlines():
+            matches = re.findall(pattern, line)
+            result.update(matches)
         return result
 
     def _find_referenced_jsonl_components(
@@ -463,18 +529,62 @@ class ConfigManager:
         return referenced_jsonl_components
 
     @staticmethod
-    def _find_cmd_references_in_cmd_component(component: TextComponent) -> Set[str]:
+    def _find_jsonl_references_in_cmd_component(component: TextComponent) -> Set[str]:
         result = set()
-        pattern = re.compile("L:/(.*\.cmd)")
+        pattern = re.compile(r"L:/(.*\.jsonl)")
+        for line in component.content.splitlines():
+            matches = re.findall(pattern, line)
+            result.update(matches)
+        return result
+
+    def _find_referenced_image_components(
+        self, cmd_components: List[CmdComponent],
+        jsonl_components: List[JsonlComponent],
+        image_components: List[ImageComponent]
+    ) -> Set[ImageComponent]:
+        """
+        Find all image components that are referenced in the given cmd and jsonl components.
+        :param cmd_components:
+        :param jsonl_components:
+        :param image_components:
+        :return: set of referenced image components
+        """
+        referenced_image_components = set()
+        for component in cmd_components:
+            image_references = self._find_image_references_in_cmd_component(component)
+            for match in image_references:
+                matching_components = list(filter(lambda x: x.name == match, image_components))
+                if len(matching_components) <= 0:
+                    found_component_names = ','.join([c.name for c in image_components])
+                    raise AssertionError(
+                        f"Referenced image component not found: {match}, only found: {found_component_names}")
+                referenced_image_components.update(matching_components)
+
+        for component in jsonl_components:
+            image_references = self._find_image_references_in_jsonl_component(component)
+            for match in image_references:
+                matching_components = list(filter(lambda x: x.name == match, image_components))
+                if len(matching_components) <= 0:
+                    found_component_names = ','.join([c.name for c in image_components])
+                    raise AssertionError(
+                        f"Referenced image component not found: {match}, only found: {found_component_names}")
+                referenced_image_components.update(matching_components)
+
+        return referenced_image_components
+
+    @staticmethod
+    def _find_image_references_in_cmd_component(component: TextComponent) -> Set[str]:
+        result = set()
+        pattern = re.compile(r"L:/(.*\.(?:png|bin))")
         for line in component.content.splitlines():
             matches = re.findall(pattern, line)
             result.update(matches)
         return result
 
     @staticmethod
-    def _find_jsonl_references_in_cmd_component(component: TextComponent) -> Set[str]:
+    def _find_image_references_in_jsonl_component(component: TextComponent) -> Set[str]:
         result = set()
-        pattern = re.compile("L:/(.*\.jsonl)")
+        pattern = re.compile(r"L:/(.*\.(?:png|bin))")
         for line in component.content.splitlines():
             matches = re.findall(pattern, line)
             result.update(matches)

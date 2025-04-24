@@ -33,9 +33,9 @@ class OpenHaspImageProcessor:
         if not fitscreen:
             width = min(w for w in [width, original_width] if w is not None and w > 0)
             height = min(h for h in [height, original_height] if h is not None and h > 0)
-            im.thumbnail((height, width), Image.ANTIALIAS)
+            im.thumbnail((height, width), Image.Resampling.LANCZOS)
         else:
-            im = im.resize((height, width), Image.ANTIALIAS)
+            im = im.resize((height, width), Image.Resampling.LANCZOS)
         width, height = im.size  # actual size after resize
 
         out_image.write(struct.pack("I", height << 21 | width << 10 | 4))

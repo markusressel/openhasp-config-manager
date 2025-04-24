@@ -3,12 +3,12 @@ from typing import Dict, List
 import orjson
 import requests
 
-from openhasp_config_manager.openhasp_client.model.debug_config import DebugConfig
-from openhasp_config_manager.openhasp_client.model.gui_config import GuiConfig
-from openhasp_config_manager.openhasp_client.model.hasp_config import HaspConfig
-from openhasp_config_manager.openhasp_client.model.http_config import HttpConfig
-from openhasp_config_manager.openhasp_client.model.mqtt_config import MqttConfig
-from openhasp_config_manager.openhasp_client.model.telnet_config import TelnetConfig
+from openhasp_config_manager.openhasp_client.model.configuration.debug_config import DebugConfig
+from openhasp_config_manager.openhasp_client.model.configuration.gui_config import GuiConfig
+from openhasp_config_manager.openhasp_client.model.configuration.hasp_config import HaspConfig
+from openhasp_config_manager.openhasp_client.model.configuration.http_config import HttpConfig
+from openhasp_config_manager.openhasp_client.model.configuration.mqtt_config import MqttConfig, MqttTopicConfig
+from openhasp_config_manager.openhasp_client.model.configuration.telnet_config import TelnetConfig
 
 GET = "GET"
 POST = "POST"
@@ -56,6 +56,18 @@ class WebserviceClient:
             data=data,
         )
 
+    def get_http_config(self) -> HttpConfig:
+        data = self._do_request(
+            method=GET,
+            url=self._base_url + "api/config/http/",
+        )
+
+        return HttpConfig(
+            port=data["port"],
+            user=data["user"],
+            password=data["pass"],
+        )
+
     def set_http_config(self, config: HttpConfig):
         """
         Set the HTTP configuration
@@ -84,11 +96,16 @@ class WebserviceClient:
 
         return MqttConfig(
             name=data["name"],
-            group=data["group"],
             host=data["host"],
             port=data["port"],
             user=data["user"],
-            password=data["pass"]
+            password=data["pass"],
+            topic=MqttTopicConfig(
+                node=data["topic"]["node"],
+                group=data["topic"]["group"],
+                broadcast=data["topic"]["broadcast"],
+                hass=data["topic"]["hass"],
+            )
         )
 
     def set_mqtt_config(self, config: MqttConfig):
@@ -98,7 +115,12 @@ class WebserviceClient:
         """
         data = {
             "name": config.name,
-            "group": config.group,
+            "topic": {
+                "node": config.topic.node,
+                "group": config.topic.group,
+                "broadcast": config.topic.broadcast,
+                "hass": config.topic.hass,
+            },
             "host": config.host,
             "port": config.port,
             "user": config.user,
@@ -113,6 +135,23 @@ class WebserviceClient:
             method=POST,
             url=self._base_url + "config",
             data=data,
+        )
+
+    def get_gui_config(self) -> GuiConfig:
+        data = self._do_request(
+            method=GET,
+            url=self._base_url + "api/config/gui/",
+        )
+
+        return GuiConfig(
+            idle1=data["idle1"],
+            idle2=data["idle2"],
+            rotate=data["rotate"],
+            cursor=data["cursor"],
+            bckl=data["bckl"],
+            bcklinv=data["bcklinv"],
+            invert=data["invert"],
+            calibration=data["calibration"]
         )
 
     def set_gui_config(self, config: GuiConfig):

@@ -1,7 +1,7 @@
 import abc
 from typing import Dict
 
-from openhasp_config_manager.openhasp_client.model.config import Config
+from openhasp_config_manager.openhasp_client.model.configuration.config import Config
 
 
 class JsonlObjectProcessor(metaclass=abc.ABCMeta):
@@ -10,5 +10,5 @@ class JsonlObjectProcessor(metaclass=abc.ABCMeta):
     """
 
     @abc.abstractmethod
-    def process(self, input: Dict, config: Config) -> Dict:
+    def process(self, input: Dict, config: Config, template_vars: Dict[str, any]) -> Dict:
         raise NotImplementedError

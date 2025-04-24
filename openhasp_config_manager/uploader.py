@@ -180,15 +180,33 @@ class ConfigUploader:
         )
 
     def _update_config(self, device: Device):
-        # current_mqtt_config = self._api_client.get_mqtt_config()
-        # TODO: compare existing config with new config and only update if necessary
+        config_has_changed = False
 
-        self._api_client.set_mqtt_config(device.config.mqtt)
-        self._api_client.set_http_config(device.config.http)
-        self._api_client.set_gui_config(device.config.gui)
+        current_mqtt_config = self._api_client.get_mqtt_config()
+        if current_mqtt_config == device.config.mqtt:
+            info("MQTT config has not changed")
+        else:
+            info("Updating MQTT config...")
+            self._api_client.set_mqtt_config(device.config.mqtt)
+            config_has_changed = True
 
-        # TODO: return True if config has changed
-        return False
+        current_http_config = self._api_client.get_http_config()
+        if current_http_config == device.config.http:
+            info("HTTP config has not changed")
+        else:
+            info("Updating HTTP config...")
+            self._api_client.set_http_config(device.config.http)
+            config_has_changed = True
+
+        current_gui_config = self._api_client.get_gui_config()
+        if current_gui_config == device.config.gui:
+            info("GUI config has not changed")
+        else:
+            info("Updating GUI config...")
+            self._api_client.set_gui_config(device.config.gui)
+            config_has_changed = True
+
+        return config_has_changed
 
     @staticmethod
     def _calculate_diff(file_name: str, string1: str, string2: str) -> str:

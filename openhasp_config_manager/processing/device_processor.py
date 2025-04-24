@@ -5,7 +5,7 @@ import orjson
 
 from openhasp_config_manager.openhasp_client.model.component import Component, JsonlComponent, CmdComponent, \
     TextComponent, RawComponent
-from openhasp_config_manager.openhasp_client.model.config import Config
+from openhasp_config_manager.openhasp_client.model.configuration.config import Config
 from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.processing.jsonl import JsonlObjectProcessor
 from openhasp_config_manager.processing.preprocessor.jsonl_preprocessor import JsonlPreProcessor
@@ -43,7 +43,7 @@ class DeviceProcessor:
     def _add_jsonl(self, component: JsonlComponent):
         self._jsonl_components.append(component)
 
-    def normalize(self, device: Device, component: Component) -> str:
+    def normalize(self, device: Device, component: Component) -> str | bytes:
         if isinstance(component, JsonlComponent):
             template_vars: Dict[str, any] = self._compute_jsonl_template_variables(device, component)
             return self._normalize_jsonl(self._device.config, component, template_vars)
@@ -58,8 +58,10 @@ class DeviceProcessor:
             return component.content
         elif isinstance(component, Component):
             raise NotImplementedError(f"Unknown component type: {component.type}")
+        else:
+            raise AssertionError(f"Received unexpected input: {component}")
 
-    def _normalize_jsonl(self, config: Config, component: Component, template_vars: Dict[str, any]) -> str:
+    def _normalize_jsonl(self, config: Config, component: JsonlComponent, template_vars: Dict[str, any]) -> str:
         normalized_objects: List[str] = []
 
         objects = self._jsonl_preprocessor.split_jsonl_objects(component.content)
@@ -70,8 +72,9 @@ class DeviceProcessor:
 
         return "\n".join(normalized_objects)
 
-    def _normalize_jsonl_object(self, config: Config, component: Component, ob: str,
-                                template_vars: Dict[str, any]) -> str:
+    def _normalize_jsonl_object(
+        self, config: Config, component: JsonlComponent, ob: str, template_vars: Dict[str, any]
+    ) -> str:
         parsed = orjson.loads(ob)
 
         normalized_object = {}
@@ -84,7 +87,7 @@ class DeviceProcessor:
 
         processed = normalized_object
         for processor in self._jsonl_object_processors:
-            processed = processor.process(processed, config)
+            processed = processor.process(processed, config, template_vars)
 
         return json.dumps(processed, indent=None)
 

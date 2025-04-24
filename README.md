@@ -12,12 +12,16 @@ place.
     * [x] line breaks wherever you like
     * [x] jinja2 templating within object values
     * [x] local and globally scoped variables
+  * [x] default theming for all object types
 * [x] validation of common mistakes for
     * [x] jsonl objects
     * [x] cmd files
 * [x] simple configuration upload to the device(s)
     * [x] automatic diffing to only update changed configuration files
     * [x] git-style diff output for changed lines
+* [x] GUI Preview (WIP)
+    * [x] Inspect individual plate screens before deploying to an actual device
+    * [x] Speedup prototyping by using the preview to test your changes
 * [x] API client (Web + MQTT)
     * [x] execute commands on a plate
     * [x] listen to events and state updates
@@ -365,6 +369,26 @@ common.navbar.last_page: 4
 ...
 header.title: Home
 ```
+
+#### Theming
+
+To specify default property values for an object type, simply define them as a variable
+under `theme.obj.<obj-type>`, where `<obj-type>` is the value of the `obj` property of the object.
+
+The keys used must conform to the naming of the object properties as specified in OpenHasp, see:
+https://www.openhasp.com/latest/design/objects/
+
+F.ex., to make the background color of all buttons red by default, define:
+
+```yaml
+theme:
+  obj:
+    btn:
+      bg_color: "#FF0000"
+```
+
+in a global variable file named `theme.yaml` located at the root of your configurations directory
+`openhasp-configs/theme.yaml`.
 
 ## Deployment
 

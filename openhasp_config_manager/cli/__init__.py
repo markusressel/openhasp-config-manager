@@ -1,5 +1,4 @@
 import asyncio
-import pathlib
 from pathlib import Path
 
 import click
@@ -7,6 +6,7 @@ import click
 from openhasp_config_manager.cli.cmd import c_cmd
 from openhasp_config_manager.cli.deploy import c_deploy
 from openhasp_config_manager.cli.generate import c_generate
+from openhasp_config_manager.cli.gui import c_gui
 from openhasp_config_manager.cli.listen import c_listen
 from openhasp_config_manager.cli.logs import c_logs
 from openhasp_config_manager.cli.screenshot import c_screenshot
@@ -118,6 +118,25 @@ def c_help():
     with click.Context(cli) as ctx:
         echo(ctx.get_help())
 
+
+@cli.command(name="gui")
+@click.option(*get_option_names(PARAM_CFG_DIR),
+              required=False,
+              default=DEFAULT_CONFIG_PATH,
+              type=click.Path(exists=True, path_type=Path),
+              help=get_option_help(PARAM_CFG_DIR))
+@click.option(*get_option_names(PARAM_OUTPUT_DIR),
+              required=True,
+              default=DEFAULT_OUTPUT_PATH,
+              type=click.Path(path_type=Path),
+              help=get_option_help(PARAM_OUTPUT_DIR))
+def generate(config_dir: Path, output_dir: Path):
+    """
+    Launches the GUI of openhasp-config-manager.
+    """
+    asyncio.run(
+        c_gui(config_dir, output_dir)
+    )
 
 @cli.command(name="generate")
 @click.option(*get_option_names(PARAM_CFG_DIR),
@@ -328,10 +347,6 @@ def vars(config_dir: Path, path: str):
 @click.option(*get_option_names(PARAM_DEVICE),
               required=True,
               help=get_option_help(PARAM_DEVICE))
-@click.option(*get_option_names(PARAM_CFG_DIR),
-              required=True,
-              type=click.Path(exists=False, path_type=pathlib.Path),
-              help=get_option_help(PARAM_CFG_DIR))
 @click.option(*get_option_names(PARAM_OUTPUT_DIR),
               required=True,
               default=DEFAULT_SCREENSHOT_OUTPUT_PATH,
