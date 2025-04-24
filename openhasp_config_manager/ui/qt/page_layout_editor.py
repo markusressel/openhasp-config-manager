@@ -416,17 +416,29 @@ class PagePreviewWidget(QWidget):
         object_id = obj.get("id", None)
         print(f"Drawing switch with id {object_id}: {obj}")
 
+        value = obj.get("val", 0)
         x = obj.get("x", 0)
         y = obj.get("y", 0)
         width = obj.get("w", 50)
         height = obj.get("h", 50)
+        corner_radius = obj.get("radius00", 0)
         object_bg_color = obj.get("bg_color", "green")
         text_font = obj.get("text_font", 25)
         text_color = obj.get("text_color", None)
 
         self._draw_scaled_rect(
             painter, x, y, width, height, padding, d_width, d_height,
-            fill_color=object_bg_color
+            fill_color=object_bg_color, corner_radius=corner_radius,
+        )
+
+        # Draw the knob
+        knob_radius = obj.get("radius20", 0)
+        knob_color = obj.get("bg_color20", "lightgray")
+
+        knob_x = x + (width - 1) if value else x
+        self._draw_scaled_circle(
+            painter, knob_x, y, width, height, padding, d_width, d_height,
+            fill_color=knob_color, radius=knob_radius
         )
 
         # Draw the text
@@ -474,13 +486,14 @@ class PagePreviewWidget(QWidget):
         y = obj.get("y", 0)
         width = obj.get("w", 50)
         height = obj.get("h", 50)
+        corner_radius = obj.get("radius", None)
         text_font = obj.get("text_font", 25)
         text_color = obj.get("text_color", None)
         object_bg_color = obj.get("bg_color", "purple")
 
         self._draw_scaled_rect(
             painter, x, y, width, height, padding, d_width, d_height,
-            fill_color=object_bg_color, corner_radius=10
+            fill_color=object_bg_color, corner_radius=corner_radius
         )
 
         # Draw the text
@@ -574,7 +587,7 @@ class PagePreviewWidget(QWidget):
         )
 
         scale_factor = 0.8 * (d_height / self.page_height)
-        scaled_corner_radius = int(corner_radius * scale_factor)
+        scaled_corner_radius = min(scaled_height / 2, int(corner_radius * scale_factor))
 
         rect = QRectF(
             padding + scaled_x,
@@ -624,12 +637,16 @@ class PagePreviewWidget(QWidget):
         if fill_color is None:
             return
 
+        if radius <= 0:
+            return
+
         scaled_x, scaled_y, scaled_width, scaled_height = self.__get_scaled_rect(
             x, y, width, height, padding, d_width, d_height
         )
 
         scale_factor = 0.8 * (d_height / self.page_height)
         scaled_radius = int(radius * scale_factor)
+        scaled_radius = min(scaled_radius, scaled_height // 2)
 
         rect = QRectF(
             padding + scaled_x,
