@@ -7,7 +7,10 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=on
 ENV VENV_HOME=/opt/poetry
 WORKDIR /app
 
+COPY README.md README.md
+COPY openhasp_config_manager openhasp_config_manager
 COPY poetry.lock pyproject.toml ./
+
 RUN apt-get update \
  && apt-get -y install python3-pip \
  && apt-get clean && rm -rf /var/lib/apt/lists/* \
@@ -20,9 +23,6 @@ RUN apt-get update \
 
 # Add Poetry to PATH
 ENV PATH="${VENV_HOME}/bin:${PATH}"
-
-COPY openhasp_config_manager openhasp_config_manager
-COPY README.md README.md
 
 RUN ${VENV_HOME}/bin/pip install .
 
