@@ -59,5 +59,8 @@ testpaths = [
     "tests",
 ]
 
-[tool.poetry.scripts]
+[project]
+name = "openhasp-config-manager"
+
+[project.scripts]
 openhasp-config-manager = 'openhasp_config_manager.cli:cli'
