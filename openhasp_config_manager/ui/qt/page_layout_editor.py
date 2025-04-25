@@ -581,6 +581,8 @@ class PagePreviewWidget(QWidget):
             return
         if border_color is None:
             border_color = "#FFFFFF"
+        if corner_radius is None:
+            corner_radius = 0
 
         scaled_x, scaled_y, scaled_width, scaled_height = self.__get_scaled_rect(
             x, y, width, height, padding, d_width, d_height

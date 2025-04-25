@@ -27,7 +27,7 @@ class MqttClient:
         :param payload: payload to publish
         """
         async with self._create_mqtt_client() as client:
-            if isinstance(payload, dict):
+            if isinstance(payload, dict) or isinstance(payload, list):
                 payload = json.dumps(payload)
 
             await client.publish(topic, payload=payload)

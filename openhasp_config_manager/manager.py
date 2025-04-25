@@ -205,7 +205,7 @@ class ConfigManager:
         return result
 
     @staticmethod
-    def _create_text_component_from_path(device_cfg_dir_root: Path, path: Path, prefix: str) -> Component or None:
+    def _create_text_component_from_path(device_cfg_dir_root: Path, path: Path, prefix: str = "") -> Component or None:
         file = Path(device_cfg_dir_root, path)
 
         if not file.is_file():
@@ -459,15 +459,16 @@ class ConfigManager:
         referenced_jsonl_components = self._find_referenced_jsonl_components(cmd_components, jsonl_components)
 
         # find image files referenced in CMD files and JSONL files
-        referenced_image_components = self._find_referenced_image_components(cmd_components, jsonl_components,
-                                                                             image_components)
+        referenced_image_components = self._find_referenced_image_components(
+            cmd_components, jsonl_components, image_components
+        )
 
         # compute component for jsonl file referenced in config.hasp.pages
         pages_jsonl_component_path = self._compute_component_path_of_pages_config_value(device.path, device.config)
         if pages_jsonl_component_path is not None:
             pages_jsonl_component = self._create_text_component_from_path(
                 device_cfg_dir_root=device.path,
-                path=pages_jsonl_component_path, prefix=""
+                path=pages_jsonl_component_path,
             )
             referenced_jsonl_components.add(pages_jsonl_component)
 
@@ -589,6 +590,64 @@ class ConfigManager:
             matches = re.findall(pattern, line)
             result.update(matches)
         return result
+
+    def determine_device_jsonl_component_order_for_cmd(
+        self, device: Device, cmd_component: CmdComponent) -> List[JsonlComponent]:
+        """
+        Determines the order of the jsonl components based on the order of their reference in cmd components.
+
+        :param device: The device to analyze.
+        :param cmd_component: The cmd component to analyze.
+        :return: The ordered list of jsonl components.
+        """
+        device_cmd_components = device.cmd
+        device_jsonl_components = device.jsonl
+
+        return self._determine_device_jsonl_component_order_for_cmd(
+            cmd_component=cmd_component,
+            device_cmd_components=device_cmd_components,
+            device_jsonl_components=device_jsonl_components
+        )
+
+    def _determine_device_jsonl_component_order_for_cmd(
+        self, cmd_component: CmdComponent,
+        device_cmd_components: List[CmdComponent],
+        device_jsonl_components: List[JsonlComponent]) -> List[JsonlComponent]:
+        """
+        Determines an ordered list of all referenced jsonl components based on their reference in the given cmd component.
+
+        :param cmd_component: The cmd component to analyze.
+        :param device_cmd_components: The list of cmd components to check for references.
+        :param device_jsonl_components: The list of jsonl components to order.
+        :return: The ordered list of jsonl components.
+        """
+        jsonl_components = []
+
+        for cmd in cmd_component.commands:
+            if cmd.endswith(".jsonl"):
+                jsonl_component_name = cmd.split("/")[-1]
+                jsonl_component = next(
+                    filter(lambda x: x.name == jsonl_component_name, device_jsonl_components), None
+                )
+                if jsonl_component is None:
+                    raise AssertionError(f"Component {jsonl_component_name} not found in device jsonl components")
+                jsonl_components.append(jsonl_component)
+            elif cmd.endswith(".cmd"):
+                cmd_component_name = cmd.split("/")[-1]
+                cmd_component = next(
+                    filter(lambda x: x.name == cmd_component_name, device_cmd_components), None
+                )
+                if cmd_component is None:
+                    raise AssertionError(f"Component {cmd_component_name} not found in device cmd components")
+                jsonl_components.extend(
+                    self._determine_device_jsonl_component_order_for_cmd(
+                        cmd_component,
+                        device_cmd_components,
+                        device_jsonl_components
+                    )
+                )
+
+        return jsonl_components
 
     @staticmethod
     def _write_output(device: Device, component: Component, output_content: str | bytes):
