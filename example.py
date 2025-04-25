@@ -28,7 +28,7 @@ async def main():
 
     devices = config_manager.analyze()
 
-    device = next(filter(lambda x: x.name == "touch_down_1", devices))
+    device = next(filter(lambda x: x.name == "wt32sc01plus_1", devices))
 
     client = OpenHaspClient(device)
     uploader = ConfigUploader(output_dir, client)

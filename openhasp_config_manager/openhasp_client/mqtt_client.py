@@ -88,10 +88,9 @@ class MqttClient:
         while True:
             try:
                 async with self._create_mqtt_client() as client:
-                    async with client.messages as messages:
-                        await client.subscribe("hasp/#")
-                        async for message in messages:
-                            await self._handle_message(message)
+                    await client.subscribe("hasp/#")
+                    async for message in client.messages:
+                        await self._handle_message(message)
             except asyncio.CancelledError:
                 break
             except Exception as ex:

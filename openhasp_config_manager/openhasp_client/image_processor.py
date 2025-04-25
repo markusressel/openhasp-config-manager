@@ -49,5 +49,7 @@ class OpenHaspImageProcessor:
             g = (pix[1] >> 2) & 0x3F
             b = (pix[2] >> 3) & 0x1F
             out_image.write(struct.pack("H", (r << 11) | (g << 5) | b))
-
         out_image.flush()
+
+        im.close()
+        img.close()
