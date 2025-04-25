@@ -18,7 +18,10 @@ class OpenHaspImageProcessor:
 
         if in_image.startswith("http"):
 
+            # consider last part of the url as filename
             filename = in_image.split("/")[-1]
+            # remove url args, if any
+            filename = filename.split("?")[0]
             import temppathlib
             with temppathlib.NamedTemporaryFile(suffix=filename) as tmp_image:
                 content = requests.get(in_image, stream=True).content
