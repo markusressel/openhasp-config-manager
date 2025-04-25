@@ -47,6 +47,10 @@ aiomqtt = "2.3.2"
 telnetlib3 = "2.0.4"
 pillow = "11.2.1"
 
+[tool.poetry.group.ui]
+optional = true
+
+[tool.poetry.group.ui.dependencies]
 PyQt6 = "6.9.0"
 QtAwesome = "1.4.0"
 
