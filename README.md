@@ -414,6 +414,11 @@ documentation: https://openhasp.haswitchplate.com/latest/commands/
 > openhasp-config-manager cmd -c ./openhasp-configs -d plate35 -C backlight -p "{\"state\":\"on\",\"brightness\":128}"
 ```
 
+## API Client
+
+openhasp-config-manager also provides a simple API client to interact with a plate.
+See [example.py](example.py) to see how to use it.
+
 # FAQ
 
 ## How do I see device logs?
