@@ -219,8 +219,9 @@ class OpenHaspClient:
         obj: str,
         image,
         access_host: str,
-        access_port: int = 0,
         listen_host: str = "0.0.0.0",
+        listen_port: int = 0,
+        access_port: int = None,
         timeout: int = 10,
         size: Tuple[int or None, int or None] = (None, None),
         fitscreen: bool = False,
@@ -240,6 +241,9 @@ class OpenHaspClient:
         :param size: the size of the image
         :param fitscreen: if True, the image will be resized to fit the screen
         """
+        if access_port is None:
+            access_port = listen_port
+
         import temppathlib
         with temppathlib.NamedTemporaryFile() as out_image:
             self._image_processor.image_to_rgb565(
@@ -252,6 +256,7 @@ class OpenHaspClient:
                 obj=obj,
                 image_file=out_image,
                 listen_host=listen_host,
+                listen_port=listen_port,
                 access_host=access_host,
                 access_port=access_port,
                 timeout=timeout
@@ -263,6 +268,7 @@ class OpenHaspClient:
         image_file,
         listen_host: str,
         access_host: str,
+        listen_port: int = 0,
         access_port: int = 0,
         timeout: int = 5,
     ):
@@ -271,8 +277,9 @@ class OpenHaspClient:
         :param obj: the object to set the image for
         :param image_file: the image to serve
         :param listen_host: the address to bind the webserver to
+        :param listen_port: the port to bind the webserver to, defaults to 0 (random free port)
         :param access_host: the address at which the device this webserver is running on is accessible to the plate
-        :param access_port: the port to bind the webserver to, defaults to 0 (random free port)
+        :param access_port: the port at which the device this webserver is running on is accessible to the plate
         :param timeout: the timeout in seconds after which the webserver will be stopped
         :return: the URL to retrieve the image
         """
@@ -283,16 +290,16 @@ class OpenHaspClient:
             request.app["served"].set_result(True)
             return response
 
-        async def start_server(app, listen_host, access_host, port, timeout):
+        async def start_server(app, listen_host, listen_port, access_host, access_port, timeout):
             runner = web.AppRunner(app)
             await runner.setup()
-            site = web.TCPSite(runner, listen_host, port)
+            site = web.TCPSite(runner, listen_host, listen_port)
             await site.start()
 
             port = site._server.sockets[0].getsockname()[1]
 
-            listen_url = f"http://{listen_host}:{port}/"
-            access_url = f"http://{access_host}:{port}/"
+            listen_url = f"http://{listen_host}:{listen_port}/"
+            access_url = f"http://{access_host}:{access_port}/"
             print(f"Serving on {listen_url}, accessible via {access_url}")
 
             await asyncio.sleep(1)
@@ -321,8 +328,9 @@ class OpenHaspClient:
         await start_server(
             app=app,
             listen_host=listen_host,
+            listen_port=listen_port,
             access_host=access_host,
-            port=access_port,
+            access_port=access_port,
             timeout=timeout
         )
 
