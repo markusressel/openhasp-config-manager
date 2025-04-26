@@ -24,7 +24,9 @@ class OpenHaspImageProcessor:
             filename = filename.split("?")[0]
             import temppathlib
             with temppathlib.NamedTemporaryFile(suffix=filename) as tmp_image:
-                content = requests.get(in_image, stream=True).content
+                response = requests.get(in_image, stream=True)
+                response.raise_for_status()
+                content = response.content
                 tmp_image.file.write(content)
                 im = Image.open(tmp_image.path)
         else:
