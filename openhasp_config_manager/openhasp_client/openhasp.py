@@ -279,7 +279,13 @@ class OpenHaspClient:
         timeout: int = 5,
     ):
         """
-        Serves an image using a temporary webserver
+        Serves an image using a temporary webserver.
+
+        Note that this webserver intentionally does **not** use HTTPS, since openhasp
+        does not support SSL connections. The source file can use an HTTPS source regardless,
+        since openhasp-config-manager will fetch the image from the source directly,
+        convert it for the plate, and then serve it internally via HTTP.
+
         :param obj: the object to set the image for
         :param image_file: the image to serve
         :param listen_host: the address to bind the webserver to
@@ -310,8 +316,10 @@ class OpenHaspClient:
             access_url = f"http://{access_host}:{access_port}/"
             print(f"Serving on {listen_url}, accessible via {access_url}")
 
+            # give the server some time to start
             await asyncio.sleep(1)
 
+            # set the object properties to point to the image url, the plate will download the image immediately
             await self.set_object_properties(
                 obj=obj,
                 properties={
