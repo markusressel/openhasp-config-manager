@@ -206,15 +206,6 @@ class OpenHaspClient:
             password=device.config.http.password,
         )
 
-    async def send_image(self, image: any, page: int, object_id: int):
-        """
-        Send an image to the device
-        :param image: the image to send
-        :param page: the page to send the image to
-        :param object_id: the object id to send the image to
-        """
-        raise NotImplementedError("send_image is not implemented yet")
-
     async def set_text(self, obj: str, text: str):
         """
         Set the text of an object
@@ -228,6 +219,7 @@ class OpenHaspClient:
         obj: str,
         image,
         access_host: str,
+        access_port: int = 0,
         listen_host: str = "0.0.0.0",
         timeout: int = 10,
         size: Tuple[int or None, int or None] = (None, None),
@@ -242,6 +234,7 @@ class OpenHaspClient:
         :param obj: the object to set the image for
         :param image: the image to set
         :param access_host: the address at which the device this webserver is running on is accessible to the plate
+        :param access_port: the port to bind the webserver to, defaults to 0 (random free port)
         :param listen_host: the address to bind the webserver to
         :param timeout: the timeout in seconds to wait for the image to be fetched by the plate
         :param size: the size of the image
@@ -260,15 +253,26 @@ class OpenHaspClient:
                 image_file=out_image,
                 listen_host=listen_host,
                 access_host=access_host,
+                access_port=access_port,
                 timeout=timeout
             )
 
-    async def _serve_image(self, obj: str, image_file, listen_host: str, access_host: str, timeout: int):
+    async def _serve_image(
+        self,
+        obj: str,
+        image_file,
+        listen_host: str,
+        access_host: str,
+        access_port: int = 0,
+        timeout: int = 5,
+    ):
         """
         Serves an image using a temporary webserver
+        :param obj: the object to set the image for
         :param image_file: the image to serve
         :param listen_host: the address to bind the webserver to
         :param access_host: the address at which the device this webserver is running on is accessible to the plate
+        :param access_port: the port to bind the webserver to, defaults to 0 (random free port)
         :param timeout: the timeout in seconds after which the webserver will be stopped
         :return: the URL to retrieve the image
         """
@@ -318,7 +322,7 @@ class OpenHaspClient:
             app=app,
             listen_host=listen_host,
             access_host=access_host,
-            port=0,  # let the system pick a random free port for us
+            port=access_port,
             timeout=timeout
         )
 
