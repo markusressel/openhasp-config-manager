@@ -22,11 +22,20 @@ class OpenHaspImageProcessor:
             filename = in_image.split("/")[-1]
             # remove url args, if any
             filename = filename.split("?")[0]
+
+            response = requests.get(in_image, stream=True)
+            response.raise_for_status()
+            content_type = response.headers.get('content-type', None)
+            content = response.content
+
+            # add file extension based on content type
+            from mimetypes import guess_extension
+            guess = guess_extension(content_type)
+            if guess is not None:
+                filename = filename + guess
+
             import temppathlib
             with temppathlib.NamedTemporaryFile(suffix=filename) as tmp_image:
-                response = requests.get(in_image, stream=True)
-                response.raise_for_status()
-                content = response.content
                 tmp_image.file.write(content)
                 im = Image.open(tmp_image.path)
         else:
