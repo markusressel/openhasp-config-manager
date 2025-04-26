@@ -297,8 +297,10 @@ class OpenHaspClient:
             await site.start()
 
             port = site._server.sockets[0].getsockname()[1]
+            if access_port == 0:
+                access_port = port
 
-            listen_url = f"http://{listen_host}:{listen_port}/"
+            listen_url = f"http://{listen_host}:{port}/"
             access_url = f"http://{access_host}:{access_port}/"
             print(f"Serving on {listen_url}, accessible via {access_url}")
 
