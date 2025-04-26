@@ -486,7 +486,7 @@ class PagePreviewWidget(QWidget):
         y = obj.get("y", 0)
         width = obj.get("w", 50)
         height = obj.get("h", 50)
-        corner_radius = obj.get("radius", None)
+        corner_radius = obj.get("radius", height)
         text_font = obj.get("text_font", 25)
         text_color = obj.get("text_color", None)
         object_bg_color = obj.get("bg_color", "purple")
