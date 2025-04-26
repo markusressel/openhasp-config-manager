@@ -232,6 +232,12 @@ class OpenHaspClient:
         The image will then be converted to RGB565 and
         served by a temporary webserver for the plate to fetch it.
 
+        Note: If you are calling this function concurrently, be aware that under
+        the hood a free and unoccupied port is required to feed the image to the
+        plate. If you cannot use different ports for each call, make sure to add
+        a locking mechanism to avoid multiple threads from creating a webserver
+        on the same port.
+
         :param obj: the object to set the image for
         :param image: the image to set
         :param access_host: the address at which the device this webserver is running on is accessible to the plate
