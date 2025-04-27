@@ -1,4 +1,6 @@
 import asyncio
+import logging
+import sys
 from pathlib import Path
 
 from openhasp_config_manager.manager import ConfigManager
@@ -6,13 +8,19 @@ from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 from openhasp_config_manager.processing.variables import VariableManager
 from openhasp_config_manager.uploader import ConfigUploader
 
+logger = logging.getLogger("example")
+logger.setLevel(logging.DEBUG)
+console_handler = logging.StreamHandler(sys.stdout)
+console_handler.setLevel(logging.DEBUG)
+console_handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
+logger.addHandler(console_handler)
+
 
 async def event_callback(topic: str, payload: bytes):
-    print(f"MQTT Event: {topic} - {payload.decode('utf-8')}")
-
+    logger.info(f"MQTT Event: {topic} - {payload.decode('utf-8')}")
 
 async def state_callback(topic: str, payload: bytes):
-    print(f"State Event: {topic} - {payload.decode('utf-8')}")
+    logger.info(f"State Event: {topic} - {payload.decode('utf-8')}")
 
 
 async def main():
@@ -28,7 +36,7 @@ async def main():
 
     devices = config_manager.analyze()
 
-    device = next(filter(lambda x: x.name == "wt32sc01plus_1", devices))
+    device = next(filter(lambda x: x.name == "wt32sc01plus_2", devices))
 
     client = OpenHaspClient(device)
     uploader = ConfigUploader(output_dir, client)

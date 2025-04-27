@@ -25,15 +25,16 @@ async def main():
 
     client = OpenHaspClient(device)
 
-    home_assistant_camera_snapshot_url = "http://192.168.2.20:8123/api/camera_proxy/camera.x1c_00m09a3c2900999_camera?token=75158c6ceb5ba3af8e3821ddce1d40ca763412786dcdeb246ce55a56222af6b9"
+    home_assistant_camera_snapshot_url = "http://192.168.2.20:8123/api/camera_proxy/camera.x1c_00m09a3c2900999_camera?token=baef380cd0905d90ee0a47b397a6626f4ab1a2e4a087540d99555c2d89ec8783"
     await client.set_image(
-        obj="p3b40",
+        obj="p2b40",
         image=home_assistant_camera_snapshot_url,
-        size=(int(108 / 2), int(192 / 2)),
+        # size=(int(108 / 2), int(192 / 2)),
+        size=(108, 192),
         listen_host="0.0.0.0",
-        listen_port=0,
+        listen_port=20000,
         access_host="192.168.2.199",
-        access_port=0,
+        access_port=20000,
     )
 
 

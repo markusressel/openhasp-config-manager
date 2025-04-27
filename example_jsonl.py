@@ -43,9 +43,11 @@ async def main():
 
     await client.clear_page(0)
     await client.clear_page(1)
+    await client.clear_page(2)
+    await client.clear_page(3)
 
     for jsonl_object in loaded_objects:
-        if jsonl_object.get("page", None) not in [0, 1]:
+        if jsonl_object.get("page", None) not in [0, 1, 2, 3]:
             continue
         print(f"Sending {jsonl_object}")
         await client.command("jsonl", jsonl_object)
