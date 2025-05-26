@@ -1,7 +1,5 @@
 from PyQt6.QtWidgets import QWidget, QMainWindow, QVBoxLayout
 
-from PyQt6.QtWidgets import QWidget, QMainWindow, QVBoxLayout
-
 from openhasp_config_manager.manager import ConfigManager
 from openhasp_config_manager.openhasp_client.model.component import CmdComponent
 from openhasp_config_manager.openhasp_client.model.device import Device

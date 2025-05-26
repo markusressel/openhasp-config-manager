@@ -177,6 +177,9 @@ class PageJsonlPreviewWidget(QTextEdit):
 
         self.set_page(page)
 
+        size_policy = QSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
+        self.setSizePolicy(size_policy)
+
     def set_page(self, page: OpenHaspDevicePagesData):
         self.page = page
         self.setText(page.jsonl_components[0].content)

@@ -1,7 +1,7 @@
 import pathlib
 from pathlib import Path
 
-from PyQt6.QtWidgets import QTreeWidget, QAbstractItemView, QTreeWidgetItem
+from PyQt6.QtWidgets import QTreeWidget, QAbstractItemView, QTreeWidgetItem, QSizePolicy
 
 from openhasp_config_manager.ui.qt.util import clear_layout
 
@@ -22,6 +22,9 @@ class FileBrowserWidget(QTreeWidget):
         self.setAllColumnsShowFocus(True)
 
         self.itemClicked.connect(self.on_item_clicked)
+
+        size_policy = QSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+        self.setSizePolicy(size_policy)
 
     def clear_entries(self):
         clear_layout(self.layout)
