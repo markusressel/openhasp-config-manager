@@ -52,7 +52,7 @@ pillow = "11.2.1"
 optional = true
 
 [tool.poetry.group.ui.dependencies]
-PyQt6 = "6.9.0"
+PyQt6 = "6.9.1"
 QtAwesome = "1.4.0"
 
 [tool.poetry.group.dev.dependencies]
