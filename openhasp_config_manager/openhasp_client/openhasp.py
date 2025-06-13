@@ -500,15 +500,21 @@ class OpenHaspClient:
         topic = f"hasp/{self._device.config.mqtt.name}/command/{name}"
         await self._mqtt_client.publish(topic=topic, payload=params)
 
+    async def jsonl(self, jsonl: str or dict):
+        """
+        Send a JSONL string to the device.
+        See: https://www.openhasp.com/0.6.3/commands/?h=jsonl#jsonl
+        :param jsonl: the JSONL string (or object) to send
+        """
+        await self.command(name="jsonl", params=jsonl)
+
     async def clear_object(self, obj: str):
         """
         Clear an object on the device.
         See: https://www.openhasp.com/0.6.3/design/objects/#common-methods
         :param obj: the object to clear, f.ex. "p1b2"
         """
-        await self.command(
-            name=f"{obj}.clear",
-        )
+        await self.command(name=f"{obj}.clear", )
 
     async def clear_object(self, page: int, obj: int):
         """
@@ -526,9 +532,7 @@ class OpenHaspClient:
         See: https://www.openhasp.com/0.6.3/design/objects/#common-methods
         :param obj: the object to delete, f.ex. "p1b2"
         """
-        await self.command(
-            name=f"{obj}.delete",
-        )
+        await self.command(name=f"{obj}.delete", )
 
     async def delete_object(self, page: int, obj: int):
         """
@@ -546,9 +550,7 @@ class OpenHaspClient:
         See: https://www.openhasp.com/0.6.3/design/objects/#common-methods
         :param obj: the object to bring to the front, f.ex. "p1b2"
         """
-        await self.command(
-            name=f"{obj}.to_front",
-        )
+        await self.command(name=f"{obj}.to_front", )
 
     async def bring_object_to_front(self, page: int, obj: int):
         """
@@ -566,9 +568,7 @@ class OpenHaspClient:
         See: https://www.openhasp.com/0.6.3/design/objects/#common-methods
         :param obj: the object to bring to the back, f.ex. "p1b2"
         """
-        await self.command(
-            name=f"{obj}.to_back",
-        )
+        await self.command(name=f"{obj}.to_back", )
 
     async def bring_object_to_back(self, page: int, obj: int):
         """

@@ -60,7 +60,7 @@ async def main():
             # skip objects that are not on page 0, 1, 2 or 3
             continue
         print(f"Sending {jsonl_object}")
-        await client.command("jsonl", jsonl_object)
+        await client.jsonl(jsonl_object)
 
 
 if __name__ == '__main__':
