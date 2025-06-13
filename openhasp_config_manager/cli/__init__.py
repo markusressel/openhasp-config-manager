@@ -130,7 +130,7 @@ def c_help():
               default=DEFAULT_OUTPUT_PATH,
               type=click.Path(path_type=Path),
               help=get_option_help(PARAM_OUTPUT_DIR))
-def generate(config_dir: Path, output_dir: Path):
+def gui(config_dir: Path, output_dir: Path):
     """
     Launches the GUI of openhasp-config-manager.
     """

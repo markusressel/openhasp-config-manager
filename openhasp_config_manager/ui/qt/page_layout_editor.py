@@ -7,11 +7,12 @@ from PyQt6.QtCore import QSize, Qt, QRect, QRectF
 from PyQt6.QtGui import QPainter, QBrush, QColor, QMouseEvent, QPainterPath, QFont, QPen
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QSizePolicy, QPushButton, QHBoxLayout, QTextEdit
 from orjson import orjson
+from qasync import asyncSlot
 
 from openhasp_config_manager.manager import ConfigManager
 from openhasp_config_manager.openhasp_client.model.component import JsonlComponent
 from openhasp_config_manager.openhasp_client.model.device import Device
-from openhasp_config_manager.openhasp_client.openhasp import IntegratedIcon
+from openhasp_config_manager.openhasp_client.openhasp import IntegratedIcon, OpenHaspClient
 from openhasp_config_manager.ui.qt.util import clear_layout
 
 
@@ -76,7 +77,36 @@ class PageLayoutEditorWidget(QWidget):
         self.page_jsonl_preview = PageJsonlPreviewWidget(device_pages_data)
         self.preview_container.layout().addWidget(self.page_jsonl_preview)
 
+        self.button_deploy_page = QPushButton("Deploy Page")
+        self.preview_container.layout().addWidget(
+            self.button_deploy_page
+        )
+
+        self.button_deploy_page.clicked.connect(self._on_deploy_page_clicked)
+
         self.set_page_index(index=1)
+
+    @asyncSlot()
+    async def _on_deploy_page_clicked(self):
+        """
+        Deploy the current page index to the device.
+        """
+        if self.page_objects is None or len(self.page_objects) == 0:
+            return
+
+        device = self.device_pages_data.device
+
+        print(f"Deploying page {self.current_index} to device {device.name}")
+        client = OpenHaspClient(device)
+
+        # clear the page first
+        print(f"Clearing page {self.current_index}")
+        await client.clear_page(self.current_index)
+
+        # send all objects for the current page index
+        page_objects = self.get_page_objects(index=self.current_index, include_global=True)
+        for obj in page_objects:
+            await client.jsonl(obj)
 
     def set_page_index(self, index: int):
         print("Setting page index", index)
@@ -190,7 +220,7 @@ class PageJsonlPreviewWidget(QTextEdit):
         :param page_objects: the list of objects to set
         """
         sorted_page_objects = sorted(page_objects, key=lambda obj: (
-        obj.get("page", 0), obj.get("id", 0), obj.get("y", ""), obj.get("x", "")))
+            obj.get("page", 0), obj.get("id", 0), obj.get("y", ""), obj.get("x", "")))
 
         content = "\n".join(map(lambda x: orjson.dumps(x).decode(), sorted_page_objects))
         self.setText(content)

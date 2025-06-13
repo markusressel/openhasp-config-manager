@@ -54,6 +54,7 @@ optional = true
 [tool.poetry.group.ui.dependencies]
 PyQt6 = "6.9.1"
 QtAwesome = "1.4.0"
+qasync = "*"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "*"
