@@ -416,8 +416,18 @@ documentation: https://openhasp.haswitchplate.com/latest/commands/
 
 ## API Client
 
-openhasp-config-manager also provides a simple API client to interact with a plate.
-See [example.py](example.py) to see how to use it.
+If you don't want to use all of the file-tree related features of openhasp-config-manager,
+but still want to interact with your openHASP devices using python and the official API,
+you can use the `OpenHaspClient` class to do so. It provides a simple interface
+to interact with a plate, send commands, listen to events and state updates.
+
+See
+
+- [example.py](example.py)
+- [example_image.py](example_image.py)
+- [example_jsonl.py](example_jsonl.py)
+
+to see how to use it.
 
 # FAQ
 
