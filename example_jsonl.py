@@ -12,7 +12,8 @@ from openhasp_config_manager.processing.variables import VariableManager
 
 async def main():
     """
-    Example to set an image on a device using OpenHaspClient.
+    Example to set dynamically clear and apply all pages specified in the
+    openhasp-configs for a given device using OpenHaspClient.
     """
     config_dir = Path("./openhasp-configs")
     output_dir = Path("./output")
