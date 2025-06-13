@@ -20,7 +20,7 @@ class MqttClient:
         self._callbacks: Dict[str, List[callable]] = {}
         self.__mqtt_client: Client | None = None
 
-    async def publish(self, topic: str, payload: any):
+    async def publish(self, topic: str, payload: any = None):
         """
         Publish a message to a topic
         :param topic: topic to publish to

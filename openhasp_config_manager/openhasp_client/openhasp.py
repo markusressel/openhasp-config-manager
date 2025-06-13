@@ -491,7 +491,7 @@ class OpenHaspClient:
         """
         await self._mqtt_client.cancel_callback(callback=callback)
 
-    async def command(self, name: str, params: any = ""):
+    async def command(self, name: str, params: any = None):
         """
         Execute a command on a device
         :param name: the name of the command
