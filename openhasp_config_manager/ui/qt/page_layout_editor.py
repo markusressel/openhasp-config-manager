@@ -77,6 +77,10 @@ class PageLayoutEditorWidget(QWidget):
         self.page_jsonl_preview = PageJsonlPreviewWidget(device_pages_data)
         self.preview_container.layout().addWidget(self.page_jsonl_preview)
 
+        self.clear_page_button = QPushButton("Clear Page")
+        self.preview_container.layout().addWidget(self.clear_page_button)
+        self.clear_page_button.clicked.connect(self._on_clear_page_clicked)
+
         self.button_deploy_page = QPushButton("Deploy Page")
         self.preview_container.layout().addWidget(
             self.button_deploy_page
@@ -85,6 +89,23 @@ class PageLayoutEditorWidget(QWidget):
         self.button_deploy_page.clicked.connect(self._on_deploy_page_clicked)
 
         self.set_page_index(index=1)
+
+    @asyncSlot()
+    async def _on_clear_page_clicked(self):
+        """
+        Clear the current page index on the device.
+        """
+        if self.current_index is None:
+            return
+
+        device = self.device_pages_data.device
+
+        print(f"Clearing page {self.current_index} on device {device.name}")
+        client = OpenHaspClient(device)
+
+        # clear the page first
+        print(f"Clearing page {self.current_index}")
+        await client.clear_page(self.current_index)
 
     @asyncSlot()
     async def _on_deploy_page_clicked(self):
