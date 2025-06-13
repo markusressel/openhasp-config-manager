@@ -62,6 +62,17 @@ async def main():
         print(f"Sending {jsonl_object}")
         await client.jsonl(jsonl_object)
 
+    # delete some objects to test the clear functionality
+    for idx, obj in enumerate(loaded_objects):
+        if idx < 10:
+            obj_page = obj.get("page", 0)
+            obj_id = obj.get("id", 0)
+
+            obj_identifier = f"p{obj_page}b{obj_id}"
+
+            print(f"Clearing object {obj_identifier}")
+            await client.delete_object_id(page=obj_page, obj=obj_id)
+
 
 if __name__ == '__main__':
     asyncio.run(main())

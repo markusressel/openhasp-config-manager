@@ -516,7 +516,7 @@ class OpenHaspClient:
         """
         await self.command(name=f"{obj}.clear", )
 
-    async def clear_object(self, page: int, obj: int):
+    async def clear_object_id(self, page: int, obj: int):
         """
         Clear an object on a specific page.
         See: https://www.openhasp.com/0.6.3/design/objects/#common-methods
@@ -534,7 +534,7 @@ class OpenHaspClient:
         """
         await self.command(name=f"{obj}.delete", )
 
-    async def delete_object(self, page: int, obj: int):
+    async def delete_object_id(self, page: int, obj: int):
         """
         Delete an object on a specific page.
         See: https://www.openhasp.com/0.6.3/design/objects/#common-methods
@@ -552,7 +552,7 @@ class OpenHaspClient:
         """
         await self.command(name=f"{obj}.to_front", )
 
-    async def bring_object_to_front(self, page: int, obj: int):
+    async def bring_object_to_front_id(self, page: int, obj: int):
         """
         Bring an object to the front of a specific page.
         See: https://www.openhasp.com/0.6.3/design/objects/#common-methods
@@ -570,7 +570,7 @@ class OpenHaspClient:
         """
         await self.command(name=f"{obj}.to_back", )
 
-    async def bring_object_to_back(self, page: int, obj: int):
+    async def bring_object_to_back_id(self, page: int, obj: int):
         """
         Bring an object to the back of a specific page.
         See: https://www.openhasp.com/0.6.3/design/objects/#common-methods
