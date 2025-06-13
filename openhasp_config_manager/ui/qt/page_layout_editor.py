@@ -103,6 +103,7 @@ class PageLayoutEditorWidget(QWidget):
         print(f"Clearing page {self.current_index}")
         await client.clear_page(self.current_index)
 
+        print(f"Sending {len(self.page_objects)} on page {self.current_index} to device {device.name}")
         # send all objects for the current page index
         page_objects = self.get_page_objects(index=self.current_index, include_global=True)
         for obj in page_objects:
