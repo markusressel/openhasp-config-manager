@@ -491,7 +491,7 @@ class OpenHaspClient:
         """
         await self._mqtt_client.cancel_callback(callback=callback)
 
-    async def command(self, name: str, params: any):
+    async def command(self, name: str, params: any = ""):
         """
         Execute a command on a device
         :param name: the name of the command
@@ -499,6 +499,86 @@ class OpenHaspClient:
         """
         topic = f"hasp/{self._device.config.mqtt.name}/command/{name}"
         await self._mqtt_client.publish(topic=topic, payload=params)
+
+    async def clear_object(self, obj: str):
+        """
+        Clear an object on the device.
+        See: https://www.openhasp.com/0.6.3/design/objects/#common-methods
+        :param obj: the object to clear, f.ex. "p1b2"
+        """
+        await self.command(
+            name=f"{obj}.clear",
+        )
+
+    async def clear_object(self, page: int, obj: int):
+        """
+        Clear an object on a specific page.
+        See: https://www.openhasp.com/0.6.3/design/objects/#common-methods
+        :param page: the page index
+        :param obj: the object index
+        """
+        object_id = self._compute_object_id(page, obj)
+        await self.clear_object(object_id)
+
+    async def delete_object(self, obj: str):
+        """
+        Delete an object on the device.
+        See: https://www.openhasp.com/0.6.3/design/objects/#common-methods
+        :param obj: the object to delete, f.ex. "p1b2"
+        """
+        await self.command(
+            name=f"{obj}.delete",
+        )
+
+    async def delete_object(self, page: int, obj: int):
+        """
+        Delete an object on a specific page.
+        See: https://www.openhasp.com/0.6.3/design/objects/#common-methods
+        :param page: the page index
+        :param obj: the object index
+        """
+        object_id = self._compute_object_id(page, obj)
+        await self.delete_object(object_id)
+
+    async def bring_object_to_front(self, obj: str):
+        """
+        Bring an object to the front of the page.
+        See: https://www.openhasp.com/0.6.3/design/objects/#common-methods
+        :param obj: the object to bring to the front, f.ex. "p1b2"
+        """
+        await self.command(
+            name=f"{obj}.to_front",
+        )
+
+    async def bring_object_to_front(self, page: int, obj: int):
+        """
+        Bring an object to the front of a specific page.
+        See: https://www.openhasp.com/0.6.3/design/objects/#common-methods
+        :param page: the page index
+        :param obj: the object index
+        """
+        object_id = self._compute_object_id(page, obj)
+        await self.bring_object_to_front(object_id)
+
+    async def bring_object_to_back(self, obj: str):
+        """
+        Bring an object to the back of the page.
+        See: https://www.openhasp.com/0.6.3/design/objects/#common-methods
+        :param obj: the object to bring to the back, f.ex. "p1b2"
+        """
+        await self.command(
+            name=f"{obj}.to_back",
+        )
+
+    async def bring_object_to_back(self, page: int, obj: int):
+        """
+        Bring an object to the back of a specific page.
+        See: https://www.openhasp.com/0.6.3/design/objects/#common-methods
+        :param page: the page index
+        :param obj: the object index
+        """
+        object_id = self._compute_object_id(page, obj)
+        await self.bring_object_to_back(object_id)
 
     def get_files(self) -> List[str]:
         """
@@ -598,3 +678,12 @@ class OpenHaspClient:
 
     async def logs(self):
         await self._telnet_client.logs()
+
+    def _compute_object_id(self, page: int, obj: int) -> str:
+        """
+        Creates an object ID for a given page and object index.
+        :param page: the page index
+        :param obj: the object index
+        :return: the object ID in the format "p{page}b{obj}"
+        """
+        return f"p{page}b{obj}" if page >= 0 else obj

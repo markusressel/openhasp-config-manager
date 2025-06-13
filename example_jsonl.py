@@ -28,7 +28,7 @@ async def main():
     devices = config_manager.analyze()
     device: Device = next(filter(lambda x: x.name == "wt32sc01plus_2", devices))
     device_processor = config_manager.create_device_processor(device)
-    # load jsonl component objects
+    # load jsonl component objects by analyzing the boot.cmd component
     boot_cmd_component = next(filter(lambda x: x.name == "boot.cmd", device.cmd), None)
     ordered_jsonl_components = config_manager.determine_device_jsonl_component_order_for_cmd(device, boot_cmd_component)
     loaded_objects: List[Dict] = []
@@ -40,15 +40,24 @@ async def main():
     # apply page 0 objects last (on top)
     loaded_objects = sorted(loaded_objects, key=lambda x: x.get("page", 0))
 
+    # create a list of all page indices found in the loaded objects
+    page_indices = set(obj.get("page", 0) for obj in loaded_objects)
+
     client = OpenHaspClient(device)
 
-    await client.clear_page(0)
-    await client.clear_page(1)
-    await client.clear_page(2)
-    await client.clear_page(3)
+    # clear all pages that are found in the loaded objects
+    for page_index in page_indices:
+        if page_index > 3:
+            # ignore later pages to update only part of them
+            continue
+        print(f"Clearing page {page_index}")
+        await client.clear_page(page_index)
 
+    # apply the loaded objects in the order that OpenHasp would render them from the config
     for jsonl_object in loaded_objects:
-        if jsonl_object.get("page", None) not in [0, 1, 2, 3]:
+        page_index = jsonl_object.get("page", 0)
+        if page_index > 3:
+            # skip objects that are not on page 0, 1, 2 or 3
             continue
         print(f"Sending {jsonl_object}")
         await client.command("jsonl", jsonl_object)
