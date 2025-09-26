@@ -36,7 +36,7 @@ aiohttp = ">=3.9.0,<3.13.0" # taken from appdaemon 4.5.0
 temppathlib = "1.2.0"
 Jinja2 = "3.1.6"
 py-range-parse = "1.0.5"
-pyyaml = "6.0.2"
+pyyaml = "6.0.3"
 
 multidict = "6.6.4"
 frozenlist = "1.7.0"
