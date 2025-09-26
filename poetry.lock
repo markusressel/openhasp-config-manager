@@ -1286,14 +1286,14 @@ use-chardet-on-py3 = ["chardet (>=3.0.2,<6)"]
 
 [[package]]
 name = "telnetlib3"
-version = "2.0.7"
+version = "2.0.8"
 description = "Python 3 asyncio Telnet server and client Protocol library"
 optional = false
 python-versions = ">=3.7"
 groups = ["main"]
 files = [
-    {file = "telnetlib3-2.0.7-py2.py3-none-any.whl", hash = "sha256:9857fbcb372d1e937826ddbc953a435fad817dfcdf87c733d45db61b17b410b2"},
-    {file = "telnetlib3-2.0.7.tar.gz", hash = "sha256:933e202714dfd054dfe8498b0b911cf4fdcfc5cf22d910187b2419b13c2a6c74"},
+    {file = "telnetlib3-2.0.8-py2.py3-none-any.whl", hash = "sha256:9c5b762d359581af61b7872c5abd1aa82d8fd49044d12b4eb5a7c88660901dbd"},
+    {file = "telnetlib3-2.0.8.tar.gz", hash = "sha256:08a2a7a3a6790f89617442b7d491da8b531d87706fffd6a33eeff57ac440b752"},
 ]
 
 [[package]]
@@ -1463,4 +1463,4 @@ propcache = ">=0.2.1"
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12"
-content-hash = "b1a442769497074705512d7cef702a0a5da574d891e82d7f7bbbc9394a9bdf60"
+content-hash = "29e5a63f68204cde411d1cc2ad74f9dc4e904edd09d7ab7407bc2c06dc9a4529"
