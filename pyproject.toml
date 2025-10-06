@@ -39,7 +39,7 @@ py-range-parse = "1.0.5"
 pyyaml = "6.0.3"
 
 multidict = "6.6.4"
-frozenlist = "1.7.0"
+frozenlist = "1.8.0"
 yarl = "1.21.0"
 
 orjson = "3.11.3"
