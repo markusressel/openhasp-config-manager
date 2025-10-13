@@ -1097,14 +1097,14 @@ files = [
 
 [[package]]
 name = "py-range-parse"
-version = "1.0.5"
+version = "1.0.6"
 description = "Parses commonly used range notations to python objects"
 optional = false
 python-versions = "*"
 groups = ["main"]
 files = [
-    {file = "py_range_parse-1.0.5-py3-none-any.whl", hash = "sha256:a9d6b66f8e10dd26f5ff9726daef5b70bb32368a00a4563bd65d062c73d7c979"},
-    {file = "py_range_parse-1.0.5.tar.gz", hash = "sha256:15cf56ab4483814162f57f3b2bfd3ae68f6c4ea4cd7e710c881a5ce97f516c2c"},
+    {file = "py_range_parse-1.0.6-py3-none-any.whl", hash = "sha256:fe11726763a58b0fc376525440bc3bb07d39b4c1ee84809ad12b2f719f461ca5"},
+    {file = "py_range_parse-1.0.6.tar.gz", hash = "sha256:e8ded6123a8d422e6dfe880d29b0fdac930d927e3843cb272e49500a47010dda"},
 ]
 
 [[package]]
@@ -1592,4 +1592,4 @@ propcache = ">=0.2.1"
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12"
-content-hash = "5686a4e7c460aad54e66447ec3d373395bab7304d503147b22d0fc44f94650cf"
+content-hash = "1a249173b66b7fa37c2755464b47baa5c786c8d789a45126e5f22c24e5cc0bfe"
