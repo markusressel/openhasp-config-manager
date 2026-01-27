@@ -53,7 +53,7 @@ optional = true
 
 [tool.poetry.group.ui.dependencies]
 PyQt6 = "6.10.2"
-QtAwesome = "1.4.0"
+QtAwesome = "1.4.1"
 qasync = "*"
 
 [tool.poetry.group.dev.dependencies]

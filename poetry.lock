@@ -1322,14 +1322,14 @@ typing = ["mypy (>=1.0)"]
 
 [[package]]
 name = "qtawesome"
-version = "1.4.0"
+version = "1.4.1"
 description = "FontAwesome icons in PyQt and PySide applications"
 optional = false
 python-versions = ">=3.7"
 groups = ["ui"]
 files = [
-    {file = "qtawesome-1.4.0-py3-none-any.whl", hash = "sha256:a4d689fa071c595aa6184171ce1f0f847677cb8d2db45382c43129f1d72a3d93"},
-    {file = "qtawesome-1.4.0.tar.gz", hash = "sha256:783e414d1317f3e978bf67ea8e8a1b1498bad9dbd305dec814027e3b50521be6"},
+    {file = "qtawesome-1.4.1-py3-none-any.whl", hash = "sha256:6a45f0ec214e0cd7c9c867772ec596799dcd5fae00a4b17717ff0d95d2e3fb64"},
+    {file = "qtawesome-1.4.1.tar.gz", hash = "sha256:d6c5aa545b614fc562769e9eeadf18530e08b8eebe28af4ab5d38131194c9c7b"},
 ]
 
 [package.dependencies]
@@ -1580,4 +1580,4 @@ propcache = ">=0.2.1"
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12"
-content-hash = "0862c263eb81c1cf9006b9978a29f1d27e8266f383ba6eda6d9c104d513f4c09"
+content-hash = "918e49f60d0631ad6cbc52f02b050de4610229d95b99fd6bd83ad928bb51d4d0"
