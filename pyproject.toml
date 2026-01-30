@@ -38,7 +38,7 @@ Jinja2 = "3.1.6"
 py-range-parse = "1.0.6"
 pyyaml = "6.0.3"
 
-multidict = "6.7.0"
+multidict = "6.7.1"
 frozenlist = "1.8.0"
 yarl = "1.22.0"
 
