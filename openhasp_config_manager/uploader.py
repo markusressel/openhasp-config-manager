@@ -1,5 +1,6 @@
 import difflib
 from pathlib import Path
+from typing import Optional
 
 from openhasp_config_manager import util
 from openhasp_config_manager.openhasp_client.model.device import Device
@@ -148,7 +149,7 @@ class ConfigUploader:
                 self._api_client.delete_file(f)
         return result
 
-    def _check_if_checksum_will_change(self, file: Path, original_checksum: str, new_content: bytes) -> str | None:
+    def _check_if_checksum_will_change(self, file: Path, original_checksum: str, new_content: bytes) -> Optional[str]:
         """
         Checks if the checksum for the given file has changed since it was last uploaded.
         :param file: the path of the file to check

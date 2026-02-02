@@ -23,7 +23,7 @@ class VariableManager:
         """
         self._path_vars = self._read(self._cfg_root)
 
-    def add_var(self, key: str, value: any, path: Path = None):
+    def add_var(self, key: str, value: Any, path: Path = None):
         """
         Registers a variable to a path
         :param key: the variable key
@@ -53,7 +53,7 @@ class VariableManager:
         combined = merge_dict_recursive(combined, vars)
         self._path_vars[relative_path_str] = combined
 
-    def get_vars(self, path: Path) -> [str, Any]:
+    def get_vars(self, path: Path) -> Dict[str, Any]:
         """
         Returns the variable definitions and values for a given path.
 

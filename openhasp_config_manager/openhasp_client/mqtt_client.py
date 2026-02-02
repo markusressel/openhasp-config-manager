@@ -1,7 +1,7 @@
 import asyncio
 import json
 import uuid
-from typing import Callable, List, Dict
+from typing import Callable, List, Dict, Optional
 
 from aiomqtt import Client, Message
 
@@ -16,11 +16,11 @@ class MqttClient:
         self._mqtt_password = mqtt_password
         self._reconnect_interval_seconds = 5
 
-        self._mqtt_client_task: asyncio.Task | None = None
+        self._mqtt_client_task: Optional[asyncio.Task] = None
         self._callbacks: Dict[str, List[callable]] = {}
-        self.__mqtt_client: Client | None = None
+        self.__mqtt_client: Optional[Client] = None
 
-    async def publish(self, topic: str, payload: any = None):
+    async def publish(self, topic: str, payload: str | Dict | List = None):
         """
         Publish a message to a topic
         :param topic: topic to publish to

@@ -1,6 +1,6 @@
 import asyncio
 from enum import Enum
-from typing import Dict, List, Any, Callable, Tuple
+from typing import Dict, List, Any, Callable, Tuple, Optional
 
 from aiomqtt import Topic
 
@@ -491,7 +491,7 @@ class OpenHaspClient:
         """
         await self._mqtt_client.cancel_callback(callback=callback)
 
-    async def command(self, name: str, params: any = None):
+    async def command(self, name: str, params: Any = None):
         """
         Execute a command on a device
         :param name: the name of the command
@@ -500,7 +500,7 @@ class OpenHaspClient:
         topic = f"hasp/{self._device.config.mqtt.name}/command/{name}"
         await self._mqtt_client.publish(topic=topic, payload=params)
 
-    async def jsonl(self, jsonl: str or dict):
+    async def jsonl(self, jsonl: str | dict):
         """
         Send a JSONL string to the device.
         See: https://www.openhasp.com/0.7.0/commands/?h=jsonl#jsonl
@@ -587,7 +587,7 @@ class OpenHaspClient:
         """
         return self._webservice_client.get_files()
 
-    def get_file_content(self, file_name: str) -> bytes or None:
+    def get_file_content(self, file_name: str) -> Optional[bytes]:
         return self._webservice_client.get_file_content(file_name)
 
     def delete_file(self, file_name: str):

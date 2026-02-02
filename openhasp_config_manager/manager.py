@@ -1,7 +1,7 @@
 import re
 import shutil
 from pathlib import Path
-from typing import List, Set
+from typing import List, Set, Optional
 
 import orjson
 
@@ -116,7 +116,7 @@ class ConfigManager:
         return result
 
     @staticmethod
-    def _compute_component_path_of_pages_config_value(device_cfg_dir_root: Path, config: Config) -> Path | None:
+    def _compute_component_path_of_pages_config_value(device_cfg_dir_root: Path, config: Config) -> Optional[Path]:
         sub_path = config.hasp.pages[1:]
         sub_path = sub_path.removeprefix("L:/")
         sub_path = sub_path.removeprefix("/")
@@ -145,7 +145,7 @@ class ConfigManager:
 
         return result
 
-    def _read_jsonl_components(self, path, prefix) -> List[Component]:
+    def _read_jsonl_components(self, path, prefix) -> List[JsonlComponent]:
         result = []
         suffix = ".jsonl"
         for file in path.rglob(f"*{suffix}"):
@@ -164,7 +164,7 @@ class ConfigManager:
                 result.append(jsonl_component)
         return result
 
-    def _read_cmd_components(self, path, prefix) -> List[Component]:
+    def _read_cmd_components(self, path, prefix) -> List[CmdComponent]:
         result = []
         suffix = ".cmd"
         for file in path.rglob(f"*{suffix}"):
@@ -184,7 +184,7 @@ class ConfigManager:
                 result.append(cmd_component)
         return result
 
-    def _read_image_components(self, path, prefix) -> List[Component]:
+    def _read_image_components(self, path, prefix) -> List[ImageComponent]:
         result = []
         image_suffixes = [".png", ".bin"]
         for suffix in image_suffixes:
@@ -205,7 +205,7 @@ class ConfigManager:
         return result
 
     @staticmethod
-    def _create_text_component_from_path(device_cfg_dir_root: Path, path: Path, prefix: str = "") -> Component or None:
+    def _create_text_component_from_path(device_cfg_dir_root: Path, path: Path, prefix: str = "") -> Optional[TextComponent]:
         file = Path(device_cfg_dir_root, path)
 
         if not file.is_file():
@@ -230,7 +230,7 @@ class ConfigManager:
         return component
 
     @staticmethod
-    def _create_raw_component_from_path(device_cfg_dir_root: Path, path: Path, prefix: str) -> Component or None:
+    def _create_raw_component_from_path(device_cfg_dir_root: Path, path: Path, prefix: str) -> Optional[RawComponent]:
         file = Path(device_cfg_dir_root, path)
 
         if not file.is_file():
@@ -254,7 +254,7 @@ class ConfigManager:
         )
         return component
 
-    def _read_config(self, device_path: Path) -> Config | None:
+    def _read_config(self, device_path: Path) -> Optional[Config]:
         config_file = Path(device_path, CONFIG_FILE_NAME)
         if config_file.exists() and config_file.is_file():
             content = config_file.read_text()
@@ -456,7 +456,7 @@ class ConfigManager:
         referenced_cmd_components = self._find_referenced_cmd_components(cmd_components)
 
         # find jsonl files referenced in CMD files
-        referenced_jsonl_components = self._find_referenced_jsonl_components(cmd_components, jsonl_components)
+        referenced_jsonl_components: Set[Component] = self._find_referenced_jsonl_components(cmd_components, jsonl_components)
 
         # find image files referenced in CMD files and JSONL files
         referenced_image_components = self._find_referenced_image_components(

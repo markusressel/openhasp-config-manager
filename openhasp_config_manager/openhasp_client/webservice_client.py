@@ -89,7 +89,7 @@ class WebserviceClient:
         )
 
     def get_mqtt_config(self) -> MqttConfig:
-        data = self._do_request(
+        data: Dict[str, Any] = self._do_request(
             method=GET,
             url=self._base_url + "api/config/mqtt/",
         )
@@ -300,7 +300,7 @@ class WebserviceClient:
     def _do_request(self, method: str = GET, url: str = "/", params: dict = None,
                     json: Any = None, files: Any = None, data: Any = None,
                     headers: Dict = None,
-                    stream: bool = None) -> List | Dict | bytes | None:
+                    stream: bool = None) -> Optional[List | Dict | bytes]:
         """
         Executes a http request based on the given parameters
 
