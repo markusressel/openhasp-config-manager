@@ -503,7 +503,7 @@ class OpenHaspClient:
     async def jsonl(self, jsonl: str or dict):
         """
         Send a JSONL string to the device.
-        See: https://www.openhasp.com/0.6.3/commands/?h=jsonl#jsonl
+        See: https://www.openhasp.com/0.7.0/commands/?h=jsonl#jsonl
         :param jsonl: the JSONL string (or object) to send
         """
         await self.command(name="jsonl", params=jsonl)
@@ -511,7 +511,7 @@ class OpenHaspClient:
     async def clear_object(self, obj: str):
         """
         Clear an object on the device.
-        See: https://www.openhasp.com/0.6.3/design/objects/#common-methods
+        See: https://www.openhasp.com/0.7.0/design/objects/#common-methods
         :param obj: the object to clear, f.ex. "p1b2"
         """
         await self.command(name=f"{obj}.clear", )
@@ -519,7 +519,7 @@ class OpenHaspClient:
     async def clear_object_id(self, page: int, obj: int):
         """
         Clear an object on a specific page.
-        See: https://www.openhasp.com/0.6.3/design/objects/#common-methods
+        See: https://www.openhasp.com/0.7.0/design/objects/#common-methods
         :param page: the page index
         :param obj: the object index
         """
@@ -529,7 +529,7 @@ class OpenHaspClient:
     async def delete_object(self, obj: str):
         """
         Delete an object on the device.
-        See: https://www.openhasp.com/0.6.3/design/objects/#common-methods
+        See: https://www.openhasp.com/0.7.0/design/objects/#common-methods
         :param obj: the object to delete, f.ex. "p1b2"
         """
         await self.command(name=f"{obj}.delete", )
@@ -537,7 +537,7 @@ class OpenHaspClient:
     async def delete_object_id(self, page: int, obj: int):
         """
         Delete an object on a specific page.
-        See: https://www.openhasp.com/0.6.3/design/objects/#common-methods
+        See: https://www.openhasp.com/0.7.0/design/objects/#common-methods
         :param page: the page index
         :param obj: the object index
         """
@@ -547,7 +547,7 @@ class OpenHaspClient:
     async def bring_object_to_front(self, obj: str):
         """
         Bring an object to the front of the page.
-        See: https://www.openhasp.com/0.6.3/design/objects/#common-methods
+        See: https://www.openhasp.com/0.7.0/design/objects/#common-methods
         :param obj: the object to bring to the front, f.ex. "p1b2"
         """
         await self.command(name=f"{obj}.to_front", )
@@ -555,7 +555,7 @@ class OpenHaspClient:
     async def bring_object_to_front_id(self, page: int, obj: int):
         """
         Bring an object to the front of a specific page.
-        See: https://www.openhasp.com/0.6.3/design/objects/#common-methods
+        See: https://www.openhasp.com/0.7.0/design/objects/#common-methods
         :param page: the page index
         :param obj: the object index
         """
@@ -565,7 +565,7 @@ class OpenHaspClient:
     async def bring_object_to_back(self, obj: str):
         """
         Bring an object to the back of the page.
-        See: https://www.openhasp.com/0.6.3/design/objects/#common-methods
+        See: https://www.openhasp.com/0.7.0/design/objects/#common-methods
         :param obj: the object to bring to the back, f.ex. "p1b2"
         """
         await self.command(name=f"{obj}.to_back", )
@@ -573,7 +573,7 @@ class OpenHaspClient:
     async def bring_object_to_back_id(self, page: int, obj: int):
         """
         Bring an object to the back of a specific page.
-        See: https://www.openhasp.com/0.6.3/design/objects/#common-methods
+        See: https://www.openhasp.com/0.7.0/design/objects/#common-methods
         :param page: the page index
         :param obj: the object index
         """
