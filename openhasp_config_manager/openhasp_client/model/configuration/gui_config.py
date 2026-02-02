@@ -4,11 +4,11 @@ from typing import List
 
 @dataclass
 class GuiConfig:
-    idle1: int
-    idle2: int
-    bckl: int
-    bcklinv: int
-    rotate: int
-    cursor: int
-    invert: int
-    calibration: List[int]
+    idle1: int = None
+    idle2: int = None
+    bckl: int = None
+    bcklinv: int = None
+    rotate: int = None
+    cursor: int = None
+    invert: int = None
+    calibration: List[int] = None

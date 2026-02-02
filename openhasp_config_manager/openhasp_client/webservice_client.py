@@ -1,4 +1,4 @@
-from typing import Dict, List
+from typing import Dict, List, Any, Optional
 
 import orjson
 import requests
@@ -259,7 +259,7 @@ class WebserviceClient:
         file_names = list(map(lambda x: x["name"], files))
         return file_names
 
-    def get_file_content(self, file_name: str) -> bytes or None:
+    def get_file_content(self, file_name: str) -> Optional[bytes]:
         try:
             response = self._do_request(
                 method=GET,
@@ -298,9 +298,9 @@ class WebserviceClient:
         )
 
     def _do_request(self, method: str = GET, url: str = "/", params: dict = None,
-                    json: any = None, files: any = None, data: any = None,
-                    headers: dict = None,
-                    stream: bool = None) -> list or dict or None:
+                    json: Any = None, files: Any = None, data: Any = None,
+                    headers: Dict = None,
+                    stream: bool = None) -> List | Dict | bytes | None:
         """
         Executes a http request based on the given parameters
 
@@ -332,6 +332,7 @@ class WebserviceClient:
                 return response.json()
             else:
                 return response.content
+        return None
 
     @staticmethod
     def _compute_base_url(url: str) -> str:
