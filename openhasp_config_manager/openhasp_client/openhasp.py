@@ -510,7 +510,7 @@ class OpenHaspClient:
 
     async def clear_object(self, obj: str):
         """
-        Clear an object on the device.
+        Delete the children from the object on the device.
         See: https://www.openhasp.com/0.7.0/design/objects/#common-methods
         :param obj: the object to clear, f.ex. "p1b2"
         """
@@ -518,7 +518,7 @@ class OpenHaspClient:
 
     async def clear_object_id(self, page: int, obj: int):
         """
-        Clear an object on a specific page.
+        Delete the children from the object on a specific page.
         See: https://www.openhasp.com/0.7.0/design/objects/#common-methods
         :param page: the page index
         :param obj: the object index
@@ -528,7 +528,7 @@ class OpenHaspClient:
 
     async def delete_object(self, obj: str):
         """
-        Delete an object on the device.
+        Delete the object and its children from the page.
         See: https://www.openhasp.com/0.7.0/design/objects/#common-methods
         :param obj: the object to delete, f.ex. "p1b2"
         """
@@ -536,7 +536,7 @@ class OpenHaspClient:
 
     async def delete_object_id(self, page: int, obj: int):
         """
-        Delete an object on a specific page.
+        Delete the object and its children from the page.
         See: https://www.openhasp.com/0.7.0/design/objects/#common-methods
         :param page: the page index
         :param obj: the object index
