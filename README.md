@@ -381,7 +381,7 @@ under `theme.obj.<obj-type>`, where `<obj-type>` is the value of the `obj` prope
 The keys used must conform to the naming of the object properties as specified in OpenHasp, see:
 https://www.openhasp.com/latest/design/objects/
 
-F.ex., to make the background color of all buttons red by default, define:
+For example, to make the background color of all buttons red by default, define:
 
 `theme.yaml`
 ```yaml
