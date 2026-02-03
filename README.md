@@ -1,30 +1,32 @@
 # openhasp-config-manager
 
-A cli tool to manage all of your [openHASP](https://github.com/HASwitchPlate/openHASP) device configs in a centralized
-place.
+The missing management layer for your openHASP setup. A powerful suite of tools to simplify hardware UI design—combining
+a logic-aware config engine with a robust API client and deployment automation.
 
 # Features
 
-* [x] unlimited multi-device management
-* [x] shared configuration between devices
-* [x] jsonl preprocessing, which allows for
-    * [x] `//` comments within jsonl files
-    * [x] line breaks wherever you like
-    * [x] jinja2 templating within object values
-    * [x] local and globally scoped variables
-  * [x] default theming for all object types
-* [x] validation of common mistakes for
-    * [x] jsonl objects
-    * [x] cmd files
-* [x] simple configuration upload to the device(s)
-    * [x] automatic diffing to only update changed configuration files
-    * [x] git-style diff output for changed lines
-* [x] GUI Preview (WIP)
-    * [x] Inspect individual plate screens before deploying to an actual device
-    * [x] Speedup prototyping by using the preview to test your changes
-* [x] API client (Web + MQTT)
-    * [x] execute commands on a plate
-    * [x] listen to events and state updates
+🏗️ Advanced Configuration Engine
+
+* 🏠 Centralized Management: Manage an unlimited fleet of devices from one folder structure with shared configuration support.
+* 🛠️ Smart JSONL Preprocessing:
+  * **Multiline Support:** Write clean, readable blocks instead of giant single-line strings.
+  * **Jinja2 Templating:** Power your UI with logic, math, and cross-object variables (e.g., `{{ p1b1.y + 10 }}`).
+  * **Comments:** Use `//` to document your layout logic directly inside your `.jsonl` files.
+  * **YAML Variables:** Define global and local variables to reuse values across your entire setup.
+* 🎨 **Global Theme Engine:** Define styles (colors, fonts, radii) once and apply them to all objects instantly.
+
+🚢 Smart Deployment & Validation
+
+* 🛡️ **Early Error Detection:** Automatically catch syntax mistakes in .jsonl and .cmd files before they hit your hardware.
+* 🔄 **Delta Deployments:** Save time and flash wear—only upload what changed.
+* 🔍 **Visual Diffs:** Review exactly what will change with a git-style +/- line-by-line output.
+* 📺 **GUI Preview (WIP):** Inspect and prototype your screens in a digital previewer before deploying.
+
+🔌 API & Interaction
+
+* 📡 **Unified API Client:** Interact with your plates via a single Python interface over Web or MQTT.
+* ⚡ **Command Execution:** Send openHASP commands programmatically.
+* 🔔 **Real-time Events:** Subscribe to button presses, state updates, and touch events as they happen.
 
 ```shell
 > openhasp-config-manager -h
@@ -78,7 +80,7 @@ Since openhasp-config-manager needs some dependencies (see [here](/pyproject.tom
 
 ### venv-install
 
-[venv-install](https://github.com/markusressel/venv-install) is a little helper tool to eas the
+[venv-install](https://github.com/markusressel/venv-install) is a little helper tool to ease the
 installation, management and usage of python cli tools in venvs.
 
 ```bash
@@ -132,14 +134,14 @@ openhasp-config-manager when executing.
   subfolder for each openHASP device you want to configure using
   openhasp-config-manager. It is recommended to name subfolders according
   to the physical devices associated with them.
-    * `touch_down_1` (example device folder)
-        * A device folder contains `*.jsonl`, `*.cmd` and other files which should
-          only be uploaded to that particular device.
-        * You can create arbitrary nested folder structures for organizing the files.
-          There is a limit to the file name length though,
-          see [FAQ](#output-file-name-length-must-not-exceed-30-characters)
-        * You must provide a `config.json` file, see [config.json](#config.json)
-          for more info.
+  * `touch_down_1` (example device folder)
+    * A device folder contains `*.jsonl`, `*.cmd` and other files which should
+      only be uploaded to that particular device.
+    * You can create arbitrary nested folder structures for organizing the files.
+      There is a limit to the file name length though,
+      see [FAQ](#output-file-name-length-must-not-exceed-30-characters)
+    * You must provide a `config.json` file, see [config.json](#config.json)
+      for more info.
 
 A more advanced configuration layout could look something like this:
 
