@@ -28,6 +28,8 @@ a logic-aware config engine with a robust API client and deployment automation.
 * ⚡ **Command Execution:** Send openHASP commands programmatically.
 * 🔔 **Real-time Events:** Subscribe to button presses, state updates, and touch events as they happen.
 
+# CLI
+
 ```shell
 > openhasp-config-manager -h
 Usage: openhasp-config-manager [OPTIONS] COMMAND [ARGS]...
@@ -89,6 +91,8 @@ openhasp-config-manager -h
 ```
 
 ### Manual
+<details>
+<summary><b>Manual Installation & Uninstallation</b></summary>
 
 ```bash
 mkdir -p ~/venvs/openhasp-config-manager
@@ -112,6 +116,9 @@ openhasp-config-manager analyze -c "./openhasp-configs"
 deactivate
 rm -rf ~/venvs/openhasp-config-manager
 ```
+
+</details>
+
 
 ## Plate Configuration Setup
 
@@ -209,7 +216,7 @@ to enable all of its features. To fix that we need to add a custom section to th
 openhasp-config-manager runs all configuration files through various preprocessors, which allow us to use
 features the original file formats do not support by themselves, like f.ex. templating.
 
-#### Multiline JSONL files
+#### 📝 Multiline JSONL files
 
 While the JSONL file format requires each object to be on a single line, openhasp-config-manager
 allows you to add as many line breaks as you wish. This makes it much easier to edit, since a config
@@ -249,7 +256,7 @@ You can mark comments by prefixing them with a double forward-slash:
 }
 ```
 
-#### Templating
+#### 🪄 Templating
 
 You can use Jinja2 templates inside all jsonl object values. To access the value of another object in a
 template, you can use the `pXbY` syntax established by openHASP, where `X` is the `page` of an object and
@@ -276,7 +283,7 @@ You can use the full functionality of Jinja2 like f.ex. math operations, functio
   }
 ```
 
-#### Variables
+#### 📦 Variables & Scoping
 
 Besides accessing other objects, you can also define custom variables yourself, which can then
 be referenced inside of templates. Variables are defined using `*.yaml` files. If you
