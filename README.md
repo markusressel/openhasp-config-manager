@@ -52,15 +52,15 @@ Commands:
   vars        Prints the variables accessible in a given path.
 ```
 
-# Disclaimer
+# 🛠️ Project Status
 
-**TL;DR: This project is still experimental.**
+I use `openhasp-config-manager` **exclusively** to manage my own openHASP devices. While it is my "daily driver", please keep in mind:
 
-I do use openhasp-config-manager exclusively to configure all of my openHASP devices. I am in the
-process of adding tests to everything to make it more reliable and have also added lots of features along the way.
-However, there are definitely still a couple of things that do not yet work as intended. Error logs
-might need some love to be able to figure out what you did wrong. If you like the
-project, feel free to open an issue or PR to help me out.
+* **In Development:** I’m actively adding tests and refining features to make it more robust.
+* **Rough Edges:** Error logging is still a bit basic. If something goes wrong, the logs might require some "detective work" to figure out the exact cause.
+* **Experimental:** It’s stable for my needs, but since every openHASP setup is unique, you might run into edge cases I haven't hit yet.
+
+If you like the project and want to help polish those error logs or add features, I’m always happy to review an issue or a PR!
 
 # How to use
 
