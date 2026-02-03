@@ -204,7 +204,7 @@ to enable all of its features. To fix that we need to add a custom section to th
   ... rest of config ...
 ```
 
-### Config File Preprocessing
+### 🧠 Config File Preprocessing
 
 openhasp-config-manager runs all configuration files through various preprocessors, which allow us to use
 features the original file formats do not support by themselves, like f.ex. templating.
