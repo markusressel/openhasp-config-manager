@@ -113,7 +113,7 @@ deactivate
 rm -rf ~/venvs/openhasp-config-manager
 ```
 
-## Configuration
+## Plate Configuration Setup
 
 openhasp-config-manager is first and foremost a configuration
 management system. Simply follow the basic folder structure and
