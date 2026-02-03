@@ -171,7 +171,7 @@ openhasp-configs
         └── online.cmd
 ```
 
-### config.json
+### ⚙️ Plate Setup (`config.json`)
 
 openhasp-config-manager makes use of the `config.json` on your plate. It can extract information
 from it to detect things like screen orientation, and also allows you to deploy changes within the
@@ -186,6 +186,9 @@ built-in file browser integrated into the webserver of your openHASP plate, see
 The official `config.json` file doesn't provide enough info for openhasp-config-manager
 to enable all of its features though. To fix that simply add a section to the
 file after downloading it:
+
+1. Download your config.json via the openHASP web browser.
+2. Append the `openhasp_config_manager` block, adjusting the values as needed.
 
 ```json
 {
@@ -202,6 +205,7 @@ file after downloading it:
     "ssid": "Turris IoT",
     ...
   }
+  ... rest of config ...
 ```
 
 ### Config File Preprocessing
@@ -449,13 +453,8 @@ bash -c "screen -q -L -Logfile device.log /dev/ttyUSB0 115200 &> /dev/null; tail
 
 ## Output file name length must not exceed 30 characters
 
-If you want to organize your files (both common and device-specific ones) you can
-simply create subfolders to achieve your desired structure. However, due to a technical
-limitation openHASP does not support subfolder on the actual device. To overcome
-this limitation openhasp-config-manager will automatically generate a file name for
-files in subfolders before uploading them to the device. `.json` or `.cmd` files within subfolders
-will be renamed by concatenating their full subpath using an underscore (`_`) as a separator. So f.ex.
-the file in the following structure:
+openHASP doesn't support subfolders. To keep your local project organized, the manager flattens your structure 
+during upload (e.g., `folder/page.jsonl` becomes `folder_page.jsonl`). So f.ex. the file in the following structure:
 
 ```text
 openhasp-configs
@@ -466,6 +465,9 @@ openhasp-configs
 ```
 
 would be uploaded to the `touch_down_1` device with the name `0_home_0_header.jsonl`.
+
+To avoid the "Output file name length must not exceed 30 characters" error, make sure that the
+flattened file name (including the device folder prefix) does not exceed 30 characters.
 
 # Contributing
 
