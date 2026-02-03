@@ -1,6 +1,6 @@
 # openhasp-config-manager
 
-The missing management layer for your openHASP setup. A powerful suite of tools to simplify hardware UI design—combining
+The missing management layer for your openHASP setup. A powerful suite of tools to simplify hardware UI design, combining
 a logic-aware config engine with a robust API client and deployment automation.
 
 # Features
