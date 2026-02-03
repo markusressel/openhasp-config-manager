@@ -173,21 +173,17 @@ openhasp-configs
 
 ### ⚙️ Plate Setup (`config.json`)
 
-openhasp-config-manager makes use of the `config.json` on your plate. It can extract information
-from it to detect things like screen orientation, and also allows you to deploy changes within the
-`config.json` file. Since [the official API does not support
+openhasp-config-manager makes use of the `config.json` on your plate by extracting information
+like the screen orientation. It even allows you to deploy changes within the `config.json` file.
+
+> Note: Since [the official API does not support
 uploading the full file](https://github.com/HASwitchPlate/openHASP/issues/363), only settings
 which can also be set through the web ui on the plate itself are currently supported.
+ 
+**However**, the official `config.json` file doesn't provide enough info for openhasp-config-manager
+to enable all of its features. To fix that we need to add a custom section to the file.
 
-To retrieve the initial version of the `config.json` file you can use the
-built-in file browser integrated into the webserver of your openHASP plate, see
-[official docs](https://www.openhasp.com/latest/faq/?h=web#is-there-a-file-browser-built-in).
-
-The official `config.json` file doesn't provide enough info for openhasp-config-manager
-to enable all of its features though. To fix that simply add a section to the
-file after downloading it:
-
-1. Download your config.json via the openHASP web browser.
+1. Download your config.json via the openHASP web browser, see [official docs](https://www.openhasp.com/latest/faq/?h=web#is-there-a-file-browser-built-in).
 2. Append the `openhasp_config_manager` block, adjusting the values as needed.
 
 ```json
