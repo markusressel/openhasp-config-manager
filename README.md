@@ -228,13 +228,7 @@ like this:
 will be deployed like this:
 
 ```json lines
-{
-  "page": 0,
-  "id": 31,
-  "obj": "msgbox",
-  "text": "%ip%",
-  "auto_close": 5000
-}
+{"page": 0, "id": 31, "obj": "msgbox", "text": "%ip%", "auto_close": 5000}
 ```
 
 #### Comments
