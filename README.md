@@ -366,7 +366,7 @@ common.navbar.last_page: 4
 header.title: Home
 ```
 
-#### Theming
+#### 🎨 Theming
 
 To specify default property values for an object type, simply define them as a variable
 under `theme.obj.<obj-type>`, where `<obj-type>` is the value of the `obj` property of the object.
