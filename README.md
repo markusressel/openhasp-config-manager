@@ -62,7 +62,7 @@ I use `openhasp-config-manager` **exclusively** to manage my own openHASP device
 
 If you like the project and want to help polish those error logs or add features, I’m always happy to review an issue or a PR!
 
-# How to use
+# Setup
 
 ## Docker
 
@@ -120,7 +120,7 @@ rm -rf ~/venvs/openhasp-config-manager
 </details>
 
 
-## Plate Configuration Setup
+## Getting Started
 
 openhasp-config-manager is first and foremost a configuration
 management system. Simply follow the basic folder structure and
@@ -128,7 +128,7 @@ config deployment will become trivial. **Please read all of this,
 as it is very important to understand the basic structure on
 which everything relies.**
 
-### Folder Structure
+### 📁 Folder Structure
 
 The following folders should reside inside a single parent
 folder, f.ex. named `openhasp-configs`. This folder can be
@@ -383,6 +383,7 @@ https://www.openhasp.com/latest/design/objects/
 
 F.ex., to make the background color of all buttons red by default, define:
 
+`theme.yaml`
 ```yaml
 theme:
   obj:
