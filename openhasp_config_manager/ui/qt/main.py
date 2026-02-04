@@ -42,7 +42,11 @@ class MainWindow(QMainWindow):
         self.device_list_widget.set_devices(self.devices)
 
     def on_device_selected(self, device: Device):
-        self.select_device(device)
+        # reload devices to reflect any changes that happened on disk
+        self.devices = self.config_manager.analyze()
+        self.device_list_widget.set_devices(self.devices)
+        if any(d.name == device.name for d in self.devices):
+            self.select_device(device)
 
     def select_device(self, device):
         self.device = device
