@@ -239,7 +239,7 @@ class OpenHaspClient:
         on the same port.
 
         :param obj: the object to set the image for
-        :param image: the image to set
+        :param image: the image to set, can be a URL or anything that can be opened by PIL.Image.open, f.ex. a file path
         :param access_host: the address at which the device this webserver is running on is accessible to the plate
         :param access_port: the port to bind the webserver to, defaults to 0 (random free port)
         :param listen_host: the address to bind the webserver to
