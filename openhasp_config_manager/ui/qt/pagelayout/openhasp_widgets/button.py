@@ -87,5 +87,5 @@ class HaspButtonItem(QGraphicsObject):
         """Handle the click event."""
         # Visual feedback (optional): you could change brush color here
         # and call self.update() to simulate a 'pressed' state
-        self.clicked.emit(self.obj_id)
         super().mousePressEvent(event)
+        self.clicked.emit(self.obj_id)
