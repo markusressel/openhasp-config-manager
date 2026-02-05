@@ -2,6 +2,7 @@ import asyncio
 import sys
 from pathlib import Path
 
+import qt_themes
 from PyQt6.QtWidgets import QApplication
 from qasync import QEventLoop
 
@@ -12,6 +13,7 @@ from openhasp_config_manager.ui.qt.main import MainWindow
 async def c_gui(config_dir: Path, output_dir: Path):
     config_manager = _create_config_manager(config_dir, output_dir)
     app = QApplication(sys.argv)
+    qt_themes.set_theme('one_dark_two')
     event_loop = QEventLoop(app)
     asyncio.set_event_loop(event_loop)
 
