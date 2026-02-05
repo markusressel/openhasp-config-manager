@@ -75,6 +75,7 @@ class PageLayoutEditorWidget(QWidget):
             self.jsonl_component_objects[jsonl_component.name] = loaded_objects
 
         self.page_preview_widget = PagePreviewWidget2(device_pages_data, [])
+        self.page_preview_widget.clickedValue.connect(lambda value: print(f"Clicked at value: {value}"))
         self.preview_container.layout().addWidget(self.page_preview_widget)
 
         self.page_jsonl_preview = PageJsonlPreviewWidget(device_pages_data)
