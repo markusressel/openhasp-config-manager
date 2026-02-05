@@ -15,7 +15,12 @@ from openhasp_config_manager.openhasp_client.icons import IntegratedIcon
 from openhasp_config_manager.openhasp_client.model.component import JsonlComponent
 from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
-from openhasp_config_manager.ui.qt.pagelayout.openhasp_widgets import HaspButtonItem
+from openhasp_config_manager.ui.qt.pagelayout.openhasp_widgets.bar import HaspBarItem
+from openhasp_config_manager.ui.qt.pagelayout.openhasp_widgets.button import HaspButtonItem
+from openhasp_config_manager.ui.qt.pagelayout.openhasp_widgets.image import HaspImageItem
+from openhasp_config_manager.ui.qt.pagelayout.openhasp_widgets.label import HaspLabelItem
+from openhasp_config_manager.ui.qt.pagelayout.openhasp_widgets.slider import HaspSliderItem
+from openhasp_config_manager.ui.qt.pagelayout.openhasp_widgets.switch import HaspSwitchItem
 from openhasp_config_manager.ui.qt.util import clear_layout
 
 
@@ -294,6 +299,28 @@ class PagePreviewWidget2(QGraphicsView):
                 logging.debug(f"Adding button item: {obj}")
                 item = HaspButtonItem(obj)
                 item.clicked.connect(self.clickedValue.emit)
+                self.scene.addItem(item)
+            elif obj_type == "switch":
+                logging.debug(f"Adding switch item: {obj}")
+                item = HaspSwitchItem(obj)
+                item.toggled.connect(lambda obj_id, val: print(f"Switch {obj_id} toggled to {val}"))
+                self.scene.addItem(item)
+            elif obj_type == "bar":
+                logging.debug(f"Adding bar item: {obj}")
+                item = HaspBarItem(obj)
+                self.scene.addItem(item)
+            elif obj_type == "slider":
+                logging.debug(f"Adding slider item: {obj}")
+                item = HaspSliderItem(obj)
+                item.valueChanged.connect(lambda obj_id, val: print(f"Slider {obj_id} changed to {val}"))
+                self.scene.addItem(item)
+            elif obj_type == "label":
+                logging.debug(f"Adding label item: {obj}")
+                item = HaspLabelItem(obj)
+                self.scene.addItem(item)
+            elif obj_type == "img":
+                logging.debug(f"Adding image item: {obj}")
+                item = HaspImageItem(obj)
                 self.scene.addItem(item)
 
     def set_objects(self, loaded_objects: List[dict]):
