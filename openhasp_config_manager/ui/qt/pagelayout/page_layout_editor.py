@@ -1,11 +1,11 @@
 from collections import OrderedDict
-from typing import List, Tuple, Dict, Set
+from typing import List, Tuple, Dict, Set, Optional
 
 import qtawesome as qta
 from PyQt6 import QtCore
 from PyQt6.QtCore import QSize, Qt, QRect, QRectF
 from PyQt6.QtGui import QPainter, QBrush, QColor, QMouseEvent, QPainterPath, QFont, QPen
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QSizePolicy, QPushButton, QHBoxLayout, QTextEdit
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QSizePolicy, QPushButton, QHBoxLayout, QTextEdit, QGraphicsView, QGraphicsScene
 from orjson import orjson
 from qasync import asyncSlot
 
@@ -14,6 +14,7 @@ from openhasp_config_manager.openhasp_client.icons import IntegratedIcon
 from openhasp_config_manager.openhasp_client.model.component import JsonlComponent
 from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
+from openhasp_config_manager.ui.qt.pagelayout.openhasp_widgets import HaspButtonItem
 from openhasp_config_manager.ui.qt.util import clear_layout
 
 
@@ -58,7 +59,7 @@ class PageLayoutEditorWidget(QWidget):
         self.current_index = 1
         self.jsonl_component_objects.clear()
 
-    def set_data(self, device_pages_data: OpenHaspDevicePagesData or None):
+    def set_data(self, device_pages_data: Optional[OpenHaspDevicePagesData]):
         self.device_pages_data = device_pages_data
         self.clear()
         if device_pages_data is None:
@@ -72,7 +73,7 @@ class PageLayoutEditorWidget(QWidget):
             loaded_objects = list(map(orjson.loads, objects_in_jsonl))
             self.jsonl_component_objects[jsonl_component.name] = loaded_objects
 
-        self.page_preview_widget = PagePreviewWidget(device_pages_data, [])
+        self.page_preview_widget = PagePreviewWidget2(device_pages_data, [])
         self.preview_container.layout().addWidget(self.page_preview_widget)
 
         self.page_jsonl_preview = PageJsonlPreviewWidget(device_pages_data)
@@ -249,7 +250,63 @@ class PageJsonlPreviewWidget(QTextEdit):
         self.setText(content)
 
 
+class PagePreviewWidget2(QGraphicsView):
+    clickedValue = QtCore.pyqtSignal(int)
+
+    @property
+    def page_width(self) -> int:
+        return self.page.device.config.openhasp_config_manager.device.screen.width
+
+    @property
+    def page_height(self) -> int:
+        return self.page.device.config.openhasp_config_manager.device.screen.height
+
+    def __init__(self, page: OpenHaspDevicePagesData, page_objects: List[dict], *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.page = page
+
+        # 1. Setup the Scene (use the device's actual native resolution)
+        self.native_width = self.page_width
+        self.native_height = self.page_height
+
+        self.scene = QGraphicsScene(0, 0, self.native_width, self.native_height)
+        self.scene.setBackgroundBrush(QColor('black'))
+        self.setScene(self.scene)
+
+        # 2. Make it scale smoothly
+        self.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+        self.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        self.objects: List[dict] = page_objects
+        self.load_objects()
+
+    def load_objects(self):
+        self.scene.clear()
+        for obj in self.objects:
+            obj_type = obj.get("obj")
+            if obj_type == "btn":
+                item = HaspButtonItem(obj)
+                item.clicked.connect(self.clickedValue.emit)
+                self.scene.addItem(item)
+
+    def set_objects(self, loaded_objects: List[dict]):
+        self.objects = loaded_objects
+        self._trigger_refresh()
+
+    def _trigger_refresh(self):
+        self.update()
+
+    def resizeEvent(self, event):
+        # This keeps the aspect ratio and fits the scene into the view
+        self.fitInView(self.scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
+        super().resizeEvent(event)
+
+
 class PagePreviewWidget(QWidget):
+    """
+    Draws a preview of a page layout.
+    """
     clickedValue = QtCore.pyqtSignal(int)
 
     def __init__(self, page: OpenHaspDevicePagesData, page_objects: List[dict], *args, **kwargs):
