@@ -5,16 +5,60 @@ from PyQt6.QtWidgets import QGraphicsObject, QGraphicsTextItem
 class HaspLabelItem(QGraphicsObject):
     clicked = QtCore.pyqtSignal(int)
 
+    @property
+    def obj_id(self) -> int:
+        return self.obj_data.get("id", 0)
+
+    @property
+    def obj_x(self) -> int:
+        return self.obj_data.get("x", 0)
+
+    @property
+    def obj_y(self) -> int:
+        return self.obj_data.get("y", 0)
+
+    @property
+    def w(self) -> int:
+        return self.obj_data.get("w", 100)
+
+    @property
+    def h(self) -> int:
+        return self.obj_data.get("h", 30)
+
+    @property
+    def text(self) -> str:
+        return self.obj_data.get("text", "")
+
+    @property
+    def text_color(self) -> str:
+        return self.obj_data.get("text_color", "#FFFFFF")
+
+    @property
+    def text_font(self) -> int:
+        return self.obj_data.get("text_font", 25)
+
+    @property
+    def align(self) -> str:
+        return self.obj_data.get("align", "left")
+
+    @property
+    def bg_color(self) -> str:
+        return self.obj_data.get("bg_color", None)
+
+    @property
+    def border_width(self) -> int:
+        return self.obj_data.get("border_width", 0)
+
+    @property
+    def border_color(self) -> str:
+        return self.obj_data.get("border_color", "#FF0000")
+
     def __init__(self, obj_data, parent_widget=None):
         super().__init__()
         self.obj_data = obj_data
         self.parent_widget = parent_widget
-        self.obj_id = obj_data.get("id", 0)
 
-        # Native OpenHASP coordinates
-        self.w = obj_data.get("w", 100)
-        self.h = obj_data.get("h", 30)
-        self.setPos(obj_data.get("x", 0), obj_data.get("y", 0))
+        self.setPos(self.obj_x, self.obj_y)
 
         # Child item for text rendering
         self.text_item = QGraphicsTextItem(parent=self)
@@ -26,7 +70,7 @@ class HaspLabelItem(QGraphicsObject):
 
     def _setup_text(self):
         """Processes font, color, icons, and alignment."""
-        raw_text = str(self.obj_data.get("text", ""))
+        raw_text = str(self.text)
 
         # Apply icon replacement logic if available on the parent widget
         if self.parent_widget and hasattr(self.parent_widget, '_replace_unicode_with_icons'):
@@ -37,11 +81,11 @@ class HaspLabelItem(QGraphicsObject):
         self.text_item.setPlainText(processed_text)
 
         # Color
-        color = self.obj_data.get("text_color", "#FFFFFF")
+        color = self.text_color
         self.text_item.setDefaultTextColor(QtGui.QColor(color))
 
         # Font (OpenHASP uses pixel sizes)
-        font_size = self.obj_data.get("text_font", 16)
+        font_size = int(self.text_font * 0.7)  # Adjust for scaling differences
         font = QtGui.QFont("Roboto Condensed", font_size)
         self.text_item.setFont(font)
 
@@ -50,7 +94,7 @@ class HaspLabelItem(QGraphicsObject):
 
     def _align_text(self):
         """Positions the child text item based on the 'align' property."""
-        align = self.obj_data.get("align", "left")
+        align = self.align
         t_rect = self.text_item.boundingRect()
 
         # Vertical center is standard for HASP labels
@@ -71,16 +115,16 @@ class HaspLabelItem(QGraphicsObject):
             return
 
         # Check for background color (some HASP labels have them)
-        bg_color = self.obj_data.get("bg_color")
+        bg_color = self.bg_color
         if bg_color:
             painter.setBrush(QtGui.QBrush(QtGui.QColor(bg_color)))
             painter.setPen(QtCore.Qt.PenStyle.NoPen)
             painter.drawRect(self.boundingRect())
 
         # Draw border if specified
-        border_width = self.obj_data.get("border_width", 0)
+        border_width = self.border_width
         if border_width > 0:
-            border_color = self.obj_data.get("border_color", "#FF0000")
+            border_color = self.border_color
             pen = QtGui.QPen(QtGui.QColor(border_color))
             pen.setWidth(border_width)
             painter.setPen(pen)
