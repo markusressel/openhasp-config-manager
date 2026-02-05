@@ -1,5 +1,4 @@
 import logging
-from copy import deepcopy
 from typing import List, Tuple
 
 import qtawesome as qta
@@ -60,9 +59,8 @@ class PagePreviewWidget2(QGraphicsView):
             if obj_type == "btn":
                 logging.debug(f"Adding button item: {obj}")
                 item = HaspButtonItem(obj)
-                # item.clicked.connect(self.clickedValue.emit)
-                this_object = deepcopy(obj)
-                item.clicked.connect(lambda obj_id: self.buttonClicked.emit(this_object))
+                item.clicked.connect(self.clickedValue.emit)
+                item.clicked.connect(lambda obj_id, this_object=obj: self.buttonClicked.emit(this_object))
                 self.scene.addItem(item)
             elif obj_type == "switch":
                 logging.debug(f"Adding switch item: {obj}")

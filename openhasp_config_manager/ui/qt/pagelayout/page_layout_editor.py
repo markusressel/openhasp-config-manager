@@ -87,8 +87,10 @@ class PageLayoutEditorWidget(QWidget):
         action = obj.get("action", None)
         if action == "next":
             self.next_page_index()
-        elif action == "previous":
+        elif action == "prev":
             self.previous_page_index()
+        elif action == "back":
+            self.set_page_index(0)
 
     @asyncSlot()
     async def _on_clear_page_clicked(self):
