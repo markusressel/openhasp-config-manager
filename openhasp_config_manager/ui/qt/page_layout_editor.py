@@ -10,9 +10,10 @@ from orjson import orjson
 from qasync import asyncSlot
 
 from openhasp_config_manager.manager import ConfigManager
+from openhasp_config_manager.openhasp_client.icons import IntegratedIcon
 from openhasp_config_manager.openhasp_client.model.component import JsonlComponent
 from openhasp_config_manager.openhasp_client.model.device import Device
-from openhasp_config_manager.openhasp_client.openhasp import IntegratedIcon, OpenHaspClient
+from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 from openhasp_config_manager.ui.qt.util import clear_layout
 
 
