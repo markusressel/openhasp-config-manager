@@ -11,11 +11,11 @@ class HaspButtonItem(QGraphicsObject):
         return self.obj_data.get("id", 0)
 
     @property
-    def x(self) -> int:
+    def obj_x(self) -> int:
         return self.obj_data.get("x", 0)
 
     @property
-    def y(self) -> int:
+    def obj_y(self) -> int:
         return self.obj_data.get("y", 0)
 
     @property
@@ -60,7 +60,7 @@ class HaspButtonItem(QGraphicsObject):
         self.parent_widget = parent_widget
 
         # Set position in the native scene coordinate system
-        self.setPos(self.x, self.y)
+        self.setPos(self.obj_x, self.obj_y)
 
         # Setup Text Item
         self.text_item = QGraphicsTextItem(parent=self)
