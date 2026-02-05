@@ -43,7 +43,7 @@ class HaspButtonItem(QGraphicsObject):
         self.text_item.setPlainText(processed_text)
 
         # Font settings
-        pixel_size = self.obj_data.get("text_font", 25)
+        pixel_size = self.obj_data.get("text_font", 18)
         font = QFont("Roboto Condensed", pixel_size)
         self.text_item.setFont(font)
 
