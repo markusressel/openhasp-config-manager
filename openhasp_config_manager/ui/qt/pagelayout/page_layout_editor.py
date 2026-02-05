@@ -90,7 +90,7 @@ class PageLayoutEditorWidget(QWidget):
         elif action == "prev":
             self.previous_page_index()
         elif action == "back":
-            self.set_page_index(0)
+            self.go_to_home_page()
 
     @asyncSlot()
     async def _on_clear_page_clicked(self):
@@ -132,6 +132,12 @@ class PageLayoutEditorWidget(QWidget):
         for obj in page_objects:
             await client.jsonl(obj)
 
+    def go_to_home_page(self):
+        usable_page_indices = self.get_navigable_page_indices()
+        if len(usable_page_indices) == 0:
+            return
+        self.set_page_index(usable_page_indices[0])
+
     def set_page_index(self, index: int):
         print("Setting page index", index)
         self.current_index = index
@@ -145,8 +151,7 @@ class PageLayoutEditorWidget(QWidget):
         """
         Cycle to the next available page index, skipping page 0 and rolling over to the first page.
         """
-        usable_page_indices = self.get_used_page_indices() - {0}
-        usable_page_indices = list(sorted(usable_page_indices))
+        usable_page_indices = self.get_navigable_page_indices()
         current_page_index_position_in_set = usable_page_indices.index(self.current_index)
         new_page_index_position_in_set = (current_page_index_position_in_set + 1) % len(usable_page_indices)
         self.set_page_index(usable_page_indices[new_page_index_position_in_set])
@@ -155,11 +160,14 @@ class PageLayoutEditorWidget(QWidget):
         """
         Cycle to the previous available page index, skipping page 0 and rolling over to the last page.
         """
-        usable_page_indices = self.get_used_page_indices() - {0}
-        usable_page_indices = list(sorted(usable_page_indices))
+        usable_page_indices = self.get_navigable_page_indices()
         current_page_index_position_in_set = usable_page_indices.index(self.current_index)
         new_page_index_position_in_set = (current_page_index_position_in_set - 1) % len(usable_page_indices)
         self.set_page_index(usable_page_indices[new_page_index_position_in_set])
+
+    def get_navigable_page_indices(self) -> List[int]:
+        usable_page_indices = self.get_used_page_indices() - {0}
+        return list(sorted(usable_page_indices))
 
     def get_used_page_indices(self) -> Set[int]:
         """
