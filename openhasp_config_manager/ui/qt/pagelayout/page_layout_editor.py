@@ -1,3 +1,4 @@
+import logging
 from collections import OrderedDict
 from typing import List, Tuple, Dict, Set, Optional
 
@@ -285,13 +286,18 @@ class PagePreviewWidget2(QGraphicsView):
         self.scene.clear()
         for obj in self.objects:
             obj_type = obj.get("obj")
+            if not obj_type:
+                continue  # Skip objects with no type
+
             if obj_type == "btn":
+                logging.debug(f"Adding button item: {obj}")
                 item = HaspButtonItem(obj)
                 item.clicked.connect(self.clickedValue.emit)
                 self.scene.addItem(item)
 
     def set_objects(self, loaded_objects: List[dict]):
         self.objects = loaded_objects
+        self.load_objects()
         self._trigger_refresh()
 
     def _trigger_refresh(self):

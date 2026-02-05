@@ -10,18 +10,22 @@ from openhasp_config_manager.cli.common import _create_config_manager
 from openhasp_config_manager.ui.qt.main import MainWindow
 
 
-async def c_gui(config_dir: Path, output_dir: Path):
-    config_manager = _create_config_manager(config_dir, output_dir)
+def c_gui(config_dir: Path, output_dir: Path):
+    """The synchronous entry point called by your Click CLI."""
     app = QApplication(sys.argv)
-    qt_themes.set_theme('one_dark_two')
-    event_loop = QEventLoop(app)
-    asyncio.set_event_loop(event_loop)
 
-    app_close_event = asyncio.Event()
-    app.aboutToQuit.connect(app_close_event.set)
+    # 1. Create the loop but DON'T start it with run_until_complete
+    loop = QEventLoop(app)
+    asyncio.set_event_loop(loop)
+
+    # 2. Setup the UI and the logic
+    qt_themes.set_theme('one_dark_two')
+    config_manager = _create_config_manager(config_dir, output_dir)
 
     window = MainWindow(config_manager)
     window.show()
 
-    event_loop.run_until_complete(app_close_event.wait())
-    event_loop.close()
+    # 4. Use the standard Qt exec() and the qasync context manager.
+    # This avoids the nested loop conflict with PyCharm's debugger.
+    with loop:
+        sys.exit(app.exec())

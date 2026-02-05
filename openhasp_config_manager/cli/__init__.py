@@ -134,9 +134,7 @@ def gui(config_dir: Path, output_dir: Path):
     """
     Launches the GUI of openhasp-config-manager.
     """
-    asyncio.run(
-        c_gui(config_dir, output_dir)
-    )
+    c_gui(config_dir, output_dir)
 
 @cli.command(name="generate")
 @click.option(*get_option_names(PARAM_CFG_DIR),
