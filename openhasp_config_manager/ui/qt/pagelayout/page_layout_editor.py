@@ -68,9 +68,9 @@ class PageLayoutEditorWidget(QWidget):
         self.page_jsonl_preview = PageJsonlPreviewWidget(device_pages_data)
         self.preview_container.layout().addWidget(self.page_jsonl_preview)
 
-        self.clear_page_button = QPushButton("Clear Page")
-        self.preview_container.layout().addWidget(self.clear_page_button)
-        self.clear_page_button.clicked.connect(self._on_clear_page_clicked)
+        self.button_clear_page = QPushButton("Clear Page")
+        self.preview_container.layout().addWidget(self.button_clear_page)
+        self.button_clear_page.clicked.connect(self._on_clear_page_clicked)
 
         self.button_deploy_page = QPushButton("Deploy Page")
         self.preview_container.layout().addWidget(
@@ -110,15 +110,21 @@ class PageLayoutEditorWidget(QWidget):
         if self.current_index is None:
             return
 
+        self.button_clear_page.setEnabled(False)
+
         device = self.device_pages_data.device
+        current_index = self.current_index
 
         print(f"Clearing page {self.current_index} on device {device.name}")
         client = OpenHaspClient(device)
 
         async def __async_work():
-            await client.clear_page(self.current_index)
+            await client.clear_page(current_index)
 
-        run_async(__async_work())
+        run_async(
+            coro=__async_work(),
+            on_done=lambda _: self.button_clear_page.setEnabled(True)
+        )
 
     @qBridge()
     def _on_deploy_page_clicked(self):
@@ -131,18 +137,19 @@ class PageLayoutEditorWidget(QWidget):
         self.button_deploy_page.setEnabled(False)
 
         device = self.device_pages_data.device
+        current_index = self.current_index
+        page_objects = self.get_page_objects(index=current_index, include_global=True)
 
         print(f"Deploying page {self.current_index} to device {device.name}")
         client = OpenHaspClient(device)
 
         async def __async_work():
             # clear the page first
-            print(f"Clearing page {self.current_index}")
-            await client.clear_page(self.current_index)
+            print(f"Clearing page {current_index}")
+            await client.clear_page(current_index)
 
-            print(f"Sending {len(self.page_objects)} on page {self.current_index} to device {device.name}")
+            print(f"Sending {len(page_objects)} on page {current_index} to device {device.name}")
             # send all objects for the current page index
-            page_objects = self.get_page_objects(index=self.current_index, include_global=True)
             for obj in page_objects:
                 await client.jsonl(obj)
 
