@@ -25,7 +25,5 @@ def c_gui(config_dir: Path, output_dir: Path):
     window = MainWindow(config_manager)
     window.show()
 
-    # 4. Use the standard Qt exec() and the qasync context manager.
-    # This avoids the nested loop conflict with PyCharm's debugger.
     with loop:
-        sys.exit(app.exec())
+        loop.run_forever()
