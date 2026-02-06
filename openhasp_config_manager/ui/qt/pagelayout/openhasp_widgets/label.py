@@ -77,7 +77,9 @@ class HaspLabelItem(QGraphicsObject):
         pixel_size = self.text_font
         scaled_pixel_size = int(float(pixel_size) * 0.7)
 
-        # Apply icon replacement logic if available on the parent widget
+        base_font = QtGui.QFont("Roboto Condensed", scaled_pixel_size)
+        self.text_item.setFont(base_font)
+
         if self.parent_widget and hasattr(self.parent_widget, '_replace_unicode_with_html'):
             processed_html = self.parent_widget._replace_unicode_with_html(raw_text, scaled_pixel_size)
             self.text_item.setHtml(processed_html)
@@ -87,11 +89,6 @@ class HaspLabelItem(QGraphicsObject):
         # Color
         color = self.text_color
         self.text_item.setDefaultTextColor(QtGui.QColor(color))
-
-        # Font (OpenHASP uses pixel sizes)
-        font_size = int(self.text_font * 0.7)  # Adjust for scaling differences
-        font = QtGui.QFont("Roboto Condensed", font_size)
-        self.text_item.setFont(font)
 
         # Alignment logic
         self._align_text()
