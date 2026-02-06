@@ -58,31 +58,31 @@ class PagePreviewWidget2(QGraphicsView):
 
             if obj_type == "btn":
                 logging.debug(f"Adding button item: {obj}")
-                item = HaspButtonItem(obj, self)
+                item = HaspButtonItem(obj_data=obj, parent_widget=self)
                 item.clicked.connect(self.clickedValue.emit)
                 item.clicked.connect(lambda obj_id, this_object=obj: self.buttonClicked.emit(this_object))
                 self.scene.addItem(item)
             elif obj_type == "switch":
                 logging.debug(f"Adding switch item: {obj}")
-                item = HaspSwitchItem(obj)
+                item = HaspSwitchItem(obj_data=obj, parent_widget=self)
                 item.toggled.connect(lambda obj_id, val: print(f"Switch {obj_id} toggled to {val}"))
                 self.scene.addItem(item)
             elif obj_type == "bar":
                 logging.debug(f"Adding bar item: {obj}")
-                item = HaspBarItem(obj)
+                item = HaspBarItem(obj_data=obj, parent_widget=self)
                 self.scene.addItem(item)
             elif obj_type == "slider":
                 logging.debug(f"Adding slider item: {obj}")
-                item = HaspSliderItem(obj)
+                item = HaspSliderItem(obj_data=obj, parent_widget=self)
                 item.valueChanged.connect(lambda obj_id, val: print(f"Slider {obj_id} changed to {val}"))
                 self.scene.addItem(item)
             elif obj_type == "label":
                 logging.debug(f"Adding label item: {obj}")
-                item = HaspLabelItem(obj)
+                item = HaspLabelItem(obj_data=obj, parent_widget=self)
                 self.scene.addItem(item)
             elif obj_type == "img":
                 logging.debug(f"Adding image item: {obj}")
-                item = HaspImageItem(obj)
+                item = HaspImageItem(obj_data=obj, parent_widget=self)
                 self.scene.addItem(item)
 
     def set_objects(self, loaded_objects: List[dict]):
