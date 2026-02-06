@@ -123,7 +123,7 @@ class PageLayoutEditorWidget(QWidget):
 
         run_async(
             coro=__async_work(),
-            on_done=lambda _: self.button_clear_page.setEnabled(True)
+            on_done=lambda: self.button_clear_page.setEnabled(True)
         )
 
     @qBridge()
@@ -155,7 +155,7 @@ class PageLayoutEditorWidget(QWidget):
 
         run_async(
             __async_work(),
-            on_done=lambda _: self.button_deploy_page.setEnabled(True)
+            on_done=lambda: self.button_deploy_page.setEnabled(True)
         )
 
     def go_to_home_page(self):

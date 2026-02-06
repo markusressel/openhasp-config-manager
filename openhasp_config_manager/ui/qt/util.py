@@ -1,6 +1,8 @@
 import asyncio
 import functools
 import logging
+from collections.abc import Awaitable
+from typing import Callable, Any
 
 from PyQt6.QtCore import pyqtSlot, QTimer
 
@@ -68,11 +70,18 @@ def qBridge(*slot_args):
     return decorator
 
 
-def run_async(coro, on_done=None):
+def run_async(
+    coro: Awaitable,
+    on_done: Callable[[], None] = None,
+    on_success: Callable[[Any], None] = None,
+    on_error: Callable[[Exception], None] = None,
+):
     """
     Dispatches a coroutine to the background asyncio loop.
     :param coro: The coroutine to run (e.g., client.set_page(1))
     :param on_done: Optional callback function to run on the MAIN THREAD when finished.
+    :param on_success: Optional callback function to run on the MAIN THREAD if coro succeeds, receives result as argument.
+    :param on_error: Optional callback function to run on the MAIN THREAD if coro raises an
     """
     loop = get_global_async_loop()
 
@@ -80,10 +89,23 @@ def run_async(coro, on_done=None):
     async def task_wrapper():
         try:
             result = await coro
-            if on_done:
-                # Schedule the callback back on the Main Thread
-                run_in_main(on_done, result)
+
+            def __run_callbacks():
+                if on_success:
+                    on_success(result)
+                if on_done:
+                    on_done()
+
+            run_in_main(__run_callbacks)
         except Exception as e:
             logging.exception(f"Async task failed: {e}")
+
+            def __run_error_callback():
+                if on_error:
+                    on_error(e)
+                if on_done:
+                    on_done()
+
+            run_in_main(__run_error_callback)
 
     return asyncio.run_coroutine_threadsafe(task_wrapper(), loop)
