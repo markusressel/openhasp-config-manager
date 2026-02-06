@@ -60,7 +60,7 @@ class PagePreviewWidget2(QGraphicsView):
                 logging.debug(f"Adding button item: {obj}")
                 item = HaspButtonItem(obj_data=obj, parent_widget=self)
                 item.clicked.connect(self.clickedValue.emit)
-                item.clicked.connect(lambda obj_id, this_object=obj: self.buttonClicked.emit(this_object))
+                item.clicked.connect(self._on_button_clicked)
                 self.scene.addItem(item)
             elif obj_type == "switch":
                 logging.debug(f"Adding switch item: {obj}")
@@ -84,6 +84,12 @@ class PagePreviewWidget2(QGraphicsView):
                 logging.debug(f"Adding image item: {obj}")
                 item = HaspImageItem(obj_data=obj, parent_widget=self)
                 self.scene.addItem(item)
+
+    def _on_button_clicked(self, obj_id: int):
+        # Find the object data for this button
+        obj_data = next((obj for obj in self.objects if obj.get("id") == obj_id), None)
+        if obj_data:
+            self.buttonClicked.emit(obj_data)
 
     def set_objects(self, loaded_objects: List[dict]):
         self.objects = loaded_objects
@@ -118,6 +124,7 @@ class PagePreviewWidget2(QGraphicsView):
                 processed_text = processed_text.replace(unicode_char, replacement)
 
         return f'<span>{processed_text}</span>'
+
 
 class PagePreviewWidget(QWidget):
     """

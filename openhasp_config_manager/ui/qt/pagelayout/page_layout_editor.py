@@ -4,13 +4,12 @@ from typing import List, Dict, Set, Optional
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QSizePolicy, QPushButton, QHBoxLayout, QTextEdit
 from orjson import orjson
-from qasync import asyncSlot
 
 from openhasp_config_manager.manager import ConfigManager
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 from openhasp_config_manager.ui.qt.pagelayout import OpenHaspDevicePagesData
 from openhasp_config_manager.ui.qt.pagelayout.page_preview_layout import PagePreviewWidget2
-from openhasp_config_manager.ui.qt.util import clear_layout
+from openhasp_config_manager.ui.qt.util import clear_layout, qBridge, run_async
 
 
 class PageLayoutEditorWidget(QWidget):
@@ -82,17 +81,29 @@ class PageLayoutEditorWidget(QWidget):
 
         self.set_page_index(index=1)
 
+    @qBridge(dict)
     def __on_preview_layout_button_clicked(self, obj: dict):
         print(f"Clicked on object in preview: {obj}")
         action = obj.get("action", None)
-        if action == "next":
-            self.next_page_index()
-        elif action == "prev":
-            self.previous_page_index()
-        elif action == "back":
-            self.go_to_home_page()
 
-    @asyncSlot()
+        if action in ("next", "prev", "back"):
+            if action == "next":
+                self.next_page_index()
+            elif action == "prev":
+                self.previous_page_index()
+            elif action == "back":
+                self.go_to_home_page()
+
+            # switch the device to this page
+            device = self.device_pages_data.device
+            client = OpenHaspClient(device)
+
+            run_async(
+                client.set_page(self.current_index),
+                # on_done=self.__on_network_complete  # Optional
+            )
+
+    @qBridge()
     async def _on_clear_page_clicked(self):
         """
         Clear the current page index on the device.
@@ -109,7 +120,7 @@ class PageLayoutEditorWidget(QWidget):
         print(f"Clearing page {self.current_index}")
         await client.clear_page(self.current_index)
 
-    @asyncSlot()
+    @qBridge()
     async def _on_deploy_page_clicked(self):
         """
         Deploy the current page index to the device.
@@ -228,6 +239,9 @@ class PageLayoutEditorWidget(QWidget):
         page_selector_widget.layout().addWidget(self._next_page_button_widget)
 
         return page_selector_widget
+
+    def get_page_index(self) -> int:
+        return self.current_index
 
 
 class PageJsonlPreviewWidget(QTextEdit):

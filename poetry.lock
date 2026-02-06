@@ -1293,21 +1293,6 @@ files = [
 ]
 
 [[package]]
-name = "qasync"
-version = "0.28.0"
-description = "Python library for using asyncio in Qt-based applications"
-optional = false
-python-versions = ">=3.8"
-groups = ["ui"]
-files = [
-    {file = "qasync-0.28.0-py3-none-any.whl", hash = "sha256:21faba8d047c717008378f5ac29ea58c32a8128528629e4afd57c59b768dba0f"},
-    {file = "qasync-0.28.0.tar.gz", hash = "sha256:6f7f1f18971f59cb259b107218269ba56e3ad475ec456e54714b426a6e30b71d"},
-]
-
-[package.extras]
-typing = ["mypy (>=1.0)"]
-
-[[package]]
 name = "qt-themes"
 version = "0.4.0"
 description = "A collection of themes for Qt applications in Python."
@@ -1585,4 +1570,4 @@ propcache = ">=0.2.1"
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12"
-content-hash = "796c0d81d45cf16085e5180128ddceb11aba6da888d280df37cc21fb95c17ca4"
+content-hash = "093fb263b840386e4c9af5bdf66d27db1ada2da487bfe4a4bb86eeeb79e56912"
