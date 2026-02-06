@@ -122,12 +122,13 @@ def run_async(
                     on_done()
 
             run_in_main(__run_callbacks)
-        except Exception as e:
-            logging.exception(f"Async task failed: {e}")
+        except Exception as ex:
+            logging.exception(f"Async task failed: {ex}")
+            exception = ex  # Capture the exception for use in the callback
 
             def __run_error_callback():
                 if on_error:
-                    on_error(e)
+                    on_error(exception)
                 if on_done:
                     on_done()
 
