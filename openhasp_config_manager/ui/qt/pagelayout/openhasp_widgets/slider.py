@@ -7,27 +7,63 @@ class HaspSliderItem(QGraphicsObject):
     # Signal to notify when the value changes via mouse interaction
     valueChanged = QtCore.pyqtSignal(int, int)  # (object_id, new_value)
 
+    @property
+    def obj_id(self) -> int:
+        return self.obj_data.get("id", 0)
+
+    @property
+    def obj_x(self) -> int:
+        return self.obj_data.get("x", 0)
+
+    @property
+    def obj_y(self) -> int:
+        return self.obj_data.get("y", 0)
+
+    @property
+    def w(self) -> int:
+        return self.obj_data.get("w", 160)
+
+    @property
+    def h(self) -> int:
+        return self.obj_data.get("h", 20)
+
+    @property
+    def min_val(self) -> int:
+        return self.obj_data.get("min", 0)
+
+    @property
+    def max_val(self) -> int:
+        return self.obj_data.get("max", 100)
+
+    @property
+    def val(self) -> int:
+        return self.obj_data.get("val", 0)
+
+    @property
+    def radius(self) -> int:
+        return self.obj_data.get("radius", 0)
+
+    @property
+    def knob_radius(self) -> int:
+        return self.obj_data.get("radius20", 10)
+
+    @property
+    def track_color(self) -> str:
+        return self.obj_data.get("bg_color", "gray")
+
+    @property
+    def knob_color(self) -> str:
+        return self.obj_data.get("bg_color20", "lightgray")
+
     def __init__(self, obj_data, parent_widget=None):
         super().__init__()
         self.obj_data = obj_data
         self.parent_widget = parent_widget
-        self.obj_id = obj_data.get("id", 0)
+
+        self._val = self.val  # Internal value to track changes
 
         # Native OpenHASP coordinates
-        self.w = obj_data.get("w", 160)
-        self.h = obj_data.get("h", 20)
-        self.setPos(obj_data.get("x", 0), obj_data.get("y", 0))
-
-        # Slider Range & Value
-        self.min_val = obj_data.get("min", 0)
-        self.max_val = obj_data.get("max", 100)
-        self.val = obj_data.get("val", 0)
-
-        # Visual Properties from your original logic
-        self.radius = obj_data.get("radius", 0)
-        self.knob_radius = obj_data.get("radius20", 10)
-        self.track_color = obj_data.get("bg_color", "gray")
-        self.knob_color = obj_data.get("bg_color20", "lightgray")
+        self.setPos(self.obj_x, self.obj_y)
 
         # Interactivity
         self.setAcceptHoverEvents(True)
@@ -58,7 +94,7 @@ class HaspSliderItem(QGraphicsObject):
         if range_val <= 0:
             progress_pct = 0
         else:
-            progress_pct = (self.val - self.min_val) / range_val
+            progress_pct = (self._val - self.min_val) / range_val
             progress_pct = max(0, min(progress_pct, 1))
 
         # 3. Draw the Knob (The "scaled circle")
@@ -91,7 +127,7 @@ class HaspSliderItem(QGraphicsObject):
 
         new_val = int(self.min_val + (pct * (self.max_val - self.min_val)))
 
-        if new_val != self.val:
-            self.val = new_val
+        if new_val != self._val:
+            self._val = new_val
             self.update()  # Triggers repaint
-            self.valueChanged.emit(self.obj_id, self.val)
+            self.valueChanged.emit(self.obj_id, self._val)

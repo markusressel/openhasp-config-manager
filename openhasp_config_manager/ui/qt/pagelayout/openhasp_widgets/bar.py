@@ -4,21 +4,74 @@ from PyQt6.QtWidgets import QGraphicsObject, QGraphicsTextItem
 
 
 class HaspBarItem(QGraphicsObject):
+
+    @property
+    def obj_id(self) -> int:
+        return self.obj_data.get("id", 0)
+
+    @property
+    def obj_x(self) -> int:
+        return self.obj_data.get("x", 0)
+
+    @property
+    def obj_y(self) -> int:
+        return self.obj_data.get("y", 0)
+
+    @property
+    def w(self) -> int:
+        return self.obj_data.get("w", 50)
+
+    @property
+    def h(self) -> int:
+        return self.obj_data.get("h", 50)
+
+    @property
+    def min_val(self) -> int:
+        return self.obj_data.get("min", 0)
+
+    @property
+    def max_val(self) -> int:
+        return self.obj_data.get("max", 100)
+
+    @property
+    def val(self) -> int:
+        return self.obj_data.get("val", 0)
+
+    @property
+    def text(self) -> str:
+        return self.obj_data.get("text", "")
+
+    @property
+    def text_color(self) -> str:
+        return self.obj_data.get("text_color", "#FFFFFF")
+
+    @property
+    def text_font(self) -> int:
+        return self.obj_data.get("text_font", 25)
+
+    @property
+    def bg_color(self) -> str:
+        return self.obj_data.get("bg_color", "#558B2F")
+
+    @property
+    def radius(self) -> int:
+        return self.obj_data.get("radius", self.h)
+
+    @property
+    def border_width(self) -> int:
+        return self.obj_data.get("border_width", 0)
+
+    @property
+    def border_color(self) -> str:
+        return self.obj_data.get("border_color", "#FFFFFF")
+
     def __init__(self, obj_data, parent_widget=None):
         super().__init__()
         self.obj_data = obj_data
         self.parent_widget = parent_widget
-        self.obj_id = obj_data.get("id", 0)
 
         # Native Dimensions
-        self.w = obj_data.get("w", 50)
-        self.h = obj_data.get("h", 50)
-        self.setPos(obj_data.get("x", 0), obj_data.get("y", 0))
-
-        # Bar Values
-        self.min_val = obj_data.get("min", 0)
-        self.max_val = obj_data.get("max", 100)
-        self.val = obj_data.get("val", 0)
+        self.setPos(self.obj_x, self.obj_y)
 
         # Setup Text Child
         self.text_item = QGraphicsTextItem(parent=self)
@@ -28,7 +81,7 @@ class HaspBarItem(QGraphicsObject):
         return QtCore.QRectF(0, 0, self.w, self.h)
 
     def _setup_text(self):
-        raw_text = self.obj_data.get("text", "")
+        raw_text = self.text
         if not raw_text:
             return
 
@@ -39,9 +92,10 @@ class HaspBarItem(QGraphicsObject):
             text = raw_text
 
         self.text_item.setPlainText(text)
-        self.text_item.setDefaultTextColor(QColor(self.obj_data.get("text_color", "#FFFFFF")))
+        self.text_item.setDefaultTextColor(QColor(self.text_color))
 
-        font_size = self.obj_data.get("text_font", 25)
+        font_size = self.text_font
+        font_size = int(font_size * 0.7)
         self.text_item.setFont(QFont("Roboto Condensed", font_size))
 
         # Center text within the bar
@@ -58,9 +112,9 @@ class HaspBarItem(QGraphicsObject):
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
 
         # 1. Draw Background (The Track)
-        bg_color = self.obj_data.get("bg_color", "purple")
+        bg_color = self.bg_color
         # Your logic used 'radius' or 'height' for full rounding
-        radius = self.obj_data.get("radius", self.h)
+        radius = self.radius
 
         painter.setPen(QtCore.Qt.PenStyle.NoPen)
         # Background is usually a dimmer version or specific color
@@ -81,9 +135,9 @@ class HaspBarItem(QGraphicsObject):
                 painter.drawRoundedRect(indicator_rect, radius, radius)
 
         # 3. Draw Border if exists
-        border_width = self.obj_data.get("border_width", 0)
+        border_width = self.border_width
         if border_width > 0:
-            pen = QPen(QColor(self.obj_data.get("border_color", "#FFFFFF")))
+            pen = QPen(QColor(self.border_color))
             pen.setWidth(border_width)
             painter.setPen(pen)
             painter.setBrush(QtCore.Qt.BrushStyle.NoBrush)
