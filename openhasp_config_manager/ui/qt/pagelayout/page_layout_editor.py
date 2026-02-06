@@ -1,3 +1,4 @@
+import asyncio
 from collections import OrderedDict
 from typing import List, Dict, Set, Optional
 
@@ -100,7 +101,9 @@ class PageLayoutEditorWidget(QWidget):
                 client = OpenHaspClient(device)
                 await client.set_page(self.current_index)
 
-            run_async(__async_work())
+            run_async(
+                coro=__async_work(),
+            )
 
     @qBridge()
     def _on_clear_page_clicked(self):
@@ -121,9 +124,12 @@ class PageLayoutEditorWidget(QWidget):
         async def __async_work():
             await client.clear_page(current_index)
 
+        def __on_done():
+            self.button_clear_page.setEnabled(True)
+
         run_async(
             coro=__async_work(),
-            on_done=lambda: self.button_clear_page.setEnabled(True)
+            on_done=__on_done,
         )
 
     @qBridge()
@@ -152,10 +158,15 @@ class PageLayoutEditorWidget(QWidget):
             # send all objects for the current page index
             for obj in page_objects:
                 await client.jsonl(obj)
+                await asyncio.sleep(0.1)  # small delay to avoid overwhelming the device
+
+        def __on_done():
+            print(f"Finished deploying page {current_index} to device {device.name}")
+            self.button_deploy_page.setEnabled(True)
 
         run_async(
-            __async_work(),
-            on_done=lambda: self.button_deploy_page.setEnabled(True)
+            coro=__async_work(),
+            on_done=__on_done,
         )
 
     def go_to_home_page(self):

@@ -1,10 +1,6 @@
 import asyncio
 import functools
 import logging
-from collections.abc import Awaitable
-from typing import Callable, Any
-
-from PyQt6.QtCore import pyqtSlot, QTimer
 
 
 def clear_layout(layout):
@@ -37,9 +33,38 @@ def get_global_async_loop() -> asyncio.AbstractEventLoop:
     return _GLOBAL_ASYNC_LOOP
 
 
+import threading
+from typing import Awaitable, Callable, Any
+from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
+
+
+class ThreadBridge(QObject):
+    """A helper to ferry function calls to the Main Thread."""
+    trigger = pyqtSignal(object, tuple, dict)
+
+    def __init__(self):
+        super().__init__()
+        self.trigger.connect(self._execute)
+
+    @pyqtSlot(object, tuple, dict)
+    def _execute(self, func, args, kwargs):
+        func(*args, **kwargs)
+
+
+# Create a single global instance of the bridge
+_BRIDGE = ThreadBridge()
+
+
 def run_in_main(func, *args, **kwargs):
-    """Helper to schedule a function to run on the Qt Main Thread."""
-    QTimer.singleShot(0, lambda: func(*args, **kwargs))
+    """
+    Thread-safe way to run a function on the Qt Main Thread
+    from a background asyncio thread.
+    """
+    if threading.current_thread() is threading.main_thread():
+        func(*args, **kwargs)
+    else:
+        # This sends the function and args across the thread boundary
+        _BRIDGE.trigger.emit(func, args, kwargs)
 
 
 def qBridge(*slot_args):
