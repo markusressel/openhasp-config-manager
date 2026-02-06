@@ -4,7 +4,7 @@ from openhasp_config_manager.manager import ConfigManager
 from openhasp_config_manager.openhasp_client.model.component import CmdComponent
 from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.ui.qt.device_list import DeviceListWidget
-from openhasp_config_manager.ui.qt.file_browser import FileBrowserWidget
+from openhasp_config_manager.ui.qt.pagelayout.device_controls import DeviceControlsWidget
 from openhasp_config_manager.ui.qt.pagelayout.page_layout_editor import PageLayoutEditorWidget, OpenHaspDevicePagesData
 
 
@@ -27,13 +27,18 @@ class MainWindow(QMainWindow):
         self.device_list_widget.deviceSelected.connect(self.on_device_selected)
         self.layout.addWidget(self.device_list_widget)
 
-        self.file_browser_widget = FileBrowserWidget(self.config_manager.cfg_root)
-        self.layout.addWidget(self.file_browser_widget)
+        # self.file_browser_widget = FileBrowserWidget(self.config_manager.cfg_root)
+        # self.layout.addWidget(self.file_browser_widget)
+
+        self.device_control_widget = DeviceControlsWidget()
+        self.layout.addWidget(self.device_control_widget)
+        self.device_control_widget.setVisible(False)
 
         self.page_layout_editor_widget = PageLayoutEditorWidget(
             config_manager=self.config_manager
         )
         self.layout.addWidget(self.page_layout_editor_widget)
+        self.page_layout_editor_widget.setVisible(False)
 
         self.setCentralWidget(self.container)
 
@@ -45,11 +50,16 @@ class MainWindow(QMainWindow):
         # reload devices to reflect any changes that happened on disk
         self.devices = self.config_manager.analyze()
         self.device_list_widget.set_devices(self.devices)
+
         if any(d.name == device.name for d in self.devices):
             self.select_device(device)
 
-    def select_device(self, device):
+    def select_device(self, device: Device):
         self.device = device
+
+        self.device_control_widget.set_device(self.device)
+        self.device_control_widget.setVisible(True)
+        self.page_layout_editor_widget.setVisible(True)
 
         # setup sample page layout editor for testing
         # device_processor = self.config_manager.create_device_processor(device)
