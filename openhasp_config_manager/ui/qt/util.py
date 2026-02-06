@@ -82,7 +82,6 @@ def run_async(coro, on_done=None):
             result = await coro
             if on_done:
                 # Schedule the callback back on the Main Thread
-                from PyQt6.QtCore import QTimer
                 run_in_main(on_done, result)
         except Exception as e:
             logging.exception(f"Async task failed: {e}")

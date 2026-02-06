@@ -94,14 +94,13 @@ class PageLayoutEditorWidget(QWidget):
             elif action == "back":
                 self.go_to_home_page()
 
-            # switch the device to this page
-            device = self.device_pages_data.device
-            client = OpenHaspClient(device)
+            async def __async_work():
+                # switch the device to this page
+                device = self.device_pages_data.device
+                client = OpenHaspClient(device)
+                await client.set_page(self.current_index)
 
-            run_async(
-                client.set_page(self.current_index),
-                # on_done=self.__on_network_complete  # Optional
-            )
+            run_async(__async_work())
 
     @qBridge()
     def _on_clear_page_clicked(self):
@@ -116,11 +115,10 @@ class PageLayoutEditorWidget(QWidget):
         print(f"Clearing page {self.current_index} on device {device.name}")
         client = OpenHaspClient(device)
 
-        # clear the page first
-        print(f"Clearing page {self.current_index}")
-        run_async(
-            client.clear_page(self.current_index)
-        )
+        async def __async_work():
+            await client.clear_page(self.current_index)
+
+        run_async(__async_work())
 
     @qBridge()
     def _on_deploy_page_clicked(self):
@@ -130,20 +128,28 @@ class PageLayoutEditorWidget(QWidget):
         if self.page_objects is None or len(self.page_objects) == 0:
             return
 
+        self.button_deploy_page.setEnabled(False)
+
         device = self.device_pages_data.device
 
         print(f"Deploying page {self.current_index} to device {device.name}")
         client = OpenHaspClient(device)
 
-        # clear the page first
-        print(f"Clearing page {self.current_index}")
-        run_async(client.clear_page(self.current_index))
+        async def __async_work():
+            # clear the page first
+            print(f"Clearing page {self.current_index}")
+            await client.clear_page(self.current_index)
 
-        print(f"Sending {len(self.page_objects)} on page {self.current_index} to device {device.name}")
-        # send all objects for the current page index
-        page_objects = self.get_page_objects(index=self.current_index, include_global=True)
-        for obj in page_objects:
-            run_async(client.jsonl(obj))
+            print(f"Sending {len(self.page_objects)} on page {self.current_index} to device {device.name}")
+            # send all objects for the current page index
+            page_objects = self.get_page_objects(index=self.current_index, include_global=True)
+            for obj in page_objects:
+                await client.jsonl(obj)
+
+        run_async(
+            __async_work(),
+            on_done=lambda _: self.button_deploy_page.setEnabled(True)
+        )
 
     def go_to_home_page(self):
         usable_page_indices = self.get_navigable_page_indices()
