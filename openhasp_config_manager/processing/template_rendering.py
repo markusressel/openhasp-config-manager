@@ -132,8 +132,8 @@ def _render_template(content: str, template_vars: Dict[str, str]) -> str:
         rendered = template.render(template_vars)
         return rendered
     except Exception as ex:
-        LOGGER.exception(ex)
-        print(f"{ex}: \n\n{content}\n\n {template_vars}")
+        # LOGGER.exception(ex)
+        # print(f"{ex}: \n\n{content}\n\n {template_vars}")
         raise ex
 
 
