@@ -58,7 +58,7 @@ class PagePreviewWidget2(QGraphicsView):
 
             if obj_type == "btn":
                 logging.debug(f"Adding button item: {obj}")
-                item = HaspButtonItem(obj)
+                item = HaspButtonItem(obj, self)
                 item.clicked.connect(self.clickedValue.emit)
                 item.clicked.connect(lambda obj_id, this_object=obj: self.buttonClicked.emit(this_object))
                 self.scene.addItem(item)
@@ -98,6 +98,26 @@ class PagePreviewWidget2(QGraphicsView):
         self.fitInView(self.scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
         super().resizeEvent(event)
 
+    @staticmethod
+    def _replace_unicode_with_html(text: str, size: int) -> str:
+        """
+        Wraps icons in HTML font tags so they render with the correct MDI font
+        while leaving regular text alone.
+        """
+        import qtawesome as qta
+        processed_text = text
+
+        # Get the actual font name qtawesome uses (usually 'Material Design Icons')
+        mdi_font_family = qta.font("mdi6", size).family()
+
+        for unicode_char, icon_name in IntegratedIcon.entries():
+            if unicode_char in processed_text:
+                icon_char = qta.charmap(f"mdi6.{icon_name}")
+                # Wrap only the icon in a font tag
+                replacement = f'<span style="font-family:{mdi_font_family};">{icon_char}</span>'
+                processed_text = processed_text.replace(unicode_char, replacement)
+
+        return f'<span>{processed_text}</span>'
 
 class PagePreviewWidget(QWidget):
     """

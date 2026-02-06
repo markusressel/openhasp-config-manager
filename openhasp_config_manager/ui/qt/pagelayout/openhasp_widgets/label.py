@@ -70,7 +70,9 @@ class HaspLabelItem(QGraphicsObject):
 
     def _setup_text(self):
         """Processes font, color, icons, and alignment."""
-        raw_text = str(self.text)
+        raw_text = self.text
+        if not raw_text:
+            return
 
         # Apply icon replacement logic if available on the parent widget
         if self.parent_widget and hasattr(self.parent_widget, '_replace_unicode_with_icons'):

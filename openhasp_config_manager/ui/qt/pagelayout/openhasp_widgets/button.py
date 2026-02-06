@@ -71,36 +71,32 @@ class HaspButtonItem(QGraphicsObject):
         return QtCore.QRectF(0, 0, self.w, self.h)
 
     def _setup_text(self):
-        """Applies font and centering using the native pixel size with scaling correction."""
+        """Applies Rich Text (HTML) to support both regular fonts and icons."""
         raw_text = str(self.text)
+        if not raw_text:
+            return
 
-        # Replace icons using your IntegratedIcon logic
-        if self.parent_widget and hasattr(self.parent_widget, '_replace_unicode_with_icons'):
-            processed_text = self.parent_widget._replace_unicode_with_icons(raw_text)
-        else:
-            processed_text = raw_text
-
-        self.text_item.setPlainText(processed_text)
-
-        # Apply the scale_factor logic here:
-        # Since we are in the native scene, we don't need d_height/page_height.
-        # We just apply the 0.7 adjustment to match openHASP's visual density.
         pixel_size = self.text_font
-
-        # Correctly interpret pointsize vs TrueType in 0.7.0
-        # If it's a small number like 12, 16, 24, 32, it's a fixed font.
-        # If it's larger or custom, it's the TrueType size.
         scaled_pixel_size = int(float(pixel_size) * 0.7)
 
-        font = QFont("Roboto Condensed", scaled_pixel_size)
-        font.setWeight(QFont.Weight.Normal)
-        self.text_item.setFont(font)
+        # 1. Determine the content and font requirements
+        # We use HTML to allow per-character font switching
+        if self.parent_widget and hasattr(self.parent_widget, '_replace_unicode_with_html'):
+            processed_html = self.parent_widget._replace_unicode_with_html(raw_text, scaled_pixel_size)
+            self.text_item.setHtml(processed_html)
+        else:
+            self.text_item.setPlainText(raw_text)
 
-        # Text Color
-        color = self.text_color
-        self.text_item.setDefaultTextColor(QColor(color))
+        # 2. Set the base font for the non-icon text
+        base_font = QFont("Roboto Condensed", scaled_pixel_size)
+        self.text_item.setFont(base_font)
 
-        # Centering Logic (within the native button rect)
+        # 3. Apply Styling
+        self.text_item.setDefaultTextColor(QColor(self.text_color))
+
+        # 4. Centering Logic
+        # Note: HTML text often has a small default margin
+        self.text_item.document().setDocumentMargin(0)
         t_rect = self.text_item.boundingRect()
         self.text_item.setPos(
             (self.w - t_rect.width()) / 2,
