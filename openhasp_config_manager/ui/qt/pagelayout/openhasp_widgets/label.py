@@ -74,13 +74,15 @@ class HaspLabelItem(QGraphicsObject):
         if not raw_text:
             return
 
-        # Apply icon replacement logic if available on the parent widget
-        if self.parent_widget and hasattr(self.parent_widget, '_replace_unicode_with_icons'):
-            processed_text = self.parent_widget._replace_unicode_with_icons(raw_text)
-        else:
-            processed_text = raw_text
+        pixel_size = self.text_font
+        scaled_pixel_size = int(float(pixel_size) * 0.7)
 
-        self.text_item.setPlainText(processed_text)
+        # Apply icon replacement logic if available on the parent widget
+        if self.parent_widget and hasattr(self.parent_widget, '_replace_unicode_with_html'):
+            processed_html = self.parent_widget._replace_unicode_with_html(raw_text, scaled_pixel_size)
+            self.text_item.setHtml(processed_html)
+        else:
+            self.text_item.setPlainText(raw_text)
 
         # Color
         color = self.text_color
