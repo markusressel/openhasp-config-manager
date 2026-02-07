@@ -1,6 +1,7 @@
 import re
 from typing import List
 
+from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QSyntaxHighlighter, QTextCharFormat, QColor, QFont
 from PyQt6.QtWidgets import QSizePolicy, QTextEdit
 from orjson import orjson
@@ -37,10 +38,14 @@ class PageJsonlPreviewWidget(QTextEdit):
         content = "\n".join(map(lambda x: orjson.dumps(x).decode(), sorted_page_objects))
         self.setText(content)
 
+
 class JsonLHighlighter(QSyntaxHighlighter):
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._format_cache = {}
         self.rules = []
+
+        # --- Standard Syntax Rules ---
 
         # 1. Braces and Brackets {} []
         symbol_format = QTextCharFormat()
@@ -52,35 +57,57 @@ class JsonLHighlighter(QSyntaxHighlighter):
         key_format.setForeground(QColor("#9CDCFE"))  # Light Blue
         self.rules.append((re.compile(r'"[^"\\]*"(?=\s*:)'), key_format))
 
-        # 3. Hex Color Codes (Inside strings, e.g., "#558B2F")
-        color_code_format = QTextCharFormat()
-        color_code_format.setForeground(QColor("#CE9178"))  # Salmon/Orange
-        color_code_format.setFontItalic(True)
-        # Match # followed by 6 hex chars inside quotes
-        self.rules.append((re.compile(r'"#(?:[0-9a-fA-F]{3}){1,2}"'), color_code_format))
-
-        # 4. Standard Strings (Values that aren't colors)
+        # 3. Standard Strings (Non-color values)
+        # Uses a negative lookahead to avoid matching hex codes
         string_format = QTextCharFormat()
         string_format.setForeground(QColor("#CE9178"))  # Salmon
-        # This matches strings after a colon, excluding the hex pattern above
         self.rules.append((re.compile(r'(?<=:)\s*"(?!#)[^"\\]*"'), string_format))
 
-        # 5. Numbers (int/float)
+        # 4. Numbers (int/float)
         number_format = QTextCharFormat()
         number_format.setForeground(QColor("#B5CEA8"))  # Sage Green
         self.rules.append((re.compile(r"\b-?\d+(?:\.\d+)?\b"), number_format))
 
-        # 6. Booleans and Null
+        # 5. Booleans and Null
         const_format = QTextCharFormat()
-        const_format.setForeground(QColor("#569CD6"))  # Blue
+        const_format.setForeground(QColor("#569CD6"))  # Azure Blue
         self.rules.append((re.compile(r"\b(true|false|null)\b"), const_format))
 
-        # 7. The Colon (Separator)
-        separator_format = QTextCharFormat()
-        separator_format.setForeground(QColor("#FFFFFF"))
-        self.rules.append((re.compile(r":"), separator_format))
+        # --- Dynamic Color Rule ---
 
-    def highlightBlock(self, text):
+        # Matches "#FFFFFF" or "#FFF" (3 or 6 hex digits)
+        self.color_regex = re.compile(r'"#([0-9a-fA-F]{3,6})"')
+
+    def get_color_format(self, hex_val: str) -> QTextCharFormat:
+        """Creates or retrieves a format with a colored background."""
+        if hex_val not in self._format_cache:
+            color = QColor(f"#{hex_val}")
+            fmt = QTextCharFormat()
+            fmt.setBackground(color)
+
+            # Use W3C relative luminance formula or simple lightness to
+            # determine if text should be black or white for readability.
+            if color.lightness() > 150:
+                fmt.setForeground(Qt.GlobalColor.black)
+            else:
+                fmt.setForeground(Qt.GlobalColor.white)
+
+            # Make the hex code stand out a bit more
+            fmt.setFontWeight(QFont.Weight.Bold)
+            self._format_cache[hex_val] = fmt
+
+        return self._format_cache[hex_val]
+
+    def highlightBlock(self, text: str):
+        # Apply standard syntax rules
         for pattern, fmt in self.rules:
             for match in pattern.finditer(text):
+                self.setFormat(match.start(), match.end() - match.start(), fmt)
+
+        # Apply dynamic color background rules
+        for match in self.color_regex.finditer(text):
+            hex_val = match.group(1)
+            # OpenHASP colors are usually 6 digits, but we support 3
+            if len(hex_val) in (3, 6):
+                fmt = self.get_color_format(hex_val)
                 self.setFormat(match.start(), match.end() - match.start(), fmt)
