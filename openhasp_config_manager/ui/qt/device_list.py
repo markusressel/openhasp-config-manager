@@ -11,11 +11,10 @@ from openhasp_config_manager.ui.qt.util import clear_layout
 class DeviceListWidget(QWidget):
     deviceSelected = QtCore.pyqtSignal(Device)
 
-    def __init__(self, devices):
+    def __init__(self):
         super().__init__()
-        self.devices = devices
+        self.devices = []
         self.layout = UiComponents.create_row(parent=self, alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
-        self.create_entries()
 
     def set_devices(self, devices: List[Device]):
         self.devices = devices
@@ -26,14 +25,12 @@ class DeviceListWidget(QWidget):
         clear_layout(self.layout)
 
     def create_entries(self):
-        for device in sorted(self.devices, key=lambda d: d.name):
-            d = device  # needed to capture the current device in the lambda
-
-            def __on_device_button_clicked():
-                self.on_device_label_clicked(d)
+        sorted_devices = sorted(self.devices, key=lambda d: d.name)
+        for device in sorted_devices:
+            def __on_device_button_clicked(_, device=device):
+                self.on_device_label_clicked(device)
 
             button = UiComponents.create_button(title=device.name, on_click=__on_device_button_clicked)
-            button.setContentsMargins(10, 10, 10, 10)
             self.layout.addWidget(button)
 
     def on_device_label_clicked(self, device):

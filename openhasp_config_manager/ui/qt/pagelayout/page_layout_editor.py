@@ -73,8 +73,8 @@ class PageLayoutEditorWidget(QWidget):
         self.clear()
         if device_pages_data is None:
             return
-        self.jsonl_component_objects = self._load_jsonl_component_objects(device_pages_data)
 
+        self.jsonl_component_objects = self._load_jsonl_component_objects(device_pages_data)
         self.page_preview_widget.set_data(device_pages_data)
 
         self.set_page_index(index=1)
@@ -84,8 +84,8 @@ class PageLayoutEditorWidget(QWidget):
 
         jsonl_component_objects = OrderedDict()
         # load jsonl component objects
-        for jsonl_component in self.device_pages_data.jsonl_components:
-            normalized_jsonl_component = self.device_processor.normalize(self.device_pages_data.device, jsonl_component)
+        for jsonl_component in data.jsonl_components:
+            normalized_jsonl_component = self.device_processor.normalize(data.device, jsonl_component)
             objects_in_jsonl = normalized_jsonl_component.splitlines()
             loaded_objects = list(map(orjson.loads, objects_in_jsonl))
             jsonl_component_objects[jsonl_component.name] = loaded_objects
@@ -191,7 +191,6 @@ class PageLayoutEditorWidget(QWidget):
         self.page_objects = self.get_page_objects(index=index)
         print(f"Page objects: {self.page_objects}")
         self.page_preview_widget.set_objects(self.page_objects)
-
         self.page_jsonl_preview.set_objects(self.page_objects)
 
     def next_page_index(self):

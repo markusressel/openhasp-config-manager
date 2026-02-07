@@ -24,7 +24,7 @@ class MainWindow(QMainWindow):
         self.layout = UiComponents.create_column()
         self.container.setLayout(self.layout)
 
-        self.device_list_widget = DeviceListWidget(devices=[])
+        self.device_list_widget = DeviceListWidget()
         self.device_list_widget.deviceSelected.connect(self.on_device_selected)
         self.layout.addWidget(self.device_list_widget)
 
