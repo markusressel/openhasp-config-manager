@@ -9,6 +9,7 @@ from openhasp_config_manager.manager import ConfigManager
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 from openhasp_config_manager.ui.components import UiComponents
 from openhasp_config_manager.ui.qt.pagelayout import OpenHaspDevicePagesData
+from openhasp_config_manager.ui.qt.pagelayout.editor_controls import EditorControlsWidget
 from openhasp_config_manager.ui.qt.pagelayout.jsonl_preview import PageJsonlPreviewWidget
 from openhasp_config_manager.ui.qt.pagelayout.page_preview_layout import PagePreviewWidget2
 from openhasp_config_manager.ui.qt.util import clear_layout, qBridge, run_async
@@ -30,12 +31,26 @@ class PageLayoutEditorWidget(QWidget):
     def create_layout(self):
         self.layout = UiComponents.create_column(self)
 
+        self.title_label = UiComponents.create_label(":mdi6.book-open-page-variant: Page Layout Editor")
+        self.layout.addWidget(self.title_label)
+
         self.preview_container = QWidget()
-        self.preview_container.setLayout(UiComponents.create_column())
+        self.preview_container_layout = UiComponents.create_column()
+        self.preview_container.setLayout(self.preview_container_layout)
+
+        self.preview_container_layout_title_label = UiComponents.create_label(":mdi6.eye: Page Preview")
+        self.layout.addWidget(self.preview_container_layout_title_label)
         self.layout.addWidget(self.preview_container)
 
-        self.page_selector = self._create_page_selector()
-        self.layout.addWidget(self.page_selector)
+        self.editor_controls_title_label = UiComponents.create_label(":mdi6.cog: Editor Controls")
+        self.layout.addWidget(self.editor_controls_title_label)
+        self.editor_controls = EditorControlsWidget()
+        self.editor_controls.previousPageClicked.connect(self._on_previous_page_clicked)
+        self.editor_controls.nextPageClicked.connect(self._on_next_page_clicked)
+        self.editor_controls.deployClicked.connect(self._on_deploy_page_clicked)
+        self.editor_controls.clearClicked.connect(self._on_clear_page_clicked)
+        self.layout.addWidget(self.editor_controls)
+
 
     def _on_previous_page_clicked(self):
         self.previous_page_index()
@@ -70,23 +85,6 @@ class PageLayoutEditorWidget(QWidget):
         self.page_jsonl_preview = PageJsonlPreviewWidget(device_pages_data)
         self.preview_container.layout().addWidget(self.page_jsonl_preview)
 
-        self.button_clear_page = UiComponents.create_button(
-            title="Clear Page",
-            on_click=self._on_clear_page_clicked
-        )
-        self.preview_container.layout().addWidget(self.button_clear_page)
-        self.button_clear_page.clicked.connect(self._on_clear_page_clicked)
-
-        self.button_deploy_page = UiComponents.create_button(
-            title="Deploy Page",
-            on_click=self._on_deploy_page_clicked
-        )
-        self.preview_container.layout().addWidget(
-            self.button_deploy_page
-        )
-
-        self.button_deploy_page.clicked.connect(self._on_deploy_page_clicked)
-
         self.set_page_index(index=1)
 
     @qBridge(dict)
@@ -120,7 +118,7 @@ class PageLayoutEditorWidget(QWidget):
         if self.current_index is None:
             return
 
-        self.button_clear_page.setEnabled(False)
+        self.editor_controls.button_clear_page.setEnabled(False)
 
         device = self.device_pages_data.device
         current_index = self.current_index
@@ -132,7 +130,7 @@ class PageLayoutEditorWidget(QWidget):
             await client.clear_page(current_index)
 
         def __on_done():
-            self.button_clear_page.setEnabled(True)
+            self.editor_controls.button_clear_page.setEnabled(True)
 
         run_async(
             coro=__async_work(),
@@ -147,7 +145,7 @@ class PageLayoutEditorWidget(QWidget):
         if self.page_objects is None or len(self.page_objects) == 0:
             return
 
-        self.button_deploy_page.setEnabled(False)
+        self.editor_controls.button_deploy_page.setEnabled(False)
 
         device = self.device_pages_data.device
         current_index = self.current_index
@@ -169,7 +167,7 @@ class PageLayoutEditorWidget(QWidget):
 
         def __on_done():
             print(f"Finished deploying page {current_index} to device {device.name}")
-            self.button_deploy_page.setEnabled(True)
+            self.editor_controls.button_deploy_page.setEnabled(True)
 
         run_async(
             coro=__async_work(),
@@ -258,24 +256,6 @@ class PageLayoutEditorWidget(QWidget):
         result.sort(key=lambda obj: obj.get("page") == 0)
 
         return result
-
-    def _create_page_selector(self) -> QWidget:
-        page_selector_widget = QWidget()
-        page_selector_widget.setLayout(UiComponents.create_row())
-
-        self._previous_page_button_widget = UiComponents.create_button(
-            title="Previous Page",
-            on_click=self._on_previous_page_clicked
-        )
-        page_selector_widget.layout().addWidget(self._previous_page_button_widget)
-
-        self._next_page_button_widget = UiComponents.create_button(
-            title="Next Page",
-            on_click=self._on_next_page_clicked,
-        )
-        page_selector_widget.layout().addWidget(self._next_page_button_widget)
-
-        return page_selector_widget
 
     def get_page_index(self) -> int:
         return self.current_index
