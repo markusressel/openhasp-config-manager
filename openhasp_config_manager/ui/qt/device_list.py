@@ -1,11 +1,10 @@
 from typing import List
 
 from PyQt6 import QtCore
-from PyQt6.QtWidgets import QWidget, QHBoxLayout
+from PyQt6.QtWidgets import QWidget
 
 from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.ui.components import UiComponents
-from openhasp_config_manager.ui.dimensions import UiDimensions
 from openhasp_config_manager.ui.qt.util import clear_layout
 
 
@@ -15,10 +14,7 @@ class DeviceListWidget(QWidget):
     def __init__(self, devices):
         super().__init__()
         self.devices = devices
-        self.layout = QHBoxLayout(self)
-        self.layout.setContentsMargins(0, 0, 0, 0)
-        self.layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        self.layout.setSpacing(UiDimensions.one)
+        self.layout = UiComponents.create_row(self)
         self.create_entries()
 
     def set_devices(self, devices: List[Device]):
@@ -31,7 +27,8 @@ class DeviceListWidget(QWidget):
 
     def create_entries(self):
         for device in sorted(self.devices, key=lambda d: d.name):
-            d = device # needed to capture the current device in the lambda
+            d = device  # needed to capture the current device in the lambda
+
             def __on_device_button_clicked():
                 self.on_device_label_clicked(d)
 

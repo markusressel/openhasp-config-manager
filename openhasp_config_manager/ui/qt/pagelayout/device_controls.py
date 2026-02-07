@@ -1,5 +1,6 @@
 from typing import Optional
 
+from PyQt6 import QtCore
 from PyQt6.QtWidgets import QWidget, QLayout
 
 from openhasp_config_manager.openhasp_client.model.device import Device
@@ -27,16 +28,21 @@ class DeviceControlsWidget(QWidget):
         self.client = OpenHaspClient(self.device)
 
     def _create_layout(self):
-        self.main_layout = UiComponents.create_column()
+        self.main_layout = UiComponents.create_column(
+            alignment=QtCore.Qt.AlignmentFlag.AlignLeft
+        )
         self.setLayout(self.main_layout)
 
         self.device_controls_layout = self._create_device_controls_layout()
+        self.main_layout.addWidget(UiComponents.create_label(":mdi6.cog: Device Controls"))
         self.main_layout.addLayout(self.device_controls_layout)
 
         self.screen_controls_layout = self._create_screen_controls_layout()
+        self.main_layout.addWidget(UiComponents.create_label(":mdi6.cellphone-screenshot: Screen Controls"))
         self.main_layout.addLayout(self.screen_controls_layout)
 
         self.page_controls_layout = self._create_page_controls_layout()
+        self.main_layout.addWidget(UiComponents.create_label(":mdi6.book-open-page-variant: Page Controls"))
         self.main_layout.addLayout(self.page_controls_layout)
 
     def _create_device_controls_layout(self) -> QLayout:

@@ -27,6 +27,19 @@ def parse_icons(text: str) -> str:
         # Replace both the :name: shorthand and the OpenHASP unicode char
         text = text.replace(f":{icon_name}:", icon_char)
         text = text.replace(unicode_char, icon_char)
+
+    # also replace every icon supported by the mdi6 set, using the :name: syntax
+    # This allows users to use any mdi6 icon without it being explicitly listed in IntegratedIcon
+    # We can identify mdi6 icons by the pattern :mdi6.name:
+    import re
+    pattern = r":mdi6\.([a-z0-9_-]+):"
+    def replace_mdi6_icon(match):
+        full_name = match.group(1)  # e.g., "mdi6.home"
+        icon_char = IconManager.get_mdi_char(full_name)
+        return icon_char
+
+    text = re.sub(pattern, replace_mdi6_icon, text)
+
     return text
 
 
