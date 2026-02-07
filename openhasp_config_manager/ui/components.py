@@ -28,7 +28,7 @@ class UiComponents:
     @staticmethod
     def create_row(
         parent=None,
-        alignment: QtCore.Qt.AlignmentFlag = QtCore.Qt.AlignmentFlag.AlignCenter,
+        alignment: QtCore.Qt.AlignmentFlag = QtCore.Qt.AlignmentFlag.AlignLeft,
     ) -> QHBoxLayout:
         layout = QHBoxLayout(parent)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -39,7 +39,7 @@ class UiComponents:
     @staticmethod
     def create_column(
         parent=None,
-        alignment: QtCore.Qt.AlignmentFlag = QtCore.Qt.AlignmentFlag.AlignCenter,
+        alignment: QtCore.Qt.AlignmentFlag = QtCore.Qt.AlignmentFlag.AlignTop,
     ) -> QVBoxLayout:
         layout = QVBoxLayout(parent)
         layout.setContentsMargins(0, 0, 0, 0)

@@ -31,14 +31,17 @@ class MainWindow(QMainWindow):
         # self.file_browser_widget = FileBrowserWidget(self.config_manager.cfg_root)
         # self.layout.addWidget(self.file_browser_widget)
 
+        self.device_layout = UiComponents.create_row()
+        self.layout.addLayout(self.device_layout)
+
         self.device_control_widget = DeviceControlsWidget()
-        self.layout.addWidget(self.device_control_widget)
+        self.device_layout.addWidget(self.device_control_widget)
         self.device_control_widget.setVisible(False)
 
         self.page_layout_editor_widget = PageLayoutEditorWidget(
             config_manager=self.config_manager
         )
-        self.layout.addWidget(self.page_layout_editor_widget)
+        self.device_layout.addWidget(self.page_layout_editor_widget)
         self.page_layout_editor_widget.setVisible(False)
 
         self.setCentralWidget(self.container)

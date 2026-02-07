@@ -14,7 +14,7 @@ class DeviceListWidget(QWidget):
     def __init__(self, devices):
         super().__init__()
         self.devices = devices
-        self.layout = UiComponents.create_row(self)
+        self.layout = UiComponents.create_row(parent=self, alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
         self.create_entries()
 
     def set_devices(self, devices: List[Device]):
