@@ -1,10 +1,12 @@
-from collections.abc import Callable
 from typing import Optional
 
-from PyQt6.QtWidgets import QWidget, QHBoxLayout, QPushButton
+from PyQt6 import QtCore
+from PyQt6.QtWidgets import QWidget, QHBoxLayout
 
 from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
+from openhasp_config_manager.ui.components import UiComponents
+from openhasp_config_manager.ui.dimensions import UiDimensions
 from openhasp_config_manager.ui.qt.util import run_async, qBridge
 
 
@@ -19,6 +21,9 @@ class DeviceControlsWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.layout = QHBoxLayout()
+        self.layout.setContentsMargins(0, 0, 0, 0)
+        self.layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.layout.setSpacing(UiDimensions.one)
         self.setLayout(self.layout)
 
         self.device: Optional[Device] = None
@@ -30,46 +35,41 @@ class DeviceControlsWidget(QWidget):
         self.client = OpenHaspClient(self.device)
 
     def _create_controls(self):
-        button_turn_on = self._create_button(
-            name="Turn Screen ON",
+        button_turn_on = UiComponents.create_button(
+            title="Turn Screen ON",
             on_click=self.on_turn_on_clicked,
         )
         self.layout.addWidget(button_turn_on)
 
-        button_turn_off = self._create_button(
-            name="Turn Screen OFF",
+        button_turn_off = UiComponents.create_button(
+            title="Turn Screen OFF",
             on_click=self.on_turn_off_clicked,
         )
         self.layout.addWidget(button_turn_off)
 
-        button_reboot = self._create_button(
-            name="Reboot Device",
+        button_reboot = UiComponents.create_button(
+            title="Reboot Device",
             on_click=self.on_reboot_clicked,
         )
         self.layout.addWidget(button_reboot)
 
-        button_prev_page = self._create_button(
-            name="Previous Page",
+        button_prev_page = UiComponents.create_button(
+            title="Previous Page",
             on_click=self.on_prev_page_clicked,
         )
         self.layout.addWidget(button_prev_page)
 
-        button_home_page = self._create_button(
-            name="Home Page",
+        button_home_page = UiComponents.create_button(
+            title="Home Page",
             on_click=self.on_home_page_clicked,
         )
         self.layout.addWidget(button_home_page)
 
-        button_next_page = self._create_button(
-            name="Next Page",
+        button_next_page = UiComponents.create_button(
+            title="Next Page",
             on_click=self.on_next_page_clicked,
         )
         self.layout.addWidget(button_next_page)
-
-    def _create_button(self, name: str, on_click: Callable[[], None]) -> QPushButton:
-        button = QPushButton(name)
-        button.clicked.connect(on_click)
-        return button
 
     @qBridge()
     def on_turn_on_clicked(self):

@@ -2,12 +2,15 @@ import asyncio
 from collections import OrderedDict
 from typing import List, Dict, Set, Optional
 
+from PyQt6 import QtCore
 from PyQt6.QtGui import QFont
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QSizePolicy, QPushButton, QHBoxLayout, QTextEdit
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QSizePolicy, QHBoxLayout, QTextEdit
 from orjson import orjson
 
 from openhasp_config_manager.manager import ConfigManager
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
+from openhasp_config_manager.ui.components import UiComponents
+from openhasp_config_manager.ui.dimensions import UiDimensions
 from openhasp_config_manager.ui.qt.pagelayout import OpenHaspDevicePagesData
 from openhasp_config_manager.ui.qt.pagelayout.page_preview_layout import PagePreviewWidget2
 from openhasp_config_manager.ui.qt.util import clear_layout, qBridge, run_async
@@ -28,13 +31,16 @@ class PageLayoutEditorWidget(QWidget):
 
     def create_layout(self):
         self.layout = QVBoxLayout(self)
-
-        self.page_selector = self._create_page_selector()
-        self.layout.addWidget(self.page_selector)
+        self.layout.setContentsMargins(0, 0, 0, 0)
+        self.layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.layout.setSpacing(UiDimensions.one)
 
         self.preview_container = QWidget()
         self.preview_container.setLayout(QVBoxLayout())
         self.layout.addWidget(self.preview_container)
+
+        self.page_selector = self._create_page_selector()
+        self.layout.addWidget(self.page_selector)
 
     def _on_previous_page_clicked(self):
         self.previous_page_index()
@@ -69,11 +75,17 @@ class PageLayoutEditorWidget(QWidget):
         self.page_jsonl_preview = PageJsonlPreviewWidget(device_pages_data)
         self.preview_container.layout().addWidget(self.page_jsonl_preview)
 
-        self.button_clear_page = QPushButton("Clear Page")
+        self.button_clear_page = UiComponents.create_button(
+            title="Clear Page",
+            on_click=self._on_clear_page_clicked
+        )
         self.preview_container.layout().addWidget(self.button_clear_page)
         self.button_clear_page.clicked.connect(self._on_clear_page_clicked)
 
-        self.button_deploy_page = QPushButton("Deploy Page")
+        self.button_deploy_page = UiComponents.create_button(
+            title="Deploy Page",
+            on_click=self._on_deploy_page_clicked
+        )
         self.preview_container.layout().addWidget(
             self.button_deploy_page
         )
@@ -256,12 +268,16 @@ class PageLayoutEditorWidget(QWidget):
         page_selector_widget = QWidget()
         page_selector_widget.setLayout(QHBoxLayout())
 
-        self._previous_page_button_widget = QPushButton("Previous Page")
-        self._previous_page_button_widget.clicked.connect(self._on_previous_page_clicked)
+        self._previous_page_button_widget = UiComponents.create_button(
+            title="Previous Page",
+            on_click=self._on_previous_page_clicked
+        )
         page_selector_widget.layout().addWidget(self._previous_page_button_widget)
 
-        self._next_page_button_widget = QPushButton("Next Page")
-        self._next_page_button_widget.clicked.connect(self._on_next_page_clicked)
+        self._next_page_button_widget = UiComponents.create_button(
+            title="Next Page",
+            on_click=self._on_next_page_clicked,
+        )
         page_selector_widget.layout().addWidget(self._next_page_button_widget)
 
         return page_selector_widget
