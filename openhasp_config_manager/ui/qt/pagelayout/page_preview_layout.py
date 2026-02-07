@@ -1,5 +1,5 @@
 import logging
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 
 from PyQt6 import QtCore
 from PyQt6.QtCore import QSize, Qt, QRect, QRectF
@@ -28,23 +28,17 @@ class PagePreviewWidget2(QGraphicsView):
     def page_height(self) -> int:
         return self.data.device.config.openhasp_config_manager.device.screen.height
 
-    def __init__(self, data: OpenHaspDevicePagesData, *args, **kwargs):
+    def __init__(self, data: Optional[OpenHaspDevicePagesData] = None, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.data: OpenHaspDevicePagesData = data
+        self.data: Optional[OpenHaspDevicePagesData] = data
         self.objects: List[dict] = []
 
-        # 1. Setup the Scene (use the device's actual native resolution)
-        self.native_width = self.page_width
-        self.native_height = self.page_height
-
-        self.scene = QGraphicsScene(0, 0, self.native_width, self.native_height)
-        self.scene.setBackgroundBrush(QColor('black'))
-        self.setScene(self.scene)
-
-        # 2. Make it scale smoothly
+        # Make it scale smoothly
         self.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
         self.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        self.set_data(data)
 
     def load_objects(self):
         self.scene.clear()
@@ -87,9 +81,22 @@ class PagePreviewWidget2(QGraphicsView):
         if obj_data:
             self.buttonClicked.emit(obj_data)
 
-    def set_data(self, data: OpenHaspDevicePagesData, page_objects: List[dict] = ()):
+    def set_data(self, data: Optional[OpenHaspDevicePagesData], page_objects: List[dict] = ()):
         self.data = data
+        self._setup_scene(data)
         self.set_objects(page_objects)
+
+    def _setup_scene(self, data: Optional[OpenHaspDevicePagesData]):
+        native_width = 480
+        native_height = 320
+        if data is not None:
+            # 1. Setup the Scene (use the device's actual native resolution)
+            native_width = self.data.device.config.openhasp_config_manager.device.screen.width
+            native_height = self.data.device.config.openhasp_config_manager.device.screen.height
+
+        self.scene = QGraphicsScene(0, 0, native_width, native_height)
+        self.scene.setBackgroundBrush(QColor('black'))
+        self.setScene(self.scene)
 
     def set_objects(self, loaded_objects: List[dict]):
         self.objects = loaded_objects

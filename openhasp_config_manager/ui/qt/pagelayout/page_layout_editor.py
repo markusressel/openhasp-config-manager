@@ -1,6 +1,6 @@
 import asyncio
 from collections import OrderedDict
-from typing import List, Dict, Set, Optional
+from typing import List, Dict, Set
 
 from PyQt6.QtWidgets import QWidget
 from orjson import orjson
@@ -12,7 +12,7 @@ from openhasp_config_manager.ui.qt.pagelayout import OpenHaspDevicePagesData
 from openhasp_config_manager.ui.qt.pagelayout.editor_controls import EditorControlsWidget
 from openhasp_config_manager.ui.qt.pagelayout.jsonl_preview import PageJsonlPreviewWidget
 from openhasp_config_manager.ui.qt.pagelayout.page_preview_layout import PagePreviewWidget2
-from openhasp_config_manager.ui.qt.util import clear_layout, qBridge, run_async
+from openhasp_config_manager.ui.qt.util import qBridge, run_async
 
 
 class PageLayoutEditorWidget(QWidget):
@@ -34,13 +34,18 @@ class PageLayoutEditorWidget(QWidget):
         self.title_label = UiComponents.create_label(":mdi6.book-open-page-variant: Page Layout Editor")
         self.layout.addWidget(self.title_label)
 
-        self.preview_container = QWidget()
         self.preview_container_layout = UiComponents.create_column()
-        self.preview_container.setLayout(self.preview_container_layout)
+        self.layout.addLayout(self.preview_container_layout)
 
         self.preview_container_layout_title_label = UiComponents.create_label(":mdi6.eye: Page Preview")
-        self.layout.addWidget(self.preview_container_layout_title_label)
-        self.layout.addWidget(self.preview_container)
+        self.preview_container_layout.addWidget(self.preview_container_layout_title_label)
+
+        self.page_preview_widget = PagePreviewWidget2()
+        self.page_preview_widget.buttonClicked.connect(self.__on_preview_layout_button_clicked)
+        self.preview_container_layout.addWidget(self.page_preview_widget)
+
+        self.page_jsonl_preview = PageJsonlPreviewWidget()
+        self.preview_container_layout.addWidget(self.page_jsonl_preview)
 
         self.editor_controls_title_label = UiComponents.create_label(":mdi6.cog: Editor Controls")
         self.layout.addWidget(self.editor_controls_title_label)
@@ -51,7 +56,6 @@ class PageLayoutEditorWidget(QWidget):
         self.editor_controls.clearClicked.connect(self._on_clear_page_clicked)
         self.layout.addWidget(self.editor_controls)
 
-
     def _on_previous_page_clicked(self):
         self.previous_page_index()
 
@@ -59,32 +63,35 @@ class PageLayoutEditorWidget(QWidget):
         self.next_page_index()
 
     def clear(self):
-        clear_layout(self.preview_container.layout())
+        self.page_preview_widget.set_data(None)
+
         self.current_index = 1
         self.jsonl_component_objects.clear()
 
-    def set_data(self, device_pages_data: Optional[OpenHaspDevicePagesData]):
+    def set_data(self, device_pages_data: OpenHaspDevicePagesData):
         self.device_pages_data = device_pages_data
         self.clear()
         if device_pages_data is None:
             return
-        self.device_processor = self.config_manager.create_device_processor(device_pages_data.device)
+        self.jsonl_component_objects = self._load_jsonl_component_objects(device_pages_data)
 
+        self.page_preview_widget.set_data(device_pages_data)
+        self.page_jsonl_preview.set_data(device_pages_data)
+
+        self.set_page_index(index=1)
+
+    def _load_jsonl_component_objects(self, data: OpenHaspDevicePagesData) -> OrderedDict[str, List[Dict]]:
+        self.device_processor = self.config_manager.create_device_processor(data.device)
+
+        jsonl_component_objects = OrderedDict()
         # load jsonl component objects
         for jsonl_component in self.device_pages_data.jsonl_components:
             normalized_jsonl_component = self.device_processor.normalize(self.device_pages_data.device, jsonl_component)
             objects_in_jsonl = normalized_jsonl_component.splitlines()
             loaded_objects = list(map(orjson.loads, objects_in_jsonl))
-            self.jsonl_component_objects[jsonl_component.name] = loaded_objects
+            jsonl_component_objects[jsonl_component.name] = loaded_objects
 
-        self.page_preview_widget = PagePreviewWidget2(data=device_pages_data)
-        self.page_preview_widget.buttonClicked.connect(self.__on_preview_layout_button_clicked)
-        self.preview_container.layout().addWidget(self.page_preview_widget)
-
-        self.page_jsonl_preview = PageJsonlPreviewWidget(device_pages_data)
-        self.preview_container.layout().addWidget(self.page_jsonl_preview)
-
-        self.set_page_index(index=1)
+        return jsonl_component_objects
 
     @qBridge(dict)
     def __on_preview_layout_button_clicked(self, obj: dict):
