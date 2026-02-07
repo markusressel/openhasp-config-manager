@@ -1,7 +1,6 @@
 import logging
 from typing import List, Tuple
 
-import qtawesome as qta
 from PyQt6 import QtCore
 from PyQt6.QtCore import QSize, Qt, QRect, QRectF
 from PyQt6.QtGui import QPainter, QBrush, QColor, QMouseEvent, QPainterPath, QFont, QPen
@@ -15,6 +14,7 @@ from openhasp_config_manager.ui.qt.pagelayout.openhasp_widgets.label import Hasp
 from openhasp_config_manager.ui.qt.pagelayout.openhasp_widgets.slider import HaspSliderItem
 from openhasp_config_manager.ui.qt.pagelayout.openhasp_widgets.switch import HaspSwitchItem
 from openhasp_config_manager.ui.qt.pagelayout.page_layout_editor import OpenHaspDevicePagesData
+from openhasp_config_manager.ui.qt.util import parse_icons
 
 
 class PagePreviewWidget2(QGraphicsView):
@@ -693,8 +693,4 @@ class PagePreviewWidget(QWidget):
         :param text: the text to process
         :return: the text with unicode characters replaced with icons
         """
-        for unicode_char, icon_name in IntegratedIcon.entries():
-            icon_charmap = qta.charmap(f"mdi6.{icon_name}")
-            text = text.replace(unicode_char, icon_charmap)
-
-        return text
+        return parse_icons(text)

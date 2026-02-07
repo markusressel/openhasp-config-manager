@@ -43,7 +43,7 @@ class DeviceControlsWidget(QWidget):
         layout = UiComponents.create_row()
 
         button_reboot = UiComponents.create_button(
-            title="Reboot Device",
+            title=":power-plug: Reboot Device",
             on_click=self.on_reboot_clicked,
         )
         layout.addWidget(button_reboot)
@@ -54,13 +54,13 @@ class DeviceControlsWidget(QWidget):
         layout = UiComponents.create_row()
 
         button_turn_on = UiComponents.create_button(
-            title="Turn Screen ON",
+            title=":lightbulb-on: Screen ON",
             on_click=self.on_turn_on_clicked,
         )
         layout.addWidget(button_turn_on)
 
         button_turn_off = UiComponents.create_button(
-            title="Turn Screen OFF",
+            title=":lightbulb: Screen OFF",
             on_click=self.on_turn_off_clicked,
         )
         layout.addWidget(button_turn_off)
@@ -71,19 +71,19 @@ class DeviceControlsWidget(QWidget):
         layout = UiComponents.create_row()
 
         button_prev_page = UiComponents.create_button(
-            title="Previous Page",
+            title=":arrow-left: Previous",
             on_click=self.on_prev_page_clicked,
         )
         layout.addWidget(button_prev_page)
 
         button_home_page = UiComponents.create_button(
-            title="Home Page",
+            title=":home:\nHome",
             on_click=self.on_home_page_clicked,
         )
         layout.addWidget(button_home_page)
 
         button_next_page = UiComponents.create_button(
-            title="Next Page",
+            title="Next :arrow-right:",
             on_click=self.on_next_page_clicked,
         )
         layout.addWidget(button_next_page)

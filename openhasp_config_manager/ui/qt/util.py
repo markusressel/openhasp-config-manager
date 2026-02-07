@@ -2,6 +2,33 @@ import asyncio
 import functools
 import logging
 
+import qtawesome as qta
+
+from openhasp_config_manager.openhasp_client.icons import IntegratedIcon
+
+
+class IconManager:
+    @staticmethod
+    def get_mdi_char(icon_name: str) -> str:
+        """Fetch the character from the QtAwesome MDI library."""
+        try:
+            # We use 'mdi6' for newer Material Design Icons
+            return qta.charmap(f"mdi6.{icon_name}")
+        except Exception:
+            return "?"
+
+
+# Improved Parser
+def parse_icons(text: str) -> str:
+    for unicode_char, icon_name in IntegratedIcon.entries():
+        # Get the actual character QtAwesome expects for this name
+        icon_char = IconManager.get_mdi_char(icon_name)
+
+        # Replace both the :name: shorthand and the OpenHASP unicode char
+        text = text.replace(f":{icon_name}:", icon_char)
+        text = text.replace(unicode_char, icon_char)
+    return text
+
 
 def clear_layout(layout):
     """Recursively delete all widgets and layouts in the given layout."""
