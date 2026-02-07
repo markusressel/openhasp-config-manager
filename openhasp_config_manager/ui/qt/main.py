@@ -1,10 +1,9 @@
-from PyQt6 import QtCore
-from PyQt6.QtWidgets import QWidget, QMainWindow, QVBoxLayout
+from PyQt6.QtWidgets import QWidget, QMainWindow
 
 from openhasp_config_manager.manager import ConfigManager
 from openhasp_config_manager.openhasp_client.model.component import CmdComponent
 from openhasp_config_manager.openhasp_client.model.device import Device
-from openhasp_config_manager.ui.dimensions import UiDimensions
+from openhasp_config_manager.ui.components import UiComponents
 from openhasp_config_manager.ui.qt.device_list import DeviceListWidget
 from openhasp_config_manager.ui.qt.pagelayout.device_controls import DeviceControlsWidget
 from openhasp_config_manager.ui.qt.pagelayout.page_layout_editor import PageLayoutEditorWidget, OpenHaspDevicePagesData
@@ -22,10 +21,7 @@ class MainWindow(QMainWindow):
 
     def create_basic_layout(self):
         self.container = QWidget()
-        self.layout = QVBoxLayout()
-        self.layout.setContentsMargins(0, 0, 0, 0)
-        self.layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        self.layout.setSpacing(UiDimensions.one)
+        self.layout = UiComponents.create_column()
         self.container.setLayout(self.layout)
 
         self.device_list_widget = DeviceListWidget(devices=[])

@@ -4,7 +4,7 @@ from typing import List, Dict, Set, Optional
 
 from PyQt6 import QtCore
 from PyQt6.QtGui import QFont
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QSizePolicy, QHBoxLayout, QTextEdit
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QSizePolicy, QTextEdit
 from orjson import orjson
 
 from openhasp_config_manager.manager import ConfigManager
@@ -36,7 +36,7 @@ class PageLayoutEditorWidget(QWidget):
         self.layout.setSpacing(UiDimensions.one)
 
         self.preview_container = QWidget()
-        self.preview_container.setLayout(QVBoxLayout())
+        self.preview_container.setLayout(UiComponents.create_column())
         self.layout.addWidget(self.preview_container)
 
         self.page_selector = self._create_page_selector()
@@ -266,7 +266,7 @@ class PageLayoutEditorWidget(QWidget):
 
     def _create_page_selector(self) -> QWidget:
         page_selector_widget = QWidget()
-        page_selector_widget.setLayout(QHBoxLayout())
+        page_selector_widget.setLayout(UiComponents.create_row())
 
         self._previous_page_button_widget = UiComponents.create_button(
             title="Previous Page",
