@@ -1,6 +1,6 @@
 from typing import Optional
 
-from PyQt6.QtWidgets import QWidget
+from PyQt6.QtWidgets import QWidget, QLayout
 
 from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
@@ -18,62 +18,77 @@ class DeviceControlsWidget(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.main_layout = UiComponents.create_column()
-        self.setLayout(self.main_layout)
-
-        self.device_controls_layout = UiComponents.create_row()
-        self.main_layout.addLayout(self.device_controls_layout)
-
-        self.screen_controls_layout = UiComponents.create_row()
-        self.main_layout.addLayout(self.screen_controls_layout)
-
-        self.page_controls_layout = UiComponents.create_row()
-        self.main_layout.addLayout(self.page_controls_layout)
-
         self.device: Optional[Device] = None
 
-        self._create_controls()
+        self._create_layout()
 
     def set_device(self, device: Optional[Device]):
         self.device = device
         self.client = OpenHaspClient(self.device)
 
-    def _create_controls(self):
-        button_turn_on = UiComponents.create_button(
-            title="Turn Screen ON",
-            on_click=self.on_turn_on_clicked,
-        )
-        self.screen_controls_layout.addWidget(button_turn_on)
+    def _create_layout(self):
+        self.main_layout = UiComponents.create_column()
+        self.setLayout(self.main_layout)
 
-        button_turn_off = UiComponents.create_button(
-            title="Turn Screen OFF",
-            on_click=self.on_turn_off_clicked,
-        )
-        self.screen_controls_layout.addWidget(button_turn_off)
+        self.device_controls_layout = self._create_device_controls_layout()
+        self.main_layout.addLayout(self.device_controls_layout)
+
+        self.screen_controls_layout = self._create_screen_controls_layout()
+        self.main_layout.addLayout(self.screen_controls_layout)
+
+        self.page_controls_layout = self._create_page_controls_layout()
+        self.main_layout.addLayout(self.page_controls_layout)
+
+    def _create_device_controls_layout(self) -> QLayout:
+        layout = UiComponents.create_row()
 
         button_reboot = UiComponents.create_button(
             title="Reboot Device",
             on_click=self.on_reboot_clicked,
         )
-        self.device_controls_layout.addWidget(button_reboot)
+        layout.addWidget(button_reboot)
+
+        return layout
+
+    def _create_screen_controls_layout(self) -> QLayout:
+        layout = UiComponents.create_row()
+
+        button_turn_on = UiComponents.create_button(
+            title="Turn Screen ON",
+            on_click=self.on_turn_on_clicked,
+        )
+        layout.addWidget(button_turn_on)
+
+        button_turn_off = UiComponents.create_button(
+            title="Turn Screen OFF",
+            on_click=self.on_turn_off_clicked,
+        )
+        layout.addWidget(button_turn_off)
+
+        return layout
+
+    def _create_page_controls_layout(self) -> QLayout:
+        layout = UiComponents.create_row()
 
         button_prev_page = UiComponents.create_button(
             title="Previous Page",
             on_click=self.on_prev_page_clicked,
         )
-        self.page_controls_layout.addWidget(button_prev_page)
+        layout.addWidget(button_prev_page)
 
         button_home_page = UiComponents.create_button(
             title="Home Page",
             on_click=self.on_home_page_clicked,
         )
-        self.page_controls_layout.addWidget(button_home_page)
+        layout.addWidget(button_home_page)
 
         button_next_page = UiComponents.create_button(
             title="Next Page",
             on_click=self.on_next_page_clicked,
         )
-        self.page_controls_layout.addWidget(button_next_page)
+        layout.addWidget(button_next_page)
+
+        return layout
 
     @qBridge()
     def on_turn_on_clicked(self):
