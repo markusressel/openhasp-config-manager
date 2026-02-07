@@ -3,8 +3,7 @@ from collections import OrderedDict
 from typing import List, Dict, Set, Optional
 
 from PyQt6 import QtCore
-from PyQt6.QtGui import QFont
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QSizePolicy, QTextEdit
+from PyQt6.QtWidgets import QWidget, QVBoxLayout
 from orjson import orjson
 
 from openhasp_config_manager.manager import ConfigManager
@@ -12,6 +11,7 @@ from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 from openhasp_config_manager.ui.components import UiComponents
 from openhasp_config_manager.ui.dimensions import UiDimensions
 from openhasp_config_manager.ui.qt.pagelayout import OpenHaspDevicePagesData
+from openhasp_config_manager.ui.qt.pagelayout.jsonl_preview import PageJsonlPreviewWidget
 from openhasp_config_manager.ui.qt.pagelayout.page_preview_layout import PagePreviewWidget2
 from openhasp_config_manager.ui.qt.util import clear_layout, qBridge, run_async
 
@@ -284,31 +284,3 @@ class PageLayoutEditorWidget(QWidget):
 
     def get_page_index(self) -> int:
         return self.current_index
-
-
-class PageJsonlPreviewWidget(QTextEdit):
-    def __init__(self, page: OpenHaspDevicePagesData, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.setReadOnly(True)
-        self.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
-        self.setFont(QFont("Roboto Mono", 10))
-
-        self.set_page(page)
-
-        size_policy = QSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
-        self.setSizePolicy(size_policy)
-
-    def set_page(self, page: OpenHaspDevicePagesData):
-        self.page = page
-        self.setText(page.jsonl_components[0].content)
-
-    def set_objects(self, page_objects: List[dict]):
-        """
-        Set the objects for the page.
-        :param page_objects: the list of objects to set
-        """
-        sorted_page_objects = sorted(page_objects, key=lambda obj: (
-            obj.get("page", 0), obj.get("id", 0), obj.get("y", ""), obj.get("x", "")))
-
-        content = "\n".join(map(lambda x: orjson.dumps(x).decode(), sorted_page_objects))
-        self.setText(content)
