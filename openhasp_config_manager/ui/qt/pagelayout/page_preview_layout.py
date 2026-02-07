@@ -41,7 +41,7 @@ class PagePreviewWidget2(QGraphicsView):
         self.set_data(data)
 
     def load_objects(self):
-        self.scene.clear()
+        self.scene().clear()
         for obj in self.objects:
             obj_type = obj.get("obj")
             if not obj_type:
@@ -51,29 +51,29 @@ class PagePreviewWidget2(QGraphicsView):
                 logging.debug(f"Adding button item: {obj}")
                 item = HaspButtonItem(obj_data=obj, parent_widget=self)
                 item.clicked.connect(self._on_button_clicked)
-                self.scene.addItem(item)
+                self.scene().addItem(item)
             elif obj_type == "switch":
                 logging.debug(f"Adding switch item: {obj}")
                 item = HaspSwitchItem(obj_data=obj, parent_widget=self)
                 item.toggled.connect(lambda obj_id, val: print(f"Switch {obj_id} toggled to {val}"))
-                self.scene.addItem(item)
+                self.scene().addItem(item)
             elif obj_type == "bar":
                 logging.debug(f"Adding bar item: {obj}")
                 item = HaspBarItem(obj_data=obj, parent_widget=self)
-                self.scene.addItem(item)
+                self.scene().addItem(item)
             elif obj_type == "slider":
                 logging.debug(f"Adding slider item: {obj}")
                 item = HaspSliderItem(obj_data=obj, parent_widget=self)
                 item.valueChanged.connect(lambda obj_id, val: print(f"Slider {obj_id} changed to {val}"))
-                self.scene.addItem(item)
+                self.scene().addItem(item)
             elif obj_type == "label":
                 logging.debug(f"Adding label item: {obj}")
                 item = HaspLabelItem(obj_data=obj, parent_widget=self)
-                self.scene.addItem(item)
+                self.scene().addItem(item)
             elif obj_type == "img":
                 logging.debug(f"Adding image item: {obj}")
                 item = HaspImageItem(obj_data=obj, parent_widget=self)
-                self.scene.addItem(item)
+                self.scene().addItem(item)
 
     def _on_button_clicked(self, obj_id: int):
         # Find the object data for this button
@@ -81,10 +81,10 @@ class PagePreviewWidget2(QGraphicsView):
         if obj_data:
             self.buttonClicked.emit(obj_data)
 
-    def set_data(self, data: Optional[OpenHaspDevicePagesData], page_objects: List[dict] = ()):
+    def set_data(self, data: Optional[OpenHaspDevicePagesData]):
         self.data = data
         self._setup_scene(data)
-        self.set_objects(page_objects)
+        self.set_objects([])
 
     def _setup_scene(self, data: Optional[OpenHaspDevicePagesData]):
         native_width = 480
@@ -94,9 +94,12 @@ class PagePreviewWidget2(QGraphicsView):
             native_width = self.data.device.config.openhasp_config_manager.device.screen.width
             native_height = self.data.device.config.openhasp_config_manager.device.screen.height
 
-        self.scene = QGraphicsScene(0, 0, native_width, native_height)
-        self.scene.setBackgroundBrush(QColor('black'))
-        self.setScene(self.scene)
+        if self.scene() is None:
+            scene = QGraphicsScene(0, 0, native_width, native_height)
+            scene.setBackgroundBrush(QColor('black'))
+            self.setScene(scene)
+        else:
+            self.scene().clear()
 
     def set_objects(self, loaded_objects: List[dict]):
         self.objects = loaded_objects
@@ -108,7 +111,7 @@ class PagePreviewWidget2(QGraphicsView):
 
     def resizeEvent(self, event):
         # This keeps the aspect ratio and fits the scene into the view
-        self.fitInView(self.scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
+        self.fitInView(self.scene().sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
         super().resizeEvent(event)
 
     @staticmethod

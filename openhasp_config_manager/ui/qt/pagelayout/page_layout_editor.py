@@ -76,7 +76,6 @@ class PageLayoutEditorWidget(QWidget):
         self.jsonl_component_objects = self._load_jsonl_component_objects(device_pages_data)
 
         self.page_preview_widget.set_data(device_pages_data)
-        self.page_jsonl_preview.set_data(device_pages_data)
 
         self.set_page_index(index=1)
 

@@ -1,16 +1,14 @@
 import re
-from typing import List, Optional
+from typing import List
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QSyntaxHighlighter, QTextCharFormat, QColor, QFont
 from PyQt6.QtWidgets import QSizePolicy, QTextEdit
 from orjson import orjson
 
-from openhasp_config_manager.ui.qt.pagelayout import OpenHaspDevicePagesData
-
 
 class PageJsonlPreviewWidget(QTextEdit):
-    def __init__(self, data: Optional[OpenHaspDevicePagesData] = None, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.setReadOnly(True)
         self.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
@@ -18,17 +16,8 @@ class PageJsonlPreviewWidget(QTextEdit):
 
         self.highlighter = JsonLHighlighter(self.document())
 
-        self.set_data(data)
-
         size_policy = QSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
         self.setSizePolicy(size_policy)
-
-    def set_data(self, data: Optional[OpenHaspDevicePagesData]):
-        self.data = data
-        if data is None:
-            self.setText("")
-        else:
-            self.setText(data.jsonl_components[0].content)
 
     def set_objects(self, page_objects: List[dict]):
         """
