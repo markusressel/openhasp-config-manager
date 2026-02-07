@@ -97,7 +97,7 @@ class DeviceControlsWidget(QWidget):
         print(f"Turning on screen for device: {self.device.name}")
 
         async def __turn_on_screen():
-            await self.client.set_backlight(True, None)
+            await self.client.set_backlight(state=True)
 
         run_async(__turn_on_screen())
 
@@ -108,7 +108,7 @@ class DeviceControlsWidget(QWidget):
         print(f"Turning off screen for device: {self.device.name}")
 
         async def __turn_off_screen():
-            await self.client.set_backlight(False, None)
+            await self.client.set_backlight(state=False)
 
         run_async(__turn_off_screen())
 

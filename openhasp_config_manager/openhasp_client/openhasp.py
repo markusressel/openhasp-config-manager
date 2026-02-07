@@ -212,18 +212,24 @@ class OpenHaspClient:
             params=state
         )
 
-    async def set_backlight(self, state: bool, brightness: int):
+    async def set_backlight(self, state: bool = None, brightness: int = None):
         """
         Sets the backlight state and brightness
-        :param state: True to turn on, False to turn off
-        :param brightness: the brightness level in 0..255
+        :param state: (optional)True to turn on, False to turn off
+        :param brightness: (optional) the brightness level in 0..255
         """
+        params = {
+            "state": state,
+            "brightness": brightness,
+        }
+        # remove None values
+        params = {k: v for k, v in params.items() if v is not None}
+        if not params:
+            raise ValueError("At least one of 'state' or 'brightness' must be set")
+
         return await self.command(
             name="backlight",
-            params={
-                "state": state,
-                "brightness": brightness,
-            }
+            params=params
         )
 
     async def wakeup(self):
