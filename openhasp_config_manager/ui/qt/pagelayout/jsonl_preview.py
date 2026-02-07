@@ -15,7 +15,7 @@ class PageJsonlPreviewWidget(QTextEdit):
         self.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
         self.setFont(QFont("Roboto Mono", 10))
 
-        self.highlighter = JsonHighlighter(self.document())
+        self.highlighter = JsonLHighlighter(self.document())
 
         self.set_page(page)
 
@@ -37,32 +37,48 @@ class PageJsonlPreviewWidget(QTextEdit):
         content = "\n".join(map(lambda x: orjson.dumps(x).decode(), sorted_page_objects))
         self.setText(content)
 
-
-class JsonHighlighter(QSyntaxHighlighter):
+class JsonLHighlighter(QSyntaxHighlighter):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.rules = []
 
-        # Key format (e.g., "id":)
+        # 1. Braces and Brackets {} []
+        symbol_format = QTextCharFormat()
+        symbol_format.setForeground(QColor("#FFD700"))  # Gold
+        self.rules.append((re.compile(r"[\{\}\[\]]"), symbol_format))
+
+        # 2. Keys (The property names)
         key_format = QTextCharFormat()
-        key_format.setForeground(QColor("#ce9178"))  # Terracotta
-        key_format.setFontWeight(QFont.Weight.Bold)
+        key_format.setForeground(QColor("#9CDCFE"))  # Light Blue
         self.rules.append((re.compile(r'"[^"\\]*"(?=\s*:)'), key_format))
 
-        # String value format
+        # 3. Hex Color Codes (Inside strings, e.g., "#558B2F")
+        color_code_format = QTextCharFormat()
+        color_code_format.setForeground(QColor("#CE9178"))  # Salmon/Orange
+        color_code_format.setFontItalic(True)
+        # Match # followed by 6 hex chars inside quotes
+        self.rules.append((re.compile(r'"#(?:[0-9a-fA-F]{3}){1,2}"'), color_code_format))
+
+        # 4. Standard Strings (Values that aren't colors)
         string_format = QTextCharFormat()
-        string_format.setForeground(QColor("#9cdcfe"))  # Light Blue
-        self.rules.append((re.compile(r'(?<=:)\s*"[^"\\]*"'), string_format))
+        string_format.setForeground(QColor("#CE9178"))  # Salmon
+        # This matches strings after a colon, excluding the hex pattern above
+        self.rules.append((re.compile(r'(?<=:)\s*"(?!#)[^"\\]*"'), string_format))
 
-        # Number format
+        # 5. Numbers (int/float)
         number_format = QTextCharFormat()
-        number_format.setForeground(QColor("#b5cea8"))  # Light Green
-        self.rules.append((re.compile(r'\b\d+(\.\d+)?\b'), number_format))
+        number_format.setForeground(QColor("#B5CEA8"))  # Sage Green
+        self.rules.append((re.compile(r"\b-?\d+(?:\.\d+)?\b"), number_format))
 
-        # Boolean/Null format
-        keyword_format = QTextCharFormat()
-        keyword_format.setForeground(QColor("#569cd6"))  # Azure
-        self.rules.append((re.compile(r'\b(true|false|null)\b'), keyword_format))
+        # 6. Booleans and Null
+        const_format = QTextCharFormat()
+        const_format.setForeground(QColor("#569CD6"))  # Blue
+        self.rules.append((re.compile(r"\b(true|false|null)\b"), const_format))
+
+        # 7. The Colon (Separator)
+        separator_format = QTextCharFormat()
+        separator_format.setForeground(QColor("#FFFFFF"))
+        self.rules.append((re.compile(r":"), separator_format))
 
     def highlightBlock(self, text):
         for pattern, fmt in self.rules:
