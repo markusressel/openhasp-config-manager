@@ -2,14 +2,12 @@ import asyncio
 from collections import OrderedDict
 from typing import List, Dict, Set, Optional
 
-from PyQt6 import QtCore
-from PyQt6.QtWidgets import QWidget, QVBoxLayout
+from PyQt6.QtWidgets import QWidget
 from orjson import orjson
 
 from openhasp_config_manager.manager import ConfigManager
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 from openhasp_config_manager.ui.components import UiComponents
-from openhasp_config_manager.ui.dimensions import UiDimensions
 from openhasp_config_manager.ui.qt.pagelayout import OpenHaspDevicePagesData
 from openhasp_config_manager.ui.qt.pagelayout.jsonl_preview import PageJsonlPreviewWidget
 from openhasp_config_manager.ui.qt.pagelayout.page_preview_layout import PagePreviewWidget2
@@ -30,10 +28,7 @@ class PageLayoutEditorWidget(QWidget):
         self.create_layout()
 
     def create_layout(self):
-        self.layout = QVBoxLayout(self)
-        self.layout.setContentsMargins(0, 0, 0, 0)
-        self.layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        self.layout.setSpacing(UiDimensions.one)
+        self.layout = UiComponents.create_column(self)
 
         self.preview_container = QWidget()
         self.preview_container.setLayout(UiComponents.create_column())
