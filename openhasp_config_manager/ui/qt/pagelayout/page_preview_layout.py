@@ -18,21 +18,21 @@ from openhasp_config_manager.ui.qt.util import parse_icons
 
 
 class PagePreviewWidget2(QGraphicsView):
-    clickedValue = QtCore.pyqtSignal(int)
     buttonClicked = QtCore.pyqtSignal(dict)
 
     @property
     def page_width(self) -> int:
-        return self.page.device.config.openhasp_config_manager.device.screen.width
+        return self.data.device.config.openhasp_config_manager.device.screen.width
 
     @property
     def page_height(self) -> int:
-        return self.page.device.config.openhasp_config_manager.device.screen.height
+        return self.data.device.config.openhasp_config_manager.device.screen.height
 
-    def __init__(self, page: OpenHaspDevicePagesData, page_objects: List[dict], *args, **kwargs):
+    def __init__(self, data: OpenHaspDevicePagesData, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.page = page
+        self.data: OpenHaspDevicePagesData = data
+        self.objects: List[dict] = []
 
         # 1. Setup the Scene (use the device's actual native resolution)
         self.native_width = self.page_width
@@ -46,9 +46,6 @@ class PagePreviewWidget2(QGraphicsView):
         self.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
         self.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        self.objects: List[dict] = page_objects
-        self.load_objects()
-
     def load_objects(self):
         self.scene.clear()
         for obj in self.objects:
@@ -59,7 +56,6 @@ class PagePreviewWidget2(QGraphicsView):
             if obj_type == "btn":
                 logging.debug(f"Adding button item: {obj}")
                 item = HaspButtonItem(obj_data=obj, parent_widget=self)
-                item.clicked.connect(self.clickedValue.emit)
                 item.clicked.connect(self._on_button_clicked)
                 self.scene.addItem(item)
             elif obj_type == "switch":
@@ -90,6 +86,10 @@ class PagePreviewWidget2(QGraphicsView):
         obj_data = next((obj for obj in self.objects if obj.get("id") == obj_id), None)
         if obj_data:
             self.buttonClicked.emit(obj_data)
+
+    def set_data(self, data: OpenHaspDevicePagesData, page_objects: List[dict] = ()):
+        self.data = data
+        self.set_objects(page_objects)
 
     def set_objects(self, loaded_objects: List[dict]):
         self.objects = loaded_objects
