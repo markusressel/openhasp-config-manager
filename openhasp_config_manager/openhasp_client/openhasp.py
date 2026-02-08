@@ -197,9 +197,9 @@ class OpenHaspClient:
         :param properties: properties to set
         """
         for prop, value in properties.items():
+            keyword = f"{obj}.{prop}"
             await self.command(
-                name=f"{obj}.{prop}",
-                params=value,
+                params=f"{keyword}={value}",
             )
 
     async def set_idle_state(self, state: str):
@@ -208,7 +208,7 @@ class OpenHaspClient:
         :param state: one of "off", "short", "long"
         """
         return await self.command(
-            name="idle",
+            keyword="idle",
             params=state
         )
 
@@ -228,7 +228,7 @@ class OpenHaspClient:
             raise ValueError("At least one of 'state' or 'brightness' must be set")
 
         return await self.command(
-            name="backlight",
+            keyword="backlight",
             params=params
         )
 
@@ -244,7 +244,7 @@ class OpenHaspClient:
         :param index: the index of the page to set
         """
         return await self.command(
-            name="page",
+            keyword="page",
             params=f"{index}"
         )
 
@@ -253,7 +253,7 @@ class OpenHaspClient:
         Set the next page
         """
         return await self.command(
-            name="page",
+            keyword="page",
             params="next"
         )
 
@@ -262,7 +262,7 @@ class OpenHaspClient:
         Set the previous page
         """
         return await self.command(
-            name="page",
+            keyword="page",
             params="prev"
         )
 
@@ -271,7 +271,7 @@ class OpenHaspClient:
         Clear the current page
         """
         return await self.command(
-            name="clearpage",
+            keyword="clearpage",
         )
 
     async def clear_page(self, page: int):
@@ -280,7 +280,7 @@ class OpenHaspClient:
         :param page: the page index to clear
         """
         return await self.command(
-            name="clearpage",
+            keyword="clearpage",
             params=page
         )
 
@@ -289,7 +289,7 @@ class OpenHaspClient:
         Clear all pages
         """
         return await self.command(
-            name="clearpage",
+            keyword="clearpage",
             params="all"
         )
 
@@ -337,13 +337,17 @@ class OpenHaspClient:
         """
         await self._mqtt_client.cancel_callback(callback=callback)
 
-    async def command(self, name: str, params: Any = None):
+    async def command(self, keyword: str = None, params: Any = None):
         """
         Execute a command on a device
-        :param name: the name of the command
+        See: https://www.openhasp.com/0.7.0/commands/mqtt/#issuing-commands
+
+        :param keyword: (optional) keyword of the command
         :param params: parameters for the command
         """
-        topic = f"hasp/{self._device.config.mqtt.name}/command/{name}"
+        topic = f"hasp/{self._device.config.mqtt.name}/command"
+        if keyword is not None:
+            topic += f"/{keyword}"
         await self._mqtt_client.publish(topic=topic, payload=params)
 
     async def jsonl(self, jsonl: str | dict):
@@ -352,7 +356,7 @@ class OpenHaspClient:
         See: https://www.openhasp.com/0.7.0/commands/?h=jsonl#jsonl
         :param jsonl: the JSONL string (or object) to send
         """
-        await self.command(name="jsonl", params=jsonl)
+        await self.command(keyword="jsonl", params=jsonl)
 
     async def clear_object(self, obj: str):
         """
@@ -360,7 +364,7 @@ class OpenHaspClient:
         See: https://www.openhasp.com/0.7.0/design/objects/#common-methods
         :param obj: the object to clear, f.ex. "p1b2"
         """
-        await self.command(name=f"{obj}.clear", )
+        await self.command(keyword=f"{obj}.clear", )
 
     async def clear_object_id(self, page: int, obj: int):
         """
@@ -378,7 +382,7 @@ class OpenHaspClient:
         See: https://www.openhasp.com/0.7.0/design/objects/#common-methods
         :param obj: the object to delete, f.ex. "p1b2"
         """
-        await self.command(name=f"{obj}.delete", )
+        await self.command(keyword=f"{obj}.delete", )
 
     async def delete_object_id(self, page: int, obj: int):
         """
@@ -396,7 +400,7 @@ class OpenHaspClient:
         See: https://www.openhasp.com/0.7.0/design/objects/#common-methods
         :param obj: the object to bring to the front, f.ex. "p1b2"
         """
-        await self.command(name=f"{obj}.to_front", )
+        await self.command(keyword=f"{obj}.to_front", )
 
     async def bring_object_to_front_id(self, page: int, obj: int):
         """
@@ -414,7 +418,7 @@ class OpenHaspClient:
         See: https://www.openhasp.com/0.7.0/design/objects/#common-methods
         :param obj: the object to bring to the back, f.ex. "p1b2"
         """
-        await self.command(name=f"{obj}.to_back", )
+        await self.command(keyword=f"{obj}.to_back", )
 
     async def bring_object_to_back_id(self, page: int, obj: int):
         """
