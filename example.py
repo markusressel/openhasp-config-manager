@@ -43,7 +43,7 @@ async def main():
     uploader = ConfigUploader(output_dir, client)
 
     # deploy the local config to the device
-    uploader.upload(device=device, purge=False, print_diff=True)
+    # uploader.upload(device=device, purge=False, print_diff=True)
 
     # subscribe to state changes of object p1b22 (async)
     await client.listen_state(obj="p1b22", callback=state_callback)
@@ -61,7 +61,7 @@ async def main():
         text="Hello!",
     )
 
-    await asyncio.sleep(10)
+    # await asyncio.sleep(10)
 
     await client.set_text(
         obj="p1b10",
@@ -70,6 +70,9 @@ async def main():
 
     await client.set_backlight(brightness=125)
     print(f"Current Backlight State: {await client.get_backlight()}")
+
+    current_p1b1ß = await client.get_object_property(obj="p1b10")
+    print(f"Current p1b10 state: {current_p1b1ß}")
 
     current_text = await client.get_object_property(obj="p1b10", prop="text")
     print(f"Current p1b10 text: {current_text}")

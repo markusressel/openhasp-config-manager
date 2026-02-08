@@ -227,18 +227,21 @@ class OpenHaspClient:
         :param timeout: the timeout in seconds to wait for the device to respond
         :return: the current value of the command
         """
-        raw_state = await self.get_state(command=command, state=command, timeout=timeout)
+        raw_state = await self.get_state(command=command, timeout=timeout)
         return raw_state[prop] if isinstance(raw_state, dict) and prop in raw_state else raw_state
 
-    async def get_state(self, command: str, state: str, timeout: float = 1.0) -> Optional[Any]:
+    async def get_state(self, command: str, state: str = None, timeout: float = 1.0) -> Optional[Any]:
         """
         Get the value of an object property.
         Note that this function will subscribe to the corresponding MQTT topic and wait for the device to publish the current value.
-        :param command: the command to get the state for
-        :param state: the state keyword to get the value for
+        :param command: the command to get the state for, can be an object property command like "p1b2.text" or a general command like "backlight",
+        :param state: the state keyword to get the value for e.g. "p1b2" for "p1b2.text" (because there is no separate "state" topic for each property, but only for the whole object), or "backlight" for "backlight" command (because the state topic is the same as the command keyword)
         :param timeout: the timeout in seconds to wait for the device to respond
         :return: the current value of the property
         """
+        if state is None:
+            state = command
+
         command_keyword = command
         listen_path = f"state/{state}"
         future = asyncio.get_event_loop().create_future()
