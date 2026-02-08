@@ -11,7 +11,7 @@ from openhasp_config_manager.ad.objects.slider import SliderObjectController
 from openhasp_config_manager.ad.objects.switch import SwitchObjectController
 
 if TYPE_CHECKING:
-    from openhasp_config_manager.ad.page import StateUpdater
+    from openhasp_config_manager.ad.page.state_updater import StateUpdater
 else:
     StateUpdater = Any
 

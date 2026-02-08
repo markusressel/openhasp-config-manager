@@ -12,7 +12,7 @@ from openhasp_config_manager.openhasp_client.model.configuration.gui_config impo
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 
 if TYPE_CHECKING:
-    from openhasp_config_manager.ad.page import StateUpdater, PageController
+    from openhasp_config_manager.ad.page.state_updater import StateUpdater, PageController
 else:
     StateUpdater = Any
 

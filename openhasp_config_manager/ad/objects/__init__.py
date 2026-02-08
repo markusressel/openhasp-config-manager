@@ -2,7 +2,7 @@ from typing import Dict, Callable, Awaitable, Any
 
 from appdaemon import ADAPI
 
-from openhasp_config_manager.ad.page import StateUpdater
+from openhasp_config_manager.ad.page.state_updater import StateUpdater
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 
 
