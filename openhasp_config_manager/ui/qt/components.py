@@ -2,7 +2,7 @@ from collections.abc import Callable
 
 import qtawesome as qta
 from PyQt6 import QtCore
-from PyQt6.QtWidgets import QPushButton, QHBoxLayout, QVBoxLayout, QLabel
+from PyQt6.QtWidgets import QPushButton, QHBoxLayout, QVBoxLayout, QLabel, QCheckBox
 
 from openhasp_config_manager.ui.dimensions import UiDimensions
 from openhasp_config_manager.ui.qt.util import parse_icons
@@ -18,11 +18,27 @@ class UiComponents:
         return label
 
     @staticmethod
-    def create_button(title: str, on_click: Callable[[], None]) -> QPushButton:
+    def create_button(
+        title: str,
+        on_click: Callable[[], None]
+    ) -> QPushButton:
         button = QPushButton(parse_icons(title))
         button.setFont(qta.font("mdi6", 16))
         button.setStyleSheet("padding: 10px;")
         button.clicked.connect(on_click)
+        return button
+
+    @staticmethod
+    def create_switch(
+        title: str,
+        initial_state: bool,
+        on_toggle: Callable[[bool], None]
+    ) -> QCheckBox:
+        button = QCheckBox(parse_icons(title))
+        button.setFont(qta.font("mdi6", 16))
+        button.setStyleSheet("padding: 10px;")
+        button.setChecked(initial_state)
+        button.toggled.connect(on_toggle)
         return button
 
     @staticmethod

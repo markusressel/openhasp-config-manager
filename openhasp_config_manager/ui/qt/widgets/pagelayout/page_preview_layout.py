@@ -1,5 +1,6 @@
 import logging
 from typing import List, Tuple, Optional
+from warnings import deprecated
 
 from PyQt6 import QtCore
 from PyQt6.QtCore import QSize, Qt, QRect, QRectF
@@ -136,6 +137,7 @@ class PagePreviewWidget2(QGraphicsView):
         return f'<span>{processed_text}</span>'
 
 
+@deprecated("PagePreviewWidget2 is the new and improved version of PagePreviewWidget, using QGraphicsView for better performance and interactivity. PagePreviewWidget will be removed in a future release.")
 class PagePreviewWidget(QWidget):
     """
     Draws a preview of a page layout.

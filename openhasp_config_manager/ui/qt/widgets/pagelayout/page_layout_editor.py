@@ -12,6 +12,7 @@ from openhasp_config_manager.ui.qt.util import qBridge, run_async
 from openhasp_config_manager.ui.qt.widgets.pagelayout import OpenHaspDevicePagesData
 from openhasp_config_manager.ui.qt.widgets.pagelayout.editor_controls import EditorControlsWidget
 from openhasp_config_manager.ui.qt.widgets.pagelayout.jsonl_preview import PageJsonlPreviewWidget
+from openhasp_config_manager.ui.qt.widgets.pagelayout.openhasp_widget_picker import OpenHASPWidgetPicker
 from openhasp_config_manager.ui.qt.widgets.pagelayout.page_preview_layout import PagePreviewWidget2
 
 
@@ -34,33 +35,60 @@ class PageLayoutEditorWidget(QWidget):
         self.title_label = UiComponents.create_label(":mdi6.book-open-page-variant: Page Layout Editor")
         self.layout.addWidget(self.title_label)
 
-        self.preview_container_layout = UiComponents.create_column()
-        self.layout.addLayout(self.preview_container_layout)
-
-        self.preview_container_layout_title_label = UiComponents.create_label(":mdi6.eye: Page Preview")
-        self.preview_container_layout.addWidget(self.preview_container_layout_title_label)
-
-        self.page_preview_widget = PagePreviewWidget2()
-        self.page_preview_widget.buttonClicked.connect(self.__on_preview_layout_button_clicked)
-        self.preview_container_layout.addWidget(self.page_preview_widget)
-
-        self.page_jsonl_preview = PageJsonlPreviewWidget()
-        self.preview_container_layout.addWidget(self.page_jsonl_preview)
-
         self.editor_controls_title_label = UiComponents.create_label(":mdi6.cog: Editor Controls")
         self.layout.addWidget(self.editor_controls_title_label)
         self.editor_controls = EditorControlsWidget()
         self.editor_controls.previousPageClicked.connect(self._on_previous_page_clicked)
         self.editor_controls.nextPageClicked.connect(self._on_next_page_clicked)
+        self.editor_controls.syncWithRealDeviceToggled.connect(self._on_sync_with_real_device_toggled)
         self.editor_controls.deployClicked.connect(self._on_deploy_page_clicked)
         self.editor_controls.clearClicked.connect(self._on_clear_page_clicked)
         self.layout.addWidget(self.editor_controls)
 
+        self.device_preview_container_layout = UiComponents.create_column()
+        self.layout.addLayout(self.device_preview_container_layout)
+
+        self.device_preview_container_title_label = UiComponents.create_label(":mdi6.eye: Page Preview")
+        self.device_preview_container_layout.addWidget(self.device_preview_container_title_label)
+
+        self.device_preview_row = UiComponents.create_row()
+        self.device_preview_container_layout.addLayout(self.device_preview_row)
+
+        self.page_preview_widget = PagePreviewWidget2()
+        self.page_preview_widget.buttonClicked.connect(self.__on_preview_layout_button_clicked)
+        self.device_preview_row.addWidget(self.page_preview_widget)
+
+        self.widget_picker = OpenHASPWidgetPicker()
+        self.device_preview_row.addWidget(self.widget_picker)
+
+        self.page_jsonl_preview = PageJsonlPreviewWidget()
+        self.device_preview_container_layout.addWidget(self.page_jsonl_preview)
+
     def _on_previous_page_clicked(self):
         self.previous_page_index()
+        if self.editor_controls.is_sync_with_real_device_enabled():
+            self._sync_device_page_with_device()
 
     def _on_next_page_clicked(self):
         self.next_page_index()
+        if self.editor_controls.is_sync_with_real_device_enabled():
+            self._sync_device_page_with_device()
+
+    @qBridge(bool)
+    def _on_sync_with_real_device_toggled(self, enabled: bool):
+        if enabled:
+            self._sync_device_page_with_device()
+
+    def _sync_device_page_with_device(self):
+        async def __async_work():
+            # switch the device to this page
+            device = self.device_pages_data.device
+            client = OpenHaspClient(device)
+            await client.set_page(self.current_index)
+
+        run_async(
+            coro=__async_work(),
+        )
 
     def clear(self):
         self.page_preview_widget.set_data(None)
