@@ -446,7 +446,7 @@ class OpenHaspClient:
         :param page: the page index
         :param obj: the object index
         """
-        object_id = self._compute_object_id(page, obj)
+        object_id = self.compute_object_id(page, obj)
         await self.clear_object(object_id)
 
     async def delete_object(self, obj: str):
@@ -464,7 +464,7 @@ class OpenHaspClient:
         :param page: the page index
         :param obj: the object index
         """
-        object_id = self._compute_object_id(page, obj)
+        object_id = self.compute_object_id(page, obj)
         await self.delete_object(object_id)
 
     async def bring_object_to_front(self, obj: str):
@@ -482,7 +482,7 @@ class OpenHaspClient:
         :param page: the page index
         :param obj: the object index
         """
-        object_id = self._compute_object_id(page, obj)
+        object_id = self.compute_object_id(page, obj)
         await self.bring_object_to_front(object_id)
 
     async def bring_object_to_back(self, obj: str):
@@ -500,7 +500,7 @@ class OpenHaspClient:
         :param page: the page index
         :param obj: the object index
         """
-        object_id = self._compute_object_id(page, obj)
+        object_id = self.compute_object_id(page, obj)
         await self.bring_object_to_back(object_id)
 
     def get_files(self) -> List[str]:
@@ -602,7 +602,7 @@ class OpenHaspClient:
     async def logs(self):
         await self._telnet_client.logs()
 
-    def _compute_object_id(self, page: int, obj: int) -> str:
+    def compute_object_id(self, page: int, obj: int) -> str:
         """
         Creates an object ID for a given page and object index.
         :param page: the page index
