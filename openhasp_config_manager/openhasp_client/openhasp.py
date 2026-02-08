@@ -2,7 +2,6 @@ import asyncio
 from typing import Dict, List, Any, Callable, Tuple, Optional, Awaitable
 
 import orjson
-from aiomqtt import Topic
 
 from openhasp_config_manager.openhasp_client.image_processor import OpenHaspImageProcessor
 from openhasp_config_manager.openhasp_client.model.configuration.gui_config import GuiConfig
@@ -244,7 +243,7 @@ class OpenHaspClient:
         listen_path = f"state/{state}"
         future = asyncio.get_event_loop().create_future()
 
-        async def _callback(event_topic: Topic, event_payload: bytes):
+        async def _callback(event_topic: str, event_payload: bytes):
             if not future.done():
                 try:
                     # OpenHASP state payloads are usually JSON: {"text": "12345", "val": 10, ...}

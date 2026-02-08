@@ -74,7 +74,7 @@ class DeviceControlsWidget(QWidget):
         #     2. the listener needs to be changed when the device is changed
         #     3. the listener can only be started after a device has been set
         #
-        # async def _callback(event_topic: Topic, event_payload: bytes):
+        # async def _callback(event_topic: str, event_payload: bytes):
         #     try:
         #         # OpenHASP state payloads are usually JSON: {"text": "12345", "val": 10, ...}
         #         brightness = int(str(event_payload, "utf-8"))
