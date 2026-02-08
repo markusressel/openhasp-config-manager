@@ -26,14 +26,12 @@ class EditorControlsWidget(QWidget):
             title="Previous Page",
             on_click=self._on_previous_page_clicked
         )
-        self._previous_page_button_widget.clicked.connect(self._on_previous_page_clicked)
         page_controls_row.addWidget(self._previous_page_button_widget)
 
         self._next_page_button_widget = UiComponents.create_button(
             title="Next Page",
             on_click=self._on_next_page_clicked,
         )
-        self._next_page_button_widget.clicked.connect(self._on_next_page_clicked)
         page_controls_row.addWidget(self._next_page_button_widget)
 
         deployment_controls_row = UiComponents.create_row()
@@ -43,14 +41,12 @@ class EditorControlsWidget(QWidget):
             title="Clear Page",
             on_click=self._on_clear_page_clicked
         )
-        self.button_clear_page.clicked.connect(self._on_clear_page_clicked)
         deployment_controls_row.addWidget(self.button_clear_page)
 
         self.button_deploy_page = UiComponents.create_button(
             title="Deploy Page",
             on_click=self._on_deploy_page_clicked
         )
-        self.button_deploy_page.clicked.connect(self._on_deploy_page_clicked)
         deployment_controls_row.addWidget(self.button_deploy_page)
 
         page_selector_widget = QWidget()
