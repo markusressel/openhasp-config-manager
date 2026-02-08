@@ -60,7 +60,7 @@ class PageController:
         entity_id: str | List[str] = None,
         attribute: str = None,
         get_state: Callable[[], Awaitable[Any]] = None,
-        text: Callable = lambda x: str(x)
+        text: Callable[[Any], str] = lambda x: str(x)
     ) -> LabelObjectController:
         """
         Adds a text object to the page.

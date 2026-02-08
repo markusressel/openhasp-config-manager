@@ -33,7 +33,6 @@ class DeviceControlsWidget(QWidget):
             alignment=QtCore.Qt.AlignmentFlag.AlignLeft
         )
 
-
         self.screen_controls_layout = self._create_screen_controls_layout()
         self.layout.addWidget(UiComponents.create_label(":mdi6.cellphone-screenshot: Screen Controls"))
         self.layout.addLayout(self.screen_controls_layout)
@@ -68,6 +67,30 @@ class DeviceControlsWidget(QWidget):
             min_value=1,
             on_change=self.__on_brightness_changed
         )
+
+        # TODO: listening to brightness changes from the device
+        #     this is harder than anticipated because
+        #     1. it requires a continuous async listener to MQTT events, which is difficult in PyQT environment
+        #     2. the listener needs to be changed when the device is changed
+        #     3. the listener can only be started after a device has been set
+        #
+        # async def _callback(event_topic: Topic, event_payload: bytes):
+        #     try:
+        #         # OpenHASP state payloads are usually JSON: {"text": "12345", "val": 10, ...}
+        #         brightness = int(str(event_payload, "utf-8"))
+        #         brightness_slider.set_value(brightness)
+        #     except Exception:
+        #         # If it's not JSON, just return the raw payload
+        #         pass
+        #
+        # async def __listen_brightness():
+        #     listen_path = f"state/backlight"
+        #     await self.client.listen_event(
+        #         path=listen_path,
+        #         callback=_callback,
+        #     )
+        #
+        # run_async(__listen_brightness())
         layout.addWidget(brightness_slider)
 
         button_turn_on = UiComponents.create_button(

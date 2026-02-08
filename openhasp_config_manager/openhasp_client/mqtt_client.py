@@ -1,9 +1,9 @@
 import asyncio
 import json
 import uuid
-from typing import Callable, List, Dict, Optional
+from typing import Callable, List, Dict, Optional, Awaitable
 
-from aiomqtt import Client, Message
+from aiomqtt import Client, Message, Topic
 
 
 class MqttClient:
@@ -32,7 +32,7 @@ class MqttClient:
 
             await client.publish(topic, payload=payload)
 
-    async def subscribe(self, topic: str, callback: Callable):
+    async def subscribe(self, topic: str, callback: Callable[[Topic, bytes], Awaitable[None]]):
         """
         Subscribe to a topic and call the callback when a message is received
         :param topic: topic to subscribe to

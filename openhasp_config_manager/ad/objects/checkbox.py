@@ -23,7 +23,7 @@ class CheckboxObjectController(ObjectController):
         obj_id: int,
         entity: str,
         attribute: str = None,
-        converter: Callable = lambda x: str(x)
+        converter: Callable[[Any], str] = lambda x: str(x)
     ):
         """
         Sets up a connection between an object and an entity, updating the text of the object

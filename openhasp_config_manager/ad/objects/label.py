@@ -24,7 +24,7 @@ class LabelObjectController(ObjectController):
         entity_id: str | List[str] = None,
         attribute: str = None,
         get_state: Callable[[], Awaitable[Any]] = None,
-        converter: Callable = None
+        converter: Callable[[Any], str] = None
     ):
         """
         Sets up a connection between an object and an entity, updating the text of the object

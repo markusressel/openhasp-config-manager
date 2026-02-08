@@ -1,5 +1,5 @@
 import asyncio
-from typing import Dict, List, Any, Callable, Tuple, Optional
+from typing import Dict, List, Any, Callable, Tuple, Optional, Awaitable
 
 import orjson
 from aiomqtt import Topic
@@ -349,7 +349,7 @@ class OpenHaspClient:
             }
         )
 
-    async def listen_state(self, obj: str, callback: Callable):
+    async def listen_state(self, obj: str, callback: Callable[[str, bytes], Awaitable[None]]):
         """
         Listen to OpenHASP state events
         :param obj: object to listen to
@@ -357,6 +357,7 @@ class OpenHaspClient:
         """
 
         async def _callback(event_topic: Topic, event_payload: bytes):
+            # convert topic to string to avoid exposing the aiomqtt.Topic class to the caller
             await callback(str(event_topic), event_payload)
 
         await self.listen_event(
@@ -364,7 +365,7 @@ class OpenHaspClient:
             callback=_callback,
         )
 
-    async def listen_event(self, path: str, callback: Callable):
+    async def listen_event(self, path: str, callback: Callable[[Topic, bytes], Awaitable[None]]):
         """
         Listen to OpenHASP events related to this device
         :param path: MQTT subpath to listen to
