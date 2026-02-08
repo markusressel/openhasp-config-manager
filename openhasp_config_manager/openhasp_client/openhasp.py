@@ -198,6 +198,9 @@ class OpenHaspClient:
         """
         for prop, value in properties.items():
             keyword = f"{obj}.{prop}"
+            # intentionally do not set the keyword parameter,
+            # to avoid empty values being interpreted as a
+            # "get the current value" request.
             await self.command(
                 params=f"{keyword}={value}",
             )
