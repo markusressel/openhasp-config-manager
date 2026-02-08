@@ -9,7 +9,6 @@ APP_SPECIFIC_TIMER_HANDLES: Dict[ADAPI, Dict[str, Any]] = {}
 
 
 def get_timer_handles_for_app(controller: ADAPI) -> Dict[str, Any]:
-    global APP_SPECIFIC_TIMER_HANDLES
     APP_SPECIFIC_TIMER_HANDLES.setdefault(controller, {})
     entry = APP_SPECIFIC_TIMER_HANDLES.get(controller, {})
     return entry
@@ -26,12 +25,10 @@ async def schedule_globally(
     await cancel(controller, name)
 
     async def _callback(*args):
-        global GLOBAL_TIMER_HANDLES
         GLOBAL_TIMER_HANDLES.pop(name)
         await callback(*args)
 
     handle = await controller.run_in(_callback, delay, **kwargs)
-    global GLOBAL_TIMER_HANDLES
     GLOBAL_TIMER_HANDLES[name] = handle
     return handle
 
@@ -118,7 +115,6 @@ async def cancel_all(controller: ADAPI):
     Cancel all timers for the given controller
     :param controller: the controller to cancel timers for
     """
-    global APP_SPECIFIC_TIMER_HANDLES
     app_handles = get_timer_handles_for_app(controller)
     for name, handle in app_handles.items():
         if handle is not None:
