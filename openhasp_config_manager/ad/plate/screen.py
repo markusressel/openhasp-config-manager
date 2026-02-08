@@ -1,4 +1,5 @@
 from asyncio import Task
+from typing import Optional
 
 from appdaemon import ADAPI
 
@@ -16,7 +17,7 @@ class ScreenController:
         self.client = client
         self.deployment_controller = deployment_controller
 
-        self._screen_brightness_task: Task = None
+        self._screen_brightness_task: Optional[Task] = None
 
     async def init(self):
         await self.set_default_auto_brightness_config()

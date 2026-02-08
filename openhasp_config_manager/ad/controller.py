@@ -1,12 +1,17 @@
 import asyncio
 import traceback
-from typing import Dict
+from typing import Dict, TYPE_CHECKING, Any
 
 from appdaemon import ADAPI
 
 from openhasp_config_manager.ad import KEY_ARGS, KEY_NAME, util_ad_timer
 from openhasp_config_manager.ad.page.state_updater import StateUpdater
 from openhasp_config_manager.ad.plate import PlateConfig, PlateController
+
+if TYPE_CHECKING:
+    from openhasp_config_manager.ad.page import PageController
+else:
+    PageController = Any
 
 PLATE_SETUP_TIMER = "plate_setup_timer"
 PLATE_SYNC_TIMER = "plate_sync_timer"
