@@ -1,6 +1,7 @@
 import asyncio
 from typing import Dict, List, Any, Callable, Tuple, Optional
 
+import orjson
 from aiomqtt import Topic
 
 from openhasp_config_manager.openhasp_client.image_processor import OpenHaspImageProcessor
@@ -192,7 +193,7 @@ class OpenHaspClient:
 
     async def set_object_properties(self, obj: str, properties: Dict[str, Any]):
         """
-        Set the state of a plate
+        Set the property state of on object
         :param obj: object to set a state for
         :param properties: properties to set
         """
@@ -204,6 +205,45 @@ class OpenHaspClient:
             await self.command(
                 params=f"{keyword}={value}",
             )
+
+    async def get_object_property(self, obj: str, prop: str, timeout: float = 1.0) -> Optional[Any]:
+        """
+        Get the value of an object property.
+        Note that this function will subscribe to the corresponding MQTT topic and wait for the device to publish the current value.
+        :param obj: the object to get the property for
+        :param prop: the keyword of the property to get
+        :param timeout: the timeout in seconds to wait for the device to respond
+        :return: the current value of the property
+        """
+        command_keyword = f"{obj}.{prop}"
+        listen_path = f"state/{obj}"
+        future = asyncio.get_event_loop().create_future()
+
+        async def _callback(event_topic: Topic, event_payload: bytes):
+            if not future.done():
+                try:
+                    # OpenHASP state payloads are usually JSON: {"text": "12345", "val": 10, ...}
+                    data = orjson.loads(event_payload)
+                    if prop in data:
+                        future.set_result(data[prop])
+                except Exception:
+                    # If it's not JSON, just return the raw payload
+                    future.set_result(event_payload.decode('utf-8'))
+
+        await self.listen_event(
+            path=listen_path,
+            callback=_callback,
+        )
+
+        await self.command(
+            keyword=command_keyword,
+        )
+
+        try:
+            return await asyncio.wait_for(future, timeout=timeout)
+        except asyncio.TimeoutError:
+            print(f"Timeout: Device did not respond to {listen_path} within {timeout}s")
+            return None
 
     async def set_idle_state(self, state: str):
         """
