@@ -387,16 +387,15 @@ class OpenHaspClient:
         :param callback: callback to call when a matching event is received
         """
 
-        async def _callback(event_topic: Topic, event_payload: bytes):
-            # convert topic to string to avoid exposing the aiomqtt.Topic class to the caller
-            await callback(str(event_topic), event_payload)
+        async def _callback(event_topic: str, event_payload: bytes):
+            await callback(event_topic, event_payload)
 
         await self.listen_event(
             path=f"state/{obj}",
             callback=_callback,
         )
 
-    async def listen_event(self, path: str, callback: Callable[[Topic, bytes], Awaitable[None]]):
+    async def listen_event(self, path: str, callback: Callable[[str, bytes], Awaitable[None]]):
         """
         Listen to OpenHASP events related to this device
         :param path: MQTT subpath to listen to

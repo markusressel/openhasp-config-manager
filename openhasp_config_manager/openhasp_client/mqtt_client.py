@@ -3,7 +3,7 @@ import json
 import uuid
 from typing import Callable, List, Dict, Optional, Awaitable
 
-from aiomqtt import Client, Message, Topic
+from aiomqtt import Client, Message
 
 
 class MqttClient:
@@ -17,7 +17,7 @@ class MqttClient:
         self._reconnect_interval_seconds = 5
 
         self._mqtt_client_task: Optional[asyncio.Task] = None
-        self._callbacks: Dict[str, List[callable]] = {}
+        self._callbacks: Dict[str, List[Callable[[str, bytes], Awaitable[None]]]] = {}
         self.__mqtt_client: Optional[Client] = None
 
     async def publish(self, topic: str, payload: str | Dict | List = None):
@@ -32,7 +32,7 @@ class MqttClient:
 
             await client.publish(topic, payload=payload)
 
-    async def subscribe(self, topic: str, callback: Callable[[Topic, bytes], Awaitable[None]]):
+    async def subscribe(self, topic: str, callback: Callable[[str, bytes], Awaitable[None]]):
         """
         Subscribe to a topic and call the callback when a message is received
         :param topic: topic to subscribe to
@@ -102,4 +102,8 @@ class MqttClient:
         for topic, callbacks in self._callbacks.items():
             if message.topic.matches(topic):
                 for callback in callbacks:
-                    await callback(message.topic, message.payload)
+                    # convert topic to string to avoid exposing the aiomqtt.Topic class to the caller
+                    await callback(
+                        str(message.topic),
+                        message.payload
+                    )
