@@ -235,7 +235,7 @@ class OpenHaspClient:
         Get the value of an object property.
         Note that this function will subscribe to the corresponding MQTT topic and wait for the device to publish the current value.
         :param command: the command to get the state for, can be an object property command like "p1b2.text" or a general command like "backlight",
-        :param state: the state keyword to get the value for e.g. "p1b2" for "p1b2.text" (because there is no separate "state" topic for each property, but only for the whole object), or "backlight" for "backlight" command (because the state topic is the same as the command keyword)
+        :param state: (optional) the state keyword to get the value for, defaults to the value of the `command` parameter e.g. "backlight" for "backlight" command (because the state topic is the same as the command keyword), but can be set to a different value for commands where the state topic differs from the command keyword, e.g. "p1b2" for "p1b2.text" command (because the state topic is "p1b2" and not "p1b2.text")
         :param timeout: the timeout in seconds to wait for the device to respond
         :return: the current value of the property
         """
