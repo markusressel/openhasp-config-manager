@@ -48,6 +48,33 @@ class UiComponents:
         return button
 
     @staticmethod
+    def create_slider(
+        title: str,
+        on_change: Callable[[int], None],
+        initial_value: int = 0,
+        min_value: int = 0,
+        max_value: int = 100,
+    ):
+        from PyQt6.QtWidgets import QSlider, QWidget, QHBoxLayout, QLabel
+        slider_widget = QWidget()
+        layout = QHBoxLayout(slider_widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(UiDimensions.one)
+
+        label = QLabel(parse_icons(title))
+        label.setFont(qta.font("mdi6", 16))
+        label.setStyleSheet("padding: 10px;")
+        layout.addWidget(label)
+
+        slider = QSlider(QtCore.Qt.Orientation.Horizontal)
+        slider.setRange(min_value, max_value)
+        slider.setValue(initial_value)
+        slider.valueChanged.connect(on_change)
+        layout.addWidget(slider)
+
+        return slider_widget
+
+    @staticmethod
     def create_row(
         parent=None,
         alignment: QtCore.Qt.AlignmentFlag = QtCore.Qt.AlignmentFlag.AlignLeft,

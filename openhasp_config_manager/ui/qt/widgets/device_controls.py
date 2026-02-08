@@ -62,6 +62,14 @@ class DeviceControlsWidget(QWidget):
     def _create_screen_controls_layout(self) -> QLayout:
         layout = UiComponents.create_row()
 
+        brightness_slider = UiComponents.create_slider(
+            title="Brightness",
+            initial_value=100,
+            min_value=1,
+            on_change=self.__on_brightness_changed
+        )
+        layout.addWidget(brightness_slider)
+
         button_turn_on = UiComponents.create_button(
             title=":lightbulb-on: Screen ON",
             on_click=self.on_turn_on_clicked,
@@ -98,6 +106,17 @@ class DeviceControlsWidget(QWidget):
         layout.addWidget(button_next_page)
 
         return layout
+
+    @qBridge(int)
+    def __on_brightness_changed(self, value: int):
+        if self.device is None:
+            return
+        print(f"Setting brightness to {value} for device: {self.device.name}")
+
+        async def __set_brightness():
+            await self.client.set_backlight(brightness=value)
+
+        run_async(__set_brightness())
 
     @qBridge()
     def on_turn_on_clicked(self):
