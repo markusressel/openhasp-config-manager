@@ -602,7 +602,8 @@ class OpenHaspClient:
     async def logs(self):
         await self._telnet_client.logs()
 
-    def compute_object_id(self, page: int, obj: int) -> str:
+    @staticmethod
+    def compute_object_id(page: int, obj: int) -> str:
         """
         Creates an object ID for a given page and object index.
         :param page: the page index
