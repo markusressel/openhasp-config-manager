@@ -8,12 +8,12 @@ from orjson import orjson
 from openhasp_config_manager.manager import ConfigManager
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 from openhasp_config_manager.ui.qt.components import UiComponents
-from openhasp_config_manager.ui.qt.util import qBridge, run_async
+from openhasp_config_manager.ui.qt.util import qBridge, run_async, parse_icons
 from openhasp_config_manager.ui.qt.widgets.pagelayout import OpenHaspDevicePagesData
 from openhasp_config_manager.ui.qt.widgets.pagelayout.editor_controls import EditorControlsWidget
 from openhasp_config_manager.ui.qt.widgets.pagelayout.jsonl_preview import PageJsonlPreviewWidget
 from openhasp_config_manager.ui.qt.widgets.pagelayout.openhasp_widget_picker import OpenHASPWidgetPicker
-from openhasp_config_manager.ui.qt.widgets.pagelayout.page_preview_layout import PagePreviewWidget2
+from openhasp_config_manager.ui.qt.widgets.pagelayout.page_preview_layout import PagePreviewWidget2, PreviewMode
 
 
 class PageLayoutEditorWidget(QWidget):
@@ -51,11 +51,18 @@ class PageLayoutEditorWidget(QWidget):
         self.device_preview_container_title_label = UiComponents.create_label(":mdi6.eye: Page Preview")
         self.device_preview_container_layout.addWidget(self.device_preview_container_title_label)
 
+        self.editor_mode_button = UiComponents.create_button(
+            title="",
+            on_click=self._on_editor_mode_clicked
+        )
+        self.device_preview_container_layout.addWidget(self.editor_mode_button)
+
         self.device_preview_row = UiComponents.create_row()
         self.device_preview_container_layout.addLayout(self.device_preview_row)
 
         self.page_preview_widget = PagePreviewWidget2()
         self.page_preview_widget.buttonClicked.connect(self.__on_preview_layout_button_clicked)
+        self.page_preview_widget.modeChanged.connect(self._on_editor_mode_changed)
         self.device_preview_row.addWidget(self.page_preview_widget)
 
         self.widget_picker = OpenHASPWidgetPicker()
@@ -64,11 +71,15 @@ class PageLayoutEditorWidget(QWidget):
         self.page_jsonl_preview = PageJsonlPreviewWidget()
         self.device_preview_container_layout.addWidget(self.page_jsonl_preview)
 
+        self.page_preview_widget.set_mode(PreviewMode.Interact)
+
+    @qBridge()
     def _on_previous_page_clicked(self):
         self.previous_page_index()
         if self.editor_controls.is_sync_with_real_device_enabled():
             self._sync_device_page_with_device()
 
+    @qBridge()
     def _on_next_page_clicked(self):
         self.next_page_index()
         if self.editor_controls.is_sync_with_real_device_enabled():
@@ -136,6 +147,14 @@ class PageLayoutEditorWidget(QWidget):
             if self.editor_controls.is_sync_with_real_device_enabled():
                 self._sync_device_page_with_device()
 
+    @qBridge(PreviewMode)
+    def _on_editor_mode_changed(self, mode: PreviewMode):
+        if mode == PreviewMode.Edit:
+            self.editor_mode_button.setText(parse_icons(":mdi6.pencil: Edit Mode"))
+        elif mode == PreviewMode.Interact:
+            self.editor_mode_button.setText(parse_icons(":mdi6.eye: Interaction Mode"))
+        self.editor_mode_button.update()
+
     @qBridge()
     def _on_clear_page_clicked(self):
         """
@@ -199,6 +218,13 @@ class PageLayoutEditorWidget(QWidget):
             coro=__async_work(),
             on_done=__on_done,
         )
+
+    @qBridge()
+    def _on_editor_mode_clicked(self):
+        if self.page_preview_widget.mode == PreviewMode.Edit:
+            self.page_preview_widget.set_mode(PreviewMode.Interact)
+        else:
+            self.page_preview_widget.set_mode(PreviewMode.Edit)
 
     def go_to_home_page(self):
         usable_page_indices = self.get_navigable_page_indices()

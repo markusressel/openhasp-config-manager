@@ -18,7 +18,6 @@ class IconManager:
             return "?"
 
 
-# Improved Parser
 def parse_icons(text: str) -> str:
     for unicode_char, icon_name in IntegratedIcon.entries():
         # Get the actual character QtAwesome expects for this name

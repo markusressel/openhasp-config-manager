@@ -1,4 +1,5 @@
 import logging
+from enum import StrEnum
 from typing import List, Tuple, Optional
 from warnings import deprecated
 
@@ -18,7 +19,12 @@ from openhasp_config_manager.ui.qt.widgets.pagelayout.openhasp_widgets.switch im
 from openhasp_config_manager.ui.qt.widgets.pagelayout.page_layout_editor import OpenHaspDevicePagesData
 
 
+class PreviewMode(StrEnum):
+    Interact = "interact"
+    Edit = "edit"
+
 class PagePreviewWidget2(QGraphicsView):
+    modeChanged = QtCore.pyqtSignal(PreviewMode)
     buttonClicked = QtCore.pyqtSignal(dict)
 
     @property
@@ -31,6 +37,7 @@ class PagePreviewWidget2(QGraphicsView):
 
     def __init__(self, data: Optional[OpenHaspDevicePagesData] = None, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.mode = PreviewMode.Interact
 
         self.data: Optional[OpenHaspDevicePagesData] = data
         self.objects: List[dict] = []
@@ -40,6 +47,15 @@ class PagePreviewWidget2(QGraphicsView):
         self.setRenderHint(QPainter.RenderHint.Antialiasing)
 
         self.set_data(data)
+
+    def set_mode(self, mode: PreviewMode):
+        self.mode = mode
+        for item in self.scene().items():
+            if isinstance(item, (HaspButtonItem, HaspSwitchItem, HaspSliderItem)):
+                # TODO: for later, we can have different edit modes for different item types
+                # item.set_edit_mode(enabled)
+                pass
+        self.modeChanged.emit(mode)
 
     def load_objects(self):
         self.scene().clear()
