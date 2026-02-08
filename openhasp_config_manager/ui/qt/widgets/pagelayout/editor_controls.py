@@ -45,7 +45,6 @@ class EditorControlsWidget(QWidget):
         )
         self.button_clear_page.clicked.connect(self._on_clear_page_clicked)
         deployment_controls_row.addWidget(self.button_clear_page)
-        self.button_clear_page.clicked.connect(self._on_clear_page_clicked)
 
         self.button_deploy_page = UiComponents.create_button(
             title="Deploy Page",
@@ -53,8 +52,6 @@ class EditorControlsWidget(QWidget):
         )
         self.button_deploy_page.clicked.connect(self._on_deploy_page_clicked)
         deployment_controls_row.addWidget(self.button_deploy_page)
-
-        self.button_deploy_page.clicked.connect(self._on_deploy_page_clicked)
 
         page_selector_widget = QWidget()
 
