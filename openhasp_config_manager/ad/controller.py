@@ -5,7 +5,8 @@ from typing import Dict
 from appdaemon import ADAPI
 
 from openhasp_config_manager.ad import KEY_ARGS, KEY_NAME, util_ad_timer
-from openhasp_config_manager.ad.plate import PlateConfig, StateUpdater, PlateController
+from openhasp_config_manager.ad.page.state_updater import StateUpdater
+from openhasp_config_manager.ad.plate import PlateConfig, PlateController
 
 PLATE_SETUP_TIMER = "plate_setup_timer"
 PLATE_SYNC_TIMER = "plate_sync_timer"

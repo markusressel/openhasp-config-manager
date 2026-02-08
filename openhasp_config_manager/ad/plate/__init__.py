@@ -12,7 +12,8 @@ from openhasp_config_manager.openhasp_client.model.configuration.gui_config impo
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 
 if TYPE_CHECKING:
-    from openhasp_config_manager.ad.page.state_updater import StateUpdater, PageController
+    from openhasp_config_manager.ad.page.state_updater import StateUpdater
+    from openhasp_config_manager.ad.page import PageController
 else:
     StateUpdater = Any
 
@@ -229,7 +230,7 @@ class PlateController:
 
     async def command(self, cmd: str, params: str = ""):
         return await self.client.command(
-            name=cmd,
+            keyword=cmd,
             params=params,
         )
 
