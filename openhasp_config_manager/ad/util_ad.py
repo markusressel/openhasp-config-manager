@@ -3,7 +3,8 @@ from datetime import timedelta, datetime
 from typing import Union, List, Set, Any, Optional
 
 from appdaemon import ADAPI
-from util import util_common, util_timer
+
+from openhasp_config_manager.ad import util_ad_timer
 
 STATE_UNAVAILABLE = "unavailable"
 STATE_UNKNOWN = "unknown"
@@ -56,7 +57,7 @@ async def listen_state_and_call_immediately(
         :param kwargs: additional arguments
         """
         nonlocal last_called_time
-        now = util_common.now_in_berlin()
+        now = controller.get_now()
         if throttle_delay.total_seconds() > 0 and last_called_time is not None:
             time_since_last_call = now - last_called_time
             if time_since_last_call < throttle_delay:
