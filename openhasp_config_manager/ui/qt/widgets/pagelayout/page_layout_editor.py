@@ -133,15 +133,8 @@ class PageLayoutEditorWidget(QWidget):
             elif action == "back":
                 self.go_to_home_page()
 
-            async def __async_work():
-                # switch the device to this page
-                device = self.device_pages_data.device
-                client = OpenHaspClient(device)
-                await client.set_page(self.current_index)
-
-            run_async(
-                coro=__async_work(),
-            )
+            if self.editor_controls.is_sync_with_real_device_enabled():
+                self._sync_device_page_with_device()
 
     @qBridge()
     def _on_clear_page_clicked(self):
