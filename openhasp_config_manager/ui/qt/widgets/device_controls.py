@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import QWidget, QLayout
 
 from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
-from openhasp_config_manager.ui.components import UiComponents
+from openhasp_config_manager.ui.qt.components import UiComponents
 from openhasp_config_manager.ui.qt.util import run_async, qBridge
 
 

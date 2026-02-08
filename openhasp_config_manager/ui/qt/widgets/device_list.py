@@ -4,7 +4,7 @@ from PyQt6 import QtCore
 from PyQt6.QtWidgets import QWidget
 
 from openhasp_config_manager.openhasp_client.model.device import Device
-from openhasp_config_manager.ui.components import UiComponents
+from openhasp_config_manager.ui.qt.components import UiComponents
 from openhasp_config_manager.ui.qt.util import clear_layout
 
 

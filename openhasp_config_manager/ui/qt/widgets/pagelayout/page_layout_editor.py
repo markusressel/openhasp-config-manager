@@ -7,12 +7,12 @@ from orjson import orjson
 
 from openhasp_config_manager.manager import ConfigManager
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
-from openhasp_config_manager.ui.components import UiComponents
-from openhasp_config_manager.ui.qt.pagelayout import OpenHaspDevicePagesData
-from openhasp_config_manager.ui.qt.pagelayout.editor_controls import EditorControlsWidget
-from openhasp_config_manager.ui.qt.pagelayout.jsonl_preview import PageJsonlPreviewWidget
-from openhasp_config_manager.ui.qt.pagelayout.page_preview_layout import PagePreviewWidget2
+from openhasp_config_manager.ui.qt.components import UiComponents
 from openhasp_config_manager.ui.qt.util import qBridge, run_async
+from openhasp_config_manager.ui.qt.widgets.pagelayout import OpenHaspDevicePagesData
+from openhasp_config_manager.ui.qt.widgets.pagelayout.editor_controls import EditorControlsWidget
+from openhasp_config_manager.ui.qt.widgets.pagelayout.jsonl_preview import PageJsonlPreviewWidget
+from openhasp_config_manager.ui.qt.widgets.pagelayout.page_preview_layout import PagePreviewWidget2
 
 
 class PageLayoutEditorWidget(QWidget):
@@ -238,6 +238,7 @@ class PageLayoutEditorWidget(QWidget):
         """
         Get the page objects for the given page index.
         :param index: the index of the page
+        :param include_global: whether to include global objects (page 0)
         :return: a list of objects for the page
         """
         if self.device_pages_data is None:

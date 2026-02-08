@@ -18,7 +18,7 @@ class UiComponents:
         return label
 
     @staticmethod
-    def create_button(title: str, on_click: Callable[[...], None]) -> QPushButton:
+    def create_button(title: str, on_click: Callable[[], None]) -> QPushButton:
         button = QPushButton(parse_icons(title))
         button.setFont(qta.font("mdi6", 16))
         button.setStyleSheet("padding: 10px;")

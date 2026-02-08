@@ -3,10 +3,10 @@ from PyQt6.QtWidgets import QWidget, QMainWindow
 from openhasp_config_manager.manager import ConfigManager
 from openhasp_config_manager.openhasp_client.model.component import CmdComponent
 from openhasp_config_manager.openhasp_client.model.device import Device
-from openhasp_config_manager.ui.components import UiComponents
-from openhasp_config_manager.ui.qt.device_list import DeviceListWidget
-from openhasp_config_manager.ui.qt.pagelayout.device_controls import DeviceControlsWidget
-from openhasp_config_manager.ui.qt.pagelayout.page_layout_editor import PageLayoutEditorWidget, OpenHaspDevicePagesData
+from openhasp_config_manager.ui.qt.components import UiComponents
+from openhasp_config_manager.ui.qt.widgets.device_controls import DeviceControlsWidget
+from openhasp_config_manager.ui.qt.widgets.device_list import DeviceListWidget
+from openhasp_config_manager.ui.qt.widgets.pagelayout.page_layout_editor import PageLayoutEditorWidget, OpenHaspDevicePagesData
 
 
 class MainWindow(QMainWindow):
