@@ -19,6 +19,7 @@ logger.addHandler(console_handler)
 async def event_callback(topic: str, payload: bytes):
     logger.info(f"MQTT Event: {topic} - {payload.decode('utf-8')}")
 
+
 async def state_callback(topic: str, payload: bytes):
     logger.info(f"State Event: {topic} - {payload.decode('utf-8')}")
 
@@ -66,6 +67,15 @@ async def main():
         obj="p1b10",
         text="World!",
     )
+
+    await client.set_backlight(brightness=125)
+    print(f"Current Backlight State: {await client.get_backlight()}")
+
+    current_text = await client.get_object_property(obj="p1b10", prop="text")
+    print(f"Current p1b10 text: {current_text}")
+
+    current_backlight_brightness = await client.get_command_state(command="backlight", prop="brightness")
+    print(f"Current backlight brightness value: {current_backlight_brightness}")
 
     # wait forever (to let "listen_event" and "listen_state" tasks continue)
     await asyncio.Event().wait()

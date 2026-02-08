@@ -216,7 +216,32 @@ class OpenHaspClient:
         :return: the current value of the property
         """
         command_keyword = f"{obj}.{prop}"
-        listen_path = f"state/{obj}"
+        raw_state = await self.get_state(command=command_keyword, state=obj, timeout=timeout)
+        return raw_state[prop] if isinstance(raw_state, dict) and prop in raw_state else raw_state
+
+    async def get_command_state(self, command: str, prop: Optional[str] = None, timeout: float = 1.0) -> Optional[Any]:
+        """
+        Get the current state of a command.
+        Note that this function will subscribe to the corresponding MQTT topic and wait for the device to publish the current value.
+        :param command: the command to get the state for
+        :param prop: (optional) the specific property to get from the command state, if the command state is a dict
+        :param timeout: the timeout in seconds to wait for the device to respond
+        :return: the current value of the command
+        """
+        raw_state = await self.get_state(command=command, state=command, timeout=timeout)
+        return raw_state[prop] if isinstance(raw_state, dict) and command in raw_state else raw_state
+
+    async def get_state(self, command: str, state: str, timeout: float = 1.0) -> Optional[Any]:
+        """
+        Get the value of an object property.
+        Note that this function will subscribe to the corresponding MQTT topic and wait for the device to publish the current value.
+        :param command: the command to get the state for
+        :param state: the state keyword to get the value for
+        :param timeout: the timeout in seconds to wait for the device to respond
+        :return: the current value of the property
+        """
+        command_keyword = command
+        listen_path = f"state/{state}"
         future = asyncio.get_event_loop().create_future()
 
         async def _callback(event_topic: Topic, event_payload: bytes):
@@ -224,8 +249,7 @@ class OpenHaspClient:
                 try:
                     # OpenHASP state payloads are usually JSON: {"text": "12345", "val": 10, ...}
                     data = orjson.loads(event_payload)
-                    if prop in data:
-                        future.set_result(data[prop])
+                    future.set_result(data)
                 except Exception:
                     # If it's not JSON, just return the raw payload
                     future.set_result(event_payload.decode('utf-8'))
@@ -274,6 +298,13 @@ class OpenHaspClient:
             keyword="backlight",
             params=params
         )
+
+    async def get_backlight(self) -> Dict[str, Any]:
+        """
+        Gets the current backlight state and brightness
+        :return: a dict containing the current backlight state and brightness
+        """
+        return await self.get_command_state(command="backlight")
 
     async def wakeup(self):
         """
