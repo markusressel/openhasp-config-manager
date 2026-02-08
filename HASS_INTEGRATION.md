@@ -32,7 +32,7 @@ When starting the AppDaemon Docker container, it will automatically install the 
 Then, in your AppDaemon app, you can import and use the `OpenHaspClient` like this:
 
 ```python
-from openhasp_config_manager import OpenHaspClient
+from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 ```
 
 I have already written extensive tooling to make it easy to integrate OpenHASP into AppDaemon, 

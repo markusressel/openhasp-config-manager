@@ -27,6 +27,7 @@ a logic-aware config engine with a robust API client and deployment automation.
 * 📡 **Unified API Client:** Interact with your plates via a single Python interface over Web or MQTT.
 * ⚡ **Command Execution:** Send openHASP commands programmatically.
 * 🔔 **Real-time Events:** Subscribe to button presses, state updates, and touch events as they happen.
+* 🪄 **AppDaemon Integration Utilities:** Seamlessly integrate with AppDaemon for advanced automations and logic.
 
 # CLI
 
@@ -417,6 +418,16 @@ documentation: https://openhasp.haswitchplate.com/latest/commands/
 ```shell
 > openhasp-config-manager cmd -c ./openhasp-configs -d plate35 -C backlight -p "{\"state\":\"on\",\"brightness\":128}"
 ```
+
+## AppDaemon Integration Utilities
+
+If you want to integrate your openHASP devices with [AppDaemon](https://github.com/AppDaemon/appdaemon), openhasp-config-manager contains
+some utilities to make this process easier.
+
+### Plate Controller
+
+The `OpenHaspController` class provides a high-level interface to manage the state of your plate, send commands and listen to events.
+See: [openhasp_config_manager/ad/README.md](openhasp_config_manager/ad/README.md) for more details and examples.
 
 ## API Client
 

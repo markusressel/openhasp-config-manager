@@ -6,13 +6,15 @@ is efficient and easy to use within AppDaemon apps.
 
 ## Requirements
 
-* **AppDaemon Environment**: If you are running this within the standard AppDaemon Docker container or a dedicated AppDaemon installation, no action is required. The necessary
-  appdaemon libraries are pre-installed in these environments.
-* **Other Environments**: If you are using these utilities in a custom Python environment (such as for local development, linting, or a non-standard container), you must manually
-  install the `appdaemon`package:
+### AppDaemon Environment
 
-```bash
-pip install appdaemon
+Besides making sure AppDaemon is properly set up and running (which is already the case
+if you use the AppDaemon Docker Container), make sure to include the `openhasp-config-manager` package in your AppDaemon environment. 
+You can do this by adding it to your `requirements.txt` file:
+
+**requirements.txt**
+```requirements
+openhasp-config-manager==0.7.0
 ```
 
 ## Implement a Plate within AppDaemon
@@ -46,8 +48,6 @@ class MyPlatePage(PageController):
         obj_id=50,
         on_click=__callback,
       )
-
-
 ```
 
 #### 2. Register the Page in your Controller
