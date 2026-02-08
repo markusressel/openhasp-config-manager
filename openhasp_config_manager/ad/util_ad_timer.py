@@ -44,7 +44,6 @@ async def schedule(
     await cancel(controller, name)
 
     async def _callback(*args):
-        global APP_SPECIFIC_TIMER_HANDLES
         app_handles = get_timer_handles_for_app(controller)
         if name in app_handles.keys():
             app_handles.pop(name)
@@ -52,7 +51,6 @@ async def schedule(
         await callback(*args)
 
     handle = await controller.run_in(_callback, delay, **kwargs)
-    global APP_SPECIFIC_TIMER_HANDLES
     APP_SPECIFIC_TIMER_HANDLES.setdefault(controller, {})
     APP_SPECIFIC_TIMER_HANDLES[controller][name] = handle
 
@@ -93,7 +91,6 @@ async def get_scheduled_time(controller: ADAPI, name: str) -> Optional[datetime.
 
 
 async def cancel_globally(controller: ADAPI, name: str):
-    global GLOBAL_TIMER_HANDLES
     existing_timer_handle: Optional[str] = GLOBAL_TIMER_HANDLES.get(name, None)
     if existing_timer_handle is not None:
         # controller.log(f"Cancelling '{name}' globally")
@@ -123,12 +120,10 @@ async def cancel_all(controller: ADAPI):
 
 
 def is_scheduled_globally(name: str) -> bool:
-    global GLOBAL_TIMER_HANDLES
     return name in GLOBAL_TIMER_HANDLES.keys()
 
 
 def is_scheduled(controller: ADAPI, name: str) -> bool:
-    global APP_SPECIFIC_TIMER_HANDLES
     app_handles = get_timer_handles_for_app(controller)
     return name in app_handles.keys()
 
