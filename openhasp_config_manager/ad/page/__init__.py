@@ -12,8 +12,10 @@ from openhasp_config_manager.ad.objects.switch import SwitchObjectController
 
 if TYPE_CHECKING:
     from openhasp_config_manager.ad.page.state_updater import StateUpdater
+    from openhasp_config_manager.ad.plate import PlateBehavior, PlateController
 else:
     StateUpdater = Any
+    PlateBehavior = Any
 
 
 class PageController:
@@ -43,14 +45,14 @@ class PageController:
         for ob in self.objects.values():
             await ob.init()
 
-    async def request_plate_behavior(self, quirk: "PlateBehavior"):
-        await self.plate.request_behavior(self, quirk)
+    async def request_plate_behavior(self, behavior: "PlateBehavior"):
+        await self.plate.request_behavior(self, behavior)
 
-    async def drop_plate_behavior(self, quirk: "PlateBehavior"):
-        await self.plate.drop_behavior_request(self, quirk)
+    async def drop_plate_behavior(self, behavior: "PlateBehavior"):
+        await self.plate.drop_behavior_request(self, behavior)
 
-    async def has_plate_behavior(self, quirk: "PlateBehavior") -> bool:
-        return self.plate.has_behavior_request(quirk)
+    async def has_plate_behavior(self, behavior: "PlateBehavior") -> bool:
+        return self.plate.has_behavior_request(behavior)
 
     async def add_label(
         self,
