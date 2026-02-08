@@ -33,9 +33,6 @@ class DeviceControlsWidget(QWidget):
             alignment=QtCore.Qt.AlignmentFlag.AlignLeft
         )
 
-        self.device_controls_layout = self._create_device_controls_layout()
-        self.layout.addWidget(UiComponents.create_label(":mdi6.cog: Device Controls"))
-        self.layout.addLayout(self.device_controls_layout)
 
         self.screen_controls_layout = self._create_screen_controls_layout()
         self.layout.addWidget(UiComponents.create_label(":mdi6.cellphone-screenshot: Screen Controls"))
@@ -44,6 +41,10 @@ class DeviceControlsWidget(QWidget):
         self.page_controls_layout = self._create_page_controls_layout()
         self.layout.addWidget(UiComponents.create_label(":mdi6.book-open-page-variant: Page Controls"))
         self.layout.addLayout(self.page_controls_layout)
+
+        self.device_controls_layout = self._create_device_controls_layout()
+        self.layout.addWidget(UiComponents.create_label(":mdi6.cog: Device Controls"))
+        self.layout.addLayout(self.device_controls_layout)
 
         self.layout.addStretch(1)
 
