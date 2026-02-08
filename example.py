@@ -71,9 +71,6 @@ async def main():
     await client.set_backlight(brightness=125)
     print(f"Current Backlight State: {await client.get_backlight()}")
 
-    current_p1b1ß = await client.get_object_property(obj="p1b10")
-    print(f"Current p1b10 state: {current_p1b1ß}")
-
     current_text = await client.get_object_property(obj="p1b10", prop="text")
     print(f"Current p1b10 text: {current_text}")
 
