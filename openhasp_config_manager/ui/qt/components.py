@@ -20,11 +20,17 @@ class UiComponents:
     @staticmethod
     def create_button(
         title: str,
-        on_click: Callable[[], None]
+        on_click: Callable[[], None],
+        alignment: QtCore.Qt.AlignmentFlag = QtCore.Qt.AlignmentFlag.AlignCenter,
     ) -> QPushButton:
         button = QPushButton(parse_icons(title))
         button.setFont(qta.font("mdi6", 16))
-        button.setStyleSheet("padding: 10px;")
+        alignment_str = {
+            QtCore.Qt.AlignmentFlag.AlignLeft: "left",
+            QtCore.Qt.AlignmentFlag.AlignCenter: "center",
+            QtCore.Qt.AlignmentFlag.AlignRight: "right",
+        }[alignment]
+        button.setStyleSheet(f"padding: 10px; text-align: {alignment_str};")
         button.clicked.connect(on_click)
         return button
 

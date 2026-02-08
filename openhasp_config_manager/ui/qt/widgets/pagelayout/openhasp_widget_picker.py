@@ -58,6 +58,7 @@ class OpenHASPWidgetPicker(QWidget):
 
         widget = UiComponents.create_button(
             title=title,
+            alignment=QtCore.Qt.AlignmentFlag.AlignLeft,
             on_click=_on_button_clicked
         )
         self.layout.addWidget(widget)
