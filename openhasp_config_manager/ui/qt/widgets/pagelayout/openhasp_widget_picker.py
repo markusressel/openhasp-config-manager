@@ -27,27 +27,27 @@ class OpenHASPWidgetPicker(QWidget):
         self.layout = UiComponents.create_column(parent=self)
 
         self._add_widget_picker_button(
-            title="+Label",
+            title=":mdi6.plus: Label",
             widget_type=OpenHASPWidgetType.LABEL
         )
         self._add_widget_picker_button(
-            title="+Button",
+            title=":mdi6.plus: Button",
             widget_type=OpenHASPWidgetType.BUTTON
         )
         self._add_widget_picker_button(
-            title="+Switch",
+            title=":mdi6.plus: Switch",
             widget_type=OpenHASPWidgetType.SWITCH
         )
         self._add_widget_picker_button(
-            title="+Image",
+            title=":mdi6.plus: Image",
             widget_type=OpenHASPWidgetType.IMAGE
         )
         self._add_widget_picker_button(
-            title="+Bar",
+            title=":mdi6.plus: Bar",
             widget_type=OpenHASPWidgetType.BAR
         )
         self._add_widget_picker_button(
-            title="+Slider",
+            title=":mdi6.plus: Slider",
             widget_type=OpenHASPWidgetType.SLIDER
         )
 
