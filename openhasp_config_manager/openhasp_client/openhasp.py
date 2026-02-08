@@ -229,7 +229,7 @@ class OpenHaspClient:
         :return: the current value of the command
         """
         raw_state = await self.get_state(command=command, state=command, timeout=timeout)
-        return raw_state[prop] if isinstance(raw_state, dict) and command in raw_state else raw_state
+        return raw_state[prop] if isinstance(raw_state, dict) and prop in raw_state else raw_state
 
     async def get_state(self, command: str, state: str, timeout: float = 1.0) -> Optional[Any]:
         """
