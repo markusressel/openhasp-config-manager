@@ -6,7 +6,7 @@ description = "A tool to manage all of your openHASP device configs in a central
 license = "AGPL-3.0-or-later"
 
 authors = [
-    "Markus Ressel <mail@markusressel.de>",
+  "Markus Ressel <mail@markusressel.de>",
 ]
 
 readme = 'README.md'
@@ -14,13 +14,14 @@ readme = 'README.md'
 repository = "https://github.com/markusressel/openhasp-config-manager"
 homepage = "https://github.com/markusressel/openhasp-config-manager"
 
-keywords = ['openhasp', 'config', 'management']
+keywords = ['openhasp', 'config', 'management', 'mqtt', 'home automation', 'appdaemon']
 
 classifiers = [
-    "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
-    "Development Status :: 5 - Production/Stable"
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.12",
+  "Development Status :: 5 - Production/Stable"
 ]
 
 [build-system]
@@ -31,8 +32,8 @@ build-backend = "poetry.core.masonry.api"
 python = ">=3.12,<3.14"  # Compatible python versions must be declared here
 
 click = "8.3.1"
-requests = "2.32.5" # taken from appdaemon 4.5.0
-aiohttp = ">=3.9.0,<3.14.0" # taken from appdaemon 4.5.0
+requests = "2.32.5"
+aiohttp = ">=3.9.0,<3.14.0"
 temppathlib = "1.2.0"
 Jinja2 = "3.1.6"
 py-range-parse = "1.0.6"
@@ -44,7 +45,7 @@ yarl = "1.22.0"
 
 orjson = "3.11.7"
 aiomqtt = "*" # compromise to get it working with appdaemon 4.5.0
-paho-mqtt = ">= 1.6.1,< 2.2.0" # taken from appdaemon 4.5.0
+paho-mqtt = ">= 1.6.1,< 2.2.0"
 telnetlib3 = "2.0.8"
 pillow = "12.1.0"
 
@@ -63,7 +64,7 @@ appdaemon = "4.5.13" # required for ad util testing
 
 [tool.pytest.ini_options]
 testpaths = [
-    "tests",
+  "tests",
 ]
 
 [project]
