@@ -1,21 +1,17 @@
 import copy
 from asyncio import Task
 from enum import StrEnum
-from typing import Dict, Callable, Set, Optional, Awaitable, Any, TYPE_CHECKING
+from typing import Dict, Callable, Set, Optional, Awaitable, Any
 
 from appdaemon import ADAPI
 
 from openhasp_config_manager.ad import util_openhasp
+from openhasp_config_manager.ad.page import PageController
+from openhasp_config_manager.ad.page.state_updater import StateUpdater
 from openhasp_config_manager.ad.plate.deployment import DeploymentController
 from openhasp_config_manager.ad.plate.screen import ScreenController
 from openhasp_config_manager.openhasp_client.model.configuration.gui_config import GuiConfig
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
-
-if TYPE_CHECKING:
-    from openhasp_config_manager.ad.page.state_updater import StateUpdater
-    from openhasp_config_manager.ad.page import PageController
-else:
-    StateUpdater = Any
 
 
 class ScreenState:
