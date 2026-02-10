@@ -28,6 +28,7 @@ class DeviceControlsWidget(QWidget):
         self.client = OpenHaspClient(self.device)
 
     def _create_layout(self):
+        self.setFixedWidth(350)
         self.layout = UiComponents.create_column(
             parent=self,
             alignment=QtCore.Qt.AlignmentFlag.AlignLeft
@@ -48,7 +49,9 @@ class DeviceControlsWidget(QWidget):
         self.layout.addStretch(1)
 
     def _create_device_controls_layout(self) -> QLayout:
-        layout = UiComponents.create_row()
+        layout = UiComponents.create_row(
+            alignment=QtCore.Qt.AlignmentFlag.AlignCenter,
+        )
 
         button_reboot = UiComponents.create_button(
             title=":power-plug: Reboot Device",
@@ -59,7 +62,24 @@ class DeviceControlsWidget(QWidget):
         return layout
 
     def _create_screen_controls_layout(self) -> QLayout:
-        layout = UiComponents.create_row()
+        column = UiComponents.create_column()
+
+        screen_on_off_row = UiComponents.create_row(
+            alignment=QtCore.Qt.AlignmentFlag.AlignCenter,
+        )
+        column.addLayout(screen_on_off_row)
+
+        button_turn_on = UiComponents.create_button(
+            title=":lightbulb-on: Screen ON",
+            on_click=self.on_turn_on_clicked,
+        )
+        screen_on_off_row.addWidget(button_turn_on)
+
+        button_turn_off = UiComponents.create_button(
+            title=":lightbulb: Screen OFF",
+            on_click=self.on_turn_off_clicked,
+        )
+        screen_on_off_row.addWidget(button_turn_off)
 
         brightness_slider = UiComponents.create_slider(
             title="Brightness",
@@ -91,24 +111,14 @@ class DeviceControlsWidget(QWidget):
         #     )
         #
         # run_async(__listen_brightness())
-        layout.addWidget(brightness_slider)
+        column.addWidget(brightness_slider)
 
-        button_turn_on = UiComponents.create_button(
-            title=":lightbulb-on: Screen ON",
-            on_click=self.on_turn_on_clicked,
-        )
-        layout.addWidget(button_turn_on)
-
-        button_turn_off = UiComponents.create_button(
-            title=":lightbulb: Screen OFF",
-            on_click=self.on_turn_off_clicked,
-        )
-        layout.addWidget(button_turn_off)
-
-        return layout
+        return column
 
     def _create_page_controls_layout(self) -> QLayout:
-        layout = UiComponents.create_row()
+        layout = UiComponents.create_row(
+            alignment=QtCore.Qt.AlignmentFlag.AlignCenter,
+        )
 
         button_prev_page = UiComponents.create_button(
             title=":arrow-left: Previous",
