@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from openhasp_config_manager.cli.common import _create_config_manager, _analyze_and_filter
-from openhasp_config_manager.ui.util import error, success, info
+from openhasp_config_manager.gui.util import error, success, info
 
 
 async def c_screenshot(config_dir: Path, device: str, output: Path):

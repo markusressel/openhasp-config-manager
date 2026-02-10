@@ -3,9 +3,9 @@ from pathlib import Path
 from typing import Optional
 
 from openhasp_config_manager import util
+from openhasp_config_manager.gui.util import print_diff_to_console, info, warn
 from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
-from openhasp_config_manager.ui.util import print_diff_to_console, info, warn
 
 
 class ConfigUploader:

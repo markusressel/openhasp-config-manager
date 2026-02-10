@@ -6,7 +6,7 @@ from pathlib import Path
 import qt_themes
 from PyQt6.QtWidgets import QApplication
 
-from openhasp_config_manager.ui.qt.util import setup_global_async_loop, get_global_async_loop
+from openhasp_config_manager.gui.qt.util import setup_global_async_loop, get_global_async_loop
 
 
 def c_gui(config_dir: Path, output_dir: Path):
@@ -25,7 +25,7 @@ def c_gui(config_dir: Path, output_dir: Path):
 
     # 2. Setup UI
     from openhasp_config_manager.cli.common import _create_config_manager
-    from openhasp_config_manager.ui.qt.main import MainWindow
+    from openhasp_config_manager.gui.qt.main import MainWindow
 
     config_manager = _create_config_manager(config_dir, output_dir)
     window = MainWindow(config_manager)

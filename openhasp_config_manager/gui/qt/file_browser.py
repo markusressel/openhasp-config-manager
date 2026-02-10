@@ -3,7 +3,7 @@ from pathlib import Path
 
 from PyQt6.QtWidgets import QTreeWidget, QAbstractItemView, QTreeWidgetItem, QSizePolicy
 
-from openhasp_config_manager.ui.qt.util import clear_layout
+from openhasp_config_manager.gui.qt.util import clear_layout
 
 
 class FileBrowserWidget(QTreeWidget):

@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from openhasp_config_manager.cli.common import _create_config_manager, _analyze_and_filter, _deploy
-from openhasp_config_manager.ui.util import warn, success, error
+from openhasp_config_manager.gui.util import warn, success, error
 
 
 async def c_deploy(config_dir: Path, output_dir: Path, device: str, purge: bool, diff: bool):

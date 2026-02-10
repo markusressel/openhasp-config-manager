@@ -14,7 +14,7 @@ from openhasp_config_manager.cli.shell import c_shell
 from openhasp_config_manager.cli.state import c_state
 from openhasp_config_manager.cli.upload import c_upload
 from openhasp_config_manager.cli.vars import c_vars
-from openhasp_config_manager.ui.util import echo
+from openhasp_config_manager.gui.util import echo
 
 PARAM_CFG_DIR = "cfg_dir"
 PARAM_OUTPUT_DIR = "output_dir"

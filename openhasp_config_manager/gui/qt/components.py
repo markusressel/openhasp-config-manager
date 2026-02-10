@@ -4,8 +4,8 @@ import qtawesome as qta
 from PyQt6 import QtCore
 from PyQt6.QtWidgets import QPushButton, QHBoxLayout, QVBoxLayout, QLabel, QCheckBox
 
-from openhasp_config_manager.ui.dimensions import UiDimensions
-from openhasp_config_manager.ui.qt.util import parse_icons
+from openhasp_config_manager.gui.dimensions import UiDimensions
+from openhasp_config_manager.gui.qt.util import parse_icons
 
 
 class UiComponents:

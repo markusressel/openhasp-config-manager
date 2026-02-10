@@ -1,8 +1,8 @@
 from pathlib import Path
 from typing import Dict, List
 
+from openhasp_config_manager.gui.util import error, echo
 from openhasp_config_manager.processing.variables import VariableManager
-from openhasp_config_manager.ui.util import error, echo
 
 
 async def _format_variables(variables: Dict) -> str:

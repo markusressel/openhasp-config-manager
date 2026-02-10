@@ -1,8 +1,8 @@
 from pathlib import Path
 
 from openhasp_config_manager.cli.common import _create_config_manager, _analyze_and_filter
+from openhasp_config_manager.gui.util import error, info
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
-from openhasp_config_manager.ui.util import error, info
 
 
 async def c_logs(config_dir: Path, device: str):

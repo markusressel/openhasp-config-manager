@@ -1,10 +1,10 @@
 from pathlib import Path
 from typing import Tuple, List
 
+from openhasp_config_manager.gui.util import info
 from openhasp_config_manager.manager import ConfigManager
 from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.processing.variables import VariableManager
-from openhasp_config_manager.ui.util import info
 
 
 async def _generate(config_manager: ConfigManager, device: Device):

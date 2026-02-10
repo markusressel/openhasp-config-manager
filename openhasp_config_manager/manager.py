@@ -6,6 +6,7 @@ from typing import List, Set, Optional
 import orjson
 
 from openhasp_config_manager.const import COMMON_FOLDER_NAME, DEVICES_FOLDER_NAME, SYSTEM_SCRIPTS
+from openhasp_config_manager.gui.util import warn
 from openhasp_config_manager.openhasp_client.model.component import Component, TextComponent, RawComponent, \
     ImageComponent, JsonlComponent, CmdComponent, FontComponent
 from openhasp_config_manager.openhasp_client.model.configuration.config import Config
@@ -23,7 +24,6 @@ from openhasp_config_manager.openhasp_client.model.openhasp_config_manager_confi
 from openhasp_config_manager.processing.device_processor import DeviceProcessor
 from openhasp_config_manager.processing.jsonl.jsonl import ObjectDimensionsProcessor, ObjectThemeProcessor
 from openhasp_config_manager.processing.variables import VariableManager
-from openhasp_config_manager.ui.util import warn
 from openhasp_config_manager.validation.cmd import CmdFileValidator
 from openhasp_config_manager.validation.device_validator import DeviceValidator
 from openhasp_config_manager.validation.jsonl import JsonlObjectValidator

@@ -3,9 +3,9 @@ from typing import List
 from PyQt6 import QtCore
 from PyQt6.QtWidgets import QWidget
 
+from openhasp_config_manager.gui.qt.components import UiComponents
+from openhasp_config_manager.gui.qt.util import clear_layout
 from openhasp_config_manager.openhasp_client.model.device import Device
-from openhasp_config_manager.ui.qt.components import UiComponents
-from openhasp_config_manager.ui.qt.util import clear_layout
 
 
 class DeviceListWidget(QWidget):

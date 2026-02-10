@@ -1,7 +1,7 @@
 from PyQt6 import QtCore
 from PyQt6.QtWidgets import QWidget
 
-from openhasp_config_manager.ui.qt.components import UiComponents
+from openhasp_config_manager.gui.qt.components import UiComponents
 
 
 class EditorControlsWidget(QWidget):

@@ -5,15 +5,15 @@ from typing import List, Dict, Set
 from PyQt6.QtWidgets import QWidget
 from orjson import orjson
 
+from openhasp_config_manager.gui.qt.components import UiComponents
+from openhasp_config_manager.gui.qt.util import qBridge, run_async, parse_icons
+from openhasp_config_manager.gui.qt.widgets.pagelayout import OpenHaspDevicePagesData
+from openhasp_config_manager.gui.qt.widgets.pagelayout.editor_controls import EditorControlsWidget
+from openhasp_config_manager.gui.qt.widgets.pagelayout.jsonl_preview import PageJsonlPreviewWidget
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widget_picker import OpenHASPWidgetPicker
+from openhasp_config_manager.gui.qt.widgets.pagelayout.page_preview_layout import PagePreviewWidget2, PreviewMode
 from openhasp_config_manager.manager import ConfigManager
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
-from openhasp_config_manager.ui.qt.components import UiComponents
-from openhasp_config_manager.ui.qt.util import qBridge, run_async, parse_icons
-from openhasp_config_manager.ui.qt.widgets.pagelayout import OpenHaspDevicePagesData
-from openhasp_config_manager.ui.qt.widgets.pagelayout.editor_controls import EditorControlsWidget
-from openhasp_config_manager.ui.qt.widgets.pagelayout.jsonl_preview import PageJsonlPreviewWidget
-from openhasp_config_manager.ui.qt.widgets.pagelayout.openhasp_widget_picker import OpenHASPWidgetPicker
-from openhasp_config_manager.ui.qt.widgets.pagelayout.page_preview_layout import PagePreviewWidget2, PreviewMode
 
 
 class PageLayoutEditorWidget(QWidget):

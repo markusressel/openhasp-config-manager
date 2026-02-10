@@ -5,7 +5,7 @@ from typing import Dict, List
 import jinja2
 from jinja2 import BaseLoader
 
-from openhasp_config_manager.ui.util import echo, error
+from openhasp_config_manager.gui.util import echo, error
 
 LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(logging.DEBUG)

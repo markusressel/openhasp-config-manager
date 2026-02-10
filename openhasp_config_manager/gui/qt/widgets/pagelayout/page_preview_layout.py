@@ -8,15 +8,15 @@ from PyQt6.QtCore import QSize, Qt, QRect, QRectF
 from PyQt6.QtGui import QPainter, QBrush, QColor, QMouseEvent, QPainterPath, QFont, QPen
 from PyQt6.QtWidgets import QWidget, QSizePolicy, QGraphicsView, QGraphicsScene
 
+from openhasp_config_manager.gui.qt.util import parse_icons
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.bar import HaspBarItem
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.button import HaspButtonItem
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.image import HaspImageItem
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.label import HaspLabelItem
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.slider import HaspSliderItem
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.switch import HaspSwitchItem
+from openhasp_config_manager.gui.qt.widgets.pagelayout.page_layout_editor import OpenHaspDevicePagesData
 from openhasp_config_manager.openhasp_client.icons import IntegratedIcon
-from openhasp_config_manager.ui.qt.util import parse_icons
-from openhasp_config_manager.ui.qt.widgets.pagelayout.openhasp_widgets.bar import HaspBarItem
-from openhasp_config_manager.ui.qt.widgets.pagelayout.openhasp_widgets.button import HaspButtonItem
-from openhasp_config_manager.ui.qt.widgets.pagelayout.openhasp_widgets.image import HaspImageItem
-from openhasp_config_manager.ui.qt.widgets.pagelayout.openhasp_widgets.label import HaspLabelItem
-from openhasp_config_manager.ui.qt.widgets.pagelayout.openhasp_widgets.slider import HaspSliderItem
-from openhasp_config_manager.ui.qt.widgets.pagelayout.openhasp_widgets.switch import HaspSwitchItem
-from openhasp_config_manager.ui.qt.widgets.pagelayout.page_layout_editor import OpenHaspDevicePagesData
 
 
 class PreviewMode(StrEnum):

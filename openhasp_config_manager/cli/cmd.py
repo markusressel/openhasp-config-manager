@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from openhasp_config_manager.cli.common import _create_config_manager, _analyze_and_filter, _cmd
-from openhasp_config_manager.ui.util import success, error
+from openhasp_config_manager.gui.util import success, error
 
 
 async def c_cmd(config_dir: Path, device: str, command: str, payload: str):
