@@ -3,13 +3,13 @@ import json
 from asyncio import Task
 from typing import Callable, Any, List, Awaitable, Dict
 
-import appdaemon.plugins.hass.hassapi as hass
+from appdaemon import ADAPI
 
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 
 
 async def listen_event(
-    controller: hass.Hass,
+    controller: ADAPI,
     client: OpenHaspClient,
     path: str,
     callback: Callable[[str, bytes], Awaitable[Any]],
@@ -44,7 +44,7 @@ async def listen_event(
 
 
 async def listen_state(
-    controller: hass.Hass,
+    controller: ADAPI,
     client: OpenHaspClient,
     obj: str,
     callback: Callable[[str, Dict], Awaitable[Any]],
@@ -80,7 +80,7 @@ async def listen_state(
 
 
 async def config(
-    controller: hass.Hass,
+    controller: ADAPI,
     plate: str,
     submodule: str,
     params: str | List[Any] | Dict[str, Any],

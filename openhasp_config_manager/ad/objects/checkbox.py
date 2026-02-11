@@ -13,6 +13,9 @@ else:
 
 
 class CheckboxObjectController(ObjectController):
+    """
+    Controller for a checkbox object on the OpenHASP plate.
+    """
 
     def __init__(
         self,
@@ -28,6 +31,9 @@ class CheckboxObjectController(ObjectController):
         """
         Sets up a connection between an object and an entity, updating the text of the object
         each time the entity changes based on the text function.
+
+        See: https://www.openhasp.com/latest/design/objects/checkbox/
+
         :param entity: the entity id
         :param attribute: the attribute from the entity to use
         :param converter: the function to call to get the text to set
@@ -55,6 +61,10 @@ class CheckboxObjectController(ObjectController):
                 controller=self.app, callback=self._on_state_changed, entity_id=self.entity)
 
     async def get_text_state(self) -> str:
+        """
+        Gets the current state to be used for the text of this checkbox object, either by calling get_state or by getting the state of the entity and attribute.
+        :return: the current state to be used for the text of this checkbox object
+        """
         if self.attribute is not None:
             return await self.app.get_state(self.entity, attribute=self.attribute)
         else:

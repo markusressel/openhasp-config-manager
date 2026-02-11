@@ -179,12 +179,14 @@ class PageController:
         self,
         obj_id: int,
         entity: str,
+        get_state: Callable[[], Awaitable[Any]] = None,
         transform_value: Callable[[Any], int] = None,
     ) -> ProgressObjectController:
         """
         Adds a progress object to the page.
         :param obj_id: the id of the object
         :param entity: the entity to bind to
+        :param get_state: a function to get the current state (if not using entity binding)
         :param transform_value: a function to transform the entity value to a progress value
         :return: the progress object controller
         """
@@ -195,6 +197,7 @@ class PageController:
             page=self.index,
             obj_id=obj_id,
             entity=entity,
+            get_state=get_state,
             transform_value=transform_value,
         )
         await self.add_object_controller(progress)

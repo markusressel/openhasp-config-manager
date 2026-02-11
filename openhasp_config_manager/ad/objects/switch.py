@@ -24,6 +24,9 @@ class SwitchState(StrEnum):
 
 
 class SwitchObjectController(ObjectController):
+    """
+    Controller for a switch object on the OpenHASP plate.
+    """
 
     def __init__(
         self,
@@ -36,6 +39,9 @@ class SwitchObjectController(ObjectController):
     ):
         """
         Sets up a connection between a toggle and a light entity
+
+        See: https://www.openhasp.com/0.7.0/design/objects/switch/
+
         :param entity: the entity id of the light
         """
         super().__init__(app=app, client=client, state_updater=state_updater, page=page, obj_id=obj_id)

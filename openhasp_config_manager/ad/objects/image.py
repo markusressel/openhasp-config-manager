@@ -8,9 +8,21 @@ lock = asyncio.Lock()
 class ImageObjectController(ObjectController):
 
     async def init(self):
+        """
+        Sets up the image object. This is called when the page is loaded, and can be used to set up the initial state of the object.
+
+        See: https://www.openhasp.com/0.7.0/design/objects/image/
+        """
         self.app.log(f"Initializing image object {self.object_id}", level="DEBUG")
 
     async def push_image(self, image: str, width: int, height: int):
+        """
+        Pushes an image to this image object. The image must be a base64 encoded string, and the width and height must be specified in pixels.
+
+        :param image: the image to set, can be a URL or anything that can be opened by PIL.Image.open, f.ex. a file path
+        :param width: the width of the image in pixels
+        :param height: the height of the image in pixels
+        """
         try:
             async with lock:
                 await self.client.set_image(

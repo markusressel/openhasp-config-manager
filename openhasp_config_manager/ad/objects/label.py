@@ -13,6 +13,9 @@ else:
 
 
 class LabelObjectController(ObjectController):
+    """
+    Controller for a label object on the OpenHASP plate.
+    """
 
     def __init__(
         self,
@@ -29,6 +32,9 @@ class LabelObjectController(ObjectController):
         """
         Sets up a connection between an object and an entity, updating the text of the object
         each time the entity changes based on the text function.
+
+        See: https://www.openhasp.com/latest/design/objects/label/
+
         :param app: the app this object belongs to
         :param client: the OpenHASP client
         :param state_updater: the state updater to use

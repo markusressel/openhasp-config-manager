@@ -7,6 +7,10 @@ from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 
 
 class ObjectController:
+    """
+    Base class for controllers for objects on the OpenHASP plate.
+    This should be subclassed for each type of object to implement specific functionality for that object type.
+    """
 
     def __init__(
         self,
@@ -16,6 +20,15 @@ class ObjectController:
         page: int,
         obj_id: int,
     ):
+        """
+        Object controller for a single object on a page on an OpenHASP plate.
+
+        :param app: the appdaemon app instance
+        :param client: the OpenHASP client to use for communication with the plate
+        :param state_updater: the state updater to use for registering state updates
+        :param page: the page index of the object
+        :param obj_id: the object index of the object
+        """
         self.app = app
         self.client = client
         self.state_updater = state_updater
@@ -24,12 +37,22 @@ class ObjectController:
 
     @property
     def object_id(self):
+        """
+        :return: the composite object id for this object, in the format "p{page}b{obj_id}"
+        """
         return f"p{self.page}b{self.obj_id}"
 
     async def init(self):
+        """
+        Initializes the object controller. This should be called after the object is created and registered on the page.
+        """
         raise NotImplementedError()
 
     async def set_hidden(self, hidden: bool):
+        """
+        Hides or shows this slider object
+        :param hidden: whether to hide or show the slider
+        """
         return await self.client.set_hidden(
             obj=self.object_id,
             hidden=hidden

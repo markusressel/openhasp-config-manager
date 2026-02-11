@@ -18,6 +18,9 @@ class ButtonEvent(StrEnum):
 
 
 class ButtonObjectController(ObjectController):
+    """
+    Controller for a button object on the OpenHASP plate.
+    """
 
     def __init__(
         self,
@@ -28,6 +31,18 @@ class ButtonObjectController(ObjectController):
         obj_id: int,
         on_click: Callable[[str, Dict], Awaitable[Any]],
     ):
+        """
+        Sets up a button object.
+
+        See: https://www.openhasp.com/latest/design/objects/button/
+
+        :param app:
+        :param client:
+        :param state_updater:
+        :param page:
+        :param obj_id:
+        :param on_click:
+        """
         super().__init__(app=app, client=client, state_updater=state_updater, page=page, obj_id=obj_id)
         self.on_click = on_click
 
@@ -91,6 +106,10 @@ class ButtonObjectController(ObjectController):
 
 
 class SceneButtonObjectController(ButtonObjectController):
+    """
+    Controller for a button object on the OpenHASP plate that activates a scene when clicked.
+    """
+
     SCENE_ENTITY_PREFIX = "scene."
 
     def __init__(
