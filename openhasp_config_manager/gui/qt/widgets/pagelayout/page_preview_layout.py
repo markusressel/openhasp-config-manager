@@ -61,30 +61,24 @@ class PagePreviewWidget2(QGraphicsView):
 
     def load_objects(self):
         self.scene().clear()
-        for obj in self.objects:
-            obj_type = obj.get("obj")
+        for obj_data in self.objects:
+            obj_type = obj_data.get("obj")
             if not obj_type:
                 continue  # Skip objects with no type
 
             item = None
             if obj_type == "btn":
-                item = HaspButtonItem(
-                    obj_data=obj,
-                    parent_widget=self,
-                    on_click=self._on_button_clicked
-                )
+                item = self._create_button_widget(obj_data)
             elif obj_type == "switch":
-                item = HaspSwitchItem(obj_data=obj, parent_widget=self)
-                item.toggled.connect(lambda obj_id, val: print(f"Switch {obj_id} toggled to {val}"))
+                item = self._create_switch_widget(obj_data)
             elif obj_type == "bar":
-                item = HaspBarItem(obj_data=obj, parent_widget=self)
+                item = self._create_bar_widget(obj_data)
             elif obj_type == "slider":
-                item = HaspSliderItem(obj_data=obj, parent_widget=self)
-                item.valueChanged.connect(lambda obj_id, val: print(f"Slider {obj_id} changed to {val}"))
+                item = self._create_slider_widget(obj_data)
             elif obj_type == "label":
-                item = HaspLabelItem(obj_data=obj, parent_widget=self)
+                item = self._create_label_widget(obj_data)
             elif obj_type == "img":
-                item = HaspImageItem(obj_data=obj, parent_widget=self)
+                item = self._create_img_widget(obj_data)
 
             if item is not None:
                 logging.debug(f"Adding '{obj_type}' item to scene: {item}")
@@ -150,6 +144,47 @@ class PagePreviewWidget2(QGraphicsView):
                 processed_text = processed_text.replace(unicode_char, replacement)
 
         return f'<span>{processed_text}</span>'
+
+    def _create_button_widget(self, obj_data: Dict) -> HaspButtonItem:
+        return HaspButtonItem(
+            obj_data=obj_data,
+            on_click=self._on_button_clicked,
+            parent_widget=self,
+        )
+
+    def _create_switch_widget(self, obj_data: Dict) -> HaspSwitchItem:
+        widget = HaspSwitchItem(
+            obj_data=obj_data,
+            parent_widget=self,
+        )
+        widget.toggled.connect(lambda obj_id, val: print(f"Switch {obj_id} toggled to {val}"))
+        return widget
+
+    def _create_bar_widget(self, obj_data: Dict) -> HaspBarItem:
+        return HaspBarItem(
+            obj_data=obj_data,
+            parent_widget=self
+        )
+
+    def _create_slider_widget(self, obj_data) -> HaspSliderItem:
+        widget = HaspSliderItem(
+            obj_data=obj_data,
+            parent_widget=self
+        )
+        widget.valueChanged.connect(lambda obj_id, val: print(f"Slider {obj_id} changed to {val}"))
+        return widget
+
+    def _create_label_widget(self, obj_data: Dict) -> HaspLabelItem:
+        return HaspLabelItem(
+            obj_data=obj_data,
+            parent_widget=self
+        )
+
+    def _create_img_widget(self, obj_data: Dict) -> HaspImageItem:
+        return HaspImageItem(
+            obj_data=obj_data,
+            parent_widget=self
+        )
 
 
 @deprecated(

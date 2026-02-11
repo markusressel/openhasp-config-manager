@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from typing import Dict
 
 from PyQt6 import QtCore, QtGui
 from PyQt6.QtGui import QColor, QFont, QPen, QBrush
@@ -47,7 +48,12 @@ class HaspButtonItem(EditableWidget):
     def border_color(self) -> str:
         return self.obj_data.get("border_color", "#000000")
 
-    def __init__(self, obj_data, parent_widget=None, on_click: Callable[[], None] = None):
+    def __init__(
+        self,
+        obj_data: Dict,
+        on_click: Callable[[Dict], None] = None,
+        parent_widget=None,
+    ):
         super().__init__(obj_data)
         self.parent_widget = parent_widget
         self._on_click = on_click
