@@ -36,12 +36,12 @@ class ButtonObjectController(ObjectController):
 
         See: https://www.openhasp.com/latest/design/objects/button/
 
-        :param app:
-        :param client:
-        :param state_updater:
-        :param page:
-        :param obj_id:
-        :param on_click:
+        :param app: the app this object belongs to
+        :param client: the OpenHASP client
+        :param state_updater: the state updater to use
+        :param page: the page id
+        :param obj_id: the object id
+        :param on_click: the callback to call when the button is clicked, with the topic and payload of the click event as parameters
         """
         super().__init__(app=app, client=client, state_updater=state_updater, page=page, obj_id=obj_id)
         self.on_click = on_click

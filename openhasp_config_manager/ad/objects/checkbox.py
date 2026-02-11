@@ -24,7 +24,7 @@ class CheckboxObjectController(ObjectController):
         state_updater: StateUpdater,
         page: int,
         obj_id: int,
-        entity: str,
+        entity: str = None,
         attribute: str = None,
         converter: Callable[[Any], str] = lambda x: str(x)
     ):
@@ -34,6 +34,11 @@ class CheckboxObjectController(ObjectController):
 
         See: https://www.openhasp.com/latest/design/objects/checkbox/
 
+        :param app: the app this object belongs to
+        :param client: the OpenHASP client
+        :param state_updater: the state updater to use
+        :param page: the page id
+        :param obj_id: the object id
         :param entity: the entity id
         :param attribute: the attribute from the entity to use
         :param converter: the function to call to get the text to set

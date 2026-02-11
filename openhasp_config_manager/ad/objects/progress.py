@@ -24,8 +24,8 @@ class ProgressObjectController(ObjectController):
         state_updater: StateUpdater,
         page: int,
         obj_id: int,
-        entity: str,
-        get_state: Callable[[], Awaitable[Any]],
+        entity: str = None,
+        get_state: Callable[[], Awaitable[Any]] = None,
         transform_value: Callable[[Any], int] = None
     ):
         """
@@ -33,6 +33,11 @@ class ProgressObjectController(ObjectController):
 
         See: https://www.openhasp.com/0.7.0/design/objects/bar/
 
+        :param app: the app this object belongs to
+        :param client: the OpenHASP client
+        :param state_updater: the state updater to use
+        :param page: the page id
+        :param obj_id: the object id
         :param entity: the entity id to use for values
         :param transform_value: (optional) a function to transform the entity value to a progress value
         """

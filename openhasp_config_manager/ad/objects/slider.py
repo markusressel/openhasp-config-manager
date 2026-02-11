@@ -16,6 +16,7 @@ class SliderEvent(StrEnum):
     CHANGED = "changed"
     UP = "up"
 
+
 class SliderObjectController(ObjectController):
 
     def __init__(
@@ -25,10 +26,10 @@ class SliderObjectController(ObjectController):
         state_updater: StateUpdater,
         page: int,
         obj_id: int,
-        entity: str,
-        get_state: Callable[[], Awaitable[Any]],
-        on_changed: Callable[[Any], Awaitable[None]],
-        on_released: Callable[[Any], Awaitable[None]],
+        entity: str = None,
+        get_state: Callable[[], Awaitable[Any]] = None,
+        on_changed: Callable[[Any], Awaitable[None]] = None,
+        on_released: Callable[[Any], Awaitable[None]] = None,
         transform_value: Callable[[Any], int] = None,
     ):
         """
@@ -36,10 +37,15 @@ class SliderObjectController(ObjectController):
 
         See: https://www.openhasp.com/0.7.0/design/objects/slider/
 
-        :param entity: the entity id to use for values
-        :param get_state: called to get the current state of the slider
-        :param on_changed: called when the slider is changed
-        :param on_released: called when the slider is released
+        :param app: the app this object belongs to
+        :param client: the OpenHASP client
+        :param state_updater: the state updater to use
+        :param page: the page id
+        :param obj_id: the object id
+        :param entity: (optional) the entity id to use for values
+        :param get_state: (optional) called to get the current state of the slider
+        :param on_changed: (optional) called when the slider is changed
+        :param on_released: (optional) called when the slider is released
         :param transform_value: (optional) a function to transform the entity value to a slider value
         """
         super().__init__(app=app, client=client, state_updater=state_updater, page=page, obj_id=obj_id)
@@ -58,6 +64,9 @@ class SliderObjectController(ObjectController):
 
     async def init(self):
         self.app.log(f"Initializing slider object {self.object_id}", level="DEBUG")
+
+        # TODO: make all of this optional
+
         slider_sync_name = f"slider:{self.object_id}:{self.entity}"
         self.state_updater.register(
             name=slider_sync_name,

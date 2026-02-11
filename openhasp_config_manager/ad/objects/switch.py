@@ -1,5 +1,5 @@
 from enum import StrEnum
-from typing import Dict, TYPE_CHECKING, Any
+from typing import Dict, TYPE_CHECKING, Any, Callable, Awaitable
 
 from appdaemon import ADAPI
 
@@ -35,17 +35,25 @@ class SwitchObjectController(ObjectController):
         state_updater: StateUpdater,
         page: int,
         obj_id: int,
-        entity: str
+        entity: str = None,
+        get_state: Callable[[], Awaitable[bool]] = None,
     ):
         """
         Sets up a connection between a toggle and a light entity
 
         See: https://www.openhasp.com/0.7.0/design/objects/switch/
 
-        :param entity: the entity id of the light
+        :param app: the app this object belongs to
+        :param client: the OpenHASP client
+        :param state_updater: the state updater to use
+        :param page: the page id
+        :param obj_id: the object id
+        :param entity: (optional) the entity id of the light
+        :param get_state: (optional) called to get the current state of the toggle, should return "on" or "off"
         """
         super().__init__(app=app, client=client, state_updater=state_updater, page=page, obj_id=obj_id)
         self.entity = entity
+        self.get_state = get_state
 
     async def init(self):
         self.app.log(f"Initializing switch object {self.object_id}", level="DEBUG")
@@ -54,6 +62,7 @@ class SwitchObjectController(ObjectController):
         )
 
     async def _setup_switch(self, entity: str):
+        # TODO: make this optional and support custom on_changed and on_released callbacks instead of just toggle
 
         async def _toggle_callback(topic: str, payload: Dict):
             self.app.log(f"Toggle callback payload: {payload}")

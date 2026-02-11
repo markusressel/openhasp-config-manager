@@ -49,16 +49,17 @@ class LabelObjectController(ObjectController):
         self.entity_ids = entity_id if isinstance(entity_id, list) else [entity_id] if entity_id is not None else None
         self.attribute = attribute
         self.get_state = get_state
-
-        if self.get_state is None and self.entity_ids is None:
-            raise ValueError("Either entity or get_state must be provided")
-
         self.converter = converter
         if self.converter is None:
             self.converter = lambda x: str(x) if x is not None else "-"
 
     async def init(self):
         self.app.log(f"Initializing label object {self.object_id} for entity {self.entity_ids}", level="DEBUG")
+
+        if self.entity_ids is not None or self.get_state is not None:
+            await self._setup_state_listeners_and_sync()
+
+    async def _setup_state_listeners_and_sync(self):
         ids_str = ",".join(self.entity_ids) if self.entity_ids else "None"
         text_sync_name = f"label:{self.object_id}:{ids_str}"
         self.state_updater.register(
