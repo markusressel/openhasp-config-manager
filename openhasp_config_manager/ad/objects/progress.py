@@ -12,7 +12,7 @@ else:
     StateUpdater = Any
 
 
-class ProgressObjectController(ObjectController):
+class BarObjectController(ObjectController):
     """
     Controller for a bar object on the OpenHASP plate.
     """

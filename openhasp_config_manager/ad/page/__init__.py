@@ -6,7 +6,7 @@ from openhasp_config_manager.ad.objects import ObjectController
 from openhasp_config_manager.ad.objects.button import ButtonObjectController, SceneButtonObjectController
 from openhasp_config_manager.ad.objects.image import ImageObjectController
 from openhasp_config_manager.ad.objects.label import LabelObjectController
-from openhasp_config_manager.ad.objects.progress import ProgressObjectController
+from openhasp_config_manager.ad.objects.progress import BarObjectController
 from openhasp_config_manager.ad.objects.slider import SliderObjectController
 from openhasp_config_manager.ad.objects.switch import SwitchObjectController
 
@@ -108,7 +108,9 @@ class PageController:
         return button
 
     async def add_scene_button(
-        self, obj_id: int, scene: str
+        self,
+        obj_id: int,
+        scene: str
     ) -> SceneButtonObjectController:
         """
         Adds a button object to the page that activates a scene.
@@ -128,12 +130,16 @@ class PageController:
         return button
 
     async def add_switch(
-        self, obj_id: int, entity: str
+        self,
+        obj_id: int,
+        entity_id: str = None,
+        get_state: Callable[[], Awaitable[Any]] = None,
     ) -> SwitchObjectController:
         """
         Adds a switch object to the page.
         :param obj_id: the id of the object
-        :param entity: the entity to bind to
+        :param entity_id: (optional) the entity to bind to
+        :param get_state: (optional) a function to get the current state of the switch
         :return: the switch object controller
         """
         switch: SwitchObjectController = SwitchObjectController(
@@ -142,7 +148,8 @@ class PageController:
             state_updater=self.state_updater,
             page=self.index,
             obj_id=obj_id,
-            entity_id=entity,
+            entity_id=entity_id,
+            get_state=get_state,
         )
         await self.add_object_controller(switch)
         return switch
@@ -150,6 +157,7 @@ class PageController:
     async def add_slider(
         self,
         obj_id: int,
+        entity_id: str = None,
         get_state: Callable[[], Awaitable[Any]] = None,
         on_changed: Callable[[Any], Awaitable[None]] = None,
         on_released: Callable[[Any], Awaitable[None]] = None,
@@ -157,9 +165,10 @@ class PageController:
         """
         Adds a slider object to the page.
         :param obj_id: the id of the object
-        :param get_state: a function to determine the current position of the slider
-        :param on_changed: a function to call when the slider is changed by user input
-        :param on_released: a function to call when the slider handle is released (user input ends)
+        :param entity_id: (optional) the entity to bind to
+        :param get_state: (optional) a function to determine the current position of the slider
+        :param on_changed: (optional) a function to call when the slider is changed by user input
+        :param on_released: (optional) a function to call when the slider handle is released (user input ends)
         :return: the slider object controller
         """
         slider = SliderObjectController(
@@ -168,6 +177,7 @@ class PageController:
             state_updater=self.state_updater,
             page=self.index,
             obj_id=obj_id,
+            entity_id=entity_id,
             get_state=get_state,
             on_changed=on_changed,
             on_released=on_released,
@@ -175,36 +185,37 @@ class PageController:
         await self.add_object_controller(slider)
         return slider
 
-    async def add_progress(
+    async def add_bar(
         self,
         obj_id: int,
-        entity: str,
+        entity_id: str = None,
         get_state: Callable[[], Awaitable[Any]] = None,
         transform_value: Callable[[Any], int] = None,
-    ) -> ProgressObjectController:
+    ) -> BarObjectController:
         """
         Adds a progress object to the page.
         :param obj_id: the id of the object
-        :param entity: the entity to bind to
+        :param entity_id: the entity to bind to
         :param get_state: a function to get the current state (if not using entity binding)
         :param transform_value: a function to transform the entity value to a progress value
         :return: the progress object controller
         """
-        progress = ProgressObjectController(
+        bar = BarObjectController(
             app=self.app,
             client=self.client,
             state_updater=self.state_updater,
             page=self.index,
             obj_id=obj_id,
-            entity_id=entity,
+            entity_id=entity_id,
             get_state=get_state,
             transform_value=transform_value,
         )
-        await self.add_object_controller(progress)
-        return progress
+        await self.add_object_controller(bar)
+        return bar
 
     async def add_image(
-        self, obj_id: int
+        self,
+        obj_id: int
     ) -> ImageObjectController:
         """
         Adds an image object to the page.
