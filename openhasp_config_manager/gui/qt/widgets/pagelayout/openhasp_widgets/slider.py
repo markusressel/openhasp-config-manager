@@ -61,7 +61,7 @@ class HaspSliderItem(EditableWidget):
         We expand the bounding rect slightly to ensure the knob doesn't
         get clipped if it is taller than the slider track.
         """
-        margin = max(0, self.knob_radius - (self.obj_h / 2))
+        margin = max(0.0, self.knob_radius - (self.obj_h / 2))
         return QtCore.QRectF(-margin, -margin, self.obj_w + (margin * 2), self.obj_h + (margin * 2))
 
     def paint(self, painter, option, widget=None):
@@ -83,7 +83,7 @@ class HaspSliderItem(EditableWidget):
             progress_pct = 0
         else:
             progress_pct = (self._val - self.min_val) / range_val
-            progress_pct = max(0, min(progress_pct, 1))
+            progress_pct = max(0.0, min(progress_pct, 1))
 
         # 3. Draw the Knob (The "scaled circle")
         # Center the knob on the track based on current value

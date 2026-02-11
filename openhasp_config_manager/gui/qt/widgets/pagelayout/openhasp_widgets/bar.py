@@ -115,7 +115,7 @@ class HaspBarItem(EditableWidget):
         range_val = self.max_val - self.min_val
         if range_val > 0:
             progress_pct = (self.val - self.min_val) / range_val
-            progress_pct = max(0, min(progress_pct, 1))  # Clamp 0.0 - 1.0
+            progress_pct = max(0.0, min(progress_pct, 1))  # Clamp 0.0 - 1.0
 
             indicator_w = self.obj_w * progress_pct
             if indicator_w > 0:

@@ -114,7 +114,7 @@ class HaspButtonItem(EditableWidget):
 
         # openHASP radius can be a pixel value or very large for pill-shape
         # We ensure it doesn't exceed half the height/width
-        effective_radius = min(self.radius, self.obj_h / 2, self.obj_w / 2)
+        effective_radius = min(float(self.radius), self.obj_h / 2, self.obj_w / 2)
 
         painter.drawRoundedRect(rect, effective_radius, effective_radius)
 
