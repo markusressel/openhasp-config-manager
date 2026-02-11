@@ -44,21 +44,21 @@ class ButtonObjectController(ObjectController):
         :param on_click: the callback to call when the button is clicked, with the topic and payload of the click event as parameters
         """
         super().__init__(app=app, client=client, state_updater=state_updater, page=page, obj_id=obj_id)
-        self.on_click = on_click
+        self._on_click = on_click
 
     async def init(self):
         self.app.log(f"Initializing button object {self.object_id}", level="DEBUG")
 
         async def _click_callback(topic, payload: Dict):
             if payload["event"] == ButtonEvent.UP:
-                await self._on_click(topic, payload)
+                await self.__on_click(topic, payload)
 
         return await self.listen_obj(
             callback=_click_callback,
         )
 
-    async def _on_click(self, topic: str, payload: Dict):
-        await self.on_click(topic, payload)
+    async def __on_click(self, topic: str, payload: Dict):
+        await self._on_click(topic, payload)
 
     async def set_is_toggle(self, is_toggle: bool):
         """

@@ -142,7 +142,7 @@ class PageController:
             state_updater=self.state_updater,
             page=self.index,
             obj_id=obj_id,
-            entity=entity,
+            entity_id=entity,
         )
         await self.add_object_controller(switch)
         return switch
@@ -196,7 +196,7 @@ class PageController:
             state_updater=self.state_updater,
             page=self.index,
             obj_id=obj_id,
-            entity=entity,
+            entity_id=entity,
             get_state=get_state,
             transform_value=transform_value,
         )

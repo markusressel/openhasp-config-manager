@@ -46,55 +46,58 @@ class LabelObjectController(ObjectController):
         :param converter: (optional) converter function to transform the state value into the displayed text
         """
         super().__init__(app=app, client=client, state_updater=state_updater, page=page, obj_id=obj_id)
-        self.entity_ids = entity_id if isinstance(entity_id, list) else [entity_id] if entity_id is not None else None
-        self.attribute = attribute
-        self.get_state = get_state
-        self.converter = converter
-        if self.converter is None:
-            self.converter = lambda x: str(x) if x is not None else "-"
+        self._entity_ids = entity_id if isinstance(entity_id, list) else [entity_id] if entity_id is not None else None
+        self._attribute = attribute
+        self._get_state = get_state
+        self._converter = converter
+        if self._converter is None:
+            self._converter = lambda x: str(x) if x is not None else "-"
 
     async def init(self):
-        self.app.log(f"Initializing label object {self.object_id} for entity {self.entity_ids}", level="DEBUG")
+        self.app.log(f"Initializing label object {self.object_id} for entity {self._entity_ids}", level="DEBUG")
 
-        if self.entity_ids is not None or self.get_state is not None:
+        if self._entity_ids is not None or self._get_state is not None:
             await self._setup_state_listeners_and_sync()
 
     async def _setup_state_listeners_and_sync(self):
-        ids_str = ",".join(self.entity_ids) if self.entity_ids else "None"
+        ids_str = ",".join(self._entity_ids) if self._entity_ids else "None"
         text_sync_name = f"label:{self.object_id}:{ids_str}"
         self.state_updater.register(
             name=text_sync_name,
-            get_state=self.get_state if self.get_state is not None else self.get_text_state,
-            update_obj=self.set_text_obj_state,
+            get_state=self.__get_text_state,
+            update_obj=self.__set_text_obj_state,
         )
         await self.state_updater.sync(name=text_sync_name)
 
-        if self.entity_ids is not None:
-            if self.attribute is not None:
-                for entity_id in self.entity_ids:
+        if self._entity_ids is not None:
+            if self._attribute is not None:
+                for entity_id in self._entity_ids:
                     await util_ad.listen_state_and_call_immediately(
-                        controller=self.app, callback=self._on_state_changed, entity_id=entity_id, attribute=self.attribute)
+                        controller=self.app, callback=self._on_state_changed, entity_id=entity_id, attribute=self._attribute)
             else:
-                for entity_id in self.entity_ids:
+                for entity_id in self._entity_ids:
                     await util_ad.listen_state_and_call_immediately(
                         controller=self.app, callback=self._on_state_changed, entity_id=entity_id)
 
-    async def get_text_state(self) -> str:
-        if self.attribute is not None:
-            return await self.app.get_state(self.entity_ids[0], attribute=self.attribute)
-        else:
-            return await self.app.get_state(self.entity_ids[0])
+    async def __get_text_state(self) -> str:
+        if self._get_state is not None:
+            return await self._get_state()
 
-    async def set_text_obj_state(self, state: Any):
+        if self._attribute is not None:
+            return await self.app.get_state(self._entity_ids[0], attribute=self._attribute)
+        else:
+            return await self.app.get_state(self._entity_ids[0])
+
+    async def __set_text_obj_state(self, state: Any):
         await self._on_state_changed(None, None, None, state, None)
 
     async def _on_state_changed(self, entity, attribute, old, new, kwargs):
-        if self.get_state is not None:
-            new = await self.get_state()
+        if self._get_state is not None:
+            new = await self._get_state()
         if new in [STATE_UNKNOWN, STATE_UNAVAILABLE]:
             new = "-"
 
-        display_text = self.converter(new)
+        display_text = self._converter(new)
         await self.set_text(
             text=display_text,
         )

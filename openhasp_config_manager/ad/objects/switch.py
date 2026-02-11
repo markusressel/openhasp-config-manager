@@ -35,11 +35,11 @@ class SwitchObjectController(ObjectController):
         state_updater: StateUpdater,
         page: int,
         obj_id: int,
-        entity: str = None,
+        entity_id: str = None,
         get_state: Callable[[], Awaitable[bool]] = None,
     ):
         """
-        Sets up a connection between a toggle and a light entity
+        Sets up a connection between a switch and a light entity
 
         See: https://www.openhasp.com/0.7.0/design/objects/switch/
 
@@ -48,69 +48,82 @@ class SwitchObjectController(ObjectController):
         :param state_updater: the state updater to use
         :param page: the page id
         :param obj_id: the object id
-        :param entity: (optional) the entity id of the light
-        :param get_state: (optional) called to get the current state of the toggle, should return "on" or "off"
+        :param entity_id: (optional) the entity id of the light
+        :param get_state: (optional) called to get the current state of the switch, should return True for on and False for off
         """
         super().__init__(app=app, client=client, state_updater=state_updater, page=page, obj_id=obj_id)
-        self.entity = entity
-        self.get_state = get_state
+        self._entity_id = entity_id
+        self._get_state = get_state
 
     async def init(self):
         self.app.log(f"Initializing switch object {self.object_id}", level="DEBUG")
-        await self._setup_switch(
-            entity=self.entity,
+
+        if self._entity_id is not None or self._get_state is not None:
+            await self._setup_state_listener_and_sync()
+
+    async def _setup_state_listener_and_sync(self):
+        switch_sync_name = f"switch:{self.object_id}:{self._entity_id}"
+        self.state_updater.register(
+            name=switch_sync_name,
+            get_state=self.__get_switch_state,
+            update_obj=self.__set_switch_obj_state,
         )
+        await self.state_updater.sync(switch_sync_name)
 
-    async def _setup_switch(self, entity: str):
-        # TODO: make this optional and support custom on_changed and on_released callbacks instead of just toggle
-
-        async def _toggle_callback(topic: str, payload: Dict):
-            self.app.log(f"Toggle callback payload: {payload}")
+        async def _switch_callback(topic: str, payload: Dict):
+            self.app.log(f"switch callback payload: {payload}")
             if payload["event"] == SwitchEvent.UP:
-                en = self.app.get_entity(entity=entity)
-                self.app.log(f"Toggle '{en.entity_name}'")
-                await self.app.call_service("homeassistant/toggle", entity_id=en.entity_id)
+                if self._entity_id is not None:
+                    await self._toggle_entity()
 
         await self.listen_obj(
-            callback=_toggle_callback,
+            callback=_switch_callback,
         )
 
-        async def _state_update_callback(entity, attribute, old, new, kwargs):
-            enabled = True
-            val = 0
-            if new == SwitchState.ON:
-                val = 1
-            elif new == SwitchState.OFF:
-                val = 0
-            else:
-                enabled = False
-
-            await self.set_object_properties(
-                properties={
-                    "val": val,
-                    "enabled": enabled,
-                }
+        if self._entity_id is not None:
+            await util_ad.listen_state_and_call_immediately(
+                controller=self.app,
+                callback=self.__state_update_callback,
+                entity_id=self._entity_id
             )
 
-        async def get_toggle_state() -> str:
-            return await self.app.get_state(entity)
+    async def _toggle_entity(self):
+        en = self.app.get_entity(entity=self._entity_id)
+        self.app.log(f"switch '{en.entity_name}'")
+        await self.app.call_service("homeassistant/switch", entity_id=en.entity_id)
 
-        async def set_toggle_obj_state(state: str):
-            await _state_update_callback(None, None, None, state, None)
+    async def __get_switch_state(self) -> bool:
+        """
+        Gets the current state of this switch object, either by calling get_state or by getting the state of the entity.
+        :return: the current state of this switch object
+        """
+        if self._get_state is not None:
+            return await self._get_state()
+        elif self._entity_id is not None:
+            state = await self.app.get_state(self._entity_id)
+            return state == SwitchState.ON
+        else:
+            raise ValueError("No method to get state for this switch object")
 
-        toggle_sync_name = f"toggle:{self.object_id}:{entity}"
-        self.state_updater.register(
-            name=toggle_sync_name,
-            get_state=get_toggle_state,
-            update_obj=set_toggle_obj_state,
+    async def __state_update_callback(self, entity, attribute, old, new, kwargs):
+        enabled = True
+        val = 0
+        if new == SwitchState.ON:
+            val = 1
+        elif new == SwitchState.OFF:
+            val = 0
+        else:
+            enabled = False
+
+        await self.set_object_properties(
+            properties={
+                "val": val,
+                "enabled": enabled,
+            }
         )
-        await self.state_updater.sync(toggle_sync_name)
 
-        await util_ad.listen_state_and_call_immediately(
-            controller=self.app,
-            callback=_state_update_callback,
-            entity_id=entity
-        )
+    async def __set_switch_obj_state(self, state: str):
+        await self.__state_update_callback(None, None, None, state, None)
 
     async def set_indicator_color(self, color: str):
         """

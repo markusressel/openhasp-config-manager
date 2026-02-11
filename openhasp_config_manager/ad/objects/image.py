@@ -6,6 +6,9 @@ lock = asyncio.Lock()
 
 
 class ImageObjectController(ObjectController):
+    """
+    Controller for an image object on the OpenHASP plate.
+    """
 
     async def init(self):
         """
