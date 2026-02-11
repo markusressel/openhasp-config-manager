@@ -1,6 +1,6 @@
 import logging
 from enum import StrEnum
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Dict
 from warnings import deprecated
 
 from PyQt6 import QtCore
@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import QWidget, QSizePolicy, QGraphicsView, QGraphicsScene
 from openhasp_config_manager.gui.qt.util import parse_icons
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.bar import HaspBarItem
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.button import HaspButtonItem
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.image import HaspImageItem
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.label import HaspLabelItem
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.slider import HaspSliderItem
@@ -22,6 +23,7 @@ from openhasp_config_manager.openhasp_client.icons import IntegratedIcon
 class PreviewMode(StrEnum):
     Interact = "interact"
     Edit = "edit"
+
 
 class PagePreviewWidget2(QGraphicsView):
     modeChanged = QtCore.pyqtSignal(PreviewMode)
@@ -51,10 +53,10 @@ class PagePreviewWidget2(QGraphicsView):
     def set_mode(self, mode: PreviewMode):
         self.mode = mode
         for item in self.scene().items():
-            if isinstance(item, (HaspButtonItem, HaspSwitchItem, HaspSliderItem)):
-                # TODO: for later, we can have different edit modes for different item types
-                # item.set_edit_mode(enabled)
-                pass
+            if isinstance(item, EditableWidget):
+                item.movable = (mode == PreviewMode.Edit)
+                item.editable = (mode == PreviewMode.Edit)
+
         self.modeChanged.emit(mode)
 
     def load_objects(self):
@@ -64,37 +66,34 @@ class PagePreviewWidget2(QGraphicsView):
             if not obj_type:
                 continue  # Skip objects with no type
 
+            item = None
             if obj_type == "btn":
-                logging.debug(f"Adding button item: {obj}")
-                item = HaspButtonItem(obj_data=obj, parent_widget=self)
-                item.clicked.connect(self._on_button_clicked)
-                self.scene().addItem(item)
+                item = HaspButtonItem(
+                    obj_data=obj,
+                    parent_widget=self,
+                    on_click=self._on_button_clicked
+                )
             elif obj_type == "switch":
-                logging.debug(f"Adding switch item: {obj}")
                 item = HaspSwitchItem(obj_data=obj, parent_widget=self)
                 item.toggled.connect(lambda obj_id, val: print(f"Switch {obj_id} toggled to {val}"))
-                self.scene().addItem(item)
             elif obj_type == "bar":
-                logging.debug(f"Adding bar item: {obj}")
                 item = HaspBarItem(obj_data=obj, parent_widget=self)
-                self.scene().addItem(item)
             elif obj_type == "slider":
-                logging.debug(f"Adding slider item: {obj}")
                 item = HaspSliderItem(obj_data=obj, parent_widget=self)
                 item.valueChanged.connect(lambda obj_id, val: print(f"Slider {obj_id} changed to {val}"))
-                self.scene().addItem(item)
             elif obj_type == "label":
-                logging.debug(f"Adding label item: {obj}")
                 item = HaspLabelItem(obj_data=obj, parent_widget=self)
-                self.scene().addItem(item)
             elif obj_type == "img":
-                logging.debug(f"Adding image item: {obj}")
                 item = HaspImageItem(obj_data=obj, parent_widget=self)
+
+            if item is not None:
+                logging.debug(f"Adding '{obj_type}' item to scene: {item}")
                 self.scene().addItem(item)
 
-    def _on_button_clicked(self, obj_id: int):
+    def _on_button_clicked(self, obj_data: Dict):
+        if self.mode != PreviewMode.Interact:
+            return
         # Find the object data for this button
-        obj_data = next((obj for obj in self.objects if obj.get("id") == obj_id), None)
         if obj_data:
             self.buttonClicked.emit(obj_data)
 
@@ -153,7 +152,8 @@ class PagePreviewWidget2(QGraphicsView):
         return f'<span>{processed_text}</span>'
 
 
-@deprecated("PagePreviewWidget2 is the new and improved version of PagePreviewWidget, using QGraphicsView for better performance and interactivity. PagePreviewWidget will be removed in a future release.")
+@deprecated(
+    "PagePreviewWidget2 is the new and improved version of PagePreviewWidget, using QGraphicsView for better performance and interactivity. PagePreviewWidget will be removed in a future release.")
 class PagePreviewWidget(QWidget):
     """
     Draws a preview of a page layout.

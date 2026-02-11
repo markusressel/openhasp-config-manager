@@ -95,8 +95,7 @@ class HaspBarItem(EditableWidget):
         )
 
     def paint(self, painter, option, widget=None):
-        if not painter:
-            return
+        super().paint(painter, option, widget)
 
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
 

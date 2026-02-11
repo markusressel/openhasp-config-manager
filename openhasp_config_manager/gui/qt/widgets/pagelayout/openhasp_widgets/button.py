@@ -1,7 +1,10 @@
+from collections.abc import Callable
+
 from PyQt6 import QtCore, QtGui
 from PyQt6.QtGui import QColor, QFont, QPen, QBrush
 from PyQt6.QtWidgets import QGraphicsTextItem
 
+from openhasp_config_manager.gui.qt.util import qBridge
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
 
 
@@ -44,9 +47,10 @@ class HaspButtonItem(EditableWidget):
     def border_color(self) -> str:
         return self.obj_data.get("border_color", "#000000")
 
-    def __init__(self, obj_data, parent_widget=None):
+    def __init__(self, obj_data, parent_widget=None, on_click: Callable[[], None] = None):
         super().__init__(obj_data)
         self.parent_widget = parent_widget
+        self._on_click = on_click
 
         # Set position in the native scene coordinate system
         self.setPos(self.obj_x, self.obj_y)
@@ -54,6 +58,12 @@ class HaspButtonItem(EditableWidget):
         # Setup Text Item
         self.text_item = QGraphicsTextItem(parent=self)
         self._setup_text()
+
+        self.clicked.connect(self._on_button_clicked)
+
+    @qBridge()
+    def _on_button_clicked(self):
+        self._on_click(self.obj_data)
 
     def boundingRect(self) -> QtCore.QRectF:
         """Defines the clickable area in native pixels."""
@@ -94,6 +104,8 @@ class HaspButtonItem(EditableWidget):
 
     def paint(self, painter, option, widget=None):
         """Draws the button shape in native coordinates."""
+        super().paint(painter, option, widget)
+
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
 
         # Background

@@ -65,8 +65,7 @@ class HaspSliderItem(EditableWidget):
         return QtCore.QRectF(-margin, -margin, self.obj_w + (margin * 2), self.obj_h + (margin * 2))
 
     def paint(self, painter, option, widget=None):
-        if not painter:
-            return
+        super().paint(painter, option, widget)
 
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
 

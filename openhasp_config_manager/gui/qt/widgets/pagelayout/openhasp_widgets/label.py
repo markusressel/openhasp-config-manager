@@ -101,8 +101,7 @@ class HaspLabelItem(EditableWidget):
 
     def paint(self, painter, option, widget=None):
         """Draws optional backgrounds or borders for the label container."""
-        if not painter:
-            return
+        super().paint(painter, option, widget)
 
         # Check for background color (some HASP labels have them)
         bg_color = self.bg_color
