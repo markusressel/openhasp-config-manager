@@ -1,28 +1,18 @@
 from PyQt6 import QtCore, QtGui
-from PyQt6.QtWidgets import QGraphicsObject, QGraphicsTextItem
+from PyQt6.QtWidgets import QGraphicsTextItem
+
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
 
 
-class HaspLabelItem(QGraphicsObject):
+class HaspLabelItem(EditableWidget):
     clicked = QtCore.pyqtSignal(int)
 
     @property
-    def obj_id(self) -> int:
-        return self.obj_data.get("id", 0)
-
-    @property
-    def obj_x(self) -> int:
-        return self.obj_data.get("x", 0)
-
-    @property
-    def obj_y(self) -> int:
-        return self.obj_data.get("y", 0)
-
-    @property
-    def w(self) -> int:
+    def obj_w(self) -> int:
         return self.obj_data.get("w", 100)
 
     @property
-    def h(self) -> int:
+    def obj_h(self) -> int:
         return self.obj_data.get("h", 30)
 
     @property
@@ -54,8 +44,7 @@ class HaspLabelItem(QGraphicsObject):
         return self.obj_data.get("border_color", "#FF0000")
 
     def __init__(self, obj_data, parent_widget=None):
-        super().__init__()
-        self.obj_data = obj_data
+        super().__init__(obj_data)
         self.parent_widget = parent_widget
 
         self.setPos(self.obj_x, self.obj_y)
@@ -66,7 +55,7 @@ class HaspLabelItem(QGraphicsObject):
 
     def boundingRect(self) -> QtCore.QRectF:
         """Defines the hit-box and drawing area for the label."""
-        return QtCore.QRectF(0, 0, self.w, self.h)
+        return QtCore.QRectF(0, 0, self.obj_w, self.obj_h)
 
     def _setup_text(self):
         """Processes font, color, icons, and alignment."""
@@ -99,12 +88,12 @@ class HaspLabelItem(QGraphicsObject):
         t_rect = self.text_item.boundingRect()
 
         # Vertical center is standard for HASP labels
-        y_pos = (self.h - t_rect.height()) / 2
+        y_pos = (self.obj_h - t_rect.height()) / 2
 
         if align == "center":
-            x_pos = (self.w - t_rect.width()) / 2
+            x_pos = (self.obj_w - t_rect.width()) / 2
         elif align == "right":
-            x_pos = self.w - t_rect.width()
+            x_pos = self.obj_w - t_rect.width()
         else:  # left
             x_pos = 0
 

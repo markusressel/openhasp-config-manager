@@ -1,30 +1,19 @@
 from PyQt6 import QtCore, QtGui
 from PyQt6.QtGui import QColor, QBrush
-from PyQt6.QtWidgets import QGraphicsObject
+
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
 
 
-class HaspSliderItem(QGraphicsObject):
+class HaspSliderItem(EditableWidget):
     # Signal to notify when the value changes via mouse interaction
     valueChanged = QtCore.pyqtSignal(int, int)  # (object_id, new_value)
 
     @property
-    def obj_id(self) -> int:
-        return self.obj_data.get("id", 0)
-
-    @property
-    def obj_x(self) -> int:
-        return self.obj_data.get("x", 0)
-
-    @property
-    def obj_y(self) -> int:
-        return self.obj_data.get("y", 0)
-
-    @property
-    def w(self) -> int:
+    def obj_w(self) -> int:
         return self.obj_data.get("w", 160)
 
     @property
-    def h(self) -> int:
+    def obj_h(self) -> int:
         return self.obj_data.get("h", 20)
 
     @property
@@ -56,8 +45,7 @@ class HaspSliderItem(QGraphicsObject):
         return self.obj_data.get("bg_color20", "lightgray")
 
     def __init__(self, obj_data, parent_widget=None):
-        super().__init__()
-        self.obj_data = obj_data
+        super().__init__(obj_data)
         self.parent_widget = parent_widget
 
         self._val = self.val  # Internal value to track changes
@@ -73,8 +61,8 @@ class HaspSliderItem(QGraphicsObject):
         We expand the bounding rect slightly to ensure the knob doesn't
         get clipped if it is taller than the slider track.
         """
-        margin = max(0, self.knob_radius - (self.h / 2))
-        return QtCore.QRectF(-margin, -margin, self.w + (margin * 2), self.h + (margin * 2))
+        margin = max(0, self.knob_radius - (self.obj_h / 2))
+        return QtCore.QRectF(-margin, -margin, self.obj_w + (margin * 2), self.obj_h + (margin * 2))
 
     def paint(self, painter, option, widget=None):
         if not painter:
@@ -83,7 +71,7 @@ class HaspSliderItem(QGraphicsObject):
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
 
         # 1. Draw the Background Track
-        track_rect = QtCore.QRectF(0, 0, self.w, self.h)
+        track_rect = QtCore.QRectF(0, 0, self.obj_w, self.obj_h)
         painter.setPen(QtCore.Qt.PenStyle.NoPen)
         painter.setBrush(QBrush(QColor(self.track_color)))
         painter.drawRoundedRect(track_rect, self.radius, self.radius)
@@ -99,8 +87,8 @@ class HaspSliderItem(QGraphicsObject):
 
         # 3. Draw the Knob (The "scaled circle")
         # Center the knob on the track based on current value
-        knob_center_x = self.w * progress_pct
-        knob_center_y = self.h / 2
+        knob_center_x = self.obj_w * progress_pct
+        knob_center_y = self.obj_h / 2
 
         painter.setBrush(QBrush(QColor(self.knob_color)))
         painter.drawEllipse(
@@ -122,8 +110,8 @@ class HaspSliderItem(QGraphicsObject):
     def _update_value_from_pos(self, local_pos):
         """Calculates value based on where the mouse is on the track."""
         # Clamp mouse X between 0 and width
-        rel_x = max(0, min(local_pos.x(), self.w))
-        pct = rel_x / self.w
+        rel_x = max(0, min(local_pos.x(), self.obj_w))
+        pct = rel_x / self.obj_w
 
         new_val = int(self.min_val + (pct * (self.max_val - self.min_val)))
 

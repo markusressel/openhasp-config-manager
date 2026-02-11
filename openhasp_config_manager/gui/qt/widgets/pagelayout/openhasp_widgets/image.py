@@ -1,29 +1,18 @@
 from PyQt6 import QtCore, QtGui
 from PyQt6.QtGui import QColor, QBrush, QPixmap
-from PyQt6.QtWidgets import QGraphicsObject
+
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
 
 
-class HaspImageItem(QGraphicsObject):
+class HaspImageItem(EditableWidget):
     clicked = QtCore.pyqtSignal(int)
 
     @property
-    def obj_id(self):
-        return self.obj_data.get("id", 0)
-
-    @property
-    def obj_x(self) -> int:
-        return self.obj_data.get("x", 0)
-
-    @property
-    def obj_y(self) -> int:
-        return self.obj_data.get("y", 0)
-
-    @property
-    def w(self) -> int:
+    def obj_w(self) -> int:
         return self.obj_data.get("w", 50)
 
     @property
-    def h(self) -> int:
+    def obj_h(self) -> int:
         return self.obj_data.get("h", 50)
 
     @property
@@ -35,8 +24,7 @@ class HaspImageItem(QGraphicsObject):
         return self.obj_data.get("bg_color", "yellow")
 
     def __init__(self, obj_data, parent_widget=None):
-        super().__init__()
-        self.obj_data = obj_data
+        super().__init__(obj_data)
         self.parent_widget = parent_widget
 
         self.setPos(self.obj_x, self.obj_y)
@@ -55,13 +43,13 @@ class HaspImageItem(QGraphicsObject):
         if not self.pixmap.isNull():
             # Scale to fit while maintaining aspect ratio or force fill
             self.pixmap = self.pixmap.scaled(
-                self.w, self.h,
+                self.obj_w, self.obj_h,
                 QtCore.Qt.AspectRatioMode.KeepAspectRatio,
                 QtCore.Qt.TransformationMode.SmoothTransformation
             )
 
     def boundingRect(self) -> QtCore.QRectF:
-        return QtCore.QRectF(0, 0, self.w, self.h)
+        return QtCore.QRectF(0, 0, self.obj_w, self.obj_h)
 
     def paint(self, painter, option, widget=None):
         if not painter:

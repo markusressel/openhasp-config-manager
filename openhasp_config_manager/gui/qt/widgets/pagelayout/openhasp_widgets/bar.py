@@ -1,28 +1,18 @@
 from PyQt6 import QtCore, QtGui
 from PyQt6.QtGui import QColor, QBrush, QPen, QFont
-from PyQt6.QtWidgets import QGraphicsObject, QGraphicsTextItem
+from PyQt6.QtWidgets import QGraphicsTextItem
+
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
 
 
-class HaspBarItem(QGraphicsObject):
-
-    @property
-    def obj_id(self) -> int:
-        return self.obj_data.get("id", 0)
+class HaspBarItem(EditableWidget):
 
     @property
-    def obj_x(self) -> int:
-        return self.obj_data.get("x", 0)
-
-    @property
-    def obj_y(self) -> int:
-        return self.obj_data.get("y", 0)
-
-    @property
-    def w(self) -> int:
+    def obj_w(self) -> int:
         return self.obj_data.get("w", 50)
 
     @property
-    def h(self) -> int:
+    def obj_h(self) -> int:
         return self.obj_data.get("h", 50)
 
     @property
@@ -55,7 +45,7 @@ class HaspBarItem(QGraphicsObject):
 
     @property
     def radius(self) -> int:
-        return self.obj_data.get("radius", self.h)
+        return self.obj_data.get("radius", self.obj_h)
 
     @property
     def border_width(self) -> int:
@@ -66,8 +56,7 @@ class HaspBarItem(QGraphicsObject):
         return self.obj_data.get("border_color", "#FFFFFF")
 
     def __init__(self, obj_data, parent_widget=None):
-        super().__init__()
-        self.obj_data = obj_data
+        super().__init__(obj_data)
         self.parent_widget = parent_widget
 
         # Native Dimensions
@@ -78,7 +67,7 @@ class HaspBarItem(QGraphicsObject):
         self._setup_text()
 
     def boundingRect(self) -> QtCore.QRectF:
-        return QtCore.QRectF(0, 0, self.w, self.h)
+        return QtCore.QRectF(0, 0, self.obj_w, self.obj_h)
 
     def _setup_text(self):
         raw_text = self.text
@@ -101,8 +90,8 @@ class HaspBarItem(QGraphicsObject):
         # Center text within the bar
         t_rect = self.text_item.boundingRect()
         self.text_item.setPos(
-            (self.w - t_rect.width()) / 2,
-            (self.h - t_rect.height()) / 2
+            (self.obj_w - t_rect.width()) / 2,
+            (self.obj_h - t_rect.height()) / 2
         )
 
     def paint(self, painter, option, widget=None):
@@ -128,9 +117,9 @@ class HaspBarItem(QGraphicsObject):
             progress_pct = (self.val - self.min_val) / range_val
             progress_pct = max(0, min(progress_pct, 1))  # Clamp 0.0 - 1.0
 
-            indicator_w = self.w * progress_pct
+            indicator_w = self.obj_w * progress_pct
             if indicator_w > 0:
-                indicator_rect = QtCore.QRectF(0, 0, indicator_w, self.h)
+                indicator_rect = QtCore.QRectF(0, 0, indicator_w, self.obj_h)
                 painter.setBrush(QBrush(QColor(bg_color)))
                 painter.drawRoundedRect(indicator_rect, radius, radius)
 

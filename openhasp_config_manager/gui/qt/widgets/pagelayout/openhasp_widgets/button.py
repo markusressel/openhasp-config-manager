@@ -1,29 +1,19 @@
 from PyQt6 import QtCore, QtGui
 from PyQt6.QtGui import QColor, QFont, QPen, QBrush
-from PyQt6.QtWidgets import QGraphicsObject, QGraphicsTextItem
+from PyQt6.QtWidgets import QGraphicsTextItem
+
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
 
 
-class HaspButtonItem(QGraphicsObject):
+class HaspButtonItem(EditableWidget):
     clicked = QtCore.pyqtSignal(int)
 
     @property
-    def obj_id(self) -> int:
-        return self.obj_data.get("id", 0)
-
-    @property
-    def obj_x(self) -> int:
-        return self.obj_data.get("x", 0)
-
-    @property
-    def obj_y(self) -> int:
-        return self.obj_data.get("y", 0)
-
-    @property
-    def w(self) -> int:
+    def obj_w(self) -> int:
         return self.obj_data.get("w", 50)
 
     @property
-    def h(self) -> int:
+    def obj_h(self) -> int:
         return self.obj_data.get("h", 50)
 
     @property
@@ -55,8 +45,7 @@ class HaspButtonItem(QGraphicsObject):
         return self.obj_data.get("border_color", "#000000")
 
     def __init__(self, obj_data, parent_widget=None):
-        super().__init__()
-        self.obj_data = obj_data
+        super().__init__(obj_data)
         self.parent_widget = parent_widget
 
         # Set position in the native scene coordinate system
@@ -68,7 +57,7 @@ class HaspButtonItem(QGraphicsObject):
 
     def boundingRect(self) -> QtCore.QRectF:
         """Defines the clickable area in native pixels."""
-        return QtCore.QRectF(0, 0, self.w, self.h)
+        return QtCore.QRectF(0, 0, self.obj_w, self.obj_h)
 
     def _setup_text(self):
         """Applies Rich Text (HTML) to support both regular fonts and icons."""
@@ -99,8 +88,8 @@ class HaspButtonItem(QGraphicsObject):
         self.text_item.document().setDocumentMargin(0)
         t_rect = self.text_item.boundingRect()
         self.text_item.setPos(
-            (self.w - t_rect.width()) / 2,
-            (self.h - t_rect.height()) / 2
+            (self.obj_w - t_rect.width()) / 2,
+            (self.obj_h - t_rect.height()) / 2
         )
 
     def paint(self, painter, option, widget=None):
@@ -125,7 +114,7 @@ class HaspButtonItem(QGraphicsObject):
 
         # openHASP radius can be a pixel value or very large for pill-shape
         # We ensure it doesn't exceed half the height/width
-        effective_radius = min(self.radius, self.h / 2, self.w / 2)
+        effective_radius = min(self.radius, self.obj_h / 2, self.obj_w / 2)
 
         painter.drawRoundedRect(rect, effective_radius, effective_radius)
 
