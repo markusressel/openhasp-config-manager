@@ -151,8 +151,10 @@ class PageLayoutEditorWidget(QWidget):
     def _on_editor_mode_changed(self, mode: PreviewMode):
         if mode == PreviewMode.Edit:
             self.editor_mode_button.setText(parse_icons(":mdi6.pencil: Edit Mode"))
+            self.widget_picker.setVisible(True)
         elif mode == PreviewMode.Interact:
             self.editor_mode_button.setText(parse_icons(":mdi6.eye: Interaction Mode"))
+            self.widget_picker.setVisible(False)
         self.editor_mode_button.update()
 
     @qBridge()
