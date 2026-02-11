@@ -1,3 +1,5 @@
+from typing import Optional, List
+
 from PyQt6.QtWidgets import QWidget, QMainWindow
 
 from openhasp_config_manager.gui.qt.components import UiComponents
@@ -13,6 +15,8 @@ class MainWindow(QMainWindow):
     def __init__(self, config_manager: ConfigManager):
         super().__init__()
         self.config_manager = config_manager
+        self.devices: List[Device] = []
+        self.device: Optional[Device] = None
 
         self.setWindowTitle("openhasp-config-manager")
 
@@ -52,11 +56,11 @@ class MainWindow(QMainWindow):
 
     def on_device_selected(self, device: Device):
         # reload devices to reflect any changes that happened on disk
-        self.devices = self.config_manager.analyze()
-        self.device_list_widget.set_devices(self.devices)
+        self.load_plates()
 
-        if any(d.name == device.name for d in self.devices):
-            self.select_device(device)
+        find_device = next((d for d in self.devices if d.name == device.name), None)
+        if find_device:
+            self.select_device(find_device)
 
     def select_device(self, device: Device):
         self.device = device
@@ -86,7 +90,7 @@ class MainWindow(QMainWindow):
 
         self.page_layout_editor_widget.set_data(
             OpenHaspDevicePagesData(
-                device=self.device,
+                device=device,
                 name=cmd_component.name,
                 jsonl_components=ordered_device_jsonl_components
             )
