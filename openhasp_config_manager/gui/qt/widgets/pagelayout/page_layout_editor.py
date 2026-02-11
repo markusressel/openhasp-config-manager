@@ -11,7 +11,7 @@ from openhasp_config_manager.gui.qt.widgets.pagelayout import OpenHaspDevicePage
 from openhasp_config_manager.gui.qt.widgets.pagelayout.editor_controls import EditorControlsWidget
 from openhasp_config_manager.gui.qt.widgets.pagelayout.jsonl_preview import PageJsonlPreviewWidget
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widget_picker import OpenHASPWidgetPicker
-from openhasp_config_manager.gui.qt.widgets.pagelayout.page_preview_layout import PagePreviewWidget2, PreviewMode
+from openhasp_config_manager.gui.qt.widgets.pagelayout.page_preview_layout import PagePreviewWidget, PreviewMode
 from openhasp_config_manager.manager import ConfigManager
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 
@@ -60,7 +60,7 @@ class PageLayoutEditorWidget(QWidget):
         self.device_preview_row = UiComponents.create_row()
         self.device_preview_container_layout.addLayout(self.device_preview_row)
 
-        self.page_preview_widget = PagePreviewWidget2()
+        self.page_preview_widget = PagePreviewWidget()
         self.page_preview_widget.buttonClicked.connect(self.__on_preview_layout_button_clicked)
         self.page_preview_widget.modeChanged.connect(self._on_editor_mode_changed)
         self.device_preview_row.addWidget(self.page_preview_widget)
