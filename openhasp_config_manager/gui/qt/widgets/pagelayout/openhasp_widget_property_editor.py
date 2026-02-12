@@ -1,7 +1,7 @@
 from typing import List
 
 from PyQt6 import QtCore
-from PyQt6.QtWidgets import QWidget
+from PyQt6.QtWidgets import QWidget, QFormLayout, QLineEdit
 
 from openhasp_config_manager.gui.qt.components import UiComponents
 from openhasp_config_manager.gui.qt.util import clear_layout
@@ -38,7 +38,6 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         self._create_content()
 
     def _create_content(self):
-        """Populates the layout based on the current state."""
         if not self._editable_widgets:
             self.main_layout.addWidget(UiComponents.create_label("No object selected."))
             return
@@ -50,30 +49,87 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         editable_widget = self._editable_widgets[0]
         obj_data = editable_widget.obj_data
 
-        # --- Header ---
+        # Header
         header = UiComponents.create_label(f"<b>Object ID: {obj_data.get('id', 'N/A')}</b>")
         self.main_layout.addWidget(header)
 
-        # --- Property Rows ---
+        # Use a Form Layout for the table-like Key | Value structure
+        form_layout = QFormLayout()
+        form_layout.setLabelAlignment(QtCore.Qt.AlignmentFlag.AlignRight)
+
         for key, value in obj_data.items():
-            # Handle X and Y specifically for display without changing the underlying dict
-            if key == 'x':
-                display_val = f"{value} (Live: {editable_widget.live_x})"
-            elif key == 'y':
-                display_val = f"{value} (Live: {editable_widget.live_y})"
-            else:
-                display_val = value
+            editor_widget = self._create_editor_for_prop(key, value, editable_widget)
+            form_layout.addRow(f"{key}:", editor_widget)
 
-            self._add_property_row(key, display_val)
+        self.main_layout.addLayout(form_layout)
 
-        # --- Actions ---
+        # Reset Button
         reset_btn = UiComponents.create_button(
             title=":mdi6.undo: Reset Position",
             on_click=lambda: self._reset_position(editable_widget)
         )
-        # Enable only if there's a difference to reset
         reset_btn.setEnabled(editable_widget.delta_x != 0 or editable_widget.delta_y != 0)
         self.main_layout.addWidget(reset_btn)
+
+    def _create_editor_for_prop(self, key, value, widget):
+        """Creates a text input with units or color styling."""
+        container = QWidget()
+        layout = UiComponents.create_row(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        line_edit = QLineEdit(str(value))
+        layout.addWidget(line_edit)
+
+        # 1. Handle Units (px)
+        if key in ['x', 'y', 'w', 'h', 'border_width', 'radius']:
+            unit_label = UiComponents.create_label("px")
+            unit_label.setStyleSheet("color: gray;")
+            layout.addWidget(unit_label)
+
+            # Show live coordinate for x and y
+            if key in ['x', 'y']:
+                live_val = widget.live_x if key == 'x' else widget.live_y
+                live_label = UiComponents.create_label(f"(Live: {live_val})")
+                live_label.setStyleSheet("color: #0078d7;")
+                layout.addWidget(live_label)
+
+        # 2. Handle Colors
+        if "color" in key and isinstance(value, str) and value.startswith("#"):
+            line_edit.setStyleSheet(f"""
+                border-right: 10px solid {value};
+                padding-right: 5px;
+            """)
+
+        # Connect change signal
+        line_edit.textChanged.connect(lambda text: self._on_property_edited(key, text, widget))
+
+        return container
+
+    def _on_property_edited(self, key, text, widget):
+        """Updates the internal data and triggers a refresh of the 3D/Preview widget."""
+        try:
+            # Try to convert to int if it's a numeric field
+            if key in ['x', 'y', 'w', 'h', 'border_width', 'radius', 'id', 'page']:
+                val = int(text)
+            else:
+                val = text
+
+            # Update the underlying dict
+            widget.obj_data[key] = val
+
+            # If position/size changed, update the QGraphicsObject immediately
+            if key == 'x' or key == 'y':
+                widget.setPos(float(widget.obj_x), float(widget.obj_y))
+
+            # Notify the scene to redraw
+            widget.prepareGeometryChange()
+            widget.update()
+
+            # Emit signal for other parts of the app (like JSONL preview)
+            self.propertyChanged.emit(key, val)
+
+        except ValueError:
+            pass  # Ignore partial typing like empty strings or minus signs
 
     def _reset_position(self, widget: EditableWidget):
         """Moves the widget back to the coordinates stored in its original data."""
