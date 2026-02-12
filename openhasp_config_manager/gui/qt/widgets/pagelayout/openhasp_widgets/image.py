@@ -48,11 +48,8 @@ class HaspImageItem(EditableWidget):
                 QtCore.Qt.TransformationMode.SmoothTransformation
             )
 
-    def boundingRect(self) -> QtCore.QRectF:
-        return QtCore.QRectF(0, 0, self.obj_w, self.obj_h)
-
     def paint(self, painter, option, widget=None):
-        super().paint(painter, option, widget)
+        local_rect = self.obj_rect
 
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
 
@@ -64,11 +61,13 @@ class HaspImageItem(EditableWidget):
             bg_color = self.bg_color
             painter.setBrush(QBrush(QColor(bg_color)))
             painter.setPen(QtCore.Qt.PenStyle.NoPen)
-            painter.drawRect(self.boundingRect())
+            painter.drawRect(local_rect)
 
             # Optional: Draw a subtle "X" or icon to indicate missing image
             painter.setPen(QtGui.QPen(QColor("black"), 1))
-            painter.drawText(self.boundingRect(), QtCore.Qt.AlignmentFlag.AlignCenter, "IMG")
+            painter.drawText(local_rect, QtCore.Qt.AlignmentFlag.AlignCenter, "IMG")
+
+        super().paint(painter, option, widget)
 
     def mousePressEvent(self, event):
         self.clicked.emit(self.obj_id)

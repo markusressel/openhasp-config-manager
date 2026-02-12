@@ -66,9 +66,6 @@ class HaspBarItem(EditableWidget):
         self.text_item = QGraphicsTextItem(parent=self)
         self._setup_text()
 
-    def boundingRect(self) -> QtCore.QRectF:
-        return QtCore.QRectF(0, 0, self.obj_w, self.obj_h)
-
     def _setup_text(self):
         raw_text = self.text
         if not raw_text:
@@ -95,7 +92,7 @@ class HaspBarItem(EditableWidget):
         )
 
     def paint(self, painter, option, widget=None):
-        super().paint(painter, option, widget)
+        local_rect = self.obj_rect
 
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
 
@@ -107,7 +104,7 @@ class HaspBarItem(EditableWidget):
         painter.setPen(QtCore.Qt.PenStyle.NoPen)
         # Background is usually a dimmer version or specific color
         painter.setBrush(QBrush(QColor(bg_color).lighter(50)))
-        painter.drawRoundedRect(self.boundingRect(), radius, radius)
+        painter.drawRoundedRect(local_rect, radius, radius)
 
         # 2. Draw Progress (The Indicator)
         # Calculate width based on value percentage
@@ -129,4 +126,6 @@ class HaspBarItem(EditableWidget):
             pen.setWidth(border_width)
             painter.setPen(pen)
             painter.setBrush(QtCore.Qt.BrushStyle.NoBrush)
-            painter.drawRoundedRect(self.boundingRect(), radius, radius)
+            painter.drawRoundedRect(local_rect, radius, radius)
+
+        super().paint(painter, option, widget)

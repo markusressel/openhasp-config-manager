@@ -65,7 +65,7 @@ class HaspSliderItem(EditableWidget):
         return QtCore.QRectF(-margin, -margin, self.obj_w + (margin * 2), self.obj_h + (margin * 2))
 
     def paint(self, painter, option, widget=None):
-        super().paint(painter, option, widget)
+        local_rect = self.obj_rect
 
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
 
@@ -95,6 +95,8 @@ class HaspSliderItem(EditableWidget):
             self.knob_radius,
             self.knob_radius
         )
+
+        super().paint(painter, option, widget)
 
     # --- Interaction Logic ---
 

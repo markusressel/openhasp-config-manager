@@ -53,10 +53,6 @@ class HaspLabelItem(EditableWidget):
         self.text_item = QGraphicsTextItem(parent=self)
         self._setup_text()
 
-    def boundingRect(self) -> QtCore.QRectF:
-        """Defines the hit-box and drawing area for the label."""
-        return QtCore.QRectF(0, 0, self.obj_w, self.obj_h)
-
     def _setup_text(self):
         """Processes font, color, icons, and alignment."""
         raw_text = self.text
@@ -101,14 +97,15 @@ class HaspLabelItem(EditableWidget):
 
     def paint(self, painter, option, widget=None):
         """Draws optional backgrounds or borders for the label container."""
-        super().paint(painter, option, widget)
+        # Create a rect representing the ACTUAL label size
+        local_rect = self.obj_rect
 
         # Check for background color (some HASP labels have them)
         bg_color = self.bg_color
         if bg_color:
             painter.setBrush(QtGui.QBrush(QtGui.QColor(bg_color)))
             painter.setPen(QtCore.Qt.PenStyle.NoPen)
-            painter.drawRect(self.boundingRect())
+            painter.drawRect(local_rect)
 
         # Draw border if specified
         border_width = self.border_width
@@ -117,7 +114,9 @@ class HaspLabelItem(EditableWidget):
             pen = QtGui.QPen(QtGui.QColor(border_color))
             pen.setWidth(border_width)
             painter.setPen(pen)
-            painter.drawRect(self.boundingRect())
+            painter.drawRect(local_rect)
+
+        super().paint(painter, option, widget)
 
     def mousePressEvent(self, event):
         """Labels can sometimes be clickable in HASP."""

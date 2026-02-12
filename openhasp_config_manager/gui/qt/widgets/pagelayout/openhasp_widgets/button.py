@@ -71,10 +71,6 @@ class HaspButtonItem(EditableWidget):
     def _on_button_clicked(self):
         self._on_click(self.obj_data)
 
-    def boundingRect(self) -> QtCore.QRectF:
-        """Defines the clickable area in native pixels."""
-        return QtCore.QRectF(0, 0, self.obj_w, self.obj_h)
-
     def _setup_text(self):
         """Applies Rich Text (HTML) to support both regular fonts and icons."""
         raw_text = str(self.text)
@@ -110,7 +106,7 @@ class HaspButtonItem(EditableWidget):
 
     def paint(self, painter, option, widget=None):
         """Draws the button shape in native coordinates."""
-        super().paint(painter, option, widget)
+        local_rect = self.obj_rect
 
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
 
@@ -128,13 +124,15 @@ class HaspButtonItem(EditableWidget):
         else:
             painter.setPen(QtCore.Qt.PenStyle.NoPen)
 
-        rect = self.boundingRect()
+        rect = local_rect
 
         # openHASP radius can be a pixel value or very large for pill-shape
         # We ensure it doesn't exceed half the height/width
         effective_radius = min(float(self.radius), self.obj_h / 2, self.obj_w / 2)
 
         painter.drawRoundedRect(rect, effective_radius, effective_radius)
+
+        super().paint(painter, option, widget)
 
     def mousePressEvent(self, event):
         super().mousePressEvent(event)

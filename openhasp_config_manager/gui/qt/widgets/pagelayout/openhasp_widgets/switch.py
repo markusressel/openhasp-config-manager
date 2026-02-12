@@ -49,24 +49,24 @@ class HaspSwitchItem(EditableWidget):
 
         self.setPos(self.obj_x, self.obj_y)
 
-    def boundingRect(self):
-        return QtCore.QRectF(0, 0, self.obj_w, self.obj_h)
-
     def paint(self, painter, option, widget=None):
-        super().paint(painter, option, widget)
+        local_rect = self.obj_rect
+        
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
 
         # Track color based on state
         color = self.bg_color if self._val else "#313131"
         painter.setBrush(QtGui.QBrush(QtGui.QColor(color)))
         painter.setPen(QtCore.Qt.PenStyle.NoPen)
-        painter.drawRoundedRect(self.boundingRect(), self.obj_h / 2, self.obj_h / 2)
+        painter.drawRoundedRect(local_rect, self.obj_h / 2, self.obj_h / 2)
 
         # Knob
         knob_size = self.obj_h - 8
         knob_x = (self.obj_w - knob_size - 4) if self._val else 4
         painter.setBrush(QtGui.QBrush(QtGui.QColor(self.knob_color)))
         painter.drawEllipse(QtCore.QRectF(knob_x, 4, knob_size, knob_size))
+
+        super().paint(painter, option, widget)
 
     def mousePressEvent(self, event):
         self._val = not self._val

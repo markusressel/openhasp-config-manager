@@ -54,6 +54,18 @@ class EditableWidget(QGraphicsObject):
     def is_selected(self) -> bool:
         return self.isSelected()
 
+    def boundingRect(self) -> QtCore.QRectF:
+        # Get the base dimensions
+        rect = self.obj_rect
+
+        # Increase the rect by the pen width of the selection-outline to prevent smearing
+        margin = 3
+        return rect.adjusted(-margin, -margin, margin, margin)
+
+    @property
+    def obj_rect(self):
+        return QtCore.QRectF(0, 0, self.obj_w, self.obj_h)
+
     def paint(self, painter, option, widget=None):
         """
         Painting is mostly handled by the specific widget types (e.g., button, bar).
@@ -65,8 +77,13 @@ class EditableWidget(QGraphicsObject):
         """
         if self.is_selected:
             # Draw a selection rectangle around the widget when selected
-            selection_color = QtGui.QColor(0, 120, 215, 100)  # Semi-transparent blue
+            selection_color = QtGui.QColor("red")  # Semi-transparent blue
             selection_pen = QtGui.QPen(selection_color, 2, QtCore.Qt.PenStyle.DashLine)
             painter.setPen(selection_pen)
             painter.setBrush(QtCore.Qt.BrushStyle.NoBrush)
-            painter.drawRect(self.boundingRect())
+
+            # CRITICAL: Do NOT use self.boundingRect() here.
+            # Use the actual dimensions of the widget.
+            # This ensures the drawing is well within the 3px margin.
+            widget_rect = self.obj_rect
+            painter.drawRect(widget_rect)
