@@ -1,8 +1,9 @@
 from typing import List
 
 from PyQt6 import QtCore, QtGui
-from PyQt6.QtWidgets import QWidget, QFormLayout, QLineEdit
+from PyQt6.QtWidgets import QWidget, QFormLayout
 
+from openhasp_config_manager.gui.dimensions import UiDimensions
 from openhasp_config_manager.gui.qt.components import UiComponents
 from openhasp_config_manager.gui.qt.util import clear_layout
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
@@ -58,8 +59,9 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         form_layout.setLabelAlignment(QtCore.Qt.AlignmentFlag.AlignRight)
 
         for key, value in obj_data.items():
+            label = UiComponents.create_label(text=f"{key}:", padding=0)
             editor_widget = self._create_editor_for_prop(key, value, editable_widget)
-            form_layout.addRow(f"{key}:", editor_widget)
+            form_layout.addRow(label, editor_widget)
 
         self.main_layout.addLayout(form_layout)
 
@@ -74,10 +76,12 @@ class OpenHASPWidgetPropertyEditor(QWidget):
     def _create_editor_for_prop(self, key, value, widget):
         """Creates a text input with units or color styling."""
         container = QWidget()
-        layout = UiComponents.create_row(container)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout = UiComponents.create_row(
+            parent=container,
+            margin_end=UiDimensions.two,
+        )
 
-        line_edit = QLineEdit(str(value))
+        line_edit = UiComponents.create_edittext(text=str(value))
         if key in ['x', 'y', 'w', 'h', 'border_width', 'radius']:
             line_edit.setValidator(QtGui.QIntValidator())  # Only allow integers for these fields
         if "color" in key and isinstance(value, str) and value.startswith("#"):
