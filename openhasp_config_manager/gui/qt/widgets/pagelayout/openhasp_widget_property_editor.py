@@ -61,18 +61,31 @@ class OpenHASPWidgetPropertyEditor(QWidget):
 
         obj_data = editable_widget.obj_data
 
-        # apply_changes
+        # apply live position for display purposes (but don't modify the underlying data until user confirms changes)
         obj_data["x"] = editable_widget.live_x
         obj_data["y"] = editable_widget.live_y
 
-        # Optional: Add a header with the Object ID or Type
         header = UiComponents.create_label(f"<b>Object ID: {obj_data.get('id', 'N/A')}</b>")
         self.main_layout.addWidget(header)
 
         for key, value in obj_data.items():
-            self._add_property_editor(key, value)
+            self._add_property_row(key, value)
 
-    def _add_property_editor(self, key, value):
+        reset_btn = UiComponents.create_button(
+            title=":mdi6.undo: Reset",
+            on_click=lambda: self._reset_position(editable_widget)
+        )
+        self.main_layout.addWidget(reset_btn)
+
+    def _reset_position(self, widget: EditableWidget):
+        """Moves the widget back to the coordinates stored in its original data."""
+        # Use the properties from your EditableWidget which pull from the dict
+        widget.setPos(float(widget.obj_x), float(widget.obj_y))
+
+        # Trigger a layout refresh to update the "Position" label and button state
+        self.set_editable_widgets([widget])
+
+    def _add_property_row(self, key, value):
         # Placeholder for property editors
         label = UiComponents.create_label(
             text=f"{key}: {value}",
