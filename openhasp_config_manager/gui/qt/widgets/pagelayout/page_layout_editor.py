@@ -1,6 +1,6 @@
 import asyncio
 from collections import OrderedDict
-from typing import List, Dict, Set, Any
+from typing import List, Dict, Set
 
 from PyQt6.QtWidgets import QWidget
 from orjson import orjson
@@ -12,6 +12,7 @@ from openhasp_config_manager.gui.qt.widgets.pagelayout.editor_controls import Ed
 from openhasp_config_manager.gui.qt.widgets.pagelayout.jsonl_preview import PageJsonlPreviewWidget
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widget_picker import OpenHASPWidgetPicker
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widget_property_editor import OpenHASPWidgetPropertyEditor
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
 from openhasp_config_manager.gui.qt.widgets.pagelayout.page_preview_layout import PagePreviewWidget, PreviewMode
 from openhasp_config_manager.manager import ConfigManager
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
@@ -237,8 +238,8 @@ class PageLayoutEditorWidget(QWidget):
             self.page_preview_widget.set_mode(PreviewMode.Edit)
 
     @qBridge(list)
-    def _on_openhasp_widget_selection_changed(self, widget_data: List[Dict[str, Any]]):
-        self.widget_property_editor.set_obj_data(widget_data)
+    def _on_openhasp_widget_selection_changed(self, editable_widgets: List[EditableWidget]):
+        self.widget_property_editor.set_editable_widgets(editable_widgets)
 
     def go_to_home_page(self):
         usable_page_indices = self.get_navigable_page_indices()

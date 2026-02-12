@@ -125,9 +125,7 @@ class PagePreviewWidget(QGraphicsView):
     def _on_selection_changed(self):
         selected_items = self.scene().selectedItems()
         editable_widgets = [item for item in selected_items if isinstance(item, EditableWidget)]
-
-        obj_data_list = [item.obj_data for item in editable_widgets]
-        self.selectionChanged.emit(obj_data_list)
+        self.selectionChanged.emit(editable_widgets)
 
     def set_objects(self, loaded_objects: List[dict]):
         self.objects = loaded_objects

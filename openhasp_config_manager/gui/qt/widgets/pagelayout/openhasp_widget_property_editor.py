@@ -1,10 +1,11 @@
-from typing import Dict, List, Any
+from typing import List
 
 from PyQt6 import QtCore
 from PyQt6.QtWidgets import QWidget
 
 from openhasp_config_manager.gui.qt.components import UiComponents
 from openhasp_config_manager.gui.qt.util import clear_layout
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
 
 
 class OpenHASPWidgetPropertyEditor(QWidget):
@@ -15,13 +16,9 @@ class OpenHASPWidgetPropertyEditor(QWidget):
     # Use 'object' for the value to support strings, ints, bools, etc.
     propertyChanged = QtCore.pyqtSignal(str, object)
 
-    def __init__(self, parent=None, obj_data_items=None):
+    def __init__(self, parent=None):
         super().__init__(parent)
-
-        # Initialize as an empty list to match the List[Dict] type hint
-        if obj_data_items is None:
-            obj_data_items = []
-        self._obj_data_list: List[Dict[str, Any]] = obj_data_items
+        self._editable_widgets: List[EditableWidget] = []
 
         # Create the initial layout structure once
         self.main_layout = UiComponents.create_column(parent=self)
@@ -29,10 +26,10 @@ class OpenHASPWidgetPropertyEditor(QWidget):
 
         self._create_content()
 
-    def set_obj_data(self, data: List[Dict[str, Any]]):
+    def set_editable_widgets(self, editable_widgets: List[EditableWidget]):
         """Updates the editor with new widget data."""
         # Standardize input: if None is passed, treat as empty list
-        self._obj_data_list = data
+        self._editable_widgets = editable_widgets
 
         # Clear existing widgets from the layout
         clear_layout(self.main_layout)
@@ -44,7 +41,7 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         """Populates the layout based on the current state of self._data."""
 
         # 1. No data or empty list
-        if not self._obj_data_list:
+        if not self._editable_widgets:
             label = UiComponents.create_label(
                 text="No properties to display",
             )
@@ -52,7 +49,7 @@ class OpenHASPWidgetPropertyEditor(QWidget):
             return
 
         # 2. Multiple objects selected
-        if len(self._obj_data_list) > 1:
+        if len(self._editable_widgets) > 1:
             label = UiComponents.create_label(
                 text="Select a single object to edit its properties.",
             )
@@ -60,7 +57,13 @@ class OpenHASPWidgetPropertyEditor(QWidget):
             return
 
         # 3. Single object selected - show properties
-        obj_data = self._obj_data_list[0]
+        editable_widget = self._editable_widgets[0]
+
+        obj_data = editable_widget.obj_data
+
+        # apply_changes
+        obj_data["x"] = editable_widget.live_x
+        obj_data["y"] = editable_widget.live_y
 
         # Optional: Add a header with the Object ID or Type
         header = UiComponents.create_label(f"<b>Object ID: {obj_data.get('id', 'N/A')}</b>")

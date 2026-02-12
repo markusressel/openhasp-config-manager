@@ -34,6 +34,29 @@ class EditableWidget(QGraphicsObject):
         self._object_data = object_data
         super().__init__(*args, **kwargs)
 
+        # Initial sync: Move the item to the position defined in the JSON data
+        self.setPos(float(self.obj_x), float(self.obj_y))
+
+    @property
+    def live_x(self) -> int:
+        """The current X position in the scene (after user drag)."""
+        return int(self.pos().x())
+
+    @property
+    def live_y(self) -> int:
+        """The current Y position in the scene (after user drag)."""
+        return int(self.pos().y())
+
+    @property
+    def delta_x(self) -> int:
+        """How far the widget has moved from its original data point."""
+        return self.live_x - self.obj_x
+
+    @property
+    def delta_y(self) -> int:
+        """How far the widget has moved from its original data point."""
+        return self.live_y - self.obj_y
+
     @property
     def editable(self):
         return QGraphicsItem.GraphicsItemFlag.ItemIsSelectable in self.flags()
@@ -49,6 +72,14 @@ class EditableWidget(QGraphicsObject):
     @movable.setter
     def movable(self, value: bool):
         self.setFlag(QtWidgets.QGraphicsItem.GraphicsItemFlag.ItemIsMovable, value)
+
+    def itemChange(self, change, value):
+        if change == QGraphicsItem.GraphicsItemChange.ItemPositionChange:
+            # This is called WHENEVER the item is moved (dragging or setPos)
+            # 'value' is the new QPointF the item is moving to.
+            self.update()
+
+        return super().itemChange(change, value)
 
     @property
     def is_selected(self) -> bool:
