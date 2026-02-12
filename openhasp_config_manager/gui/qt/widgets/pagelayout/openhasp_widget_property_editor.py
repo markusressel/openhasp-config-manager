@@ -1,9 +1,8 @@
 from typing import List
 
-from PyQt6 import QtCore, QtGui
+from PyQt6 import QtCore
 from PyQt6.QtWidgets import QWidget, QFormLayout
 
-from openhasp_config_manager.gui.dimensions import UiDimensions
 from openhasp_config_manager.gui.qt.components import UiComponents
 from openhasp_config_manager.gui.qt.util import clear_layout
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
@@ -74,72 +73,63 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         self.main_layout.addWidget(reset_btn)
 
     def _create_editor_for_prop(self, key, value, widget):
-        """Creates a text input with units or color styling."""
         container = QWidget()
-        layout = UiComponents.create_row(
-            parent=container,
-            margin_end=UiDimensions.two,
-        )
+        layout = UiComponents.create_row(container)
+        layout.setContentsMargins(0, 0, 0, 0)
 
-        line_edit = UiComponents.create_edittext(text=str(value))
-        if key in ['x', 'y', 'w', 'h', 'border_width', 'radius']:
-            line_edit.setValidator(QtGui.QIntValidator())  # Only allow integers for these fields
-        if "color" in key and isinstance(value, str) and value.startswith("#"):
-            line_edit.setMaxLength(7)  # Limit to 7 characters for hex colors (#RRGGBB)
+        # Determine which widget to use
+        is_numeric = key in ['x', 'y', 'w', 'h', 'border_width', 'radius', 'id', 'page']
+
+        if is_numeric:
+            # Create a SpinBox for numbers
+            editor = UiComponents.create_spinbox(initial_value=int(value), min_val=0)
+            # QSpinBox uses valueChanged[int] instead of textChanged
+            editor.valueChanged.connect(lambda val: self._on_property_edited(key, val, widget))
+        else:
+            # Keep Edittext for strings/colors
+            editor = UiComponents.create_edittext(text=str(value))
+            editor.textChanged.connect(lambda text: self._on_property_edited(key, text, widget))
+
+        # Handle read-only logic
         if key in ['page', 'obj']:
-            line_edit.setReadOnly(True)  # Don't allow editing of page or object type
-        layout.addWidget(line_edit)
+            editor.setEnabled(False)  # SpinBoxes use setEnabled(False) or setReadOnly(True)
 
-        # 1. Handle Units (px)
+        layout.addWidget(editor)
+
+        # --- Handle Units (px) ---
         if key in ['x', 'y', 'w', 'h', 'border_width', 'radius']:
             unit_label = UiComponents.create_label("px")
             unit_label.setStyleSheet("color: gray;")
             layout.addWidget(unit_label)
 
-            # Show live coordinate for x and y
             if key in ['x', 'y']:
                 live_val = widget.live_x if key == 'x' else widget.live_y
                 live_label = UiComponents.create_label(f"(Live: {live_val})")
                 live_label.setStyleSheet("color: #0078d7;")
                 layout.addWidget(live_label)
 
-        # 2. Handle Colors
+        # --- Handle Colors ---
         if "color" in key and isinstance(value, str) and value.startswith("#"):
-            line_edit.setStyleSheet(f"""
-                border-right: 10px solid {value};
-                padding-right: 5px;
-            """)
-
-        # Connect change signal
-        line_edit.textChanged.connect(lambda text: self._on_property_edited(key, text, widget))
+            editor.setStyleSheet(f"border-right: 10px solid {value}; padding-right: 5px;")
+            editor.setMaxLength(7)
 
         return container
 
-    def _on_property_edited(self, key, text, widget):
-        """Updates the internal data and triggers a refresh of the 3D/Preview widget."""
-        try:
-            # Try to convert to int if it's a numeric field
-            if key in ['x', 'y', 'w', 'h', 'border_width', 'radius', 'id', 'page']:
-                val = int(text)
-            else:
-                val = text
+    def _on_property_edited(self, key, value, widget):
+        """Updates the internal data. 'value' can be str (from LineEdit) or int (from SpinBox)."""
+        # Update the underlying dict
+        widget.obj_data[key] = value
 
-            # Update the underlying dict
-            widget.obj_data[key] = val
+        # If position changed, update the QGraphicsObject immediately
+        if key == 'x' or key == 'y':
+            widget.setPos(float(widget.obj_x), float(widget.obj_y))
 
-            # If position/size changed, update the QGraphicsObject immediately
-            if key == 'x' or key == 'y':
-                widget.setPos(float(widget.obj_x), float(widget.obj_y))
-
-            # Notify the scene to redraw
+        # If size changed (w, h), notify the scene
+        if key in ['w', 'h']:
             widget.prepareGeometryChange()
-            widget.update()
 
-            # Emit signal for other parts of the app (like JSONL preview)
-            self.propertyChanged.emit(key, val)
-
-        except ValueError:
-            pass  # Ignore partial typing like empty strings or minus signs
+        widget.update()
+        self.propertyChanged.emit(key, value)
 
     def _reset_position(self, widget: EditableWidget):
         """Moves the widget back to the coordinates stored in its original data."""

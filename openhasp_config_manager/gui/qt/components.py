@@ -4,7 +4,7 @@ from typing import Optional
 import qtawesome as qta
 from PyQt6 import QtCore
 from PyQt6.QtGui import QFont
-from PyQt6.QtWidgets import QPushButton, QHBoxLayout, QVBoxLayout, QLabel, QCheckBox, QWidget, QLineEdit
+from PyQt6.QtWidgets import QPushButton, QHBoxLayout, QVBoxLayout, QLabel, QCheckBox, QWidget, QLineEdit, QSpinBox
 
 from openhasp_config_manager.gui.dimensions import UiDimensions
 from openhasp_config_manager.gui.qt.util import parse_icons
@@ -34,7 +34,7 @@ class UiComponents:
     ) -> QLabel:
         label = QLabel()
         label.setText(parse_icons(text))
-        label.setFont(UiComponents.ui_font if font is None else font)
+        label.setFont(cls.ui_font if font is None else font)
         label.setStyleSheet(f"padding: {padding}px;")
         return label
 
@@ -46,7 +46,7 @@ class UiComponents:
         alignment: QtCore.Qt.AlignmentFlag = QtCore.Qt.AlignmentFlag.AlignCenter,
     ) -> QPushButton:
         button = QPushButton(parse_icons(title))
-        button.setFont(UiComponents.ui_font)
+        button.setFont(cls.ui_font)
         alignment_str = {
             QtCore.Qt.AlignmentFlag.AlignLeft: "left",
             QtCore.Qt.AlignmentFlag.AlignCenter: "center",
@@ -64,7 +64,7 @@ class UiComponents:
         on_toggle: Callable[[bool], None]
     ) -> QCheckBox:
         button = QCheckBox(parse_icons(title))
-        button.setFont(UiComponents.ui_font)
+        button.setFont(cls.ui_font)
         button.setStyleSheet("padding: 10px;")
         button.setChecked(initial_state)
         button.toggled.connect(on_toggle)
@@ -86,7 +86,7 @@ class UiComponents:
 
         # 1. Title Label
         label = QLabel(parse_icons(title))
-        label.setFont(UiComponents.ui_font)
+        label.setFont(cls.ui_font)
         label.setStyleSheet("padding: 10px;")
         main_layout.addWidget(label)
 
@@ -158,3 +158,18 @@ class UiComponents:
         line_edit.setFont(cls.ui_font)
         line_edit.setStyleSheet(f"padding: {padding}px;")
         return line_edit
+
+    @classmethod
+    def create_spinbox(
+        cls,
+        min_val: int = -32768,
+        max_val: int = 32767,
+        initial_value: int = 0
+    ) -> QSpinBox:
+        spin = QSpinBox()
+        spin.setFont(cls.ui_font)
+        spin.setRange(min_val, max_val)
+        spin.setValue(initial_value)
+        # Style it to match your UI padding
+        spin.setStyleSheet("padding: 3px; margin: 2px;")
+        return spin
