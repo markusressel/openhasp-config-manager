@@ -38,43 +38,41 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         self._create_content()
 
     def _create_content(self):
-        """Populates the layout based on the current state of self._data."""
-
-        # 1. No data or empty list
+        """Populates the layout based on the current state."""
         if not self._editable_widgets:
-            label = UiComponents.create_label(
-                text="No properties to display",
-            )
-            self.main_layout.addWidget(label)
+            self.main_layout.addWidget(UiComponents.create_label("No object selected."))
             return
 
-        # 2. Multiple objects selected
         if len(self._editable_widgets) > 1:
-            label = UiComponents.create_label(
-                text="Select a single object to edit its properties.",
-            )
-            self.main_layout.addWidget(label)
+            self.main_layout.addWidget(UiComponents.create_label("Select a single object."))
             return
 
-        # 3. Single object selected - show properties
         editable_widget = self._editable_widgets[0]
-
         obj_data = editable_widget.obj_data
 
-        # apply live position for display purposes (but don't modify the underlying data until user confirms changes)
-        obj_data["x"] = editable_widget.live_x
-        obj_data["y"] = editable_widget.live_y
-
+        # --- Header ---
         header = UiComponents.create_label(f"<b>Object ID: {obj_data.get('id', 'N/A')}</b>")
         self.main_layout.addWidget(header)
 
+        # --- Property Rows ---
         for key, value in obj_data.items():
-            self._add_property_row(key, value)
+            # Handle X and Y specifically for display without changing the underlying dict
+            if key == 'x':
+                display_val = f"{value} (Live: {editable_widget.live_x})"
+            elif key == 'y':
+                display_val = f"{value} (Live: {editable_widget.live_y})"
+            else:
+                display_val = value
 
+            self._add_property_row(key, display_val)
+
+        # --- Actions ---
         reset_btn = UiComponents.create_button(
-            title=":mdi6.undo: Reset",
+            title=":mdi6.undo: Reset Position",
             on_click=lambda: self._reset_position(editable_widget)
         )
+        # Enable only if there's a difference to reset
+        reset_btn.setEnabled(editable_widget.delta_x != 0 or editable_widget.delta_y != 0)
         self.main_layout.addWidget(reset_btn)
 
     def _reset_position(self, widget: EditableWidget):
