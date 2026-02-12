@@ -1,7 +1,8 @@
-from typing import List
+import copy
+from typing import List, Any
 
 from PyQt6 import QtCore
-from PyQt6.QtWidgets import QWidget, QFormLayout
+from PyQt6.QtWidgets import QWidget, QFormLayout, QLayout
 
 from openhasp_config_manager.gui.qt.components import UiComponents
 from openhasp_config_manager.gui.qt.util import clear_layout
@@ -28,13 +29,15 @@ class OpenHASPWidgetPropertyEditor(QWidget):
 
     def set_editable_widgets(self, editable_widgets: List[EditableWidget]):
         """Updates the editor with new widget data."""
-        # Standardize input: if None is passed, treat as empty list
         self._editable_widgets = editable_widgets
 
-        # Clear existing widgets from the layout
-        clear_layout(self.main_layout)
+        # Take a snapshot of the data the moment the widget is selected
+        if self._editable_widgets and len(self._editable_widgets) == 1:
+            self._original_snapshot = copy.deepcopy(self._editable_widgets[0].obj_data)
+        else:
+            self._original_snapshot = {}
 
-        # Re-populate
+        clear_layout(self.main_layout)
         self._create_content()
 
     def _create_content(self):
@@ -53,26 +56,94 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         header = UiComponents.create_label(f"<b>Object ID: {obj_data.get('id', 'N/A')}</b>")
         self.main_layout.addWidget(header)
 
-        # Use a Form Layout for the table-like Key | Value structure
         form_layout = QFormLayout()
         form_layout.setLabelAlignment(QtCore.Qt.AlignmentFlag.AlignRight)
 
         for key, value in obj_data.items():
-            label = UiComponents.create_label(text=f"{key}:", padding=0)
+            # 1. Create the container widget
+            label_container = QWidget()
+            # Important: Use the layout to drive the container size
+            label_layout = UiComponents.create_row(label_container)
+            label_layout.setContentsMargins(0, 0, 0, 0)
+            label_layout.setSpacing(2)
+            # Force the container to respect the size of the children
+            label_layout.setSizeConstraint(QLayout.SizeConstraint.SetFixedSize)
+
+            # 2. Create Reset Button
+            mini_reset = UiComponents.create_button(
+                title=":mdi6.undo:",
+                on_click=lambda k=key: self._reset_single_property(k)
+            )
+            mini_reset.setFixedSize(22, 22)
+
+            # 3. Logic to check if value actually changed
+            original_val = self._original_snapshot.get(key)
+            # Compare as strings to be safe against type mismatches
+            has_changed = str(value) != str(original_val)
+
+            # DEBUG: For now, let's keep it visible but change color to see it
+            if has_changed:
+                mini_reset.setStyleSheet("color: #FF5722; background: transparent; border: none; font-size: 14px;")
+                mini_reset.setEnabled(True)
+            else:
+                # If not changed, make it a faint gray so we know it's THERE but inactive
+                mini_reset.setStyleSheet("color: rgba(200, 200, 200, 50); background: transparent; border: none; font-size: 14px;")
+                mini_reset.setEnabled(False)
+
+            label_text = UiComponents.create_label(text=f"{key}:", padding=0)
+
+            label_layout.addWidget(mini_reset)
+            label_layout.addWidget(label_text)
+
+            # 4. Add to the form
             editor_widget = self._create_editor_for_prop(key, value, editable_widget)
-            form_layout.addRow(label, editor_widget)
+            form_layout.addRow(label_container, editor_widget)
 
         self.main_layout.addLayout(form_layout)
 
-        # Reset Button
+        # Updated Reset Button to use the snapshot-based "Reset All"
         reset_btn = UiComponents.create_button(
-            title=":mdi6.undo: Reset Position",
-            on_click=lambda: self._reset_position(editable_widget)
+            title=":mdi6.history: Reset All Changes",
+            on_click=self._reset_all_to_snapshot
         )
-        reset_btn.setEnabled(editable_widget.delta_x != 0 or editable_widget.delta_y != 0)
+
+        # Enable if any property differs from the snapshot OR if it has moved from original obj_x/y
+        any_changes = obj_data != self._original_snapshot
+        reset_btn.setEnabled(any_changes or editable_widget.delta_x != 0 or editable_widget.delta_y != 0)
         self.main_layout.addWidget(reset_btn)
 
-    def _create_editor_for_prop(self, key, value, widget):
+    def _reset_single_property(self, key):
+        """Restore one specific property from the snapshot."""
+        if not self._editable_widgets or key not in self._original_snapshot:
+            return
+
+        widget = self._editable_widgets[0]
+        original_value = self._original_snapshot[key]
+
+        # Apply change
+        self._on_property_edited(key, original_value, widget)
+
+        # Refresh UI to update the 'changed' status of reset buttons
+        self.set_editable_widgets([widget])
+
+    def _reset_all_to_snapshot(self):
+        """Restores the whole object to the state it was in when selected."""
+        if not self._editable_widgets:
+            return
+
+        widget = self._editable_widgets[0]
+        # Update current data with snapshot data
+        widget.obj_data.update(copy.deepcopy(self._original_snapshot))
+
+        # Sync physical position
+        widget.setPos(float(widget.obj_x), float(widget.obj_y))
+        widget.prepareGeometryChange()
+        widget.update()
+
+        # Refresh UI
+        self.set_editable_widgets([widget])
+
+    def _create_editor_for_prop(self, key: str, value: Any, widget):
         container = QWidget()
         layout = UiComponents.create_row(container)
         layout.setContentsMargins(0, 0, 0, 0)
