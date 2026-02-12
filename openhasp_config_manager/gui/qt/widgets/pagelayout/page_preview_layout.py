@@ -7,6 +7,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QPainter, QColor
 from PyQt6.QtWidgets import QGraphicsView, QGraphicsScene
 
+from openhasp_config_manager.gui.qt.util import qBridge
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.bar import HaspBarItem
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.button import HaspButtonItem
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
@@ -26,6 +27,9 @@ class PreviewMode(StrEnum):
 class PagePreviewWidget(QGraphicsView):
     modeChanged = QtCore.pyqtSignal(PreviewMode)
     buttonClicked = QtCore.pyqtSignal(dict)
+
+    # Emitted when the selection changes in edit mode, providing the currently selected object's data (or None if nothing is selected)
+    selectionChanged = QtCore.pyqtSignal(list)
 
     @property
     def page_width(self) -> int:
@@ -112,9 +116,18 @@ class PagePreviewWidget(QGraphicsView):
         if self.scene() is None:
             scene = QGraphicsScene(0, 0, native_width, native_height)
             scene.setBackgroundBrush(QColor('black'))
+            scene.selectionChanged.connect(self._on_selection_changed)
             self.setScene(scene)
         else:
             self.scene().clear()
+
+    @qBridge()
+    def _on_selection_changed(self):
+        selected_items = self.scene().selectedItems()
+        editable_widgets = [item for item in selected_items if isinstance(item, EditableWidget)]
+
+        obj_data_list = [item.obj_data for item in editable_widgets]
+        self.selectionChanged.emit(obj_data_list)
 
     def set_objects(self, loaded_objects: List[dict]):
         self.objects = loaded_objects

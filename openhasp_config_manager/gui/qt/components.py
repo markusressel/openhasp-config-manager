@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from typing import Optional
 
 import qtawesome as qta
 from PyQt6 import QtCore
@@ -13,7 +14,8 @@ class UiComponents:
 
     @staticmethod
     def create_label(text: str) -> QLabel:
-        label = QLabel(parse_icons(text))
+        label = QLabel()
+        label.setText(parse_icons(text))
         label.setFont(qta.font("mdi6", 16))
         label.setStyleSheet("padding: 10px;")
         return label
@@ -95,7 +97,7 @@ class UiComponents:
 
     @staticmethod
     def create_row(
-        parent=None,
+        parent: Optional[QWidget] = None,
         alignment: QtCore.Qt.AlignmentFlag = QtCore.Qt.AlignmentFlag.AlignLeft,
     ) -> QHBoxLayout:
         layout = QHBoxLayout(parent)
@@ -106,7 +108,7 @@ class UiComponents:
 
     @staticmethod
     def create_column(
-        parent=None,
+        parent: Optional[QWidget] = None,
         alignment: QtCore.Qt.AlignmentFlag = QtCore.Qt.AlignmentFlag.AlignTop,
     ) -> QVBoxLayout:
         layout = QVBoxLayout(parent)

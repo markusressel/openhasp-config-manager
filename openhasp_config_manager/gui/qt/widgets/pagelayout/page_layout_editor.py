@@ -1,6 +1,6 @@
 import asyncio
 from collections import OrderedDict
-from typing import List, Dict, Set
+from typing import List, Dict, Set, Any
 
 from PyQt6.QtWidgets import QWidget
 from orjson import orjson
@@ -67,10 +67,12 @@ class PageLayoutEditorWidget(QWidget):
         self.page_preview_widget = PagePreviewWidget()
         self.page_preview_widget.buttonClicked.connect(self.__on_preview_layout_button_clicked)
         self.page_preview_widget.modeChanged.connect(self._on_editor_mode_changed)
+        self.page_preview_widget.selectionChanged.connect(self._on_openhasp_widget_selection_changed)
         self.device_preview_row.addWidget(self.page_preview_widget)
 
         self.widget_property_editor = OpenHASPWidgetPropertyEditor()
         self.device_preview_row.addWidget(self.widget_property_editor)
+        self.widget_property_editor.setVisible(False)
 
         self.page_jsonl_preview = PageJsonlPreviewWidget()
         self.device_preview_container_layout.addWidget(self.page_jsonl_preview)
@@ -156,9 +158,11 @@ class PageLayoutEditorWidget(QWidget):
         if mode == PreviewMode.Edit:
             self.editor_mode_button.setText(parse_icons(":mdi6.pencil: Edit Mode"))
             self.widget_picker.setVisible(True)
+            self.widget_property_editor.setVisible(True)
         elif mode == PreviewMode.Interact:
             self.editor_mode_button.setText(parse_icons(":mdi6.eye: Interaction Mode"))
             self.widget_picker.setVisible(False)
+            self.widget_property_editor.setVisible(False)
         self.editor_mode_button.update()
 
     @qBridge()
@@ -231,6 +235,10 @@ class PageLayoutEditorWidget(QWidget):
             self.page_preview_widget.set_mode(PreviewMode.Interact)
         else:
             self.page_preview_widget.set_mode(PreviewMode.Edit)
+
+    @qBridge(list)
+    def _on_openhasp_widget_selection_changed(self, widget_data: List[Dict[str, Any]]):
+        self.widget_property_editor.set_obj_data(widget_data)
 
     def go_to_home_page(self):
         usable_page_indices = self.get_navigable_page_indices()
