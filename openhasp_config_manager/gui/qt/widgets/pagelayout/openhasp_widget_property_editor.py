@@ -1,6 +1,6 @@
 from typing import List
 
-from PyQt6 import QtCore
+from PyQt6 import QtCore, QtGui
 from PyQt6.QtWidgets import QWidget, QFormLayout, QLineEdit
 
 from openhasp_config_manager.gui.qt.components import UiComponents
@@ -78,6 +78,12 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
 
         line_edit = QLineEdit(str(value))
+        if key in ['x', 'y', 'w', 'h', 'border_width', 'radius']:
+            line_edit.setValidator(QtGui.QIntValidator())  # Only allow integers for these fields
+        if "color" in key and isinstance(value, str) and value.startswith("#"):
+            line_edit.setMaxLength(7)  # Limit to 7 characters for hex colors (#RRGGBB)
+        if key in ['page', 'obj']:
+            line_edit.setReadOnly(True)  # Don't allow editing of page or object type
         layout.addWidget(line_edit)
 
         # 1. Handle Units (px)
