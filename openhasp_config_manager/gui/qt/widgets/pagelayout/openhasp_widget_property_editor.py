@@ -149,7 +149,7 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
 
         # Determine which widget to use
-        is_numeric = key in ['x', 'y', 'w', 'h', 'border_width', 'radius', 'id', 'page']
+        is_numeric = key in ['x', 'y', 'w', 'h', 'border_width', 'radius', 'id', 'page', 'outline_width', 'icon_size']
 
         if is_numeric:
             # Create a SpinBox for numbers
