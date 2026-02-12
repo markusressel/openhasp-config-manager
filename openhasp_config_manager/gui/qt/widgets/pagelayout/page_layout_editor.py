@@ -5,6 +5,7 @@ from typing import List, Dict, Set
 from PyQt6.QtWidgets import QWidget
 from orjson import orjson
 
+from openhasp_config_manager.gui.domain.plate_state_holder import PlateStateHolder
 from openhasp_config_manager.gui.qt.components import UiComponents
 from openhasp_config_manager.gui.qt.util import qBridge, run_async, parse_icons
 from openhasp_config_manager.gui.qt.widgets.pagelayout import OpenHaspDevicePagesData
@@ -23,8 +24,6 @@ class PageLayoutEditorWidget(QWidget):
         super().__init__()
         self.config_manager = config_manager
         self.device_processor = None
-        # map of <json component name, list of objects>
-        self.jsonl_component_objects: OrderedDict[str, List[Dict]] = OrderedDict()
 
         self.device_pages_data = None
         self.current_index = 1
@@ -110,19 +109,22 @@ class PageLayoutEditorWidget(QWidget):
 
     def clear(self):
         self.page_preview_widget.set_data(None)
-
         self.current_index = 1
-        self.jsonl_component_objects.clear()
 
-    def set_data(self, device_pages_data: OpenHaspDevicePagesData):
+    def set_data(self, state_holder: PlateStateHolder, device_pages_data: OpenHaspDevicePagesData):
+        self.state_holder = state_holder
+
         self.device_pages_data = device_pages_data
         self.clear()
         if device_pages_data is None:
             return
 
-        self.jsonl_component_objects = self._load_jsonl_component_objects(device_pages_data)
-        self.page_preview_widget.set_data(device_pages_data)
+        jsonl_component_objects = self._load_jsonl_component_objects(device_pages_data)
 
+        if not self.state_holder.is_loaded():
+            self.state_holder.set_jsonl_component_objects(jsonl_component_objects)
+
+        self.page_preview_widget.set_data(device_pages_data)
         self.set_page_index(index=1)
 
     def _load_jsonl_component_objects(self, data: OpenHaspDevicePagesData) -> OrderedDict[str, List[Dict]]:
@@ -286,7 +288,7 @@ class PageLayoutEditorWidget(QWidget):
             return set()
 
         used_page_indices = set()
-        for jsonl_component_name, objects_in_jsonl in self.jsonl_component_objects.items():
+        for jsonl_component_name, objects_in_jsonl in self.state_holder.plate_state.jsonl_component_objects.items():
             for obj in objects_in_jsonl:
                 object_page_index = obj.get("page", None)
                 if object_page_index is not None:
@@ -307,7 +309,7 @@ class PageLayoutEditorWidget(QWidget):
             return []
 
         result = []
-        for jsonl_component_name, objects_in_jsonl in self.jsonl_component_objects.items():
+        for jsonl_component_name, objects_in_jsonl in self.state_holder.plate_state.jsonl_component_objects.items():
             result = result + objects_in_jsonl
 
         # Filter the objects based on the index

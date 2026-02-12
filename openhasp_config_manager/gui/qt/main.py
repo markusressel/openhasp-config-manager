@@ -1,7 +1,8 @@
-from typing import Optional, List
+from typing import Optional, List, Dict
 
 from PyQt6.QtWidgets import QWidget, QMainWindow
 
+from openhasp_config_manager.gui.domain.plate_state_holder import PlateStateHolder
 from openhasp_config_manager.gui.qt.components import UiComponents
 from openhasp_config_manager.gui.qt.widgets.device_controls import DeviceControlsWidget
 from openhasp_config_manager.gui.qt.widgets.device_list import DeviceListWidget
@@ -16,6 +17,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.config_manager = config_manager
         self.devices: List[Device] = []
+        self.plate_state_holders: Dict[Device, PlateStateHolder] = {}
         self.device: Optional[Device] = None
 
         self.setWindowTitle("openhasp-config-manager")
@@ -31,9 +33,6 @@ class MainWindow(QMainWindow):
         self.device_list_widget = DeviceListWidget()
         self.device_list_widget.deviceSelected.connect(self.on_device_selected)
         self.layout.addWidget(self.device_list_widget)
-
-        # self.file_browser_widget = FileBrowserWidget(self.config_manager.cfg_root)
-        # self.layout.addWidget(self.file_browser_widget)
 
         self.device_layout = UiComponents.create_row()
         self.layout.addLayout(self.device_layout)
@@ -52,6 +51,12 @@ class MainWindow(QMainWindow):
 
     def load_plates(self):
         self.devices = self.config_manager.analyze()
+
+        # create state holders for each device
+        for device in self.devices:
+            plate_state_holder = PlateStateHolder(device=device)
+            self.plate_state_holders[device] = plate_state_holder
+
         self.device_list_widget.set_devices(self.devices)
 
     def on_device_selected(self, device: Device):
@@ -65,6 +70,8 @@ class MainWindow(QMainWindow):
     def select_device(self, device: Device):
         self.device = device
 
+        plate_state_holder = self.plate_state_holders[device]
+
         self.device_control_widget.set_device(self.device)
         self.device_control_widget.setVisible(True)
         self.page_layout_editor_widget.setVisible(True)
@@ -75,22 +82,23 @@ class MainWindow(QMainWindow):
         self.relevant_components = self.config_manager.find_relevant_components(device)
         boot_cmd_component: CmdComponent = next(
             filter(lambda x: x.name == "boot.cmd", self.relevant_components), None)
-        self.select_cmd_component(device, boot_cmd_component)
+        self.select_cmd_component(plate_state_holder, boot_cmd_component)
 
-    def select_cmd_component(self, device: Device, cmd_component: CmdComponent):
+    def select_cmd_component(self, plate_state_holder: PlateStateHolder, cmd_component: CmdComponent):
         """
-        Selects the given cmd component in the file browser widget.
-        :param device: The device to select the cmd component for.
+        Selects the given cmd component.
+        :param plate_state_holder: The plate state holder for the device.
         :param cmd_component: The cmd component to select.
         """
         ordered_device_jsonl_components = self.config_manager.determine_device_jsonl_component_order_for_cmd(
-            device=device,
+            device=plate_state_holder.device,
             cmd_component=cmd_component,
         )
 
         self.page_layout_editor_widget.set_data(
-            OpenHaspDevicePagesData(
-                device=device,
+            state_holder=plate_state_holder,
+            device_pages_data=OpenHaspDevicePagesData(
+                device=plate_state_holder.device,
                 name=cmd_component.name,
                 jsonl_components=ordered_device_jsonl_components
             )

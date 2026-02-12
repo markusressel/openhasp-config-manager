@@ -17,3 +17,5 @@ class Device:
     images: List[ImageComponent]
     fonts: List[FontComponent]
     output_dir: Path
+
+    __hash__ = lambda self: hash(self.name)
