@@ -17,6 +17,8 @@ class OpenHASPWidgetPropertyEditor(QWidget):
     # Use 'object' for the value to support strings, ints, bools, etc.
     propertyChanged = QtCore.pyqtSignal(str, object)
 
+    removeObjectClicked = QtCore.pyqtSignal()
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self._editable_widgets: List[EditableWidget] = []
@@ -101,7 +103,10 @@ class OpenHASPWidgetPropertyEditor(QWidget):
 
         self.main_layout.addLayout(form_layout)
 
-        # Updated Reset Button to use the snapshot-based "Reset All"
+        self._add_reset_all_button(editable_widget, obj_data)
+        self._add_remove_button()
+
+    def _add_reset_all_button(self, editable_widget, obj_data):
         reset_btn = UiComponents.create_button(
             title=":mdi6.history: Reset All Changes",
             on_click=self._reset_all_to_snapshot
@@ -111,6 +116,14 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         any_changes = obj_data != self._original_snapshot
         reset_btn.setEnabled(any_changes or editable_widget.delta_x != 0 or editable_widget.delta_y != 0)
         self.main_layout.addWidget(reset_btn)
+
+    def _add_remove_button(self):
+        remove_btn = UiComponents.create_button(
+            title=":mdi6.delete: Remove Object",
+            on_click=lambda: self.removeObjectClicked.emit()
+        )
+        remove_btn.setStyleSheet("background-color: red; color: white;")
+        self.main_layout.addWidget(remove_btn)
 
     def _reset_single_property(self, key):
         """Restore one specific property from the snapshot."""
@@ -145,7 +158,7 @@ class OpenHASPWidgetPropertyEditor(QWidget):
 
     def _create_editor_for_prop(self, key: str, value: Any, widget):
         container = QWidget()
-        layout = UiComponents.create_row(container)
+        layout = UiComponents.create_row(container, alignment=QtCore.Qt.AlignmentFlag.AlignVCenter)
         layout.setContentsMargins(0, 0, 0, 0)
 
         # Determine which widget to use

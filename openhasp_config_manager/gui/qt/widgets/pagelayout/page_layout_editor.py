@@ -5,7 +5,7 @@ from typing import List, Dict, Set
 from PyQt6.QtWidgets import QWidget
 from orjson import orjson
 
-from openhasp_config_manager.gui.domain.plate_state_holder import PlateStateHolder
+from openhasp_config_manager.gui.domain.plate_session import PlateSession
 from openhasp_config_manager.gui.qt.components import UiComponents
 from openhasp_config_manager.gui.qt.util import qBridge, run_async, parse_icons
 from openhasp_config_manager.gui.qt.widgets.pagelayout import OpenHaspDevicePagesData
@@ -71,6 +71,7 @@ class PageLayoutEditorWidget(QWidget):
         self.device_preview_row.addWidget(self.page_preview_widget)
 
         self.widget_property_editor = OpenHASPWidgetPropertyEditor()
+        self.widget_property_editor.removeObjectClicked.connect(self._on_remove_currently_selected_object_clicked)
         self.device_preview_row.addWidget(self.widget_property_editor)
         self.widget_property_editor.setVisible(False)
 
@@ -78,6 +79,23 @@ class PageLayoutEditorWidget(QWidget):
         self.device_preview_container_layout.addWidget(self.page_jsonl_preview)
 
         self.page_preview_widget.set_mode(PreviewMode.Interact)
+
+    @qBridge()
+    def _on_remove_currently_selected_object_clicked(self):
+        selected_items: List[EditableWidget] = self.page_preview_widget.scene().selectedItems()
+        if not selected_items:
+            return
+
+        # Modify the working draft directly
+        component_name = self.device_pages_data.jsonl_components[0].name
+        target_list = self.session.working_objects.get(component_name, [])
+
+        for item in selected_items:
+            if item.obj_data in target_list:
+                target_list.remove(item.obj_data)
+                self.session.is_dirty = True
+
+        self.set_page_index(self.current_index)
 
     @qBridge()
     def _on_previous_page_clicked(self):
@@ -111,18 +129,15 @@ class PageLayoutEditorWidget(QWidget):
         self.page_preview_widget.set_data(None)
         self.current_index = 1
 
-    def set_data(self, state_holder: PlateStateHolder, device_pages_data: OpenHaspDevicePagesData):
-        self.state_holder = state_holder
-
+    def set_data(self, session: PlateSession, device_pages_data: OpenHaspDevicePagesData):
+        self.session = session
         self.device_pages_data = device_pages_data
+
         self.clear()
-        if device_pages_data is None:
-            return
 
-        jsonl_component_objects = self._load_jsonl_component_objects(device_pages_data)
-
-        if not self.state_holder.is_loaded():
-            self.state_holder.set_jsonl_component_objects(jsonl_component_objects)
+        if not self.session.working_objects:
+            raw_data = self._load_jsonl_component_objects(device_pages_data)
+            self.session.load_from_disk(raw_data)
 
         self.page_preview_widget.set_data(device_pages_data)
         self.set_page_index(index=1)
@@ -288,7 +303,7 @@ class PageLayoutEditorWidget(QWidget):
             return set()
 
         used_page_indices = set()
-        for jsonl_component_name, objects_in_jsonl in self.state_holder.plate_state.jsonl_component_objects.items():
+        for jsonl_component_name, objects_in_jsonl in self.session.working_objects.items():
             for obj in objects_in_jsonl:
                 object_page_index = obj.get("page", None)
                 if object_page_index is not None:
@@ -308,9 +323,10 @@ class PageLayoutEditorWidget(QWidget):
         if self.device_pages_data is None:
             return []
 
+        # FIX: Changed from self.state_holder.plate_state... to self.session.working_objects
         result = []
-        for jsonl_component_name, objects_in_jsonl in self.state_holder.plate_state.jsonl_component_objects.items():
-            result = result + objects_in_jsonl
+        for objects_in_jsonl in self.session.working_objects.values():
+            result.extend(objects_in_jsonl)
 
         # Filter the objects based on the index
         result = [
