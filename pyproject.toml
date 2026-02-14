@@ -62,6 +62,15 @@ pytest = "*"
 pytest_asyncio = "*"
 appdaemon = "4.5.13" # required for ad util testing
 
+[tool.flake8]
+exclude = [
+    ".venv",
+    "venv",
+    "__pycache__",
+    "build",
+    "dist"
+]
+
 [tool.pytest.ini_options]
 testpaths = [
   "tests",
