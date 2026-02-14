@@ -162,10 +162,17 @@ class UiComponents:
     @classmethod
     def create_spinbox(
         cls,
-        min_val: int = -32768,
-        max_val: int = 32767,
-        initial_value: int = 0
+        min_val: int = None,
+        max_val: int = None,
+        initial_value: int = None
     ) -> QSpinBox:
+        if min_val is None:
+            min_val = -32768
+        if max_val is None:
+            max_val = 32767
+        if initial_value is None:
+            initial_value = 0
+
         spin = QSpinBox()
         spin.setFont(cls.ui_font)
         spin.setRange(min_val, max_val)

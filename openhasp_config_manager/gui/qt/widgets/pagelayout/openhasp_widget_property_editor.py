@@ -1,8 +1,8 @@
 import copy
-from typing import List, Any
+from typing import List, Any, Dict
 
 from PyQt6 import QtCore
-from PyQt6.QtWidgets import QWidget, QFormLayout, QLayout
+from PyQt6.QtWidgets import QWidget, QFormLayout, QLayout, QScrollArea, QVBoxLayout, QFrame
 
 from openhasp_config_manager.gui.qt.components import UiComponents
 from openhasp_config_manager.gui.qt.util import clear_layout
@@ -23,9 +23,23 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         super().__init__(parent)
         self._editable_widgets: List[EditableWidget] = []
 
-        # Create the initial layout structure once
-        self.main_layout = UiComponents.create_column(parent=self)
+        # 1. Main Layout for the Editor Widget itself
+        self.outer_layout = QVBoxLayout(self)
+        self.outer_layout.setContentsMargins(0, 0, 0, 0)
+
+        # 2. Scroll Area to contain the form (important for many properties)
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True)  # Crucial for internal layout to expand
+        self.scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        self.scroll_area.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
+        self.content_container = QWidget()
+        # This is where your actual form and buttons go
+        self.main_layout = UiComponents.create_column(parent=self.content_container)
         self.setFixedWidth(500)  # Set a fixed width for the property editor to avoid jumping when an item is selected
+
+        self.scroll_area.setWidget(self.content_container)
+        self.outer_layout.addWidget(self.scroll_area)
 
         self._create_content()
 
@@ -98,7 +112,7 @@ class OpenHASPWidgetPropertyEditor(QWidget):
             label_layout.addWidget(label_text)
 
             # 4. Add to the form
-            editor_widget = self._create_editor_for_prop(key, value, editable_widget)
+            editor_widget = self._create_editor_for_prop(obj_data, key, value, editable_widget)
             form_layout.addRow(label_container, editor_widget)
 
         self.main_layout.addLayout(form_layout)
@@ -156,7 +170,7 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         # Refresh UI
         self.set_editable_widgets([widget])
 
-    def _create_editor_for_prop(self, key: str, value: Any, widget):
+    def _create_editor_for_prop(self, obj_data: Dict, key: str, value: Any, widget):
         container = QWidget()
         layout = UiComponents.create_row(container, alignment=QtCore.Qt.AlignmentFlag.AlignVCenter)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -166,7 +180,8 @@ class OpenHASPWidgetPropertyEditor(QWidget):
 
         if is_numeric:
             # Create a SpinBox for numbers
-            editor = UiComponents.create_spinbox(initial_value=int(value), min_val=0)
+            max_value = int(obj_data["h"] / 2) if key in ['radius'] else None
+            editor = UiComponents.create_spinbox(initial_value=int(value), min_val=0, max_val=max_value)
             # QSpinBox uses valueChanged[int] instead of textChanged
             editor.valueChanged.connect(lambda val: self._on_property_edited(key, val, widget))
         else:
