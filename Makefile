@@ -1,4 +1,9 @@
 
+setup:
+	pyenv install 3.13
+	pyenv local 3.13
+	poetry install
+
 test:
 	cd tests && poetry run pytest
 
