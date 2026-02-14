@@ -45,7 +45,7 @@ class HaspBarItem(EditableWidget):
 
     @property
     def radius(self) -> int:
-        return self.obj_data.get("radius", self.obj_h)
+        return self.obj_data.get("radius", 6)
 
     @property
     def border_width(self) -> int:
