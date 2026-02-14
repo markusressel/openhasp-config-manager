@@ -7,14 +7,6 @@ class HaspSwitchItem(EditableWidget):
     toggled = QtCore.pyqtSignal(int, bool)
 
     @property
-    def obj_w(self) -> int:
-        return self.obj_data.get("w", 80)
-
-    @property
-    def obj_h(self) -> int:
-        return self.obj_data.get("h", 40)
-
-    @property
     def val(self) -> bool:
         return bool(self.obj_data.get("val", 0))
 

@@ -8,14 +8,6 @@ class HaspImageItem(EditableWidget):
     clicked = QtCore.pyqtSignal(int)
 
     @property
-    def obj_w(self) -> int:
-        return self.obj_data.get("w", 50)
-
-    @property
-    def obj_h(self) -> int:
-        return self.obj_data.get("h", 50)
-
-    @property
     def src(self) -> str:
         return self.obj_data.get("src", "")
 

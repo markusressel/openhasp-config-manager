@@ -8,14 +8,6 @@ from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable
 class HaspBarItem(EditableWidget):
 
     @property
-    def obj_w(self) -> int:
-        return self.obj_data.get("w", 50)
-
-    @property
-    def obj_h(self) -> int:
-        return self.obj_data.get("h", 50)
-
-    @property
     def min_val(self) -> int:
         return self.obj_data.get("min", 0)
 
@@ -25,7 +17,7 @@ class HaspBarItem(EditableWidget):
 
     @property
     def val(self) -> int:
-        return self.obj_data.get("val", 0)
+        return self.obj_data.get("val", 20)
 
     @property
     def text(self) -> str:

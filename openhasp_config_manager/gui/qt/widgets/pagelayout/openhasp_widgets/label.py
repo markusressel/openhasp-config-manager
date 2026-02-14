@@ -8,14 +8,6 @@ class HaspLabelItem(EditableWidget):
     clicked = QtCore.pyqtSignal(int)
 
     @property
-    def obj_w(self) -> int:
-        return self.obj_data.get("w", 100)
-
-    @property
-    def obj_h(self) -> int:
-        return self.obj_data.get("h", 30)
-
-    @property
     def text(self) -> str:
         return self.obj_data.get("text", "")
 

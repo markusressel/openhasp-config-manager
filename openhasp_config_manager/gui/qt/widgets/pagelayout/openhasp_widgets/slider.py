@@ -9,14 +9,6 @@ class HaspSliderItem(EditableWidget):
     valueChanged = QtCore.pyqtSignal(int, int)  # (object_id, new_value)
 
     @property
-    def obj_w(self) -> int:
-        return self.obj_data.get("w", 160)
-
-    @property
-    def obj_h(self) -> int:
-        return self.obj_data.get("h", 20)
-
-    @property
     def min_val(self) -> int:
         return self.obj_data.get("min", 0)
 
