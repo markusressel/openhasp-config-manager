@@ -14,11 +14,7 @@ async def main():
     output_dir = Path("./output")
 
     variable_manager = VariableManager(cfg_root=config_dir)
-    config_manager = ConfigManager(
-        cfg_root=config_dir,
-        output_root=output_dir,
-        variable_manager=variable_manager
-    )
+    config_manager = ConfigManager(cfg_root=config_dir, output_root=output_dir, variable_manager=variable_manager)
 
     devices = config_manager.analyze()
     device = next(filter(lambda x: x.name == "wt32sc01plus_2", devices))
@@ -38,5 +34,5 @@ async def main():
     )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     asyncio.run(main())

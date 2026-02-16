@@ -7,8 +7,7 @@ from telnetlib3 import TelnetTerminalClient, open_connection, telnet_client_shel
 
 
 class OpenHaspTelnetClient:
-
-    def __init__(self, host: str, port: int = 23, baudrate: int = 115200, user: str = 'admin', password: str = 'admin'):
+    def __init__(self, host: str, port: int = 23, baudrate: int = 115200, user: str = "admin", password: str = "admin"):
         self._host = host
         self._port = port
         self._baudrate = baudrate
@@ -24,10 +23,10 @@ class OpenHaspTelnetClient:
                     # End of File
                     break
 
-                if 'Username:' in outp:
+                if "Username:" in outp:
                     # reply all questions with 'y'.
                     writer.write(f"{self._username}\n")
-                elif 'Password:' in outp:
+                elif "Password:" in outp:
                     writer.write(f"{self._password}\n")
                     break
 
@@ -35,10 +34,11 @@ class OpenHaspTelnetClient:
             await telnet_client_shell(reader, writer)
 
         reader, writer = await open_connection(
-            host=self._host, port=self._port,
+            host=self._host,
+            port=self._port,
             tspeed=(self._baudrate, self._baudrate),
             shell=_shell,
-            client_factory=TelnetTerminalClient
+            client_factory=TelnetTerminalClient,
         )
 
         await writer.protocol.waiter_closed
@@ -55,8 +55,8 @@ class OpenHaspTelnetClient:
                     raise EOFError("Connection closed by remote host")
 
                 if login_done:
-                    buffer = buffer.replace('Prompt >', '')
-                    buffer = re.sub(r"\x1b\[\d+\w+\s*", '', buffer, flags=re.IGNORECASE | re.S)
+                    buffer = buffer.replace("Prompt >", "")
+                    buffer = re.sub(r"\x1b\[\d+\w+\s*", "", buffer, flags=re.IGNORECASE | re.S)
                     if not buffer.endswith("\r\n"):
                         # wait for the end of the line before processing
                         continue
@@ -71,10 +71,10 @@ class OpenHaspTelnetClient:
                     buffer = ""
                     continue
 
-                if 'Username:' in buffer:
+                if "Username:" in buffer:
                     # reply all questions with 'y'.
                     writer.write(f"{self._username}\n")
-                elif 'Password:' in buffer:
+                elif "Password:" in buffer:
                     writer.write(f"{self._password}\n")
                     login_done = True
 
@@ -83,10 +83,11 @@ class OpenHaspTelnetClient:
             # await telnet_client_shell(reader, SilentTelnetWriterUnicode(writer, client=True))
 
         reader, writer = await open_connection(
-            host=self._host, port=self._port,
+            host=self._host,
+            port=self._port,
             tspeed=(self._baudrate, self._baudrate),
             shell=_shell,
-            client_factory=TelnetTerminalClient
+            client_factory=TelnetTerminalClient,
         )
 
         await writer.protocol.waiter_closed
@@ -113,9 +114,7 @@ class OpenHaspTelnetClient:
         if os.path.sameopenfile(0, 1):
             write_fobj = sys.stdin
         loop = asyncio.get_event_loop_policy().get_event_loop()
-        writer_transport, writer_protocol = await loop.connect_write_pipe(
-            asyncio.streams.FlowControlMixin, write_fobj
-        )
+        writer_transport, writer_protocol = await loop.connect_write_pipe(asyncio.streams.FlowControlMixin, write_fobj)
 
         writer = asyncio.StreamWriter(writer_transport, writer_protocol, None, loop)
 
@@ -125,11 +124,13 @@ class OpenHaspTelnetClient:
 
 
 class SilentTelnetWriterUnicode(TelnetWriterUnicode):
-
     def __init__(self, writer, **kwargs):
         super().__init__(
-            writer.transport, writer.protocol, writer.fn_encoding, encoding_errors=writer.encoding_errors,
-            **kwargs
+            writer.transport,
+            writer.protocol,
+            writer.fn_encoding,
+            encoding_errors=writer.encoding_errors,
+            **kwargs,
         )
 
     def _handle_do_forwardmask(self, buf):

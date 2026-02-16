@@ -5,7 +5,6 @@ from tests import TestBase
 
 
 class TestJsonlPreProcessor(TestBase):
-
     def test_empty_content(self):
         # GIVEN
         underTest = JsonlPreProcessor()
@@ -74,10 +73,13 @@ class TestJsonlPreProcessor(TestBase):
         result = underTest.cleanup_object_for_json_parsing(content)
 
         # THEN
-        assert result == textwrap.dedent("""
+        assert (
+            result
+            == textwrap.dedent("""
         { "x": 0 }
         { "y": 0 }
         """).strip()
+        )
 
     def test_inline_comment_after_object_param_with_comma_is_stripped(self):
         # GIVEN
@@ -94,12 +96,15 @@ class TestJsonlPreProcessor(TestBase):
         result = underTest.cleanup_object_for_json_parsing(content)
 
         # THEN
-        assert result == textwrap.dedent("""
+        assert (
+            result
+            == textwrap.dedent("""
                {
                "x": 0,
                "y": 0
                }
                """).strip()
+        )
 
     def test_inline_comment_after_object_param_without_comma_is_stripped(self):
         # GIVEN
@@ -116,12 +121,15 @@ class TestJsonlPreProcessor(TestBase):
         result = underTest.cleanup_object_for_json_parsing(content)
 
         # THEN
-        assert result == textwrap.dedent("""
+        assert (
+            result
+            == textwrap.dedent("""
                {
                "x": 0,
                "y": 0
                }
                """).strip()
+        )
 
     def test_trailing_comma_on_last_object_is_stripped(self):
         # GIVEN
@@ -137,11 +145,14 @@ class TestJsonlPreProcessor(TestBase):
         result = underTest.cleanup_object_for_json_parsing(content)
 
         # THEN
-        assert result == textwrap.dedent("""
+        assert (
+            result
+            == textwrap.dedent("""
                {
                "x": 0
                }
                """).strip()
+        )
 
     def test_split_objects_empty_content(self):
         # GIVEN
@@ -215,6 +226,9 @@ class TestJsonlPreProcessor(TestBase):
         result = underTest.cleanup_object_for_json_parsing(content)
 
         # THEN
-        assert result == textwrap.dedent("""
+        assert (
+            result
+            == textwrap.dedent("""
         { "x": 0, "url": "https://upload.wikimedia.org/wikipedia/commons/b/bf/Test_card.png" }
         """).strip()
+        )

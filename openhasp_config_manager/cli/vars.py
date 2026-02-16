@@ -6,15 +6,15 @@ from openhasp_config_manager.processing.variables import VariableManager
 
 
 async def _format_variables(variables: Dict) -> str:
-    def get_dict_contents(d: Dict, parent_key: str = '', result: List[str] = []):
+    def get_dict_contents(d: Dict, parent_key: str = "", result: List[str] = []):
         for k in sorted(d.keys()):
             v = d[k]
             if isinstance(v, dict):
-                get_dict_contents(v, parent_key + k + '.', result)
+                get_dict_contents(v, parent_key + k + ".", result)
             elif isinstance(v, list):
                 for i in range(len(v)):
                     if isinstance(v[i], dict):
-                        get_dict_contents(v[i], parent_key + k + '.' + str(i) + '.', result)
+                        get_dict_contents(v[i], parent_key + k + "." + str(i) + ".", result)
                     else:
                         result.append(f"{parent_key}{k}[{i}]: {v[i]}")
             else:

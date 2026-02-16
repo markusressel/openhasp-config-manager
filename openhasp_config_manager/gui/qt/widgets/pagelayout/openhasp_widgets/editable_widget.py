@@ -5,7 +5,6 @@ from PyQt6.QtWidgets import QGraphicsObject, QGraphicsItem
 
 
 class EditableWidget(QGraphicsObject):
-
     @property
     def obj_data(self):
         return self._object_data

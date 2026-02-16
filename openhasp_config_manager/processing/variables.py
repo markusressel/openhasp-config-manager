@@ -104,7 +104,7 @@ class VariableManager:
         """
         result = {}
         for toplevel_path in [path]:
-            for p in list(toplevel_path.glob('**/**')):
+            for p in list(toplevel_path.glob("**/**")):
                 if not p.is_dir():
                     continue
 
@@ -118,7 +118,8 @@ class VariableManager:
                     #  to jinja2 templates via a custom function like f.ex. "vars('my.key.items.a')".
                     #  This may be cumbersome to use though...
                     raise AssertionError(
-                        "Variables contain key 'items' which conflicts with the built-in function of jinja2. Please choose a different name.")
+                        "Variables contain key 'items' which conflicts with the built-in function of jinja2. Please choose a different name."
+                    )
 
                 path_str = str(p)
                 if path_str not in result:

@@ -13,10 +13,14 @@ class ObjectDimensionsProcessor(JsonlObjectProcessor):
     """
     Used to process .jsonl files to add support for additional features.
     """
+
     PERCENTAGE_REGEX_PATTERN = re.compile(r"^\d+(\.\d+)?%$")
 
     def process(
-        self, input: Dict, config: Config, template_vars: Dict[str, any]
+        self,
+        input: Dict,
+        config: Config,
+        template_vars: Dict[str, any],
     ) -> Dict:
         result: Dict[str, any] = {}
         for key, value in input.items():
@@ -62,7 +66,7 @@ class ObjectDimensionsProcessor(JsonlObjectProcessor):
 
     @staticmethod
     def _parse_percentage(value: str) -> float:
-        return float(str(value).replace('%', ''))
+        return float(str(value).replace("%", ""))
 
 
 class ObjectThemeProcessor(JsonlObjectProcessor):
@@ -71,7 +75,10 @@ class ObjectThemeProcessor(JsonlObjectProcessor):
     """
 
     def process(
-        self, input: Dict, config: Config, template_vars: Dict[str, any]
+        self,
+        input: Dict,
+        config: Config,
+        template_vars: Dict[str, any],
     ) -> Dict:
         obj_key = input.get("obj", None)
         if obj_key is None:

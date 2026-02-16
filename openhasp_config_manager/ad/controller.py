@@ -18,7 +18,6 @@ PLATE_SYNC_TIMER = "plate_sync_timer"
 
 
 class OpenHaspController(ADAPI):
-
     def __init__(self, ad, config_model):
         super().__init__(ad, config_model)
         self._lwt_task = None
@@ -68,7 +67,7 @@ class OpenHaspController(ADAPI):
             controller=self,
             name=PLATE_SETUP_TIMER,
             callback=self.__failsafe_plate_setup,
-            delay=1
+            delay=1,
         )
 
     async def __failsafe_plate_setup(self, kwargs: Dict):
@@ -93,16 +92,14 @@ class OpenHaspController(ADAPI):
         except Exception as ex:
             self.log(f"Exception during plate setup: {ex}", level="ERROR")
             tb = traceback.format_exc()
-            self.log(
-                f"Failed to setup plate '{self._name}', retrying in {timeout}: {type(ex)}: {ex} {tb}",
-                level="ERROR")
+            self.log(f"Failed to setup plate '{self._name}', retrying in {timeout}: {type(ex)}: {ex} {tb}", level="ERROR")
             # await util_ad_timer.schedule(self, PLATE_SETUP_TIMER, self.__failsafe_plate_setup, timeout)
 
     def __online_check(self) -> bool:
         try:
             self.plate_controller.client.get_files()
             return True
-        except Exception as ex:
+        except Exception:
             return False
 
     async def setup_plate(self):
@@ -117,7 +114,7 @@ class OpenHaspController(ADAPI):
             controller=self,
             name=PLATE_SYNC_TIMER,
             callback=self.__plate_sync_timer_callback,
-            delay=1
+            delay=1,
         )
 
     async def __plate_sync_timer_callback(self, kwargs: Dict):
@@ -142,7 +139,7 @@ class OpenHaspController(ADAPI):
 
         self._lwt_task = await self.plate_controller.listen_openhasp_event(
             path="LWT",
-            callback=_on_lwt_event
+            callback=_on_lwt_event,
         )
 
     # async def _setup_auto_deploy_when_online(self):
@@ -161,6 +158,6 @@ class OpenHaspController(ADAPI):
     #
     #     await self.listen_openhasp_event(path="LWT", callback=_on_lwt_event)
 
-    def add_page(self, page_controller: 'PageController'):
+    def add_page(self, page_controller: "PageController"):
         self.plate_controller.add_page(page_controller)
         return page_controller

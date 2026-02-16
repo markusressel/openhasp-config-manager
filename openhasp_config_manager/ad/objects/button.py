@@ -142,7 +142,4 @@ class SceneButtonObjectController(ButtonObjectController):
             if not scene_entity.startswith(self.SCENE_ENTITY_PREFIX):
                 scene_entity = f"{self.SCENE_ENTITY_PREFIX}{scene_entity}"
             controller.log(f"Activating scene {scene_entity}")
-            return await controller.call_service(
-                "scene/turn_on",
-                entity_id=scene_entity
-            )
+            return await controller.call_service("scene/turn_on", entity_id=scene_entity)

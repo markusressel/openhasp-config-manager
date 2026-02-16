@@ -6,7 +6,10 @@ from openhasp_config_manager.gui.domain.plate_session import PlateSession
 from openhasp_config_manager.gui.qt.components import UiComponents
 from openhasp_config_manager.gui.qt.widgets.device_controls import DeviceControlsWidget
 from openhasp_config_manager.gui.qt.widgets.device_list import DeviceListWidget
-from openhasp_config_manager.gui.qt.widgets.pagelayout.page_layout_editor import PageLayoutEditorWidget, OpenHaspDevicePagesData
+from openhasp_config_manager.gui.qt.widgets.pagelayout.page_layout_editor import (
+    PageLayoutEditorWidget,
+    OpenHaspDevicePagesData,
+)
 from openhasp_config_manager.manager import ConfigManager
 from openhasp_config_manager.openhasp_client.model.component import CmdComponent
 from openhasp_config_manager.openhasp_client.model.device import Device
@@ -41,9 +44,7 @@ class MainWindow(QMainWindow):
         self.device_layout.addWidget(self.device_control_widget)
         self.device_control_widget.setVisible(False)
 
-        self.page_layout_editor_widget = PageLayoutEditorWidget(
-            config_manager=self.config_manager
-        )
+        self.page_layout_editor_widget = PageLayoutEditorWidget(config_manager=self.config_manager)
         self.device_layout.addWidget(self.page_layout_editor_widget)
         self.page_layout_editor_widget.setVisible(False)
 
@@ -80,8 +81,7 @@ class MainWindow(QMainWindow):
         # device_processor = self.config_manager.create_device_processor(device)
         # device_validator = self.config_manager.create_device_validator(device)
         self.relevant_components = self.config_manager.find_relevant_components(device)
-        boot_cmd_component: CmdComponent = next(
-            filter(lambda x: x.name == "boot.cmd", self.relevant_components), None)
+        boot_cmd_component: CmdComponent = next(filter(lambda x: x.name == "boot.cmd", self.relevant_components), None)
         self.select_cmd_component(session, boot_cmd_component)
 
     def select_cmd_component(self, session: PlateSession, cmd_component: CmdComponent):
@@ -100,6 +100,6 @@ class MainWindow(QMainWindow):
             device_pages_data=OpenHaspDevicePagesData(
                 device=session.device,
                 name=cmd_component.name,
-                jsonl_components=ordered_device_jsonl_components
-            )
+                jsonl_components=ordered_device_jsonl_components,
+            ),
         )

@@ -8,6 +8,7 @@ from openhasp_config_manager.openhasp_client.model.device import Device
 @dataclass
 class PlateData:
     """Represents the actual content of a plate (pages and objects)."""
+
     jsonl_component_objects: OrderedDict[str, List[Dict]] = field(default_factory=OrderedDict)
 
 

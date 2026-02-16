@@ -14,6 +14,7 @@ class OpenHASPWidgetPropertyEditor(QWidget):
     Displays the properties of an EditableWidget and allows the user to edit them.
     Emits a signal when a property is changed.
     """
+
     # Use 'object' for the value to support strings, ints, bools, etc.
     propertyChanged = QtCore.pyqtSignal(str, object)
 
@@ -88,7 +89,7 @@ class OpenHASPWidgetPropertyEditor(QWidget):
             # 2. Create Reset Button
             mini_reset = UiComponents.create_button(
                 title=":mdi6.undo:",
-                on_click=lambda k=key: self._reset_single_property(k)
+                on_click=lambda k=key: self._reset_single_property(k),
             )
             mini_reset.setFixedSize(22, 22)
 
@@ -103,7 +104,9 @@ class OpenHASPWidgetPropertyEditor(QWidget):
                 mini_reset.setEnabled(True)
             else:
                 # If not changed, make it a faint gray so we know it's THERE but inactive
-                mini_reset.setStyleSheet("color: rgba(200, 200, 200, 50); background: transparent; border: none; font-size: 14px;")
+                mini_reset.setStyleSheet(
+                    "color: rgba(200, 200, 200, 50); background: transparent; border: none; font-size: 14px;"
+                )
                 mini_reset.setEnabled(False)
 
             label_text = UiComponents.create_label(text=f"{key}:", padding=0)
@@ -123,7 +126,7 @@ class OpenHASPWidgetPropertyEditor(QWidget):
     def _add_reset_all_button(self, editable_widget, obj_data):
         reset_btn = UiComponents.create_button(
             title=":mdi6.history: Reset All Changes",
-            on_click=self._reset_all_to_snapshot
+            on_click=self._reset_all_to_snapshot,
         )
 
         # Enable if any property differs from the snapshot OR if it has moved from original obj_x/y
@@ -134,7 +137,7 @@ class OpenHASPWidgetPropertyEditor(QWidget):
     def _add_remove_button(self):
         remove_btn = UiComponents.create_button(
             title=":mdi6.delete: Remove Object",
-            on_click=lambda: self.removeObjectClicked.emit()
+            on_click=lambda: self.removeObjectClicked.emit(),
         )
         remove_btn.setStyleSheet("background-color: red; color: white;")
         self.main_layout.addWidget(remove_btn)
@@ -176,11 +179,11 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
 
         # Determine which widget to use
-        is_numeric = key in ['x', 'y', 'w', 'h', 'border_width', 'radius', 'id', 'page', 'outline_width', 'icon_size']
+        is_numeric = key in ["x", "y", "w", "h", "border_width", "radius", "id", "page", "outline_width", "icon_size"]
 
         if is_numeric:
             # Create a SpinBox for numbers
-            max_value = int(obj_data["h"] / 2) if key in ['radius'] else None
+            max_value = int(obj_data["h"] / 2) if key in ["radius"] else None
             editor = UiComponents.create_spinbox(initial_value=int(value), min_val=0, max_val=max_value)
             # QSpinBox uses valueChanged[int] instead of textChanged
             editor.valueChanged.connect(lambda val: self._on_property_edited(key, val, widget))
@@ -190,19 +193,19 @@ class OpenHASPWidgetPropertyEditor(QWidget):
             editor.textChanged.connect(lambda text: self._on_property_edited(key, text, widget))
 
         # Handle read-only logic
-        if key in ['page', 'obj']:
+        if key in ["page", "obj"]:
             editor.setEnabled(False)  # SpinBoxes use setEnabled(False) or setReadOnly(True)
 
         layout.addWidget(editor)
 
         # --- Handle Units (px) ---
-        if key in ['x', 'y', 'w', 'h', 'border_width', 'radius']:
+        if key in ["x", "y", "w", "h", "border_width", "radius"]:
             unit_label = UiComponents.create_label("px")
             unit_label.setStyleSheet("color: gray;")
             layout.addWidget(unit_label)
 
-            if key in ['x', 'y']:
-                live_val = widget.live_x if key == 'x' else widget.live_y
+            if key in ["x", "y"]:
+                live_val = widget.live_x if key == "x" else widget.live_y
                 live_label = UiComponents.create_label(f"(Live: {live_val})")
                 live_label.setStyleSheet("color: #0078d7;")
                 layout.addWidget(live_label)
@@ -220,11 +223,11 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         widget.obj_data[key] = value
 
         # If position changed, update the QGraphicsObject immediately
-        if key == 'x' or key == 'y':
+        if key == "x" or key == "y":
             widget.setPos(float(widget.obj_x), float(widget.obj_y))
 
         # If size changed (w, h), notify the scene
-        if key in ['w', 'h']:
+        if key in ["w", "h"]:
             widget.prepareGeometryChange()
 
         widget.update()

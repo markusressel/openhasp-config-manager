@@ -27,7 +27,7 @@ class CheckboxObjectController(ObjectController):
         entity_id: str = None,
         attribute: str = None,
         get_state: Callable[[], Awaitable[Any]] = None,
-        converter: Callable[[Any], str] = lambda x: str(x)
+        converter: Callable[[Any], str] = lambda x: str(x),
     ):
         """
         Sets up a connection between an object and an entity, updating the text of the object
@@ -69,10 +69,12 @@ class CheckboxObjectController(ObjectController):
         if self._entity_id is not None:
             if self._attribute is not None:
                 await util_ad.listen_state_and_call_immediately(
-                    controller=self.app, callback=self._on_state_changed, entity_id=self._entity_id, attribute=self._attribute)
+                    controller=self.app, callback=self._on_state_changed, entity_id=self._entity_id, attribute=self._attribute
+                )
             else:
                 await util_ad.listen_state_and_call_immediately(
-                    controller=self.app, callback=self._on_state_changed, entity_id=self._entity_id)
+                    controller=self.app, callback=self._on_state_changed, entity_id=self._entity_id
+                )
 
     async def __get_checkbox_state(self) -> str:
         """

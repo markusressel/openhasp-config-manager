@@ -17,7 +17,7 @@ async def listen_state_and_call_immediately(
     debounce_delay: timedelta = timedelta(seconds=0),
     debounce_delay_excluded_states: Set[str] = (),
     throttle_delay: timedelta = timedelta(seconds=0),
-    **kwargs: Any
+    **kwargs: Any,
 ):
     """
     Listens to the state of an entity and calls the callback immediately with the current state.
@@ -43,7 +43,7 @@ async def listen_state_and_call_immediately(
             inner_kwargs["attribute"],
             inner_kwargs["old"],
             inner_kwargs["new"],
-            inner_kwargs["kwargs"]
+            inner_kwargs["kwargs"],
         )
 
     async def inner_callback(entity, attribute, old, new, kwargs):
@@ -67,16 +67,13 @@ async def listen_state_and_call_immediately(
         last_called_time = now
 
         if util_ad_timer.is_scheduled(controller=controller, name=timer_key):
-            await util_ad_timer.cancel(
-                controller=controller,
-                name=timer_key
-            )
+            await util_ad_timer.cancel(controller=controller, name=timer_key)
         combined_args = {
             "entity_id": entity,
             "attribute": attribute,
             "old": old,
             "new": new,
-            "kwargs": kwargs
+            "kwargs": kwargs,
         }
         new_in_excluded_states = new in debounce_delay_excluded_states
         if debounce_delay.total_seconds() < 1 or new_in_excluded_states:
@@ -87,7 +84,7 @@ async def listen_state_and_call_immediately(
                 name=timer_key,
                 callback=_callback_wrapper,
                 delay=int(debounce_delay.total_seconds()),
-                **combined_args
+                **combined_args,
             )
 
     await controller.listen_event(callback, event="plugin_started")
@@ -99,8 +96,13 @@ async def listen_state_and_call_immediately(
     else:
         await _listen_state_and_call_immediately_single(controller, inner_callback, entity_id, **kwargs)
         # run immediately
-        await callback(entity_id, None, None, await get_optional_state_or_default(controller=controller, entity_id=entity_id, **kwargs),
-                       kwargs)
+        await callback(
+            entity_id,
+            None,
+            None,
+            await get_optional_state_or_default(controller=controller, entity_id=entity_id, **kwargs),
+            kwargs,
+        )
 
 
 async def _listen_state_and_call_immediately_single(controller: ADAPI, callback, entity_id: str, **kwargs: Any):
@@ -111,7 +113,9 @@ async def _listen_state_and_call_immediately_single(controller: ADAPI, callback,
         controller.log(f"Error in listen_state_and_call_immediately_single: {e}", level="ERROR")
 
 
-async def get_optional_state_or_default(controller: ADAPI, entity_id: str, default_states=None, default=None, **kwargs) -> Optional[Any]:
+async def get_optional_state_or_default(
+    controller: ADAPI, entity_id: str, default_states=None, default=None, **kwargs
+) -> Optional[Any]:
     """
     Gets the state of an entity.
     If the state is in default_states, the default value will be returned instead.
@@ -137,7 +141,13 @@ async def get_required_state_or_default(controller: ADAPI, entity_id: str, defau
     """
     Like get_optional_state_or_default, but returns the default if the state is None in addition to the default_states.
     """
-    state = await get_optional_state_or_default(controller=controller, entity_id=entity_id, default_states=default_states, default=default, **kwargs)
+    state = await get_optional_state_or_default(
+        controller=controller,
+        entity_id=entity_id,
+        default_states=default_states,
+        default=default,
+        **kwargs,
+    )
     if state is None:
         return default
     else:

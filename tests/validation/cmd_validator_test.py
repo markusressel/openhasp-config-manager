@@ -5,7 +5,6 @@ from tests import TestBase
 
 
 class TestCmdFileValidator(TestBase):
-
     def test_single_jsonl_command_valid(self):
         # GIVEN
         under_test = CmdFileValidator()

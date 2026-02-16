@@ -46,7 +46,7 @@ CMD_OPTION_NAMES = {
         "help": """
             The name of the device to target.
             Must be one of the device specific folders within the configuration.
-        """
+        """,
     },
     PARAM_CMD: {
         "names": ["--command", "-C"],
@@ -66,20 +66,20 @@ CMD_OPTION_NAMES = {
     },
     PARAM_PATH: {
         "names": ["--path", "-p"],
-        "help": """The subpath inside the configuration directory"""
+        "help": """The subpath inside the configuration directory""",
     },
     PARAM_OBJECT: {
         "names": ["--object", "-o"],
-        "help": """The object identifier, f.ex. p1b15"""
+        "help": """The object identifier, f.ex. p1b15""",
     },
     PARAM_STATE: {
         "names": ["--state", "-s"],
-        "help": """The state to set. Can also be a json object to set multiple properties in one go."""
+        "help": """The state to set. Can also be a json object to set multiple properties in one go.""",
     },
     PARAM_MQTT_PATH: {
         "names": ["--path", "-p"],
-        "help": """The MQTT sub-path (hasp/<device>/<path>) to listen to."""
-    }
+        "help": """The MQTT sub-path (hasp/<device>/<path>) to listen to.""",
+    },
 }
 
 
@@ -101,7 +101,7 @@ def get_option_help(parameter: str) -> str:
     return CMD_OPTION_NAMES[parameter]["help"]
 
 
-CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
+CONTEXT_SETTINGS = dict(help_option_names=["-h", "--help"])
 
 
 @click.group(context_settings=CONTEXT_SETTINGS)
@@ -120,167 +120,160 @@ def c_help():
 
 
 @cli.command(name="gui")
-@click.option(*get_option_names(PARAM_CFG_DIR),
-              required=False,
-              default=DEFAULT_CONFIG_PATH,
-              type=click.Path(exists=True, path_type=Path),
-              help=get_option_help(PARAM_CFG_DIR))
-@click.option(*get_option_names(PARAM_OUTPUT_DIR),
-              required=True,
-              default=DEFAULT_OUTPUT_PATH,
-              type=click.Path(path_type=Path),
-              help=get_option_help(PARAM_OUTPUT_DIR))
+@click.option(
+    *get_option_names(PARAM_CFG_DIR),
+    required=False,
+    default=DEFAULT_CONFIG_PATH,
+    type=click.Path(exists=True, path_type=Path),
+    help=get_option_help(PARAM_CFG_DIR),
+)
+@click.option(
+    *get_option_names(PARAM_OUTPUT_DIR),
+    required=True,
+    default=DEFAULT_OUTPUT_PATH,
+    type=click.Path(path_type=Path),
+    help=get_option_help(PARAM_OUTPUT_DIR),
+)
 def gui(config_dir: Path, output_dir: Path):
     """
     Launches the GUI of openhasp-config-manager.
     """
     c_gui(config_dir, output_dir)
 
+
 @cli.command(name="generate")
-@click.option(*get_option_names(PARAM_CFG_DIR),
-              required=False,
-              default=DEFAULT_CONFIG_PATH,
-              type=click.Path(exists=True, path_type=Path),
-              help=get_option_help(PARAM_CFG_DIR))
-@click.option(*get_option_names(PARAM_OUTPUT_DIR),
-              required=True,
-              default=DEFAULT_OUTPUT_PATH,
-              type=click.Path(path_type=Path),
-              help=get_option_help(PARAM_OUTPUT_DIR))
-@click.option(*get_option_names(PARAM_DEVICE), required=False, default=None,
-              help=get_option_help(PARAM_DEVICE))
+@click.option(
+    *get_option_names(PARAM_CFG_DIR),
+    required=False,
+    default=DEFAULT_CONFIG_PATH,
+    type=click.Path(exists=True, path_type=Path),
+    help=get_option_help(PARAM_CFG_DIR),
+)
+@click.option(
+    *get_option_names(PARAM_OUTPUT_DIR),
+    required=True,
+    default=DEFAULT_OUTPUT_PATH,
+    type=click.Path(path_type=Path),
+    help=get_option_help(PARAM_OUTPUT_DIR),
+)
+@click.option(*get_option_names(PARAM_DEVICE), required=False, default=None, help=get_option_help(PARAM_DEVICE))
 def generate(config_dir: Path, output_dir: Path, device: str):
     """
     Generates the output files for all devices in the given config directory.
     """
-    asyncio.run(
-        c_generate(config_dir, output_dir, device)
-    )
+    asyncio.run(c_generate(config_dir, output_dir, device))
 
 
 @cli.command(name="deploy")
-@click.option(*get_option_names(PARAM_CFG_DIR),
-              required=False,
-              default=DEFAULT_CONFIG_PATH,
-              type=click.Path(exists=True, path_type=Path),
-              help=get_option_help(PARAM_CFG_DIR))
-@click.option(*get_option_names(PARAM_OUTPUT_DIR),
-              required=True,
-              default=DEFAULT_OUTPUT_PATH,
-              type=click.Path(path_type=Path),
-              help=get_option_help(PARAM_OUTPUT_DIR))
-@click.option(*get_option_names(PARAM_DEVICE), required=False, default=None,
-              help=get_option_help(PARAM_DEVICE))
-@click.option(*get_option_names(PARAM_PURGE), is_flag=True,
-              help=get_option_help(PARAM_PURGE))
-@click.option(*get_option_names(PARAM_SHOW_DIFF), is_flag=True,
-              help=get_option_help(PARAM_SHOW_DIFF))
+@click.option(
+    *get_option_names(PARAM_CFG_DIR),
+    required=False,
+    default=DEFAULT_CONFIG_PATH,
+    type=click.Path(exists=True, path_type=Path),
+    help=get_option_help(PARAM_CFG_DIR),
+)
+@click.option(
+    *get_option_names(PARAM_OUTPUT_DIR),
+    required=True,
+    default=DEFAULT_OUTPUT_PATH,
+    type=click.Path(path_type=Path),
+    help=get_option_help(PARAM_OUTPUT_DIR),
+)
+@click.option(*get_option_names(PARAM_DEVICE), required=False, default=None, help=get_option_help(PARAM_DEVICE))
+@click.option(*get_option_names(PARAM_PURGE), is_flag=True, help=get_option_help(PARAM_PURGE))
+@click.option(*get_option_names(PARAM_SHOW_DIFF), is_flag=True, help=get_option_help(PARAM_SHOW_DIFF))
 def deploy(config_dir: Path, output_dir: Path, device: str, purge: bool, diff: bool):
     """
     Combines the generation and upload of a configuration.
     """
-    asyncio.run(
-        c_deploy(config_dir, output_dir, device, purge, diff)
-    )
+    asyncio.run(c_deploy(config_dir, output_dir, device, purge, diff))
 
 
 @cli.command(name="upload")
-@click.option(*get_option_names(PARAM_CFG_DIR),
-              required=False,
-              default=DEFAULT_CONFIG_PATH,
-              type=click.Path(exists=True, path_type=Path),
-              help=get_option_help(PARAM_CFG_DIR))
-@click.option(*get_option_names(PARAM_OUTPUT_DIR),
-              required=True,
-              default=DEFAULT_OUTPUT_PATH,
-              type=click.Path(path_type=Path),
-              help=get_option_help(PARAM_OUTPUT_DIR))
-@click.option(*get_option_names(PARAM_DEVICE), required=False, default=None,
-              help=get_option_help(PARAM_DEVICE))
-@click.option(*get_option_names(PARAM_PURGE), is_flag=True,
-              help=get_option_help(PARAM_PURGE))
-@click.option(*get_option_names(PARAM_SHOW_DIFF), is_flag=True,
-              help=get_option_help(PARAM_SHOW_DIFF))
+@click.option(
+    *get_option_names(PARAM_CFG_DIR),
+    required=False,
+    default=DEFAULT_CONFIG_PATH,
+    type=click.Path(exists=True, path_type=Path),
+    help=get_option_help(PARAM_CFG_DIR),
+)
+@click.option(
+    *get_option_names(PARAM_OUTPUT_DIR),
+    required=True,
+    default=DEFAULT_OUTPUT_PATH,
+    type=click.Path(path_type=Path),
+    help=get_option_help(PARAM_OUTPUT_DIR),
+)
+@click.option(*get_option_names(PARAM_DEVICE), required=False, default=None, help=get_option_help(PARAM_DEVICE))
+@click.option(*get_option_names(PARAM_PURGE), is_flag=True, help=get_option_help(PARAM_PURGE))
+@click.option(*get_option_names(PARAM_SHOW_DIFF), is_flag=True, help=get_option_help(PARAM_SHOW_DIFF))
 def upload(config_dir: Path, output_dir: Path, device: str, purge: bool, diff: bool):
     """
     Uploads the previously generated configuration to their corresponding devices.
     """
-    asyncio.run(
-        c_upload(config_dir, output_dir, device, purge, diff)
-    )
+    asyncio.run(c_upload(config_dir, output_dir, device, purge, diff))
 
 
 @cli.command(name="logs")
-@click.option(*get_option_names(PARAM_CFG_DIR),
-              required=False,
-              default=DEFAULT_CONFIG_PATH,
-              type=click.Path(exists=True, path_type=Path),
-              help=get_option_help(PARAM_CFG_DIR))
-@click.option(*get_option_names(PARAM_DEVICE), required=True, default=None,
-              help=get_option_help(PARAM_DEVICE))
+@click.option(
+    *get_option_names(PARAM_CFG_DIR),
+    required=False,
+    default=DEFAULT_CONFIG_PATH,
+    type=click.Path(exists=True, path_type=Path),
+    help=get_option_help(PARAM_CFG_DIR),
+)
+@click.option(*get_option_names(PARAM_DEVICE), required=True, default=None, help=get_option_help(PARAM_DEVICE))
 def logs(config_dir: Path, device: str):
     """
     Prints the logs of a device.
     """
-    asyncio.run(
-        c_logs(config_dir, device)
-    )
+    asyncio.run(c_logs(config_dir, device))
 
 
 @cli.command(name="shell")
-@click.option(*get_option_names(PARAM_CFG_DIR),
-              required=False,
-              default=DEFAULT_CONFIG_PATH,
-              type=click.Path(exists=True, path_type=Path),
-              help=get_option_help(PARAM_CFG_DIR))
-@click.option(*get_option_names(PARAM_DEVICE), required=True, default=None,
-              help=get_option_help(PARAM_DEVICE))
+@click.option(
+    *get_option_names(PARAM_CFG_DIR),
+    required=False,
+    default=DEFAULT_CONFIG_PATH,
+    type=click.Path(exists=True, path_type=Path),
+    help=get_option_help(PARAM_CFG_DIR),
+)
+@click.option(*get_option_names(PARAM_DEVICE), required=True, default=None, help=get_option_help(PARAM_DEVICE))
 def shell(config_dir: Path, device: str):
     """
     Connects to the telnet server of a device.
     """
-    asyncio.run(
-        c_shell(config_dir, device)
-    )
+    asyncio.run(c_shell(config_dir, device))
 
 
 @cli.command(name="listen")
-@click.option(*get_option_names(PARAM_CFG_DIR),
-              required=False,
-              default=DEFAULT_CONFIG_PATH,
-              type=click.Path(exists=True, path_type=Path),
-              help=get_option_help(PARAM_CFG_DIR))
-@click.option(*get_option_names(PARAM_DEVICE),
-              required=False,
-              help=get_option_help(PARAM_DEVICE))
-@click.option(*get_option_names(PARAM_MQTT_PATH),
-              required=True,
-              help=get_option_help(PARAM_MQTT_PATH))
+@click.option(
+    *get_option_names(PARAM_CFG_DIR),
+    required=False,
+    default=DEFAULT_CONFIG_PATH,
+    type=click.Path(exists=True, path_type=Path),
+    help=get_option_help(PARAM_CFG_DIR),
+)
+@click.option(*get_option_names(PARAM_DEVICE), required=False, help=get_option_help(PARAM_DEVICE))
+@click.option(*get_option_names(PARAM_MQTT_PATH), required=True, help=get_option_help(PARAM_MQTT_PATH))
 def listen(config_dir: Path, device: str, path: str):
     """
     Sends a state update request to a device.
     """
-    asyncio.run(
-        c_listen(config_dir, device, path)
-    )
+    asyncio.run(c_listen(config_dir, device, path))
 
 
 @cli.command(name="cmd")
-@click.option(*get_option_names(PARAM_CFG_DIR),
-              required=False,
-              default=DEFAULT_CONFIG_PATH,
-              type=click.Path(exists=True, path_type=Path),
-              help=get_option_help(PARAM_CFG_DIR))
-@click.option(*get_option_names(PARAM_DEVICE),
-              required=False,
-              help=get_option_help(PARAM_DEVICE))
-@click.option(*get_option_names(PARAM_CMD),
-              required=True,
-              help=get_option_help(PARAM_CMD))
-@click.option(*get_option_names(PARAM_PAYLOAD),
-              required=False,
-              default="",
-              help=get_option_help(PARAM_PAYLOAD))
+@click.option(
+    *get_option_names(PARAM_CFG_DIR),
+    required=False,
+    default=DEFAULT_CONFIG_PATH,
+    type=click.Path(exists=True, path_type=Path),
+    help=get_option_help(PARAM_CFG_DIR),
+)
+@click.option(*get_option_names(PARAM_DEVICE), required=False, help=get_option_help(PARAM_DEVICE))
+@click.option(*get_option_names(PARAM_CMD), required=True, help=get_option_help(PARAM_CMD))
+@click.option(*get_option_names(PARAM_PAYLOAD), required=False, default="", help=get_option_help(PARAM_PAYLOAD))
 def cmd(config_dir: Path, device: str, command: str, payload: str):
     """
     Sends a command request to a device.
@@ -288,72 +281,61 @@ def cmd(config_dir: Path, device: str, command: str, payload: str):
     The list of possible commands can be found on the official openHASP
     documentation: https://www.openhasp.com/latest/commands
     """
-    asyncio.run(
-        c_cmd(config_dir, device, command, payload)
-    )
+    asyncio.run(c_cmd(config_dir, device, command, payload))
 
 
 @cli.command(name="state")
-@click.option(*get_option_names(PARAM_CFG_DIR),
-              required=False,
-              default=DEFAULT_CONFIG_PATH,
-              type=click.Path(exists=True, path_type=Path),
-              help=get_option_help(PARAM_CFG_DIR))
-@click.option(*get_option_names(PARAM_DEVICE),
-              required=False,
-              help=get_option_help(PARAM_DEVICE))
-@click.option(*get_option_names(PARAM_OBJECT),
-              required=True,
-              help=get_option_help(PARAM_OBJECT))
-@click.option(*get_option_names(PARAM_STATE),
-              required=True,
-              help=get_option_help(PARAM_STATE))
+@click.option(
+    *get_option_names(PARAM_CFG_DIR),
+    required=False,
+    default=DEFAULT_CONFIG_PATH,
+    type=click.Path(exists=True, path_type=Path),
+    help=get_option_help(PARAM_CFG_DIR),
+)
+@click.option(*get_option_names(PARAM_DEVICE), required=False, help=get_option_help(PARAM_DEVICE))
+@click.option(*get_option_names(PARAM_OBJECT), required=True, help=get_option_help(PARAM_OBJECT))
+@click.option(*get_option_names(PARAM_STATE), required=True, help=get_option_help(PARAM_STATE))
 def state(config_dir: Path, device: str, object: str, state: str):
     """
     Sends a state update request to a device.
     """
-    asyncio.run(
-        c_state(config_dir, device, object, state)
-    )
+    asyncio.run(c_state(config_dir, device, object, state))
 
 
 @cli.command(name="vars")
-@click.option(*get_option_names(PARAM_CFG_DIR),
-              required=False,
-              default=DEFAULT_CONFIG_PATH,
-              type=click.Path(exists=True, path_type=Path),
-              help=get_option_help(PARAM_CFG_DIR))
-@click.option(*get_option_names(PARAM_PATH),
-              required=False,
-              default="",
-              help=get_option_help(PARAM_PATH))
+@click.option(
+    *get_option_names(PARAM_CFG_DIR),
+    required=False,
+    default=DEFAULT_CONFIG_PATH,
+    type=click.Path(exists=True, path_type=Path),
+    help=get_option_help(PARAM_CFG_DIR),
+)
+@click.option(*get_option_names(PARAM_PATH), required=False, default="", help=get_option_help(PARAM_PATH))
 def vars(config_dir: Path, path: str):
     """
     Prints the variables accessible in a given path.
     """
-    asyncio.run(
-        c_vars(config_dir, path)
-    )
+    asyncio.run(c_vars(config_dir, path))
 
 
 @cli.command(name="screenshot")
-@click.option(*get_option_names(PARAM_CFG_DIR),
-              required=False,
-              default=DEFAULT_CONFIG_PATH,
-              type=click.Path(exists=True, path_type=Path),
-              help=get_option_help(PARAM_CFG_DIR))
-@click.option(*get_option_names(PARAM_DEVICE),
-              required=True,
-              help=get_option_help(PARAM_DEVICE))
-@click.option(*get_option_names(PARAM_OUTPUT_DIR),
-              required=True,
-              default=DEFAULT_SCREENSHOT_OUTPUT_PATH,
-              type=click.Path(path_type=Path),
-              help=get_option_help(PARAM_OUTPUT_DIR))
+@click.option(
+    *get_option_names(PARAM_CFG_DIR),
+    required=False,
+    default=DEFAULT_CONFIG_PATH,
+    type=click.Path(exists=True, path_type=Path),
+    help=get_option_help(PARAM_CFG_DIR),
+)
+@click.option(*get_option_names(PARAM_DEVICE), required=True, help=get_option_help(PARAM_DEVICE))
+@click.option(
+    *get_option_names(PARAM_OUTPUT_DIR),
+    required=True,
+    default=DEFAULT_SCREENSHOT_OUTPUT_PATH,
+    type=click.Path(path_type=Path),
+    help=get_option_help(PARAM_OUTPUT_DIR),
+)
 def screenshot(config_dir: Path, device: str, output_dir: Path):
     """
     Requests a screenshot from the given device and stores it to the given output directory.
     """
-    asyncio.run(
-        c_screenshot(config_dir, device, output_dir)
-    )
+    asyncio.run(c_screenshot(config_dir, device, output_dir))

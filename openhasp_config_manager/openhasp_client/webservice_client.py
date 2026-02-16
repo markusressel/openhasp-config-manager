@@ -16,7 +16,6 @@ DELETE = "DELETE"
 
 
 class WebserviceClient:
-
     def __init__(self, url: str, username: str, password: str):
         self._username = username
         self._password = password
@@ -44,7 +43,7 @@ class WebserviceClient:
             "color2": config.color2,
             "font": config.font,
             "pages": config.pages,
-            "save": "hasp"
+            "save": "hasp",
         }
 
         # ignore keys with None value
@@ -76,7 +75,7 @@ class WebserviceClient:
         data = {
             "user": config.user,
             "pass": config.password,
-            "save": "http"
+            "save": "http",
         }
 
         # ignore keys with None value
@@ -105,7 +104,7 @@ class WebserviceClient:
                 group=data["topic"]["group"],
                 broadcast=data["topic"]["broadcast"],
                 hass=data["topic"]["hass"],
-            )
+            ),
         )
 
     def set_mqtt_config(self, config: MqttConfig):
@@ -125,7 +124,7 @@ class WebserviceClient:
             "port": config.port,
             "user": config.user,
             "pass": config.password,
-            "save": "mqtt"
+            "save": "mqtt",
         }
 
         # ignore keys with None value
@@ -151,7 +150,7 @@ class WebserviceClient:
             bckl=data["bckl"],
             bcklinv=data["bcklinv"],
             invert=data["invert"],
-            calibration=data["calibration"]
+            calibration=data["calibration"],
         )
 
     def set_gui_config(self, config: GuiConfig):
@@ -165,7 +164,7 @@ class WebserviceClient:
             "rotate": config.rotate,
             "cursor": config.cursor,
             "bckl": config.bckl,
-            "save": "gui"
+            "save": "gui",
         }
 
         # ignore keys with None value
@@ -185,7 +184,7 @@ class WebserviceClient:
         data = {
             "enable": config.enable,
             "port": config.port,
-            "save": "telnet"
+            "save": "telnet",
         }
 
         # ignore keys with None value
@@ -210,7 +209,7 @@ class WebserviceClient:
             "port": config.port,
             "proto": config.proto,
             "log": config.log,
-            "save": "debug"
+            "save": "debug",
         }
 
         # ignore keys with None value
@@ -239,9 +238,7 @@ class WebserviceClient:
         self._do_request(
             method=POST,
             url=self._base_url + "edit",
-            files={
-                f"{name}": content
-            },
+            files={f"{name}": content},
         )
 
     def get_files(self) -> List[str]:
@@ -253,7 +250,7 @@ class WebserviceClient:
             method=GET,
             url=self._base_url + "list?dir=/",
         )
-        response_data = orjson.loads(response.decode('utf-8'))
+        response_data = orjson.loads(response.decode("utf-8"))
 
         files = list(filter(lambda x: x["type"] == "file", response_data))
         file_names = list(map(lambda x: x["name"], files))
@@ -267,7 +264,7 @@ class WebserviceClient:
             )
             response_data = response
             return response_data
-        except Exception as ex:
+        except Exception:
             return None
 
     def delete_file(self, file_name: str):
@@ -278,9 +275,7 @@ class WebserviceClient:
         self._do_request(
             method=DELETE,
             url=self._base_url + "edit",
-            data={
-                "path": "/" + file_name
-            },
+            data={"path": "/" + file_name},
         )
 
     def take_screenshot(self) -> bytes:
@@ -291,16 +286,21 @@ class WebserviceClient:
         return self._do_request(
             method=GET,
             url=self._base_url + "screenshot",
-            params={
-                "q": "0"
-            },
+            params={"q": "0"},
             stream=True,
         )
 
-    def _do_request(self, method: str = GET, url: str = "/", params: dict = None,
-                    json: Any = None, files: Any = None, data: Any = None,
-                    headers: Dict = None,
-                    stream: bool = None) -> Optional[List | Dict | bytes]:
+    def _do_request(
+        self,
+        method: str = GET,
+        url: str = "/",
+        params: dict = None,
+        json: Any = None,
+        files: Any = None,
+        data: Any = None,
+        headers: Dict = None,
+        stream: bool = None,
+    ) -> Optional[List | Dict | bytes]:
         """
         Executes a http request based on the given parameters
 
@@ -311,15 +311,17 @@ class WebserviceClient:
         :param headers: custom headers
         :return: the response parsed as a json
         """
-        _headers = {
-        }
+        _headers = {}
         if headers is not None:
             _headers.update(headers)
 
         response = requests.request(
-            method, url, headers=_headers,
+            method,
+            url,
+            headers=_headers,
             params=params,
-            json=json, files=files,
+            json=json,
+            files=files,
             data=data,
             auth=(self._username, self._password),
             timeout=5,

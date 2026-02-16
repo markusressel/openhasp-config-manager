@@ -63,8 +63,8 @@ class PagePreviewWidget(QGraphicsView):
         self.mode = mode
         for item in self.scene().items():
             if isinstance(item, EditableWidget):
-                item.movable = (mode == PreviewMode.Edit)
-                item.editable = (mode == PreviewMode.Edit)
+                item.movable = mode == PreviewMode.Edit
+                item.editable = mode == PreviewMode.Edit
 
         self.modeChanged.emit(mode)
 
@@ -115,7 +115,7 @@ class PagePreviewWidget(QGraphicsView):
 
         if self.scene() is None:
             scene = QGraphicsScene(0, 0, native_width, native_height)
-            scene.setBackgroundBrush(QColor('black'))
+            scene.setBackgroundBrush(QColor("black"))
             scene.selectionChanged.connect(self._on_selection_changed)
             self.setScene(scene)
         else:
@@ -147,6 +147,7 @@ class PagePreviewWidget(QGraphicsView):
         while leaving regular text alone.
         """
         import qtawesome as qta
+
         processed_text = text
 
         # Get the actual font name qtawesome uses (usually 'Material Design Icons')
@@ -159,7 +160,7 @@ class PagePreviewWidget(QGraphicsView):
                 replacement = f'<span style="font-family:{mdi_font_family};">{icon_char}</span>'
                 processed_text = processed_text.replace(unicode_char, replacement)
 
-        return f'<span>{processed_text}</span>'
+        return f"<span>{processed_text}</span>"
 
     def _create_button_widget(self, obj_data: Dict) -> HaspButtonItem:
         return HaspButtonItem(
@@ -179,13 +180,13 @@ class PagePreviewWidget(QGraphicsView):
     def _create_bar_widget(self, obj_data: Dict) -> HaspBarItem:
         return HaspBarItem(
             obj_data=obj_data,
-            parent_widget=self
+            parent_widget=self,
         )
 
     def _create_slider_widget(self, obj_data) -> HaspSliderItem:
         widget = HaspSliderItem(
             obj_data=obj_data,
-            parent_widget=self
+            parent_widget=self,
         )
         widget.valueChanged.connect(lambda obj_id, val: print(f"Slider {obj_id} changed to {val}"))
         return widget
@@ -193,11 +194,11 @@ class PagePreviewWidget(QGraphicsView):
     def _create_label_widget(self, obj_data: Dict) -> HaspLabelItem:
         return HaspLabelItem(
             obj_data=obj_data,
-            parent_widget=self
+            parent_widget=self,
         )
 
     def _create_img_widget(self, obj_data: Dict) -> HaspImageItem:
         return HaspImageItem(
             obj_data=obj_data,
-            parent_widget=self
+            parent_widget=self,
         )

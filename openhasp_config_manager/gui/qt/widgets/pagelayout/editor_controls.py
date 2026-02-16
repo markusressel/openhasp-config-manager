@@ -25,7 +25,7 @@ class EditorControlsWidget(QWidget):
 
         self._previous_page_button_widget = UiComponents.create_button(
             title=":mdi6.chevron-left: Previous Page",
-            on_click=self._on_previous_page_clicked
+            on_click=self._on_previous_page_clicked,
         )
         page_controls_row.addWidget(self._previous_page_button_widget)
 
@@ -38,7 +38,7 @@ class EditorControlsWidget(QWidget):
         self._sync_with_real_device_switch = UiComponents.create_switch(
             title=":mdi6.sync: Sync with Real Device",
             initial_state=False,
-            on_toggle=lambda state: self.syncWithRealDeviceToggled.emit(state)
+            on_toggle=lambda state: self.syncWithRealDeviceToggled.emit(state),
         )
         page_controls_row.addWidget(self._sync_with_real_device_switch)
 
@@ -47,13 +47,13 @@ class EditorControlsWidget(QWidget):
 
         self.button_clear_page = UiComponents.create_button(
             title=":mdi6.eraser: Clear Page",
-            on_click=self._on_clear_page_clicked
+            on_click=self._on_clear_page_clicked,
         )
         deployment_controls_row.addWidget(self.button_clear_page)
 
         self.button_deploy_page = UiComponents.create_button(
             title=":mdi6.upload: Deploy Page",
-            on_click=self._on_deploy_page_clicked
+            on_click=self._on_deploy_page_clicked,
         )
         deployment_controls_row.addWidget(self.button_deploy_page)
 

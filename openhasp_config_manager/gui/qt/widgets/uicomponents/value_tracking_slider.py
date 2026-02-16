@@ -15,8 +15,10 @@ class ValueTrackingSlider(QSlider):
         opt = QStyleOptionSlider()
         self.initStyleOption(opt)
         handle_rect = self.style().subControlRect(
-            QStyle.ComplexControl.CC_Slider, opt,
-            QStyle.SubControl.SC_SliderHandle, self
+            QStyle.ComplexControl.CC_Slider,
+            opt,
+            QStyle.SubControl.SC_SliderHandle,
+            self,
         )
 
         # 3. Calculate text geometry
@@ -42,7 +44,7 @@ class ValueTrackingSlider(QSlider):
         # Y position is roughly 8px above the handle
         text_pos = QPoint(
             target_x,
-            handle_rect.top() - 8
+            handle_rect.top() - 8,
         )
 
         painter.drawText(text_pos, value_text)

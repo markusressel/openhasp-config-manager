@@ -74,7 +74,7 @@ class HaspButtonItem(EditableWidget):
 
         # 1. Determine the content and font requirements
         # We use HTML to allow per-character font switching
-        if self.parent_widget and hasattr(self.parent_widget, '_replace_unicode_with_html'):
+        if self.parent_widget and hasattr(self.parent_widget, "_replace_unicode_with_html"):
             processed_html = self.parent_widget._replace_unicode_with_html(raw_text, scaled_pixel_size)
             self.text_item.setHtml(processed_html)
         else:
@@ -93,7 +93,7 @@ class HaspButtonItem(EditableWidget):
         t_rect = self.text_item.boundingRect()
         self.text_item.setPos(
             (self.obj_w - t_rect.width()) / 2,
-            (self.obj_h - t_rect.height()) / 2
+            (self.obj_h - t_rect.height()) / 2,
         )
 
     def paint(self, painter, option, widget=None):

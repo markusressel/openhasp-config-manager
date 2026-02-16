@@ -42,15 +42,16 @@ class FileBrowserWidget(QTreeWidget):
         import os
         from PyQt6.QtWidgets import QTreeWidgetItem
         from PyQt6.QtGui import QIcon
+
         startpath.is_dir()
         for element in sorted(pathlib.Path(startpath).iterdir(), key=lambda x: (not x.is_dir(), x.name)):
             path_info = Path(startpath, element)
             parent_itm = QTreeWidgetItem(tree, [os.path.basename(element)])
             if os.path.isdir(path_info):
                 self._load_file_structure(path_info, parent_itm)
-                parent_itm.setIcon(0, QIcon('assets/folder.ico'))
+                parent_itm.setIcon(0, QIcon("assets/folder.ico"))
             else:
-                parent_itm.setIcon(0, QIcon('assets/file.ico'))
+                parent_itm.setIcon(0, QIcon("assets/file.ico"))
 
     def on_item_clicked(self, it: QTreeWidgetItem, col: int):
         print(it, col, it.text(col))

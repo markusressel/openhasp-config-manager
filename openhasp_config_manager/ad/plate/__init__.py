@@ -22,7 +22,7 @@ class ScreenState:
     def __init__(
         self,
         on: bool = True,
-        brightness: int = 255
+        brightness: int = 255,
     ):
         self.on = on
         self.brightness = brightness
@@ -48,6 +48,7 @@ class PlateBehavior(StrEnum):
     """
     Behaviors for OpenHASP plates.
     """
+
     # Keeps the screen always on
     ALWAYS_ON_DISPLAY = "always_on"
 
@@ -108,10 +109,7 @@ class PlateController:
             await self.update_plate_behavior(previous_behaviors)
 
     def has_behavior_request(
-        self,
-        behavior: PlateBehavior,
-        page: Optional[PageController] = None,
-        store: Dict[PlateBehavior, Set[int]] = None
+        self, behavior: PlateBehavior, page: Optional[PageController] = None, store: Dict[PlateBehavior, Set[int]] = None
     ) -> bool:
         """
         Checks if the plate has the given behavior active by any page
@@ -153,7 +151,7 @@ class PlateController:
             app=self.app,
             plate=self,
             state_updater=self.state_updater,
-            index=index
+            index=index,
         )
         self.pages[index] = page
         return page
@@ -174,7 +172,7 @@ class PlateController:
         if self.screen_controller._screen_brightness_task is not None:
             try:
                 self.screen_controller._screen_brightness_task.cancel()
-            except Exception as ex:
+            except Exception:
                 pass
             finally:
                 self._screen_brightness_task = None
@@ -185,27 +183,24 @@ class PlateController:
                 self.app.log(f"Activating screen, due to state/idle event: {event_payload}")
                 await self.screen_controller.set_backlight(
                     state=self._config.screen_brightness_default.on,
-                    brightness=self._config.screen_brightness_default.brightness
+                    brightness=self._config.screen_brightness_default.brightness,
                 )
             elif event_payload == "short":
-                self.app.log(f"Device idle for short time")
+                self.app.log("Device idle for short time")
                 await self.screen_controller.set_backlight(
                     state=self._config.screen_brightness_short_idle.on,
-                    brightness=self._config.screen_brightness_short_idle.brightness
+                    brightness=self._config.screen_brightness_short_idle.brightness,
                 )
             elif event_payload == "long":
-                self.app.log(f"Device idle for long time")
+                self.app.log("Device idle for long time")
                 await self.screen_controller.set_backlight(
                     state=self._config.screen_brightness_long_idle.on,
-                    brightness=self._config.screen_brightness_long_idle.brightness
+                    brightness=self._config.screen_brightness_long_idle.brightness,
                 )
             else:
                 self.app.log(f"Got unexpected state/idle event: {event_topic} - {event_payload}")
 
-        self._screen_brightness_task = await self.listen_openhasp_event(
-            path="state/idle",
-            callback=_on_status_event
-        )
+        self._screen_brightness_task = await self.listen_openhasp_event(path="state/idle", callback=_on_status_event)
 
     async def sync(self):
         await self.state_updater.sync()
@@ -234,9 +229,7 @@ class PlateController:
         return await self.client.set_page(index)
 
     async def set_gui_config2(
-        self,
-        idle1: int = None, idle2: int = None,
-        rotate: int = None, cursor: int = None, bckl: int = None
+        self, idle1: int = None, idle2: int = None, rotate: int = None, cursor: int = None, bckl: int = None
     ):
         gui_config = GuiConfig(
             idle1=idle1,
@@ -251,9 +244,7 @@ class PlateController:
         self.client.set_gui_config(gui_config)
 
     async def set_gui_config(
-        self,
-        idle1: int = None, idle2: int = None,
-        rotate: int = None, cursor: int = None, bckl: int = None
+        self, idle1: int = None, idle2: int = None, rotate: int = None, cursor: int = None, bckl: int = None
     ):
         parameters = {
             "idle1": idle1,
@@ -265,10 +256,7 @@ class PlateController:
         # ignore keys with None value
         parameters = {k: v for k, v in parameters.items() if v is not None}
 
-        return await self._set_config(
-            submodule="gui",
-            parameters=parameters
-        )
+        return await self._set_config(submodule="gui", parameters=parameters)
 
     async def _set_config(self, submodule: str, parameters: Dict):
         self.app.log(f"Setting {submodule} config: {parameters}")

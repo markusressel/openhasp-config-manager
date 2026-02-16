@@ -67,7 +67,7 @@ def _create_config_manager(config_dir, output_dir) -> ConfigManager:
     config_manager = ConfigManager(
         cfg_root=config_dir,
         output_root=output_dir,
-        variable_manager=variable_manager
+        variable_manager=variable_manager,
     )
     return config_manager
 

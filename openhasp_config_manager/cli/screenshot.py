@@ -14,7 +14,6 @@ async def c_screenshot(config_dir: Path, device: str, output: Path):
 
         for device in filtered_devices:
             from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
-            from openhasp_config_manager.uploader import ConfigUploader
 
             client = OpenHaspClient(device)
             try:

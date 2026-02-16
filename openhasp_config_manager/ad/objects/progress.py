@@ -26,7 +26,7 @@ class BarObjectController(ObjectController):
         obj_id: int,
         entity_id: str = None,
         get_state: Callable[[], Awaitable[Any]] = None,
-        transform_value: Callable[[Any], int] = None
+        transform_value: Callable[[Any], int] = None,
     ):
         """
         Sets up a connection between a progress bar and an entity
@@ -46,6 +46,7 @@ class BarObjectController(ObjectController):
         self._get_state = get_state
         self._transform_value = transform_value
         if transform_value is None:
+
             def __default_transform_value(x: Any) -> int:
                 if isinstance(x, str):
                     x = x.replace("%", "").strip()
@@ -72,7 +73,7 @@ class BarObjectController(ObjectController):
             await util_ad.listen_state_and_call_immediately(
                 controller=self.app,
                 callback=self.__on_state_changed,
-                entity_id=self._entity_id
+                entity_id=self._entity_id,
             )
 
     async def __on_state_changed(self, entity, attribute, old, new, kwargs):

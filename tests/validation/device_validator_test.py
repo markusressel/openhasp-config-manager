@@ -8,14 +8,13 @@ from tests import TestBase
 
 
 class TestDeviceValidator(TestBase):
-
     def test_example_config(self):
         # GIVEN
         device_validator = DeviceValidator(
             config=self.default_config,
             # TODO: mock validators
             jsonl_object_validator=JsonlObjectValidator(),
-            cmd_file_validator=CmdFileValidator()
+            cmd_file_validator=CmdFileValidator(),
         )
 
         component = TextComponent(
@@ -27,10 +26,7 @@ class TestDeviceValidator(TestBase):
         data = ""
 
         # WHEN
-        device_validator.validate(
-            component=component,
-            data=data
-        )
+        device_validator.validate(component=component, data=data)
 
         # THEN
         assert True

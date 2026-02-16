@@ -28,9 +28,9 @@ class CmdComponent(TextComponent):
     def __hash__(self):
         return super().__hash__()
 
+
 @dataclass
 class JsonlComponent(TextComponent):
-
     def __hash__(self):
         return super().__hash__()
 
@@ -45,13 +45,11 @@ class RawComponent(Component):
 
 @dataclass
 class ImageComponent(RawComponent):
-
     def __hash__(self):
         return super().__hash__()
 
 
 @dataclass
 class FontComponent(RawComponent):
-
     def __hash__(self):
         return super().__hash__()

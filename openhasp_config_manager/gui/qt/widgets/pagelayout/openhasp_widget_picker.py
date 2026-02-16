@@ -26,30 +26,12 @@ class OpenHASPWidgetPicker(QWidget):
     def _create_layout(self):
         self.layout = UiComponents.create_column(parent=self)
 
-        self._add_widget_picker_button(
-            title=":mdi6.plus: Label",
-            widget_type=OpenHASPWidgetType.LABEL
-        )
-        self._add_widget_picker_button(
-            title=":mdi6.plus: Button",
-            widget_type=OpenHASPWidgetType.BUTTON
-        )
-        self._add_widget_picker_button(
-            title=":mdi6.plus: Switch",
-            widget_type=OpenHASPWidgetType.SWITCH
-        )
-        self._add_widget_picker_button(
-            title=":mdi6.plus: Image",
-            widget_type=OpenHASPWidgetType.IMAGE
-        )
-        self._add_widget_picker_button(
-            title=":mdi6.plus: Bar",
-            widget_type=OpenHASPWidgetType.BAR
-        )
-        self._add_widget_picker_button(
-            title=":mdi6.plus: Slider",
-            widget_type=OpenHASPWidgetType.SLIDER
-        )
+        self._add_widget_picker_button(title=":mdi6.plus: Label", widget_type=OpenHASPWidgetType.LABEL)
+        self._add_widget_picker_button(title=":mdi6.plus: Button", widget_type=OpenHASPWidgetType.BUTTON)
+        self._add_widget_picker_button(title=":mdi6.plus: Switch", widget_type=OpenHASPWidgetType.SWITCH)
+        self._add_widget_picker_button(title=":mdi6.plus: Image", widget_type=OpenHASPWidgetType.IMAGE)
+        self._add_widget_picker_button(title=":mdi6.plus: Bar", widget_type=OpenHASPWidgetType.BAR)
+        self._add_widget_picker_button(title=":mdi6.plus: Slider", widget_type=OpenHASPWidgetType.SLIDER)
 
     def _add_widget_picker_button(self, title: str, widget_type: OpenHASPWidgetType):
         def _on_button_clicked():
@@ -57,8 +39,6 @@ class OpenHASPWidgetPicker(QWidget):
             self.addItem.emit(widget_type)
 
         widget = UiComponents.create_button(
-            title=title,
-            alignment=QtCore.Qt.AlignmentFlag.AlignLeft,
-            on_click=_on_button_clicked
+            title=title, alignment=QtCore.Qt.AlignmentFlag.AlignLeft, on_click=_on_button_clicked
         )
         self.layout.addWidget(widget)

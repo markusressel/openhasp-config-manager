@@ -3,27 +3,16 @@ from tests import TestBase
 
 
 class TestTemplateRendering(TestBase):
-
     def test_render_dict_recursively__template_rendering_works(self):
         # GIVEN
-        input_data = {
-            "{{ key }}": "{{ value }}"
-        }
-        template_vars = {
-            "key": "key_rendered",
-            "value": "value_rendered"
-        }
+        input_data = {"{{ key }}": "{{ value }}"}
+        template_vars = {"key": "key_rendered", "value": "value_rendered"}
 
         # WHEN
-        result = render_dict_recursive(
-            input=input_data,
-            template_vars=template_vars
-        )
+        result = render_dict_recursive(input=input_data, template_vars=template_vars)
 
         # THEN
-        assert result == {
-            "key_rendered": "value_rendered"
-        }
+        assert result == {"key_rendered": "value_rendered"}
 
     def test_render_dict_recursively__two_step_rendering(self):
         # GIVEN
@@ -36,17 +25,10 @@ class TestTemplateRendering(TestBase):
         template_vars = {}
 
         # WHEN
-        result = render_dict_recursive(
-            input=input_data,
-            template_vars=template_vars
-        )
+        result = render_dict_recursive(input=input_data, template_vars=template_vars)
 
         # THEN
-        assert result == {
-            'A': 'B',
-            'B': 'B',
-            'C': 'B'
-        }
+        assert result == {"A": "B", "B": "B", "C": "B"}
 
     def test_render_dict_recursively__inner_template(self):
         # GIVEN
@@ -59,14 +41,11 @@ class TestTemplateRendering(TestBase):
         template_vars = {}
 
         # WHEN
-        result = render_dict_recursive(
-            input=input_data,
-            template_vars=template_vars
-        )
+        result = render_dict_recursive(input=input_data, template_vars=template_vars)
 
         # THEN
         assert result == {
-            'A': '12',
+            "A": "12",
             "B": "1",
             "C": "2",
         }
@@ -77,24 +56,14 @@ class TestTemplateRendering(TestBase):
             "A": "{{ header.bar.item_y }}",
         }
 
-        template_vars = {
-            "header": {
-                "bar": {
-                    "height": 27,
-                    "item_y": "0.5%"
-                }
-            }
-        }
+        template_vars = {"header": {"bar": {"height": 27, "item_y": "0.5%"}}}
 
         # WHEN
-        result = render_dict_recursive(
-            input=input_data,
-            template_vars=template_vars
-        )
+        result = render_dict_recursive(input=input_data, template_vars=template_vars)
 
         # THEN
         assert result == {
-            'A': '0.5%',
+            "A": "0.5%",
         }
 
     def test_render_dict_recursively__template_in_list_item(self):
@@ -105,17 +74,12 @@ class TestTemplateRendering(TestBase):
             ]
         }
 
-        template_vars = {
-            "variable": "value"
-        }
+        template_vars = {"variable": "value"}
 
         # WHEN
-        result = render_dict_recursive(
-            input=input_data,
-            template_vars=template_vars
-        )
+        result = render_dict_recursive(input=input_data, template_vars=template_vars)
 
         # THEN
         assert result == {
-            'key': ['value'],
+            "key": ["value"],
         }

@@ -3,12 +3,11 @@ from typing import List
 
 
 class JsonlPreProcessor:
-
     def __init__(self):
         pass
 
     def split_jsonl_objects(self, original_content: str) -> List[str]:
-        pattern_to_find_beginning_of_objects = re.compile(r'^(?!\n)\s*(?=\{)', re.RegexFlag.MULTILINE)
+        pattern_to_find_beginning_of_objects = re.compile(r"^(?!\n)\s*(?=\{)", re.RegexFlag.MULTILINE)
         parts = pattern_to_find_beginning_of_objects.split(original_content)
 
         result = []
@@ -51,7 +50,7 @@ class JsonlPreProcessor:
                 char = line[i]
                 if char == '"':
                     quote_count += 1
-                if char == '/' and i + 1 < len(line) and line[i + 1] == '/' and quote_count % 2 == 0:
+                if char == "/" and i + 1 < len(line) and line[i + 1] == "/" and quote_count % 2 == 0:
                     break
                 new_line.append(char)
                 i += 1

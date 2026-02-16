@@ -12,9 +12,9 @@ LOGGER.setLevel(logging.DEBUG)
 
 
 def render_dict_recursive(
-        input: Dict,
-        template_vars: Dict,
-        result_key_path: List[str] = None,
+    input: Dict,
+    template_vars: Dict,
+    result_key_path: List[str] = None,
 ) -> Dict[str, any]:
     """
     Recursively called function to resolve templates within the given input dict
@@ -44,7 +44,7 @@ def render_dict_recursive(
                 try:
                     rendered_key = _render_template(key, template_vars)
                     key_undefined = _has_undeclared_variables(rendered_key)
-                except Exception as ex:
+                except Exception:
                     error(f"Undefined key: {key_undefined}, value: {key}")
                     key_undefined = True
 
@@ -55,20 +55,20 @@ def render_dict_recursive(
                 rendered_value = render_dict_recursive(
                     input=value,
                     template_vars=template_vars,
-                    result_key_path=result_key_path + [rendered_key]
+                    result_key_path=result_key_path + [rendered_key],
                 )
             elif isinstance(value, list):
                 try:
                     rendered_value = list(map(lambda x: _render_template(x, template_vars), value))
                     value_undefined = any(map(lambda x: _has_undeclared_variables(x), rendered_value))
-                except Exception as ex:
+                except Exception:
                     # print(f"Undefined value: {value_undefined}, value: {value}")
                     value_undefined = True
             elif isinstance(value, str):
                 try:
                     rendered_value = _render_template(value, template_vars)
                     value_undefined = _has_undeclared_variables(rendered_value)
-                except Exception as ex:
+                except Exception:
                     # print(f"Undefined value: {value_undefined}, value: {value}")
                     value_undefined = True
 

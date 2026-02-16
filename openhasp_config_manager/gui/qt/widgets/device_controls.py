@@ -31,7 +31,7 @@ class DeviceControlsWidget(QWidget):
         self.setFixedWidth(350)
         self.layout = UiComponents.create_column(
             parent=self,
-            alignment=QtCore.Qt.AlignmentFlag.AlignLeft
+            alignment=QtCore.Qt.AlignmentFlag.AlignLeft,
         )
 
         self.screen_controls_layout = self._create_screen_controls_layout()
@@ -85,7 +85,7 @@ class DeviceControlsWidget(QWidget):
             title="Brightness",
             initial_value=100,
             min_value=1,
-            on_change=self.__on_brightness_changed
+            on_change=self.__on_brightness_changed,
         )
 
         # TODO: listening to brightness changes from the device

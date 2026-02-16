@@ -35,9 +35,10 @@ class HaspImageItem(EditableWidget):
         if not self.pixmap.isNull():
             # Scale to fit while maintaining aspect ratio or force fill
             self.pixmap = self.pixmap.scaled(
-                self.obj_w, self.obj_h,
+                self.obj_w,
+                self.obj_h,
                 QtCore.Qt.AspectRatioMode.KeepAspectRatio,
-                QtCore.Qt.TransformationMode.SmoothTransformation
+                QtCore.Qt.TransformationMode.SmoothTransformation,
             )
 
     def paint(self, painter, option, widget=None):

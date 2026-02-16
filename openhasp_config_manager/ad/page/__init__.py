@@ -28,7 +28,7 @@ class PageController:
         app: ADAPI,
         state_updater: StateUpdater,
         plate: "PlateController",
-        index: int
+        index: int,
     ):
         self.app = app
         self.index = index
@@ -60,7 +60,7 @@ class PageController:
         entity_id: str | List[str] = None,
         attribute: str = None,
         get_state: Callable[[], Awaitable[Any]] = None,
-        text: Callable[[Any], str] = lambda x: str(x)
+        text: Callable[[Any], str] = lambda x: str(x),
     ) -> LabelObjectController:
         """
         Adds a text object to the page.
@@ -110,7 +110,7 @@ class PageController:
     async def add_scene_button(
         self,
         obj_id: int,
-        scene: str
+        scene: str,
     ) -> SceneButtonObjectController:
         """
         Adds a button object to the page that activates a scene.
@@ -215,7 +215,7 @@ class PageController:
 
     async def add_image(
         self,
-        obj_id: int
+        obj_id: int,
     ) -> ImageObjectController:
         """
         Adds an image object to the page.

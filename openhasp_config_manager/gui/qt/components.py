@@ -20,7 +20,6 @@ class classproperty(object):
 
 
 class UiComponents:
-
     @classproperty
     def ui_font(cls) -> QFont:
         return qta.font("mdi6", 16)
@@ -30,7 +29,7 @@ class UiComponents:
         cls,
         text: str,
         font: QFont = None,
-        padding: int = UiDimensions.two
+        padding: int = UiDimensions.two,
     ) -> QLabel:
         label = QLabel()
         label.setText(parse_icons(text))
@@ -61,7 +60,7 @@ class UiComponents:
         cls,
         title: str,
         initial_state: bool,
-        on_toggle: Callable[[bool], None]
+        on_toggle: Callable[[bool], None],
     ) -> QCheckBox:
         button = QCheckBox(parse_icons(title))
         button.setFont(cls.ui_font)
@@ -152,7 +151,7 @@ class UiComponents:
     def create_edittext(
         cls,
         text: str = "",
-        padding: int = UiDimensions.one
+        padding: int = UiDimensions.one,
     ):
         line_edit = QLineEdit(text)
         line_edit.setFont(cls.ui_font)
@@ -164,7 +163,7 @@ class UiComponents:
         cls,
         min_val: int = None,
         max_val: int = None,
-        initial_value: int = None
+        initial_value: int = None,
     ) -> QSpinBox:
         if min_val is None:
             min_val = -32768

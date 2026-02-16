@@ -43,7 +43,7 @@ class HaspSwitchItem(EditableWidget):
 
     def paint(self, painter, option, widget=None):
         local_rect = self.obj_rect
-        
+
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
 
         # Track color based on state

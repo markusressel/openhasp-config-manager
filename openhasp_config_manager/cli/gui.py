@@ -11,7 +11,7 @@ from openhasp_config_manager.gui.qt.util import setup_global_async_loop, get_glo
 
 def c_gui(config_dir: Path, output_dir: Path):
     app = QApplication(sys.argv)
-    qt_themes.set_theme('one_dark_two')
+    qt_themes.set_theme("one_dark_two")
 
     # 1. Start a background thread to host the asyncio loop
     setup_global_async_loop(asyncio.new_event_loop())

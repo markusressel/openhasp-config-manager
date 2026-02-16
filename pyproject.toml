@@ -58,6 +58,7 @@ QtAwesome = "1.4.1"
 qt-themes = "0.4.0"
 
 [tool.poetry.group.dev.dependencies]
+ruff = "*"
 pytest = "*"
 pytest_asyncio = "*"
 appdaemon = "4.5.13" # required for ad util testing

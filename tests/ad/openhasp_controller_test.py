@@ -3,7 +3,6 @@ from tests import TestBase
 
 
 class OpenHaspControllerTest(TestBase):
-
     async def test_instantiation(self):
         ad = {}
         config_model = {}

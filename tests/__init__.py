@@ -22,8 +22,9 @@ def _find_test_folder() -> Path:
         return p
     else:
         import glob
+
         while str(p.absolute()) != "/":
-            files = glob.glob(str(Path(p)) + '/**/tests', recursive=True)
+            files = glob.glob(str(Path(p)) + "/**/tests", recursive=True)
             if len(files) > 0:
                 return Path(files[0]).absolute()
             else:
@@ -32,7 +33,7 @@ def _find_test_folder() -> Path:
     raise AssertionError("test folder not found")
 
 
-@pytest.mark.usefixtures('tmp_path')
+@pytest.mark.usefixtures("tmp_path")
 class TestBase:
     _test_folder = _find_test_folder()
     cfg_root = Path(_test_folder, Path("_test_cfg_root"))
@@ -44,7 +45,7 @@ class TestBase:
                 screen=ScreenConfig(
                     width=320,
                     height=480,
-                )
+                ),
             )
         ),
         wifi=WifiConfig(
@@ -77,13 +78,7 @@ class TestBase:
             rotate=1,
             cursor=0,
             invert=0,
-            calibration=[
-                0,
-                65535,
-                0,
-                65535,
-                0
-            ],
+            calibration=[0, 65535, 0, 65535, 0],
         ),
         hasp=HaspConfig(
             startpage=1,

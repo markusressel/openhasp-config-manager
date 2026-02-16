@@ -24,8 +24,15 @@ class PageJsonlPreviewWidget(QTextEdit):
         Set the objects for the page.
         :param page_objects: the list of objects to set
         """
-        sorted_page_objects = sorted(page_objects, key=lambda obj: (
-            obj.get("page", 0), obj.get("id", 0), obj.get("y", ""), obj.get("x", "")))
+        sorted_page_objects = sorted(
+            page_objects,
+            key=lambda obj: (
+                obj.get("page", 0),
+                obj.get("id", 0),
+                obj.get("y", ""),
+                obj.get("x", ""),
+            ),
+        )
 
         content = "\n".join(map(lambda x: orjson.dumps(x).decode(), sorted_page_objects))
         self.setText(content)

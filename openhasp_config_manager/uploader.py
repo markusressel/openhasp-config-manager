@@ -9,7 +9,6 @@ from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 
 
 class ConfigUploader:
-
     def __init__(self, output_root: Path, openhasp_client: OpenHaspClient):
         self._api_client = openhasp_client
         self._output_root = output_root
@@ -66,7 +65,7 @@ class ConfigUploader:
         new_checksum = self._check_if_checksum_will_change(
             file=file,
             original_checksum=device_file_content_checksum,
-            new_content=content.encode("utf-8")
+            new_content=content.encode("utf-8"),
         )
 
         if new_checksum is not None:
@@ -75,7 +74,7 @@ class ConfigUploader:
                 diff_output = self._calculate_diff(
                     file_name=file.name,
                     string1=file_content_on_device,
-                    string2=content
+                    string2=content,
                 )
                 print_diff_to_console(diff_output)
             try:
@@ -109,7 +108,7 @@ class ConfigUploader:
         new_checksum = self._check_if_checksum_will_change(
             file=file,
             original_checksum=device_file_content_checksum,
-            new_content=content
+            new_content=content,
         )
 
         if new_checksum is not None:
@@ -177,7 +176,7 @@ class ConfigUploader:
         return Path(
             self._cache_dir,
             *file.relative_to(self._output_root).parts[:-1],
-            file.name + ".md5"
+            file.name + ".md5",
         )
 
     def _update_config(self, device: Device):
@@ -216,7 +215,7 @@ class ConfigUploader:
             string2.splitlines(),
             lineterm="\n",
             fromfile=f"${file_name}",
-            tofile=f"${file_name}"
+            tofile=f"${file_name}",
         )
 
         return "\n".join(list(diff))

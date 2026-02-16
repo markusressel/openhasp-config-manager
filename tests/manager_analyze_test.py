@@ -4,7 +4,6 @@ from tests import TestBase
 
 
 class TestConfigManager(TestBase):
-
     def test_analyze_whole_config(self, tmp_path):
         # GIVEN
         variable_manager = VariableManager(self.cfg_root)

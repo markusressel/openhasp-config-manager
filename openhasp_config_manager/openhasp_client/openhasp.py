@@ -16,7 +16,6 @@ from openhasp_config_manager.openhasp_client.webservice_client import Webservice
 
 
 class OpenHaspClient:
-
     def __init__(self, device: Device):
         """
         :param device: the device this client can communicate with
@@ -28,14 +27,14 @@ class OpenHaspClient:
         self._webservice_client = WebserviceClient(
             url=device.config.openhasp_config_manager.device.ip,
             username=self._device.config.http.user,
-            password=self._device.config.http.password
+            password=self._device.config.http.password,
         )
 
         self._mqtt_client = MqttClient(
             host=device.config.mqtt.host,
             port=device.config.mqtt.port,
             mqtt_user=device.config.mqtt.user,
-            mqtt_password=device.config.mqtt.password
+            mqtt_password=device.config.mqtt.password,
         )
 
         self._telnet_client = OpenHaspTelnetClient(
@@ -91,12 +90,13 @@ class OpenHaspClient:
             access_port = listen_port
 
         import temppathlib
+
         with temppathlib.NamedTemporaryFile() as out_image:
             self._image_processor.image_to_rgb565(
                 in_image=image,
                 out_image=out_image.file,
                 size=size,
-                fitscreen=fitscreen
+                fitscreen=fitscreen,
             )
             await self._serve_image(
                 obj=obj,
@@ -105,7 +105,7 @@ class OpenHaspClient:
                 listen_port=listen_port,
                 access_host=access_host,
                 access_port=access_port,
-                timeout=timeout
+                timeout=timeout,
             )
 
     async def _serve_image(
@@ -162,9 +162,7 @@ class OpenHaspClient:
             # set the object properties to point to the image url, the plate will download the image immediately
             await self.set_object_properties(
                 obj=obj,
-                properties={
-                    "src": access_url
-                }
+                properties={"src": access_url},
             )
 
             try:
@@ -187,7 +185,7 @@ class OpenHaspClient:
             listen_port=listen_port,
             access_host=access_host,
             access_port=access_port,
-            timeout=timeout
+            timeout=timeout,
         )
 
     async def set_object_properties(self, obj: str, properties: Dict[str, Any]):
@@ -254,7 +252,7 @@ class OpenHaspClient:
                     future.set_result(data)
                 except Exception:
                     # If it's not JSON, just return the raw payload
-                    future.set_result(event_payload.decode('utf-8'))
+                    future.set_result(event_payload.decode("utf-8"))
 
         await self.listen_event(
             path=listen_path,
@@ -278,7 +276,7 @@ class OpenHaspClient:
         """
         return await self.command(
             keyword="idle",
-            params=state
+            params=state,
         )
 
     async def set_backlight(self, state: bool = None, brightness: int = None):
@@ -298,7 +296,7 @@ class OpenHaspClient:
 
         return await self.command(
             keyword="backlight",
-            params=params
+            params=params,
         )
 
     async def get_backlight(self) -> Dict[str, Any]:
@@ -319,28 +317,19 @@ class OpenHaspClient:
         Set the current page
         :param index: the index of the page to set
         """
-        return await self.command(
-            keyword="page",
-            params=f"{index}"
-        )
+        return await self.command(keyword="page", params=f"{index}")
 
     async def next_page(self):
         """
         Set the next page
         """
-        return await self.command(
-            keyword="page",
-            params="next"
-        )
+        return await self.command(keyword="page", params="next")
 
     async def previous_page(self):
         """
         Set the previous page
         """
-        return await self.command(
-            keyword="page",
-            params="prev"
-        )
+        return await self.command(keyword="page", params="prev")
 
     async def clear_current_page(self):
         """
@@ -355,19 +344,13 @@ class OpenHaspClient:
         Clear the given page
         :param page: the page index to clear
         """
-        return await self.command(
-            keyword="clearpage",
-            params=page
-        )
+        return await self.command(keyword="clearpage", params=page)
 
     async def clear_all_pages(self):
         """
         Clear all pages
         """
-        return await self.command(
-            keyword="clearpage",
-            params="all"
-        )
+        return await self.command(keyword="clearpage", params="all")
 
     async def set_hidden(self, obj: str, hidden: bool):
         """
@@ -379,7 +362,7 @@ class OpenHaspClient:
             obj=obj,
             properties={
                 "hidden": "1" if hidden else "0",
-            }
+            },
         )
 
     async def listen_state(self, obj: str, callback: Callable[[str, bytes], Awaitable[None]]):
@@ -440,7 +423,7 @@ class OpenHaspClient:
         See: https://www.openhasp.com/0.7.0/design/objects/#common-methods
         :param obj: the object to clear, f.ex. "p1b2"
         """
-        await self.command(keyword=f"{obj}.clear", )
+        await self.command(keyword=f"{obj}.clear")
 
     async def clear_object_id(self, page: int, obj: int):
         """
@@ -458,7 +441,7 @@ class OpenHaspClient:
         See: https://www.openhasp.com/0.7.0/design/objects/#common-methods
         :param obj: the object to delete, f.ex. "p1b2"
         """
-        await self.command(keyword=f"{obj}.delete", )
+        await self.command(keyword=f"{obj}.delete")
 
     async def delete_object_id(self, page: int, obj: int):
         """
@@ -476,7 +459,7 @@ class OpenHaspClient:
         See: https://www.openhasp.com/0.7.0/design/objects/#common-methods
         :param obj: the object to bring to the front, f.ex. "p1b2"
         """
-        await self.command(keyword=f"{obj}.to_front", )
+        await self.command(keyword=f"{obj}.to_front")
 
     async def bring_object_to_front_id(self, page: int, obj: int):
         """
@@ -494,7 +477,7 @@ class OpenHaspClient:
         See: https://www.openhasp.com/0.7.0/design/objects/#common-methods
         :param obj: the object to bring to the back, f.ex. "p1b2"
         """
-        await self.command(keyword=f"{obj}.to_back", )
+        await self.command(keyword=f"{obj}.to_back")
 
     async def bring_object_to_back_id(self, page: int, obj: int):
         """

@@ -29,11 +29,7 @@ async def main():
     output_dir = Path("./output")
 
     variable_manager = VariableManager(cfg_root=config_dir)
-    config_manager = ConfigManager(
-        cfg_root=config_dir,
-        output_root=output_dir,
-        variable_manager=variable_manager
-    )
+    config_manager = ConfigManager(cfg_root=config_dir, output_root=output_dir, variable_manager=variable_manager)
 
     devices = config_manager.analyze()
 
@@ -81,5 +77,5 @@ async def main():
     await asyncio.Event().wait()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     asyncio.run(main())

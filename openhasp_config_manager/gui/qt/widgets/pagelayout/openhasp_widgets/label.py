@@ -57,7 +57,7 @@ class HaspLabelItem(EditableWidget):
         base_font = QtGui.QFont("Roboto Condensed", scaled_pixel_size)
         self.text_item.setFont(base_font)
 
-        if self.parent_widget and hasattr(self.parent_widget, '_replace_unicode_with_html'):
+        if self.parent_widget and hasattr(self.parent_widget, "_replace_unicode_with_html"):
             processed_html = self.parent_widget._replace_unicode_with_html(raw_text, scaled_pixel_size)
             self.text_item.setHtml(processed_html)
         else:

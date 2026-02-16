@@ -85,7 +85,7 @@ class HaspSliderItem(EditableWidget):
         painter.drawEllipse(
             QtCore.QPointF(knob_center_x, knob_center_y),
             self.knob_radius,
-            self.knob_radius
+            self.knob_radius,
         )
 
         super().paint(painter, option, widget)

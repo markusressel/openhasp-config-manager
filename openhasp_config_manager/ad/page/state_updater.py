@@ -37,17 +37,13 @@ class StateUpdater:
             try:
                 new_target_state = await get_target_state_fun()
             except Exception as e:
-                self.app.log(
-                    f"StateUpdater: Error syncing {name}: Failed to retrieve current state: {e}",
-                    level="ERROR"
-                )
+                self.app.log(f"StateUpdater: Error syncing {name}: Failed to retrieve current state: {e}", level="ERROR")
 
             try:
                 await set_state_fun(new_target_state)
             except Exception as e:
                 self.app.log(
-                    f"StateUpdater: Error syncing {name}: Failed to set state '{new_target_state}': {e}",
-                    level="ERROR"
+                    f"StateUpdater: Error syncing {name}: Failed to set state '{new_target_state}': {e}", level="ERROR"
                 )
 
     def register(
@@ -66,5 +62,5 @@ class StateUpdater:
         }
 
     def clear(self):
-        self.app.log(f"StateUpdater: Clearing registry.")
+        self.app.log("StateUpdater: Clearing registry.")
         self._registered_objects = {}

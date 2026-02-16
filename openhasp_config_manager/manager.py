@@ -7,8 +7,15 @@ import orjson
 
 from openhasp_config_manager.const import COMMON_FOLDER_NAME, DEVICES_FOLDER_NAME, SYSTEM_SCRIPTS
 from openhasp_config_manager.gui.util import warn
-from openhasp_config_manager.openhasp_client.model.component import Component, TextComponent, RawComponent, \
-    ImageComponent, JsonlComponent, CmdComponent, FontComponent
+from openhasp_config_manager.openhasp_client.model.component import (
+    Component,
+    TextComponent,
+    RawComponent,
+    ImageComponent,
+    JsonlComponent,
+    CmdComponent,
+    FontComponent,
+)
 from openhasp_config_manager.openhasp_client.model.configuration.config import Config
 from openhasp_config_manager.openhasp_client.model.configuration.debug_config import DebugConfig
 from openhasp_config_manager.openhasp_client.model.configuration.device_config import DeviceConfig
@@ -81,7 +88,8 @@ class ConfigManager:
         if not devices_path.exists():
             raise RuntimeError(
                 f"No '{DEVICES_FOLDER_NAME}' sub-folder found in '{cfg_dir_root}'. Please create it and move your "
-                f"device configuration files there.")
+                f"device configuration files there."
+            )
         for device_path in devices_path.iterdir():
             if not device_path.is_dir():
                 continue
@@ -152,7 +160,7 @@ class ConfigManager:
             component = self._create_text_component_from_path(
                 device_cfg_dir_root=path,
                 path=Path(path, file.relative_to(path)).relative_to(path),
-                prefix=prefix
+                prefix=prefix,
             )
             if component is not None:
                 jsonl_component = JsonlComponent(
@@ -171,7 +179,7 @@ class ConfigManager:
             component = self._create_text_component_from_path(
                 device_cfg_dir_root=path,
                 path=Path(path, file.relative_to(path)).relative_to(path),
-                prefix=prefix
+                prefix=prefix,
             )
             if component is not None:
                 cmd_component = CmdComponent(
@@ -179,7 +187,7 @@ class ConfigManager:
                     type=component.type,
                     path=component.path,
                     content=component.content,
-                    commands=parse_cmd_commands(component.content)
+                    commands=parse_cmd_commands(component.content),
                 )
                 result.append(cmd_component)
         return result
@@ -192,7 +200,7 @@ class ConfigManager:
                 component = self._create_raw_component_from_path(
                     device_cfg_dir_root=path,
                     path=Path(path, file.relative_to(path)).relative_to(path),
-                    prefix=prefix
+                    prefix=prefix,
                 )
                 if component is not None:
                     image_component = ImageComponent(
@@ -266,7 +274,7 @@ class ConfigManager:
             config = Config(
                 openhasp_config_manager=self._parse_openhasp_config_manager_config(
                     data=loaded["openhasp_config_manager"],
-                    swap_width_and_height=is_screen_rotated
+                    swap_width_and_height=is_screen_rotated,
                 ),
                 wifi=self._parse_wifi_config(loaded["wifi"]),
                 mqtt=self._parse_mqtt_config(loaded["mqtt"]),
@@ -274,7 +282,7 @@ class ConfigManager:
                 gui=self._parse_gui_config(loaded["gui"]),
                 hasp=self._parse_hasp_config(loaded["hasp"]),
                 debug=self._parse_debug_config(loaded["debug"]),
-                telnet=self._parse_telnet_config(loaded["telnet"])
+                telnet=self._parse_telnet_config(loaded["telnet"]),
             )
 
             return config
@@ -295,8 +303,8 @@ class ConfigManager:
                 ip=data["device"]["ip"],
                 screen=ScreenConfig(
                     width=data["device"]["screen"][screen_width_key],
-                    height=data["device"]["screen"][screen_height_key]
-                )
+                    height=data["device"]["screen"][screen_height_key],
+                ),
             )
         )
 
@@ -411,10 +419,7 @@ class ConfigManager:
         :return: a DeviceProcessor instance
         """
         # prepare DeviceProcessor
-        jsonl_processors = [
-            ObjectDimensionsProcessor(),
-            ObjectThemeProcessor()
-        ]
+        jsonl_processors = [ObjectDimensionsProcessor(), ObjectThemeProcessor()]
         device_processor = DeviceProcessor(device, jsonl_processors, self._variable_manager)
 
         # feed device specific data to the processor
@@ -477,9 +482,7 @@ class ConfigManager:
         result.extend(referenced_image_components)
         return result
 
-    def _find_referenced_cmd_components(
-        self, cmd_components: List[CmdComponent]
-    ) -> Set[CmdComponent]:
+    def _find_referenced_cmd_components(self, cmd_components: List[CmdComponent]) -> Set[CmdComponent]:
         result = set()
 
         system_components = list(filter(lambda x: x.name in SYSTEM_SCRIPTS, cmd_components))
@@ -492,9 +495,8 @@ class ConfigManager:
             for match in cmd_references:
                 matching_components = list(filter(lambda x: x.name == match, cmd_components))
                 if len(matching_components) <= 0:
-                    found_component_names = ','.join([c.name for c in cmd_components])
-                    raise AssertionError(
-                        f"Referenced CMD component not found: {match}, only found: {found_component_names}")
+                    found_component_names = ",".join([c.name for c in cmd_components])
+                    raise AssertionError(f"Referenced CMD component not found: {match}, only found: {found_component_names}")
                 result.update(matching_components)
 
         # system components should always be included
@@ -512,9 +514,7 @@ class ConfigManager:
         return result
 
     def _find_referenced_jsonl_components(
-        self,
-        cmd_components: List[CmdComponent],
-        jsonl_components: List[JsonlComponent]
+        self, cmd_components: List[CmdComponent], jsonl_components: List[JsonlComponent]
     ) -> Set[JsonlComponent]:
         referenced_jsonl_components = set()
         for component in cmd_components:
@@ -522,9 +522,8 @@ class ConfigManager:
             for match in jsonl_references:
                 matching_components = list(filter(lambda x: x.name == match, jsonl_components))
                 if len(matching_components) <= 0:
-                    found_component_names = ','.join([c.name for c in jsonl_components])
-                    raise AssertionError(
-                        f"Referenced JSONL component not found: {match}, only found: {found_component_names}")
+                    found_component_names = ",".join([c.name for c in jsonl_components])
+                    raise AssertionError(f"Referenced JSONL component not found: {match}, only found: {found_component_names}")
                 referenced_jsonl_components.update(matching_components)
 
         return referenced_jsonl_components
@@ -539,9 +538,10 @@ class ConfigManager:
         return result
 
     def _find_referenced_image_components(
-        self, cmd_components: List[CmdComponent],
+        self,
+        cmd_components: List[CmdComponent],
         jsonl_components: List[JsonlComponent],
-        image_components: List[ImageComponent]
+        image_components: List[ImageComponent],
     ) -> Set[ImageComponent]:
         """
         Find all image components that are referenced in the given cmd and jsonl components.
@@ -556,9 +556,8 @@ class ConfigManager:
             for match in image_references:
                 matching_components = list(filter(lambda x: x.name == match, image_components))
                 if len(matching_components) <= 0:
-                    found_component_names = ','.join([c.name for c in image_components])
-                    raise AssertionError(
-                        f"Referenced image component not found: {match}, only found: {found_component_names}")
+                    found_component_names = ",".join([c.name for c in image_components])
+                    raise AssertionError(f"Referenced image component not found: {match}, only found: {found_component_names}")
                 referenced_image_components.update(matching_components)
 
         for component in jsonl_components:
@@ -566,9 +565,8 @@ class ConfigManager:
             for match in image_references:
                 matching_components = list(filter(lambda x: x.name == match, image_components))
                 if len(matching_components) <= 0:
-                    found_component_names = ','.join([c.name for c in image_components])
-                    raise AssertionError(
-                        f"Referenced image component not found: {match}, only found: {found_component_names}")
+                    found_component_names = ",".join([c.name for c in image_components])
+                    raise AssertionError(f"Referenced image component not found: {match}, only found: {found_component_names}")
                 referenced_image_components.update(matching_components)
 
         return referenced_image_components
@@ -592,7 +590,10 @@ class ConfigManager:
         return result
 
     def determine_device_jsonl_component_order_for_cmd(
-        self, device: Device, cmd_component: CmdComponent) -> List[JsonlComponent]:
+        self,
+        device: Device,
+        cmd_component: CmdComponent,
+    ) -> List[JsonlComponent]:
         """
         Determines the order of the jsonl components based on the order of their reference in cmd components.
 
@@ -606,13 +607,15 @@ class ConfigManager:
         return self._determine_device_jsonl_component_order_for_cmd(
             cmd_component=cmd_component,
             device_cmd_components=device_cmd_components,
-            device_jsonl_components=device_jsonl_components
+            device_jsonl_components=device_jsonl_components,
         )
 
     def _determine_device_jsonl_component_order_for_cmd(
-        self, cmd_component: CmdComponent,
+        self,
+        cmd_component: CmdComponent,
         device_cmd_components: List[CmdComponent],
-        device_jsonl_components: List[JsonlComponent]) -> List[JsonlComponent]:
+        device_jsonl_components: List[JsonlComponent],
+    ) -> List[JsonlComponent]:
         """
         Determines an ordered list of all referenced jsonl components based on their reference in the given cmd component.
 
@@ -626,24 +629,18 @@ class ConfigManager:
         for cmd in cmd_component.commands:
             if cmd.endswith(".jsonl"):
                 jsonl_component_name = cmd.split("/")[-1]
-                jsonl_component = next(
-                    filter(lambda x: x.name == jsonl_component_name, device_jsonl_components), None
-                )
+                jsonl_component = next(filter(lambda x: x.name == jsonl_component_name, device_jsonl_components), None)
                 if jsonl_component is None:
                     raise AssertionError(f"Component {jsonl_component_name} not found in device jsonl components")
                 jsonl_components.append(jsonl_component)
             elif cmd.endswith(".cmd"):
                 cmd_component_name = cmd.split("/")[-1]
-                cmd_component = next(
-                    filter(lambda x: x.name == cmd_component_name, device_cmd_components), None
-                )
+                cmd_component = next(filter(lambda x: x.name == cmd_component_name, device_cmd_components), None)
                 if cmd_component is None:
                     raise AssertionError(f"Component {cmd_component_name} not found in device cmd components")
                 jsonl_components.extend(
                     self._determine_device_jsonl_component_order_for_cmd(
-                        cmd_component,
-                        device_cmd_components,
-                        device_jsonl_components
+                        cmd_component, device_cmd_components, device_jsonl_components
                     )
                 )
 
@@ -653,10 +650,7 @@ class ConfigManager:
     def _write_output(device: Device, component: Component, output_content: str | bytes):
         device.output_dir.mkdir(parents=True, exist_ok=True)
 
-        component_output_file = Path(
-            device.output_dir,
-            component.name
-        )
+        component_output_file = Path(device.output_dir, component.name)
 
         if isinstance(output_content, bytes):
             component_output_file.write_bytes(output_content)

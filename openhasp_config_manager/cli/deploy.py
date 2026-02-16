@@ -25,7 +25,7 @@ async def c_deploy(config_dir: Path, output_dir: Path, device: str, purge: bool,
                 device=device,
                 output_dir=output_dir,
                 purge=purge,
-                show_diff=diff
+                show_diff=diff,
             )
 
         success("Done!")

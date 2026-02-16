@@ -5,7 +5,6 @@ from tests import TestBase
 
 
 class TestVariableManager(TestBase):
-
     def test_global_variable(self, tmp_path):
         # GIVEN
         variable_manager = VariableManager(self.cfg_root)
@@ -17,11 +16,9 @@ class TestVariableManager(TestBase):
 
         # THEN
         assert result == {
-            "global": {
-                "var": "global_var_value"
-            },
-            'key_vars2': 'value_vars2',
-            "key_also_present_in_device_vars": "test_device_value"
+            "global": {"var": "global_var_value"},
+            "key_vars2": "value_vars2",
+            "key_also_present_in_device_vars": "test_device_value",
         }
 
     def test_add_var(self, tmp_path):
@@ -41,11 +38,9 @@ class TestVariableManager(TestBase):
         result = variable_manager.get_vars(tested_component_path)
         assert result == {
             "A": "B",
-            "global": {
-                "var": "global_var_value"
-            },
-            'key_vars2': 'value_vars2',
-            "key_also_present_in_device_vars": "test_device_value"
+            "global": {"var": "global_var_value"},
+            "key_vars2": "value_vars2",
+            "key_also_present_in_device_vars": "test_device_value",
         }
 
     def test_add_var_global(self, tmp_path):
@@ -65,11 +60,9 @@ class TestVariableManager(TestBase):
         result = variable_manager.get_vars(tested_component_path)
         assert result == {
             "A": "B",
-            "global": {
-                "var": "global_var_value"
-            },
-            'key_vars2': 'value_vars2',
-            "key_also_present_in_device_vars": "test_device_value"
+            "global": {"var": "global_var_value"},
+            "key_vars2": "value_vars2",
+            "key_also_present_in_device_vars": "test_device_value",
         }
 
     def test_add_vars(self, tmp_path):
@@ -80,25 +73,17 @@ class TestVariableManager(TestBase):
 
         # WHEN
         variable_manager.add_vars(
-            vars={
-                "A": {
-                    "B": "C"
-                }
-            },
+            vars={"A": {"B": "C"}},
             path=tested_component_path,
         )
 
         # THEN
         result = variable_manager.get_vars(tested_component_path)
         assert result == {
-            "A": {
-                "B": "C"
-            },
-            "global": {
-                "var": "global_var_value"
-            },
-            'key_vars2': 'value_vars2',
-            "key_also_present_in_device_vars": "test_device_value"
+            "A": {"B": "C"},
+            "global": {"var": "global_var_value"},
+            "key_vars2": "value_vars2",
+            "key_also_present_in_device_vars": "test_device_value",
         }
 
     def test_add_vars_merge_with_existing(self, tmp_path):
@@ -108,35 +93,21 @@ class TestVariableManager(TestBase):
         tested_component_path = Path(self.cfg_root, "devices", "test_device", "home", "page.jsonl")
 
         variable_manager.add_vars(
-            vars={
-                "A": {
-                    "B": "C"
-                }
-            },
+            vars={"A": {"B": "C"}},
             path=tested_component_path,
         )
 
         # WHEN
         variable_manager.add_vars(
-            vars={
-                "A": {
-                    "B": "D",
-                    "C": "E"
-                }
-            },
+            vars={"A": {"B": "D", "C": "E"}},
             path=tested_component_path,
         )
 
         # THEN
         result = variable_manager.get_vars(tested_component_path)
         assert result == {
-            "A": {
-                "B": "D",
-                "C": "E"
-            },
-            "global": {
-                "var": "global_var_value"
-            },
-            'key_vars2': 'value_vars2',
-            "key_also_present_in_device_vars": "test_device_value"
+            "A": {"B": "D", "C": "E"},
+            "global": {"var": "global_var_value"},
+            "key_vars2": "value_vars2",
+            "key_also_present_in_device_vars": "test_device_value",
         }

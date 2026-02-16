@@ -3,7 +3,6 @@ from tests import TestBase
 
 
 class TestMqttClient(TestBase):
-
     async def test_subscription(self):
         mqtt_client = MqttClient("localhost", 1883, "test", "test")
 
@@ -12,9 +11,7 @@ class TestMqttClient(TestBase):
 
         await mqtt_client.subscribe(topic="test", callback=callback)
 
-        assert mqtt_client._callbacks == {
-            "test": [callback]
-        }
+        assert mqtt_client._callbacks == {"test": [callback]}
 
         await mqtt_client.cancel_callback(callback=callback)
 
@@ -27,6 +24,4 @@ class TestMqttClient(TestBase):
         await mqtt_client.subscribe(topic="test", callback=callback)
         await mqtt_client.cancel_callback(callback=callback)
 
-        assert mqtt_client._callbacks == {
-            "test": []
-        }
+        assert mqtt_client._callbacks == {"test": []}

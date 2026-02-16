@@ -31,7 +31,9 @@ def parse_icons(text: str) -> str:
     # This allows users to use any mdi6 icon without it being explicitly listed in IntegratedIcon
     # We can identify mdi6 icons by the pattern :mdi6.name:
     import re
+
     pattern = r":mdi6\.([a-z0-9_-]+):"
+
     def replace_mdi6_icon(match):
         full_name = match.group(1)  # e.g., "mdi6.home"
         icon_char = IconManager.get_mdi_char(full_name)
@@ -79,6 +81,7 @@ from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 
 class ThreadBridge(QObject):
     """A helper to ferry function calls to the Main Thread."""
+
     trigger = pyqtSignal(object, tuple, dict)
 
     def __init__(self):

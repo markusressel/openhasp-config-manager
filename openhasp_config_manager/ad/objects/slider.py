@@ -18,7 +18,6 @@ class SliderEvent(StrEnum):
 
 
 class SliderObjectController(ObjectController):
-
     def __init__(
         self,
         app: ADAPI,
@@ -55,6 +54,7 @@ class SliderObjectController(ObjectController):
         self._on_released = on_released
         self._transform_value = transform_value
         if transform_value is None:
+
             def __default_transform_value(x: Any) -> int:
                 if isinstance(x, str):
                     x = x.replace("%", "").strip()

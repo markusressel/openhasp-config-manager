@@ -4,7 +4,6 @@ from openhasp_config_manager.validation import Validator
 
 
 class CmdFileValidator(Validator):
-
     def validate(self, data: str):
         for line in data.splitlines():
             line = line.lstrip()
@@ -16,7 +15,6 @@ class CmdFileValidator(Validator):
         elif line.startswith("jsonl"):
             command, arg = line.split(sep=" ", maxsplit=1)
             try:
-                import json
                 orjson.loads(arg)
             except Exception as ex:
                 raise AssertionError(f"jsonl command argument cannot be parsed: {ex}")

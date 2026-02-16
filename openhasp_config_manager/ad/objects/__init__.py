@@ -55,7 +55,7 @@ class ObjectController:
         """
         return await self.client.set_hidden(
             obj=self.object_id,
-            hidden=hidden
+            hidden=hidden,
         )
 
     async def set_enabled(self, enabled: bool):
@@ -77,7 +77,7 @@ class ObjectController:
         self.app.log(f"Setting properties of {self.object_id}: {properties}", level="DEBUG")
         return await self.client.set_object_properties(
             obj=self.object_id,
-            properties=properties
+            properties=properties,
         )
 
     async def listen_obj(self, callback: Callable[[str, Dict], Awaitable[Any]]):
@@ -86,6 +86,7 @@ class ObjectController:
         :param callback: the callback to call when an event for the given object is received
         """
         from openhasp_config_manager.ad import util_openhasp
+
         return await util_openhasp.listen_state(
             controller=self.app,
             client=self.client,

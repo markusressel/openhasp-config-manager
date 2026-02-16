@@ -27,6 +27,7 @@ class DeviceListWidget(QWidget):
     def create_entries(self):
         sorted_devices = sorted(self.devices, key=lambda d: d.name)
         for device in sorted_devices:
+
             def __on_device_button_clicked(_, device=device):
                 self.on_device_label_clicked(device)
 

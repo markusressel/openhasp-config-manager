@@ -5,7 +5,6 @@ from temppathlib import NamedTemporaryFile
 
 
 class OpenHaspImageProcessor:
-
     def image_to_rgb565(self, in_image, out_image, size: Tuple[int or None, int or None], fitscreen: bool):
         """
         Transforms an image to rgb565 format according to LVGL requirements.
@@ -22,6 +21,7 @@ class OpenHaspImageProcessor:
             # copy file to temp file
             tmp_file_container = NamedTemporaryFile(delete=False)
             import shutil
+
             shutil.copy(in_image, tmp_file_container.path)
 
         try:
@@ -62,11 +62,12 @@ class OpenHaspImageProcessor:
         filename = filename.split("?")[0]
         response = requests.get(in_image, stream=True)
         response.raise_for_status()
-        content_type = response.headers.get('content-type', None)
+        content_type = response.headers.get("content-type", None)
         content = response.content
 
         # add file extension based on content type
         from mimetypes import guess_extension
+
         guess = guess_extension(content_type)
         if guess is not None:
             filename = filename + guess

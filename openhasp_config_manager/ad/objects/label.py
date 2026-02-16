@@ -27,7 +27,7 @@ class LabelObjectController(ObjectController):
         entity_id: str | List[str] = None,
         attribute: str = None,
         get_state: Callable[[], Awaitable[Any]] = None,
-        converter: Callable[[Any], str] = None
+        converter: Callable[[Any], str] = None,
     ):
         """
         Sets up a connection between an object and an entity, updating the text of the object
@@ -73,11 +73,13 @@ class LabelObjectController(ObjectController):
             if self._attribute is not None:
                 for entity_id in self._entity_ids:
                     await util_ad.listen_state_and_call_immediately(
-                        controller=self.app, callback=self._on_state_changed, entity_id=entity_id, attribute=self._attribute)
+                        controller=self.app, callback=self._on_state_changed, entity_id=entity_id, attribute=self._attribute
+                    )
             else:
                 for entity_id in self._entity_ids:
                     await util_ad.listen_state_and_call_immediately(
-                        controller=self.app, callback=self._on_state_changed, entity_id=entity_id)
+                        controller=self.app, callback=self._on_state_changed, entity_id=entity_id
+                    )
 
     async def __get_text_state(self) -> str:
         if self._get_state is not None:

@@ -24,7 +24,7 @@ class DeploymentController:
         self._config_manager = ConfigManager(
             cfg_root=self.config_dir,
             output_root=self.output_dir,
-            variable_manager=variable_manager
+            variable_manager=variable_manager,
         )
 
         self._analyze_and_filter(self._name)
@@ -57,7 +57,7 @@ class DeploymentController:
 
     def deploy_config(self):
         self.client.set_gui_config(
-            config=self.device.config.gui
+            config=self.device.config.gui,
         )
         # await self.set_gui_config(
         #     idle1=self._device.config.gui.idle1,

@@ -7,9 +7,8 @@ from aiomqtt import Client, Message
 
 
 class MqttClient:
-
     def __init__(self, host: str, port: int, mqtt_user: str, mqtt_password: str):
-        self._mqtt_client_id = 'openhasp-config-manager'
+        self._mqtt_client_id = "openhasp-config-manager"
         self._host = host
         self._port = port
         self._mqtt_user = mqtt_user
@@ -53,7 +52,7 @@ class MqttClient:
         :param callback: the specific callback to cancel
         """
         if topic is None and callback is None:
-            raise ValueError('Must specify either topic, callback or both')
+            raise ValueError("Must specify either topic, callback or both")
 
         if topic is not None and callback is not None:
             self._callbacks[topic] = list(filter(lambda x: x != callback, self._callbacks[topic]))
@@ -95,7 +94,7 @@ class MqttClient:
                 break
             except Exception as ex:
                 # TODO: use logger instead of print
-                print(f'Error: {ex}; Reconnecting in {self._reconnect_interval_seconds} seconds ...')
+                print(f"Error: {ex}; Reconnecting in {self._reconnect_interval_seconds} seconds ...")
                 await asyncio.sleep(self._reconnect_interval_seconds)
 
     async def _handle_message(self, message: Message):
@@ -103,7 +102,4 @@ class MqttClient:
             if message.topic.matches(topic):
                 for callback in callbacks:
                     # convert topic to string to avoid exposing the aiomqtt.Topic class to the caller
-                    await callback(
-                        str(message.topic),
-                        message.payload
-                    )
+                    await callback(str(message.topic), message.payload)

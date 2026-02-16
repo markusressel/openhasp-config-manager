@@ -84,7 +84,7 @@ class SwitchObjectController(ObjectController):
             await util_ad.listen_state_and_call_immediately(
                 controller=self.app,
                 callback=self.__state_update_callback,
-                entity_id=self._entity_id
+                entity_id=self._entity_id,
             )
 
     async def _toggle_entity(self):

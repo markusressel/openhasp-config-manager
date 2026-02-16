@@ -3,8 +3,13 @@ from typing import List, Dict, Any
 
 import orjson
 
-from openhasp_config_manager.openhasp_client.model.component import Component, JsonlComponent, CmdComponent, \
-    TextComponent, RawComponent
+from openhasp_config_manager.openhasp_client.model.component import (
+    Component,
+    JsonlComponent,
+    CmdComponent,
+    TextComponent,
+    RawComponent,
+)
 from openhasp_config_manager.openhasp_client.model.configuration.config import Config
 from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.processing.jsonl import JsonlObjectProcessor
@@ -20,8 +25,12 @@ class DeviceProcessor:
     present within the configuration files.
     """
 
-    def __init__(self, device: Device, jsonl_object_processors: List[JsonlObjectProcessor],
-                 variable_manager: VariableManager):
+    def __init__(
+        self,
+        device: Device,
+        jsonl_object_processors: List[JsonlObjectProcessor],
+        variable_manager: VariableManager,
+    ):
         self._device = device
 
         self._jsonl_components: List[JsonlComponent] = []
@@ -121,8 +130,7 @@ class DeviceProcessor:
             merged_template_variables = merge_dict_recursive(merged_template_variables, component_template_vars)
 
             rendered_template_vars = render_dict_recursive(
-                input=c_result,
-                template_vars=merge_dict_recursive(merged_template_variables, c_result)
+                input=c_result, template_vars=merge_dict_recursive(merged_template_variables, c_result)
             )
             rendered_template_vars = merge_dict_recursive(rendered_template_vars, merged_template_variables)
 

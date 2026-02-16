@@ -10,7 +10,6 @@ from tests import TestBase
 
 
 class TestDeviceProcessor(TestBase):
-
     def test_multiline_object_params(self):
         # GIVEN
         device = Device(
@@ -21,13 +20,11 @@ class TestDeviceProcessor(TestBase):
             jsonl=[],
             images=[],
             fonts=[],
-            output_dir=None
+            output_dir=None,
         )
 
         variable_manager = VariableManager(self.cfg_root)
-        jsonl_object_processors = [
-            ObjectDimensionsProcessor()
-        ]
+        jsonl_object_processors = [ObjectDimensionsProcessor()]
         processor = DeviceProcessor(device, jsonl_object_processors, variable_manager)
 
         content = textwrap.dedent("""
@@ -37,12 +34,7 @@ class TestDeviceProcessor(TestBase):
            }
            """)
 
-        component = JsonlComponent(
-            name="component",
-            type="jsonl",
-            path=Path(self.cfg_root, "common"),
-            content=content
-        )
+        component = JsonlComponent(name="component", type="jsonl", path=Path(self.cfg_root, "common"), content=content)
 
         processor._add_jsonl(component)
 
@@ -50,9 +42,12 @@ class TestDeviceProcessor(TestBase):
         result = processor.normalize(device, component)
 
         # THEN
-        assert result == textwrap.dedent("""
+        assert (
+            result
+            == textwrap.dedent("""
                {"x": 0, "y": 0}
                """).strip()
+        )
 
     def test_multiple_objects(self):
         # GIVEN
@@ -64,13 +59,11 @@ class TestDeviceProcessor(TestBase):
             jsonl=[],
             images=[],
             fonts=[],
-            output_dir=None
+            output_dir=None,
         )
 
         variable_manager = VariableManager(self.cfg_root)
-        jsonl_object_processors = [
-            ObjectDimensionsProcessor()
-        ]
+        jsonl_object_processors = [ObjectDimensionsProcessor()]
         processor = DeviceProcessor(device, jsonl_object_processors, variable_manager)
 
         content = textwrap.dedent("""
@@ -79,10 +72,7 @@ class TestDeviceProcessor(TestBase):
             """)
 
         component = JsonlComponent(
-            name="component",
-            type="jsonl",
-            path=Path(self.cfg_root, "devices", "test_device"),
-            content=content
+            name="component", type="jsonl", path=Path(self.cfg_root, "devices", "test_device"), content=content
         )
         processor._add_jsonl(component)
 
@@ -90,10 +80,13 @@ class TestDeviceProcessor(TestBase):
         result = processor.normalize(device, component)
 
         # THEN
-        assert result == textwrap.dedent("""
+        assert (
+            result
+            == textwrap.dedent("""
             {"x": 0, "y": 0}
             {"a": 0, "b": 0}
             """).strip()
+        )
 
     def test_id_template(self):
         # GIVEN
@@ -105,13 +98,11 @@ class TestDeviceProcessor(TestBase):
             jsonl=[],
             images=[],
             fonts=[],
-            output_dir=None
+            output_dir=None,
         )
 
         variable_manager = VariableManager(self.cfg_root)
-        jsonl_object_processors = [
-            ObjectDimensionsProcessor()
-        ]
+        jsonl_object_processors = [ObjectDimensionsProcessor()]
         processor = DeviceProcessor(device, jsonl_object_processors, variable_manager)
 
         content = textwrap.dedent("""
@@ -136,10 +127,7 @@ class TestDeviceProcessor(TestBase):
            """)
 
         component = JsonlComponent(
-            name="component",
-            type="jsonl",
-            path=Path(self.cfg_root, "devices", "test_device"),
-            content=content
+            name="component", type="jsonl", path=Path(self.cfg_root, "devices", "test_device"), content=content
         )
         processor._add_jsonl(component)
 
@@ -147,11 +135,14 @@ class TestDeviceProcessor(TestBase):
         result = processor.normalize(device, component)
 
         # THEN
-        assert result == textwrap.dedent("""
+        assert (
+            result
+            == textwrap.dedent("""
                {"id": 0, "page": 1, "x": 0, "y": 0}
                {"id": 1, "page": 1, "x": 0, "y": 0}
                {"id": 2, "page": 1, "x": 0, "y": 0}
                """).strip()
+        )
 
     def test_config_value_template(self):
         # GIVEN
@@ -163,13 +154,11 @@ class TestDeviceProcessor(TestBase):
             jsonl=[],
             images=[],
             fonts=[],
-            output_dir=None
+            output_dir=None,
         )
 
         variable_manager = VariableManager(self.cfg_root)
-        jsonl_object_processors = [
-            ObjectDimensionsProcessor()
-        ]
+        jsonl_object_processors = [ObjectDimensionsProcessor()]
         processor = DeviceProcessor(device, jsonl_object_processors, variable_manager)
 
         content = textwrap.dedent("""
@@ -179,10 +168,7 @@ class TestDeviceProcessor(TestBase):
            """)
 
         component = JsonlComponent(
-            name="component",
-            type="jsonl",
-            path=Path(self.cfg_root, "devices", "test_device"),
-            content=content
+            name="component", type="jsonl", path=Path(self.cfg_root, "devices", "test_device"), content=content
         )
         processor._add_jsonl(component)
 
@@ -190,9 +176,12 @@ class TestDeviceProcessor(TestBase):
         result = processor.normalize(device, component)
 
         # THEN
-        assert result == textwrap.dedent(f"""
+        assert (
+            result
+            == textwrap.dedent(f"""
                {{"w": {device.config.openhasp_config_manager.device.screen.width}}}
                """).strip()
+        )
 
     def test_id_from_config_through_template(self):
         # GIVEN
@@ -204,22 +193,16 @@ class TestDeviceProcessor(TestBase):
             jsonl=[],
             images=[],
             fonts=[],
-            output_dir=None
+            output_dir=None,
         )
 
         variable_manager = VariableManager(self.cfg_root)
         variable_manager.add_vars(
-            vars={
-                "id": {
-                    "text": 10
-                }
-            },
+            vars={"id": {"text": 10}},
             path=device.path,
         )
 
-        jsonl_object_processors = [
-            ObjectDimensionsProcessor()
-        ]
+        jsonl_object_processors = [ObjectDimensionsProcessor()]
         processor = DeviceProcessor(device, jsonl_object_processors, variable_manager)
 
         content = textwrap.dedent("""
@@ -229,10 +212,7 @@ class TestDeviceProcessor(TestBase):
            """)
 
         component = JsonlComponent(
-            name="component",
-            type="jsonl",
-            path=Path(self.cfg_root, "devices", "test_device"),
-            content=content
+            name="component", type="jsonl", path=Path(self.cfg_root, "devices", "test_device"), content=content
         )
         processor._add_jsonl(component)
 
@@ -240,6 +220,9 @@ class TestDeviceProcessor(TestBase):
         result = processor.normalize(device, component)
 
         # THEN
-        assert result == textwrap.dedent(f"""
-               {{"id": 10}}
+        assert (
+            result
+            == textwrap.dedent("""
+               {"id": 10}
                """).strip()
+        )

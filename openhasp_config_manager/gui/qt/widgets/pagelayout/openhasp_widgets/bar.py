@@ -6,7 +6,6 @@ from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable
 
 
 class HaspBarItem(EditableWidget):
-
     @property
     def min_val(self) -> int:
         return self.obj_data.get("min", 0)
@@ -64,7 +63,7 @@ class HaspBarItem(EditableWidget):
             return
 
         # Use your icon replacement logic
-        if self.parent_widget and hasattr(self.parent_widget, '_replace_unicode_with_icons'):
+        if self.parent_widget and hasattr(self.parent_widget, "_replace_unicode_with_icons"):
             text = self.parent_widget._replace_unicode_with_icons(raw_text)
         else:
             text = raw_text
@@ -80,7 +79,7 @@ class HaspBarItem(EditableWidget):
         t_rect = self.text_item.boundingRect()
         self.text_item.setPos(
             (self.obj_w - t_rect.width()) / 2,
-            (self.obj_h - t_rect.height()) / 2
+            (self.obj_h - t_rect.height()) / 2,
         )
 
     def paint(self, painter, option, widget=None):

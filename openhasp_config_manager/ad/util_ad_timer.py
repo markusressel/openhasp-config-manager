@@ -19,7 +19,7 @@ async def schedule_globally(
     name: str,
     callback: Callable[[], Awaitable[...]],
     delay: int,
-    **kwargs
+    **kwargs,
 ):
     # controller.log(f"Scheduling '{name}' globally to run in {delay} seconds")
     await cancel(controller, name)
@@ -38,7 +38,7 @@ async def schedule(
     name: str,
     callback: Callable[[Any], Awaitable[None]],
     delay: int,
-    **kwargs
+    **kwargs,
 ):
     # controller.log(f"Scheduling '{name}' for app '{controller.name}' to run in {delay} seconds")
     await cancel(controller, name)

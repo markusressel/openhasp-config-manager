@@ -54,7 +54,7 @@ class PageLayoutEditorWidget(QWidget):
 
         self.editor_mode_button = UiComponents.create_button(
             title="",
-            on_click=self._on_editor_mode_clicked
+            on_click=self._on_editor_mode_clicked,
         )
         self.device_preview_container_layout.addWidget(self.editor_mode_button)
 
@@ -329,10 +329,7 @@ class PageLayoutEditorWidget(QWidget):
             result.extend(objects_in_jsonl)
 
         # Filter the objects based on the index
-        result = [
-            obj for obj in result if
-            obj.get("page") == index or (obj.get("page") == 0 if include_global else False)
-        ]
+        result = [obj for obj in result if obj.get("page") == index or (obj.get("page") == 0 if include_global else False)]
 
         # Filter hidden objects
         result = [obj for obj in result if not obj.get("hidden", False)]
