@@ -1,5 +1,5 @@
 # dont use alpine for python builds: https://pythonspeed.com/articles/alpine-docker-python/
-FROM python:3.12-slim-bookworm
+FROM python:3.13-slim-bookworm
 
 ENV PYTHONUNBUFFERED=1
 ENV POETRY_VERSION="2.1.2"

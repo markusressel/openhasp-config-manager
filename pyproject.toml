@@ -62,13 +62,26 @@ pytest = "*"
 pytest_asyncio = "*"
 appdaemon = "4.5.13" # required for ad util testing
 
-[tool.flake8]
+[tool.ruff]
+# Same as Black.
+line-length = 127
+indent-width = 4
+
+[tool.ruff.lint]
+# Enable Pyflakes (F) and Error (E) codes (similar to your flake8 setup)
+select = ["E", "F"]
+ignore = []
+
+[tool.ruff.format]
+quote-style = "double"
+
+# This ensures Ruff doesn't go diving into your venv
 exclude = [
     ".venv",
     "venv",
     "__pycache__",
     "build",
-    "dist"
+    "dist",
 ]
 
 [tool.pytest.ini_options]

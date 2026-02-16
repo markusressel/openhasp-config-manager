@@ -4,6 +4,14 @@ setup:
 	pyenv local 3.13
 	poetry install
 
+format:
+	poetry run ruff format .
+
+lint:
+	# --fix automatically fixes lint violations (like unused imports)
+	# --unsafe-fixes allows ruff to fix things that might change code behavior
+	poetry run ruff check . --fix
+
 test:
 	cd tests && poetry run pytest
 
