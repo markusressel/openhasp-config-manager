@@ -6,4 +6,4 @@ class OpenHaspControllerTest(TestBase):
     async def test_instantiation(self):
         ad = {}
         config_model = {}
-        controller = OpenHaspController(ad, config_model)
+        _ = OpenHaspController(ad, config_model)

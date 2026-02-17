@@ -71,7 +71,7 @@ indent-width = 4
 [tool.ruff.lint]
 # Enable Pyflakes (F) and Error (E) codes (similar to your flake8 setup)
 select = ["E", "F"]
-ignore = []
+ignore = ["E402", "E501"]
 
 [tool.ruff.format]
 quote-style = "double"

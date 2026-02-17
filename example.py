@@ -39,7 +39,7 @@ async def main():
     uploader = ConfigUploader(output_dir, client)
 
     # deploy the local config to the device
-    # uploader.upload(device=device, purge=False, print_diff=True)
+    uploader.upload(device=device, purge=False, print_diff=True)
 
     # subscribe to state changes of object p1b22 (async)
     await client.listen_state(obj="p1b22", callback=state_callback)
@@ -57,7 +57,7 @@ async def main():
         text="Hello!",
     )
 
-    # await asyncio.sleep(10)
+    await asyncio.sleep(10)
 
     await client.set_text(
         obj="p1b10",

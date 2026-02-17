@@ -17,4 +17,5 @@ class Device:
     fonts: List[FontComponent]
     output_dir: Path
 
-    __hash__ = lambda self: hash(self.name)
+    def __hash__(self):
+        return hash(self.name)
