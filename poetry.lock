@@ -1891,14 +1891,14 @@ test = ["aiohttp-cors", "cykooz.testing", "multidict", "pytest", "pytest-aiohttp
 
 [[package]]
 name = "telnetlib3"
-version = "2.5.0"
+version = "2.6.0"
 description = "Python Telnet server and client CLI and Protocol library"
 optional = false
 python-versions = ">=3.9"
 groups = ["main"]
 files = [
-    {file = "telnetlib3-2.5.0-py3-none-any.whl", hash = "sha256:66b9bfd00d40df70ba5b5790b179c421043bfee5de1482cde8d4c8415fbecc65"},
-    {file = "telnetlib3-2.5.0.tar.gz", hash = "sha256:a5bf0ae281280154ea184d6bf684cd46031339a06366c4a2445d3db55d13020d"},
+    {file = "telnetlib3-2.6.0-py3-none-any.whl", hash = "sha256:14342132ca12fa778417cc192150f220e15b1464bca35f0144a9f6035a4bac5d"},
+    {file = "telnetlib3-2.6.0.tar.gz", hash = "sha256:c231e790c626f5b6927a4a85e79bce18cde994c9424254d2193582b430972164"},
 ]
 
 [package.dependencies]
@@ -2248,4 +2248,4 @@ propcache = ">=0.2.1"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12,<3.14"
-content-hash = "25762bd7b37f4921b8200175bfe9566ba8995a7f4e0849b098e1b3100a810f11"
+content-hash = "14c3feb306e98fe84fbd6382c95eaec9c69ffaa421cd3aa32af09cb3161f4389"
