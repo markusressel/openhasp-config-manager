@@ -41,7 +41,7 @@ pyyaml = "6.0.3"
 
 multidict = "6.7.1"
 frozenlist = "1.8.0"
-yarl = "1.22.0"
+yarl = "1.23.0"
 
 orjson = "3.11.7"
 aiomqtt = "*" # compromise to get it working with appdaemon 4.5.0
