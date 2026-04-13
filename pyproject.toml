@@ -46,7 +46,7 @@ yarl = "1.23.0"
 orjson = "3.11.8"
 aiomqtt = "*" # compromise to get it working with appdaemon 4.5.0
 paho-mqtt = ">= 1.6.1,< 2.2.0"
-telnetlib3 = "4.0.1"
+telnetlib3 = "4.0.2"
 pillow = "12.2.0"
 
 [tool.poetry.group.ui]
