@@ -54,7 +54,7 @@ optional = true
 
 [tool.poetry.group.ui.dependencies]
 PyQt6 = "6.11.0"
-QtAwesome = "1.4.1"
+QtAwesome = "1.4.2"
 qt-themes = "0.4.0"
 
 [tool.poetry.group.dev.dependencies]
