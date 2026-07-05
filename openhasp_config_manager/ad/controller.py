@@ -4,7 +4,7 @@ from typing import Dict, TYPE_CHECKING, Any
 
 from appdaemon import ADAPI
 
-from openhasp_config_manager.ad import KEY_ARGS, KEY_NAME, util_ad_timer
+from openhasp_config_manager.ad import KEY_ARGS, KEY_NAME, util_ad_timer, KEY_CONFIG_DIR, KEY_OUTPUT_DIR
 from openhasp_config_manager.ad.page.state_updater import StateUpdater
 from openhasp_config_manager.ad.plate import PlateConfig, PlateController
 
@@ -30,12 +30,17 @@ class OpenHaspController(ADAPI):
         self._name = self.args[KEY_ARGS][KEY_NAME]
         self.log(f"Initializing {self._name}...")
 
+        self._config_dir = self.args[KEY_ARGS][KEY_CONFIG_DIR]
+        self._output_dir = self.args[KEY_ARGS][KEY_OUTPUT_DIR]
+
         self.state_updater = StateUpdater(app=self)
         self.plate_controller = PlateController(
             app=self,
             state_updater=self.state_updater,
             name=self._name,
             config=self.plate_config,
+            config_dir=self._config_dir,
+            output_dir=self._config_dir
         )
 
         await self.before_setup_plate()

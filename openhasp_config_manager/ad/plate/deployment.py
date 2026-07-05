@@ -8,17 +8,18 @@ from openhasp_config_manager.processing.variables import VariableManager
 from openhasp_config_manager.uploader import ConfigUploader
 
 
+
 class DeploymentController:
     """
     Controller for the deployment of the OpenHASP configuration.
     """
 
-    def __init__(self, app: ADAPI, name: str):
+    def __init__(self, app: ADAPI, name: str, config_dir: Path = Path("/conf/openhasp-configs"), output_dir: Path = Path("/conf/openhasp-configs.output")):
         self.app = app
         self._name = name
 
-        self.config_dir = Path("/conf/openhasp-configs")
-        self.output_dir = Path("/conf/openhasp-configs.output")
+        self.config_dir = config_dir
+        self.output_dir = output_dir
 
         variable_manager = VariableManager(cfg_root=self.config_dir)
         self._config_manager = ConfigManager(

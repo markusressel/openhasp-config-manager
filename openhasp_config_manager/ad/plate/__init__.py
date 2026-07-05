@@ -1,6 +1,7 @@
 import copy
 from asyncio import Task
 from enum import StrEnum
+from pathlib import Path
 from typing import Dict, Callable, Set, Optional, Awaitable, Any
 
 from appdaemon import ADAPI
@@ -58,7 +59,15 @@ class PlateController:
     Controller for an OpenHASP plate.
     """
 
-    def __init__(self, app: ADAPI, state_updater: StateUpdater, name: str, config: PlateConfig = PlateConfig()):
+    def __init__(
+        self,
+        app: ADAPI,
+        state_updater: StateUpdater,
+        name: str,
+        config: PlateConfig = PlateConfig(),
+        config_dir: Path = Path("/conf/openhasp-configs"),
+        output_dir: Path = Path("/conf/openhasp-configs.output"),
+    ):
         self.app = app
         self.state_updater = state_updater
         self._name = name
@@ -69,6 +78,8 @@ class PlateController:
         self.deployment_controller = DeploymentController(
             app=self.app,
             name=self._name,
+            config_dir=config_dir,
+            output_dir=output_dir,
         )
 
         self.screen_controller = ScreenController(
