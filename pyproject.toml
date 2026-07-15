@@ -31,31 +31,31 @@ build-backend = "poetry.core.masonry.api"
 [tool.poetry.dependencies]
 python = ">=3.12,<3.14"  # Compatible python versions must be declared here
 
-click = "8.4.2"
-requests = "2.32.5"
-aiohttp = ">=3.9.0,<3.14.0"
-temppathlib = "1.2.0"
-Jinja2 = "3.1.6"
-py-range-parse = "1.0.6"
-pyyaml = "6.0.3"
+click = ">=8.4.2"
+requests = ">=2.32.5"
+aiohttp = ">=3.9.0"
+temppathlib = ">=1.2.0"
+Jinja2 = ">=3.1.6"
+py-range-parse = ">=1.0.6"
+pyyaml = ">=6.0.3"
 
-multidict = "6.7.1"
-frozenlist = "1.8.0"
-yarl = "1.24.2"
+multidict = ">=6.7.1"
+frozenlist = ">=1.8.0"
+yarl = ">=1.24.2"
 
-orjson = "3.11.9"
+orjson = ">=3.11.9"
 aiomqtt = "*" # compromise to get it working with appdaemon 4.5.0
 paho-mqtt = ">= 1.6.1,< 2.2.0"
-telnetlib3 = "4.0.5"
-pillow = "12.3.0"
+telnetlib3 = ">=4.0.5"
+pillow = ">=12.3.0"
 
 [tool.poetry.group.ui]
 optional = true
 
 [tool.poetry.group.ui.dependencies]
-PyQt6 = "6.11.0"
-QtAwesome = "1.4.2"
-qt-themes = "0.4.0"
+PyQt6 = ">=6.11.0"
+QtAwesome = ">=1.4.2"
+qt-themes = ">=0.4.0"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "*"
@@ -92,6 +92,7 @@ testpaths = [
 
 [project]
 name = "openhasp-config-manager"
+version = "0.8.2"
 
 [project.scripts]
 openhasp-config-manager = 'openhasp_config_manager.cli:cli'
