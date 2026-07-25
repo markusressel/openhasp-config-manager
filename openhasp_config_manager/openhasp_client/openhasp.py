@@ -2,7 +2,6 @@ import asyncio
 from typing import Dict, List, Any, Callable, Tuple, Optional, Awaitable
 
 import orjson
-
 from openhasp_config_manager.gui.util import info
 from openhasp_config_manager.openhasp_client.image_processor import OpenHaspImageProcessor
 from openhasp_config_manager.openhasp_client.model.configuration.gui_config import GuiConfig
@@ -138,8 +137,21 @@ class OpenHaspClient:
         from aiohttp import web
 
         async def serve_file(request):
-            response = web.FileResponse(image_file.path)
-            request.app["served"].set_result(True)
+            response = web.StreamResponse()
+            response.content_type = 'application/octet-stream'
+            await response.prepare(request)
+            
+            with open(image_file.path, 'rb') as f:
+                while True:
+                    chunk = f.read(8192)
+                    if not chunk:
+                        break
+                    await response.write(chunk)
+            
+            await response.write_eof()
+            
+            if not request.app["served"].done():
+                request.app["served"].set_result(True)
             return response
 
         async def start_server(app, listen_host, listen_port, access_host, access_port, timeout):
@@ -152,8 +164,8 @@ class OpenHaspClient:
             if access_port == 0:
                 access_port = port
 
-            listen_url = f"http://{listen_host}:{port}/"
-            access_url = f"http://{access_host}:{access_port}/"
+            listen_url = f"http://{listen_host}:{port}/image.bin"
+            access_url = f"http://{access_host}:{access_port}/image.bin"
             print(f"Serving on {listen_url}, accessible via {access_url}")
 
             # give the server some time to start
@@ -177,7 +189,7 @@ class OpenHaspClient:
         app = web.Application()
         app["served"] = asyncio.Future()
 
-        app.router.add_route("GET", "/", serve_file)
+        app.router.add_route("GET", "/image.bin", serve_file)
 
         await start_server(
             app=app,

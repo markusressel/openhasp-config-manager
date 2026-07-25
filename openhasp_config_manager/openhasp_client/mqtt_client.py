@@ -27,11 +27,14 @@ class MqttClient:
         :param topic: topic to publish to
         :param payload: payload to publish
         """
-        async with self._create_mqtt_client() as client:
-            if isinstance(payload, dict) or isinstance(payload, list):
-                payload = json.dumps(payload)
+        if isinstance(payload, dict) or isinstance(payload, list):
+            payload = json.dumps(payload)
 
-            await client.publish(topic, payload=payload)
+        if self.__mqtt_client is not None:
+            await self.__mqtt_client.publish(topic, payload=payload)
+        else:
+            async with self._create_mqtt_client() as client:
+                await client.publish(topic, payload=payload)
 
     async def subscribe(self, topic: str, callback: Callable[[str, bytes], Awaitable[None]]):
         """
@@ -89,9 +92,13 @@ class MqttClient:
         while True:
             try:
                 async with self._create_mqtt_client() as client:
-                    await client.subscribe("hasp/#")
-                    async for message in client.messages:
-                        await self._handle_message(message)
+                    self.__mqtt_client = client
+                    try:
+                        await client.subscribe("hasp/#")
+                        async for message in client.messages:
+                            await self._handle_message(message)
+                    finally:
+                        self.__mqtt_client = None
             except asyncio.CancelledError:
                 break
             except Exception as ex:
