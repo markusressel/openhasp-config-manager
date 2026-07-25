@@ -86,7 +86,7 @@ class ObjectController:
         from openhasp_config_manager.haad import util_openhasp
 
         return await util_openhasp.listen_state(
-            controller=self.app,
+            controller=self.controller,
             client=self.client,
             obj=self.object_id,
             callback=callback,

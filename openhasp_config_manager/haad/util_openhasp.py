@@ -7,6 +7,8 @@ from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 
 from haad.controller import HaadController
 
+_background_tasks = set()
+
 
 async def listen_event(
     controller: HaadController,
@@ -40,7 +42,10 @@ async def listen_event(
         except asyncio.CancelledError:
             await client.cancel_callback(callback=_callback)
 
-    return controller.create_task(cancel_subscription_task_fun())
+    task = controller.create_task(cancel_subscription_task_fun())
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+    return task
 
 
 async def listen_state(
@@ -76,7 +81,10 @@ async def listen_state(
         except asyncio.CancelledError:
             await client.cancel_callback(callback=_callback)
 
-    return controller.create_task(cancel_subscription_task_fun())
+    task = controller.create_task(cancel_subscription_task_fun())
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+    return task
 
 
 async def config(

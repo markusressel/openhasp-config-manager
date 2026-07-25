@@ -31,7 +31,7 @@ class StateUpdater:
             self.controller.log("StateUpdater: No registered objects to sync, ignoring request")
             return
 
-        for name, entry in entries_to_sync.items():
+        for name, entry in list(entries_to_sync.items()):
             self.controller.log(f"StateUpdater: Syncing {name}", level="DEBUG")
             get_target_state_fun = entry["get"]
             set_state_fun = entry["set"]

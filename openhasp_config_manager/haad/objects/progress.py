@@ -90,13 +90,13 @@ class BarObjectController(ObjectController):
         """
         if self._get_state is not None:
             return await self._get_state()
-        if self._entity_id is not None:
-            return await self.controller.get_state(self._entity_id)
+        elif self._entity_id is not None:
+            return await self.controller.ha.get_state(self._entity_id)
         else:
             return None
 
     async def __set_progress_obj_state(self, state: str):
-        await self.__on_state_changed(None, None, None, state, None)
+        await self.__on_state_changed(HaadStateEvent(None, None, None, state, None))
 
     async def set_progress(self, progress: str | int):
         """

@@ -99,7 +99,7 @@ class SwitchObjectController(ObjectController):
         if self._get_state is not None:
             return await self._get_state()
         elif self._entity_id is not None:
-            state = await self.controller.get_state(self._entity_id)
+            state = await self.controller.ha.get_state(self._entity_id)
             return state == SwitchState.ON
         else:
             raise ValueError("No method to get state for this switch object")
@@ -122,7 +122,7 @@ class SwitchObjectController(ObjectController):
         )
 
     async def __set_switch_obj_state(self, state: str):
-        await self.__state_update_callback(None, None, None, state, None)
+        await self.__state_update_callback(HaadStateEvent(None, None, None, state, None))
 
     async def set_indicator_color(self, color: str):
         """

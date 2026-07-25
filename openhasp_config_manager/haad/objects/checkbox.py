@@ -85,9 +85,9 @@ class CheckboxObjectController(ObjectController):
         if self._get_state is not None:
             return await self._get_state()
         if self._attribute is not None:
-            return await self.controller.get_state(self._entity_id, attribute=self._attribute)
+            return await self.controller.ha.get_state(self._entity_id, attribute=self._attribute)
         else:
-            return await self.controller.get_state(self._entity_id)
+            return await self.controller.ha.get_state(self._entity_id)
 
     async def __set_checkbox_obj_state(self, state: str):
         await self._on_state_changed(HaadStateEvent(new=state))

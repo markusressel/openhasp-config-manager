@@ -11,7 +11,7 @@ class ScreenController:
     """
 
     def __init__(self, controller: HaadController, client: OpenHaspClient, deployment_controller: DeploymentController):
-        self.app = controller
+        self.controller = controller
         self.client = client
         self.deployment_controller = deployment_controller
 

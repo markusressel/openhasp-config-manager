@@ -91,12 +91,12 @@ class LabelObjectController(ObjectController):
             return await self._get_state()
 
         if self._attribute is not None:
-            return await self.controller.get_state(self._entity_ids[0], attribute=self._attribute)
+            return await self.controller.ha.get_state(self._entity_ids[0], attribute=self._attribute)
         else:
-            return await self.controller.get_state(self._entity_ids[0])
+            return await self.controller.ha.get_state(self._entity_ids[0])
 
     async def __set_text_obj_state(self, state: Any):
-        await self._on_state_changed(None, None, None, state, None)
+        await self._on_state_changed(HaadStateEvent(None, None, None, state, None))
 
     async def _on_state_changed(self, event: HaadStateEvent):
         new = event.new

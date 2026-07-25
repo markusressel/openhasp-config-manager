@@ -95,8 +95,8 @@ class SliderObjectController(ObjectController):
         """
         if self._get_state is not None:
             return await self._get_state()
-        else:
-            return await self.controller.get_state(self._entity_id)
+        elif self._entity_id is not None:
+            return await self.controller.ha.get_state(self._entity_id)
 
     async def __set_slider_obj_state(self, state: str):
         await self.set_value(state)
