@@ -59,7 +59,7 @@ class OpenHaspClient:
         self,
         obj: str,
         image,
-        access_host: str,
+        access_host: str = None,
         listen_host: str = "0.0.0.0",
         listen_port: int = 0,
         access_port: int = None,
@@ -76,7 +76,7 @@ class OpenHaspClient:
 
         :param obj: the object to set the image for
         :param image: the image to set, can be a URL or anything that can be opened by PIL.Image.open, f.ex. a file path
-        :param access_host: the address at which the device this webserver is running on is accessible to the plate
+        :param access_host: the address at which the device this webserver is running on is accessible to the plate (required if image_server is None)
         :param access_port: the port to bind the webserver to, defaults to 0 (random free port)
         :param listen_host: the address to bind the webserver to
         :param timeout: the timeout in seconds to wait for the image to be fetched by the plate
@@ -84,6 +84,8 @@ class OpenHaspClient:
         :param fitscreen: if True, the image will be resized to fit the screen
         :param image_server: optional persistent ImageServer instance to use instead of creating a temporary one
         """
+        if image_server is None and access_host is None:
+            raise ValueError("Either image_server or access_host must be provided")
         if access_port is None:
             access_port = listen_port
 
@@ -95,12 +97,13 @@ class OpenHaspClient:
         os.close(fd)
 
         try:
-            self._image_processor.image_to_rgb565(
-                in_image=image,
-                out_image=temp_path,
-                size=size,
-                fitscreen=fitscreen,
-            )
+            with open(temp_path, 'wb') as f:
+                self._image_processor.image_to_rgb565(
+                    in_image=image,
+                    out_image=f,
+                    size=size,
+                    fitscreen=fitscreen,
+                )
 
             if image_server is not None:
                 # Persistent mode

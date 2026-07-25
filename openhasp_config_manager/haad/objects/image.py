@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from collections import defaultdict
 
 from openhasp_config_manager.haad.objects import ObjectController
@@ -36,6 +37,7 @@ class ImageObjectController(ObjectController):
     """
     Controller for an image object on the OpenHASP plate.
     """
+    LOGGER = logging.getLogger(__name__)
 
     async def init(self):
         """
@@ -43,7 +45,7 @@ class ImageObjectController(ObjectController):
 
         See: https://www.openhasp.com/0.7.0/design/objects/image/
         """
-        self.controller.log(f"Initializing image object {self.object_id}", level="DEBUG")
+        self.LOGGER.debug(f"Initializing image object {self.object_id}")
 
     async def push_image(self, image: str, width: int, height: int):
         """
@@ -66,12 +68,14 @@ class ImageObjectController(ObjectController):
                 await self.client.set_image(
                     obj=self.object_id,
                     image=image,
+                    access_host=ip,
+                    access_port=_global_image_server.listen_port,
                     size=(width, height),
                     image_server=_global_image_server,
                     timeout=5,
                 )
         except Exception as e:
-            self.controller.log(f"Error pushing image: {e}", level="ERROR")
+            self.LOGGER.error(f"Error pushing image: {e}")
 
     async def set_offset(self, offset_x: int = 0, offset_y: int = 0):
         """
