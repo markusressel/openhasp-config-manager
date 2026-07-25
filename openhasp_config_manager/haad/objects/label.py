@@ -74,14 +74,14 @@ class LabelObjectController(ObjectController):
             if self._attribute is not None:
                 for entity_id in self._entity_ids:
                     await self.controller.react_to(
-                        trigger=EntityTrigger(entity_id=entity_id, attribute=self._attribute),
+                        trigger=EntityTrigger(entities=entity_id, attribute=self._attribute),
                         action=self._on_state_changed,
                         immediately=True,
                     )
             else:
                 for entity_id in self._entity_ids:
                     await self.controller.react_to(
-                        trigger=EntityTrigger(entity_id=entity_id),
+                        trigger=EntityTrigger(entities=entity_id),
                         action=self._on_state_changed,
                         immediately=True,
                     )
@@ -99,6 +99,7 @@ class LabelObjectController(ObjectController):
         await self._on_state_changed(None, None, None, state, None)
 
     async def _on_state_changed(self, event: HaadStateEvent):
+        new = event.new
         if self._get_state is not None:
             new = await self._get_state()
         if new in [STATE_UNKNOWN, STATE_UNAVAILABLE]:

@@ -40,7 +40,7 @@ async def listen_event(
         except asyncio.CancelledError:
             await client.cancel_callback(callback=_callback)
 
-    return await controller.create_task(cancel_subscription_task_fun())
+    return controller.create_task(cancel_subscription_task_fun())
 
 
 async def listen_state(
@@ -76,7 +76,7 @@ async def listen_state(
         except asyncio.CancelledError:
             await client.cancel_callback(callback=_callback)
 
-    return await controller.create_task(cancel_subscription_task_fun())
+    return controller.create_task(cancel_subscription_task_fun())
 
 
 async def config(

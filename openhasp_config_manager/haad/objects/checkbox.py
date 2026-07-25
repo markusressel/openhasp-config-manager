@@ -67,13 +67,13 @@ class CheckboxObjectController(ObjectController):
         if self._entity_id is not None:
             if self._attribute is not None:
                 await self.controller.react_to(
-                    trigger=EntityTrigger(entity_id=self._entity_id, attribute=self._attribute),
+                    trigger=EntityTrigger(entities=self._entity_id, attribute=self._attribute),
                     action=self._on_state_changed,
                     immediately=True,
                 )
             else:
                 await self.controller.react_to(
-                    trigger=EntityTrigger(entity_id=self._entity_id),
+                    trigger=EntityTrigger(entities=self._entity_id),
                     action=self._on_state_changed,
                     immediately=True,
                 )
