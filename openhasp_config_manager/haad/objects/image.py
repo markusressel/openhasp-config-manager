@@ -1,8 +1,12 @@
 import asyncio
+from collections import defaultdict
 
 from openhasp_config_manager.haad.objects import ObjectController
+from openhasp_config_manager.openhasp_client.image_server import ImageServer
 
-lock = asyncio.Lock()
+plate_locks = defaultdict(asyncio.Lock)
+_global_image_server = ImageServer(listen_host="0.0.0.0", listen_port=0)
+_server_lock = asyncio.Lock()
 
 import socket
 
@@ -51,17 +55,20 @@ class ImageObjectController(ObjectController):
         """
         try:
             ip = get_local_ip()
+            
+            async with _server_lock:
+                if not _global_image_server._is_running:
+                    _global_image_server.access_host = ip
+                    await _global_image_server.start()
                 
-            async with lock:
+            plate_id = self.client._device.name
+            async with plate_locks[plate_id]:
                 await self.client.set_image(
                     obj=self.object_id,
                     image=image,
                     size=(width, height),
-                    listen_host="0.0.0.0",
-                    listen_port=20000,
-                    access_host=ip,
-                    access_port=20000,
-                    timeout=3,
+                    image_server=_global_image_server,
+                    timeout=5,
                 )
         except Exception as e:
             self.controller.log(f"Error pushing image: {e}", level="ERROR")
