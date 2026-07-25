@@ -5,7 +5,7 @@ from openhasp_config_manager.haad.objects import ObjectController
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 
 from haad import HaadStateEvent
-from triggers import EntityTrigger
+from haad.triggers import EntityTrigger
 
 if TYPE_CHECKING:
     from openhasp_config_manager.haad.page.state_updater import StateUpdater

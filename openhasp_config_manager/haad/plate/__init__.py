@@ -12,7 +12,7 @@ from openhasp_config_manager.haad.plate.screen import ScreenController
 from openhasp_config_manager.openhasp_client.model.configuration.gui_config import GuiConfig
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 
-from controller import HaadController
+from haad.controller import HaadController
 
 
 class ScreenState:

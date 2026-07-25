@@ -1,6 +1,6 @@
 from typing import Callable, Awaitable, Any
 
-from controller import HaadController
+from haad.controller import HaadController
 
 
 class StateUpdater:

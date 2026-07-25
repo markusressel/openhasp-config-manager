@@ -7,7 +7,7 @@ from openhasp_config_manager.haad.page.state_updater import StateUpdater
 from openhasp_config_manager.haad.plate import PlateConfig, PlateController
 
 from haad.controller import HaadController, HaadContext
-from triggers import TimeTrigger
+from haad.triggers import TimeTrigger
 
 if TYPE_CHECKING:
     from openhasp_config_manager.haad.page import PageController
