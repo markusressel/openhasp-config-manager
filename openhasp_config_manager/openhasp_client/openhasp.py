@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from typing import Dict, List, Any, Callable, Tuple, Optional, Awaitable
 
 import orjson
@@ -15,6 +16,8 @@ from openhasp_config_manager.openhasp_client.webservice_client import Webservice
 
 
 class OpenHaspClient:
+    LOGGER = logging.getLogger(__name__)
+
     def __init__(self, device: Device):
         """
         :param device: the device this client can communicate with
@@ -164,9 +167,9 @@ class OpenHaspClient:
             if access_port == 0:
                 access_port = port
 
-            listen_url = f"http://{listen_host}:{port}/image.bin"
-            access_url = f"http://{access_host}:{access_port}/image.bin"
-            print(f"Serving on {listen_url}, accessible via {access_url}")
+            listen_url = f"http://{listen_host}:{port}/"
+            access_url = f"http://{access_host}:{access_port}/"
+            self.LOGGER.debug(f"Serving on {listen_url}, accessible via {access_url}")
 
             # give the server some time to start
             await asyncio.sleep(1)
@@ -180,7 +183,7 @@ class OpenHaspClient:
             try:
                 await asyncio.wait_for(app["served"], timeout)
             except asyncio.TimeoutError:
-                print(f"Timeout reached after {timeout} seconds. Server stopped.")
+                self.LOGGER.warning(f"Timeout reached after {timeout} seconds. Server stopped.")
             finally:
                 await runner.cleanup()
 
@@ -189,7 +192,7 @@ class OpenHaspClient:
         app = web.Application()
         app["served"] = asyncio.Future()
 
-        app.router.add_route("GET", "/image.bin", serve_file)
+        app.router.add_route("GET", "/", serve_file)
 
         await start_server(
             app=app,
@@ -278,7 +281,7 @@ class OpenHaspClient:
         try:
             return await asyncio.wait_for(future, timeout=timeout)
         except asyncio.TimeoutError:
-            print(f"Timeout: Device did not respond to {listen_path} within {timeout}s")
+            self.LOGGER.warning(f"Timeout: Device did not respond to {listen_path} within {timeout}s")
             return None
 
     async def set_idle_state(self, state: str):

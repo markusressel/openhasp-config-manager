@@ -72,7 +72,7 @@ class OpenHaspController(HaadController):
         first time (as seen by this app).
         """
         self._plate_setup_scheduled_task = await self.schedule(
-            trigger=TimeTrigger(timedelta(seconds=1)),
+            trigger=TimeTrigger.after_delay(timedelta(seconds=1)),
             action=self.__failsafe_plate_setup,
         )
 
@@ -85,7 +85,7 @@ class OpenHaspController(HaadController):
         if not res:
             self.log(f"Plate '{self._name}' is not online yet, retrying in {timeout}...")
             self._plate_setup_scheduled_task = await self.schedule(
-                trigger=TimeTrigger(timedelta(seconds=timeout)),
+                trigger=TimeTrigger.after_delay(timedelta(seconds=timeout)),
                 action=self.__failsafe_plate_setup,
             )
             return
@@ -103,7 +103,7 @@ class OpenHaspController(HaadController):
             tb = traceback.format_exc()
             self.log(f"Failed to setup plate '{self._name}', retrying in {timeout}: {type(ex)}: {ex} {tb}", level="ERROR")
             # self._plate_setup_scheduled_task = await self.schedule(
-            #     trigger=TimeTrigger(timedelta(seconds=timeout)),
+            #     trigger=TimeTrigger.after_delay(timedelta(seconds=timeout)),
             #     action=self.__failsafe_plate_setup,
             # )
 
@@ -123,7 +123,7 @@ class OpenHaspController(HaadController):
 
     async def schedule_sync(self):
         self._plate_sync_timer_task = await self.schedule(
-            trigger=TimeTrigger(timedelta(seconds=1)),
+            trigger=TimeTrigger.after_delay(timedelta(seconds=1)),
             action=self.__plate_sync_timer_callback,
         )
 
