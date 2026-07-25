@@ -1,10 +1,12 @@
 import asyncio
 import json
+import logging
 import uuid
 from typing import Callable, List, Dict, Optional, Awaitable
 
 from aiomqtt import Client, Message
 
+_LOGGER = logging.getLogger(__name__)
 
 class MqttClient:
     def __init__(self, host: str, port: int, mqtt_user: str, mqtt_password: str):
@@ -93,8 +95,7 @@ class MqttClient:
             except asyncio.CancelledError:
                 break
             except Exception as ex:
-                # TODO: use logger instead of print
-                print(f"Error: {ex}; Reconnecting in {self._reconnect_interval_seconds} seconds ...")
+                _LOGGER.warning(f"Error: {ex}; Reconnecting in {self._reconnect_interval_seconds} seconds ...")
                 await asyncio.sleep(self._reconnect_interval_seconds)
 
     async def _handle_message(self, message: Message):
