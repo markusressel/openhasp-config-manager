@@ -32,6 +32,13 @@ class ObjectController:
         self.state_updater = state_updater
         self.page = page
         self.obj_id = obj_id
+        self._last_properties: Dict[str, Any] = {}
+
+    def clear_cache(self):
+        """
+        Clears the properties cache, forcing the next property update to be sent to the device.
+        """
+        self._last_properties.clear()
 
     @property
     def object_id(self):
@@ -67,15 +74,27 @@ class ObjectController:
             }
         )
 
-    async def set_object_properties(self, properties: Dict):
+    async def set_object_properties(self, properties: Dict, force: bool = False):
         """
         Sets the properties of an object on the plate of this controller
         :param properties: the properties to set
+        :param force: if True, bypasses deduplication and forces the properties to be sent
         """
-        self.controller.log(f"Setting properties of {self.object_id}: {properties}", level="DEBUG")
+        changed_properties = {}
+        for k, v in properties.items():
+            if force or k not in self._last_properties or self._last_properties[k] != v:
+                changed_properties[k] = v
+                
+        if not changed_properties:
+            return
+            
+        for k, v in changed_properties.items():
+            self._last_properties[k] = v
+
+        self.controller.log(f"Setting properties of {self.object_id}: {changed_properties}", level="DEBUG")
         return await self.client.set_object_properties(
             obj=self.object_id,
-            properties=properties,
+            properties=changed_properties,
         )
 
     async def listen_obj(self, callback: Callable[[str, Dict], Awaitable[Any]]):

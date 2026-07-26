@@ -214,6 +214,9 @@ class PlateController:
         self._screen_brightness_task = await self.listen_openhasp_event(path="state/idle", callback=_on_status_event)
 
     async def sync(self):
+        for page in self.pages.values():
+            for obj in page.objects.values():
+                obj.clear_cache()
         await self.state_updater.sync()
 
     async def reboot(self):
