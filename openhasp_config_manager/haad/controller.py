@@ -62,9 +62,9 @@ class OpenHaspController(HaadController):
     async def teardown_plate_setup(self):
         self.state_updater.clear()
         if self._plate_setup_scheduled_task is not None:
-            self._plate_setup_scheduled_task.cancel()
+            await self._plate_setup_scheduled_task.cancel()
         if self._plate_sync_timer_task is not None:
-            self._plate_sync_timer_task.cancel()
+            await self._plate_sync_timer_task.cancel()
 
     async def schedule_plate_setup(self):
         """
