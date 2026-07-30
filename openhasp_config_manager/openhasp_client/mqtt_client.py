@@ -1,10 +1,12 @@
 import asyncio
 import json
+import logging
 import uuid
 from typing import Callable, List, Dict, Optional, Awaitable
 
 from aiomqtt import Client, Message
 
+_LOGGER = logging.getLogger(__name__)
 
 class MqttClient:
     def __init__(self, host: str, port: int, mqtt_user: str, mqtt_password: str):
@@ -25,11 +27,14 @@ class MqttClient:
         :param topic: topic to publish to
         :param payload: payload to publish
         """
-        async with self._create_mqtt_client() as client:
-            if isinstance(payload, dict) or isinstance(payload, list):
-                payload = json.dumps(payload)
+        if isinstance(payload, dict) or isinstance(payload, list):
+            payload = json.dumps(payload)
 
-            await client.publish(topic, payload=payload)
+        if self.__mqtt_client is not None:
+            await self.__mqtt_client.publish(topic, payload=payload)
+        else:
+            async with self._create_mqtt_client() as client:
+                await client.publish(topic, payload=payload)
 
     async def subscribe(self, topic: str, callback: Callable[[str, bytes], Awaitable[None]]):
         """
@@ -87,14 +92,17 @@ class MqttClient:
         while True:
             try:
                 async with self._create_mqtt_client() as client:
-                    await client.subscribe("hasp/#")
-                    async for message in client.messages:
-                        await self._handle_message(message)
+                    self.__mqtt_client = client
+                    try:
+                        await client.subscribe("hasp/#")
+                        async for message in client.messages:
+                            await self._handle_message(message)
+                    finally:
+                        self.__mqtt_client = None
             except asyncio.CancelledError:
                 break
             except Exception as ex:
-                # TODO: use logger instead of print
-                print(f"Error: {ex}; Reconnecting in {self._reconnect_interval_seconds} seconds ...")
+                _LOGGER.warning(f"Error: {ex}; Reconnecting in {self._reconnect_interval_seconds} seconds ...")
                 await asyncio.sleep(self._reconnect_interval_seconds)
 
     async def _handle_message(self, message: Message):

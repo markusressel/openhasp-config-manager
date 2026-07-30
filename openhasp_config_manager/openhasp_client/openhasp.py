@@ -1,8 +1,8 @@
 import asyncio
+import logging
 from typing import Dict, List, Any, Callable, Tuple, Optional, Awaitable
 
 import orjson
-
 from openhasp_config_manager.gui.util import info
 from openhasp_config_manager.openhasp_client.image_processor import OpenHaspImageProcessor
 from openhasp_config_manager.openhasp_client.model.configuration.gui_config import GuiConfig
@@ -16,6 +16,8 @@ from openhasp_config_manager.openhasp_client.webservice_client import Webservice
 
 
 class OpenHaspClient:
+    LOGGER = logging.getLogger(__name__)
+
     def __init__(self, device: Device):
         """
         :param device: the device this client can communicate with
@@ -57,136 +59,96 @@ class OpenHaspClient:
         self,
         obj: str,
         image,
-        access_host: str,
+        access_host: str = None,
         listen_host: str = "0.0.0.0",
         listen_port: int = 0,
         access_port: int = None,
         timeout: int = 10,
         size: Tuple[int or None, int or None] = (None, None),
         fitscreen: bool = False,
+        image_server=None,
     ):
         """
         Sets the image of an object.
         If the image is a URL, it will be fetched first.
         The image will then be converted to RGB565 and
-        served by a temporary webserver for the plate to fetch it.
-
-        Note: If you are calling this function concurrently, be aware that under
-        the hood a free and unoccupied port is required to feed the image to the
-        plate. If you cannot use different ports for each call, make sure to add
-        a locking mechanism to avoid multiple threads from creating a webserver
-        on the same port.
+        served by a webserver for the plate to fetch it.
 
         :param obj: the object to set the image for
         :param image: the image to set, can be a URL or anything that can be opened by PIL.Image.open, f.ex. a file path
-        :param access_host: the address at which the device this webserver is running on is accessible to the plate
+        :param access_host: the address at which the device this webserver is running on is accessible to the plate (required if image_server is None)
         :param access_port: the port to bind the webserver to, defaults to 0 (random free port)
         :param listen_host: the address to bind the webserver to
         :param timeout: the timeout in seconds to wait for the image to be fetched by the plate
         :param size: the size of the image
         :param fitscreen: if True, the image will be resized to fit the screen
+        :param image_server: optional persistent ImageServer instance to use instead of creating a temporary one
         """
+        if image_server is None and access_host is None:
+            raise ValueError("Either image_server or access_host must be provided")
         if access_port is None:
             access_port = listen_port
 
-        import temppathlib
+        import tempfile
+        import os
+        from openhasp_config_manager.openhasp_client.image_server import ImageServer
 
-        with temppathlib.NamedTemporaryFile() as out_image:
-            self._image_processor.image_to_rgb565(
-                in_image=image,
-                out_image=out_image.file,
-                size=size,
-                fitscreen=fitscreen,
-            )
-            await self._serve_image(
-                obj=obj,
-                image_file=out_image,
-                listen_host=listen_host,
-                listen_port=listen_port,
-                access_host=access_host,
-                access_port=access_port,
-                timeout=timeout,
-            )
+        fd, temp_path = tempfile.mkstemp(suffix=".bin")
+        os.close(fd)
 
-    async def _serve_image(
-        self,
-        obj: str,
-        image_file,
-        listen_host: str,
-        access_host: str,
-        listen_port: int = 0,
-        access_port: int = 0,
-        timeout: int = 5,
-    ):
-        """
-        Serves an image using a temporary webserver.
+        try:
+            with open(temp_path, 'wb') as f:
+                self._image_processor.image_to_rgb565(
+                    in_image=image,
+                    out_image=f,
+                    size=size,
+                    fitscreen=fitscreen,
+                )
 
-        Note that this webserver intentionally does **not** use HTTPS, since openhasp
-        does not support SSL connections. The source file can use an HTTPS source regardless,
-        since openhasp-config-manager will fetch the image from the source directly,
-        convert it for the plate, and then serve it internally via HTTP.
-
-        :param obj: the object to set the image for
-        :param image_file: the image to serve
-        :param listen_host: the address to bind the webserver to
-        :param listen_port: the port to bind the webserver to, defaults to 0 (random free port)
-        :param access_host: the address at which the device this webserver is running on is accessible to the plate
-        :param access_port: the port at which the device this webserver is running on is accessible to the plate
-        :param timeout: the timeout in seconds after which the webserver will be stopped
-        :return: the URL to retrieve the image
-        """
-        from aiohttp import web
-
-        async def serve_file(request):
-            response = web.FileResponse(image_file.path)
-            request.app["served"].set_result(True)
-            return response
-
-        async def start_server(app, listen_host, listen_port, access_host, access_port, timeout):
-            runner = web.AppRunner(app)
-            await runner.setup()
-            site = web.TCPSite(runner, listen_host, listen_port)
-            await site.start()
-
-            port = site._server.sockets[0].getsockname()[1]
-            if access_port == 0:
-                access_port = port
-
-            listen_url = f"http://{listen_host}:{port}/"
-            access_url = f"http://{access_host}:{access_port}/"
-            print(f"Serving on {listen_url}, accessible via {access_url}")
-
-            # give the server some time to start
-            await asyncio.sleep(1)
-
-            # set the object properties to point to the image url, the plate will download the image immediately
-            await self.set_object_properties(
-                obj=obj,
-                properties={"src": access_url},
-            )
-
-            try:
-                await asyncio.wait_for(app["served"], timeout)
-            except asyncio.TimeoutError:
-                print(f"Timeout reached after {timeout} seconds. Server stopped.")
-            finally:
-                await runner.cleanup()
-
-            return listen_url
-
-        app = web.Application()
-        app["served"] = asyncio.Future()
-
-        app.router.add_route("GET", "/", serve_file)
-
-        await start_server(
-            app=app,
-            listen_host=listen_host,
-            listen_port=listen_port,
-            access_host=access_host,
-            access_port=access_port,
-            timeout=timeout,
-        )
+            if image_server is not None:
+                # Persistent mode
+                future = asyncio.Future()
+                access_url = image_server.register_image(temp_path, delete_on_serve=True, future=future)
+                
+                # set the object properties to point to the image url, the plate will download the image immediately
+                await self.set_object_properties(
+                    obj=obj,
+                    properties={"src": access_url},
+                )
+                
+                try:
+                    await asyncio.wait_for(future, timeout)
+                except asyncio.TimeoutError:
+                    self.LOGGER.debug(f"Timeout reached waiting for plate to fetch image. Continuing.")
+            else:
+                # Legacy / CLI mode: Create a temporary server
+                server = ImageServer(
+                    listen_host=listen_host,
+                    listen_port=listen_port,
+                    access_host=access_host,
+                    access_port=access_port
+                )
+                await server.start()
+                
+                future = asyncio.Future()
+                access_url = server.register_image(temp_path, delete_on_serve=True, future=future)
+                
+                # set the object properties to point to the image url, the plate will download the image immediately
+                await self.set_object_properties(
+                    obj=obj,
+                    properties={"src": access_url},
+                )
+                
+                try:
+                    await asyncio.wait_for(future, timeout)
+                except asyncio.TimeoutError:
+                    self.LOGGER.warning(f"Timeout reached after {timeout} seconds. Server stopped.")
+                finally:
+                    await server.stop()
+        except Exception:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+            raise
 
     async def set_object_properties(self, obj: str, properties: Dict[str, Any]):
         """
@@ -266,7 +228,7 @@ class OpenHaspClient:
         try:
             return await asyncio.wait_for(future, timeout=timeout)
         except asyncio.TimeoutError:
-            print(f"Timeout: Device did not respond to {listen_path} within {timeout}s")
+            self.LOGGER.warning(f"Timeout: Device did not respond to {listen_path} within {timeout}s")
             return None
 
     async def set_idle_state(self, state: str):
