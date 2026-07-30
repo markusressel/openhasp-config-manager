@@ -5,8 +5,14 @@ from collections import defaultdict
 from openhasp_config_manager.haad.objects import ObjectController
 from openhasp_config_manager.openhasp_client.image_server import ImageServer
 
+import os
+
+# TODO: make this configurable via config file or env variable, using container_app_conf
+OPENHASP_IMAGE_PORT = int(os.environ.get("OPENHASP_IMAGE_PORT", "0"))
+OPENHASP_IMAGE_HOST = os.environ.get("OPENHASP_IMAGE_HOST", None)
+
 plate_locks = defaultdict(asyncio.Lock)
-_global_image_server = ImageServer(listen_host="0.0.0.0", listen_port=0)
+_global_image_server = ImageServer(listen_host="0.0.0.0", listen_port=OPENHASP_IMAGE_PORT)
 _server_lock = asyncio.Lock()
 
 import socket
@@ -56,7 +62,7 @@ class ImageObjectController(ObjectController):
         :param height: the height of the image in pixels
         """
         try:
-            ip = get_local_ip()
+            ip = OPENHASP_IMAGE_HOST or get_local_ip()
             
             async with _server_lock:
                 if not _global_image_server._is_running:
