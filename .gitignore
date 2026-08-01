@@ -7,3 +7,4 @@ openhasp-configs
 
 tests/test_output
 *.pclprof
+.python-version
