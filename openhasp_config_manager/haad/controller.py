@@ -28,7 +28,7 @@ class OpenHaspController(HaadController):
 
     async def initialize(self):
         self._name = self.context.config.name
-        self.log(f"Initializing {self._name}...")
+        self.logger.info(f"Initializing {self._name}...")
 
         self._config_dir = self.context.config.config_dir
         self._output_dir = self.context.config.output_dir
@@ -53,7 +53,7 @@ class OpenHaspController(HaadController):
         """
         Called by haad when the app is being terminated.
         """
-        self.log(f"Terminating {self._name}...")
+        self.logger.info(f"Terminating {self._name}...")
         if self._lwt_task is not None:
             self._lwt_task.cancel()
             self._lwt_task = None
@@ -83,7 +83,7 @@ class OpenHaspController(HaadController):
         loop = asyncio.get_event_loop()
         res = await loop.run_in_executor(None, self.__online_check)
         if not res:
-            self.log(f"Plate '{self._name}' is not online yet, retrying in {timeout}...")
+            self.logger.info(f"Plate '{self._name}' is not online yet, retrying in {timeout}...")
             self._plate_setup_scheduled_task = await self.schedule(
                 trigger=TimeTrigger.after_delay(timedelta(seconds=timeout)),
                 action=self.__failsafe_plate_setup,
@@ -91,17 +91,17 @@ class OpenHaspController(HaadController):
             return
 
         try:
-            self.log(f"Setting up plate '{self._name}'...")
+            self.logger.info(f"Setting up plate '{self._name}'...")
             await self.setup_plate()
-            self.log(f"Initializing plate controller for '{self._name}'...")
+            self.logger.info(f"Initializing plate controller for '{self._name}'...")
             await self.plate_controller.init()
-            self.log(f"Plate '{self._name}' setup complete, scheduling sync...")
+            self.logger.info(f"Plate '{self._name}' setup complete, scheduling sync...")
             await self.schedule_sync()
-            self.log(f"Plate '{self._name}' is now online and ready.")
+            self.logger.info(f"Plate '{self._name}' is now online and ready.")
         except Exception as ex:
-            self.log(f"Exception during plate setup: {ex}", level="ERROR")
+            self.logger.info(f"Exception during plate setup: {ex}", level="ERROR")
             tb = traceback.format_exc()
-            self.log(f"Failed to setup plate '{self._name}', retrying in {timeout}: {type(ex)}: {ex} {tb}", level="ERROR")
+            self.logger.info(f"Failed to setup plate '{self._name}', retrying in {timeout}: {type(ex)}: {ex} {tb}", level="ERROR")
             # self._plate_setup_scheduled_task = await self.schedule(
             #     trigger=TimeTrigger.after_delay(timedelta(seconds=timeout)),
             #     action=self.__failsafe_plate_setup,
@@ -135,13 +135,13 @@ class OpenHaspController(HaadController):
             # task already running
             return
 
-        self.log(f"Setting up online state listener for {self._name}...")
+        self.logger.info(f"Setting up online state listener for {self._name}...")
 
         async def _on_lwt_event(event_topic: str, event_payload: bytes):
             event_payload = event_payload.decode("utf-8")
-            self.log(f"Received LWT event for plate {self._name}: {event_payload}")
+            self.logger.info(f"Received LWT event for plate {self._name}: {event_payload}")
             if event_payload == "online":
-                self.log(f"Reinitializing plate {self._name} due to online event")
+                self.logger.info(f"Reinitializing plate {self._name} due to online event")
                 # await self.teardown_plate_setup()
                 # await self.before_setup_plate()
                 # await self.plate_controller.change_page(index=1)
@@ -151,7 +151,7 @@ class OpenHaspController(HaadController):
             path="LWT",
             callback=_on_lwt_event,
         ))
-        self.log(f"Online state listener for {self._name} setup complete.")
+        self.logger.info(f"Online state listener for {self._name} setup complete.")
 
     # async def _setup_auto_deploy_when_online(self):
     #     async def _on_lwt_event(event_topic: str, event_payload: bytes):

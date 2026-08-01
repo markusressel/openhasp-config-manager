@@ -69,7 +69,7 @@ class MyPlateController(OpenHaspController):
     main_page = MyPlatePage(app=self, index=1)
     self.add_page(main_page)
 
-    self.log(f"Plate {self._name} UI initialized with custom page logic.")
+    self.logger.info(f"Plate {self._name} UI initialized with custom page logic.")
 ```
 
 ### Key Workflow
