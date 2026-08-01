@@ -1,7 +1,7 @@
 from enum import StrEnum
 from typing import Dict, Callable, Awaitable, Any, TYPE_CHECKING
 
-from controller import HaadController
+from haad.controller import HaadController
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 
 if TYPE_CHECKING:

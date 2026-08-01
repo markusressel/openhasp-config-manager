@@ -1,6 +1,6 @@
 from typing import Callable, TYPE_CHECKING, Any, Awaitable
 
-from controller import HaadController
+from haad.controller import HaadController
 from openhasp_config_manager.haad import STATE_UNKNOWN, STATE_UNAVAILABLE
 from openhasp_config_manager.haad.objects import ObjectController
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient

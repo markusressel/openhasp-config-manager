@@ -1,6 +1,6 @@
 from typing import Dict, Callable, Awaitable, Any
 
-from controller import HaadController
+from haad.controller import HaadController
 from openhasp_config_manager.haad.page.state_updater import StateUpdater
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 

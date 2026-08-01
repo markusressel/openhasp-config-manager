@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from controller import HaadController
+from haad.controller import HaadController
 from openhasp_config_manager.manager import ConfigManager
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 from openhasp_config_manager.processing.variables import VariableManager

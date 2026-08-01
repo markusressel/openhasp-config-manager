@@ -1,7 +1,7 @@
 from asyncio import Task
 from typing import Optional
 
-from controller import HaadController
+from haad.controller import HaadController
 from openhasp_config_manager.haad.plate import DeploymentController
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 

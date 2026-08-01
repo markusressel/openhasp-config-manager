@@ -1,6 +1,6 @@
 from typing import Callable, Dict, Awaitable, Any, List, TYPE_CHECKING
 
-from controller import HaadController
+from haad.controller import HaadController
 from openhasp_config_manager.haad.objects import ObjectController
 from openhasp_config_manager.haad.objects.button import ButtonObjectController, SceneButtonObjectController
 from openhasp_config_manager.haad.objects.image import ImageObjectController
