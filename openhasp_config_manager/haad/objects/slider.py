@@ -1,6 +1,7 @@
 from enum import StrEnum
 from typing import Dict, Callable, Awaitable, Any, TYPE_CHECKING
 
+from controller import HaadController
 from openhasp_config_manager.haad.objects import ObjectController
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 
@@ -61,7 +62,7 @@ class SliderObjectController(ObjectController):
             self._transform_value = __default_transform_value
 
     async def init(self):
-        self.controller.log(f"Initializing slider object {self.object_id}", level="DEBUG")
+        self.controller.logger.debug(f"Initializing slider object {self.object_id}")
 
         if self._entity_id is not None or self._get_state is not None:
             await self._setup_state_listener_and_sync()

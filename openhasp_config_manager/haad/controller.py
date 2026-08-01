@@ -99,9 +99,9 @@ class OpenHaspController(HaadController):
             await self.schedule_sync()
             self.logger.info(f"Plate '{self._name}' is now online and ready.")
         except Exception as ex:
-            self.logger.info(f"Exception during plate setup: {ex}", level="ERROR")
+            self.logger.error(f"Exception during plate setup: {ex}")
             tb = traceback.format_exc()
-            self.logger.info(f"Failed to setup plate '{self._name}', retrying in {timeout}: {type(ex)}: {ex} {tb}", level="ERROR")
+            self.logger.error(f"Failed to setup plate '{self._name}', retrying in {timeout}: {type(ex)}: {ex} {tb}")
             # self._plate_setup_scheduled_task = await self.schedule(
             #     trigger=TimeTrigger.after_delay(timedelta(seconds=timeout)),
             #     action=self.__failsafe_plate_setup,
@@ -157,15 +157,15 @@ class OpenHaspController(HaadController):
     #     async def _on_lwt_event(event_topic: str, event_payload: bytes):
     #         event_payload = event_payload.decode("utf-8")
     #         if event_payload == "online":
-    #             self.app.log(f"Received online event for plate {self._name}, syncing state")
+    #             self.controller.log(f"Received online event for plate {self._name}, syncing state")
     #             await self.state_updater.sync()
     #             # try:
     #             #     changed = await self.deployment_controller.deploy(purge=True)
     #             #     if changed:
-    #             #         self.app.log(f"Configuration changed, restarting plate")
+    #             #         self.controller.log(f"Configuration changed, restarting plate")
     #             #         await self.reboot()
     #             # except Exception as ex:
-    #             #     self.app.log(f"Error while deploying plate config: {ex}")
+    #             #     self.controller.log(f"Error while deploying plate config: {ex}")
     #
     #     await self.listen_openhasp_event(path="LWT", callback=_on_lwt_event)
 

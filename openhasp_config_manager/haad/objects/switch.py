@@ -1,6 +1,7 @@
 from enum import StrEnum
 from typing import Dict, TYPE_CHECKING, Any, Callable, Awaitable
 
+from controller import HaadController
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 
 from haad import HaadStateEvent
@@ -55,7 +56,7 @@ class SwitchObjectController(ObjectController):
         self._get_state = get_state
 
     async def init(self):
-        self.controller.log(f"Initializing switch object {self.object_id}", level="DEBUG")
+        self.controller.logger.debug(f"Initializing switch object {self.object_id}")
 
         if self._entity_id is not None or self._get_state is not None:
             await self._setup_state_listener_and_sync()
@@ -70,7 +71,7 @@ class SwitchObjectController(ObjectController):
         await self.state_updater.sync(switch_sync_name)
 
         async def _switch_callback(topic: str, payload: Dict):
-            self.controller.log(f"switch callback payload: {payload}")
+            self.controller.logger.info(f"switch callback payload: {payload}")
             if payload["event"] == SwitchEvent.UP:
                 if self._entity_id is not None:
                     await self._toggle_entity()
@@ -88,7 +89,7 @@ class SwitchObjectController(ObjectController):
 
     async def _toggle_entity(self):
         en = self.controller.get_entity(entity=self._entity_id)
-        self.controller.log(f"switch '{en.entity_name}'")
+        self.controller.logger.info(f"switch '{en.entity_name}'")
         await self.controller.call_service("homeassistant/switch", entity_id=en.entity_id)
 
     async def __get_switch_state(self) -> bool:

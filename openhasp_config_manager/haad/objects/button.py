@@ -1,6 +1,7 @@
 from enum import StrEnum
 from typing import Dict, Callable, Awaitable, Any, TYPE_CHECKING
 
+from controller import HaadController
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 
 if TYPE_CHECKING:
@@ -45,7 +46,7 @@ class ButtonObjectController(ObjectController):
         self._on_click = on_click
 
     async def init(self):
-        self.controller.log(f"Initializing button object {self.object_id}", level="DEBUG")
+        self.controller.logger.debug(f"Initializing button object {self.object_id}")
 
         async def _click_callback(topic, payload: Dict):
             if payload["event"] == ButtonEvent.UP:
@@ -125,7 +126,7 @@ class SceneButtonObjectController(ButtonObjectController):
         """
 
         async def __on_click(topic: str, payload: Dict):
-            await _activate_scene(controller=self.app, name=self.scene)
+            await _activate_scene(controller=self.controller, name=self.scene)
 
         super().__init__(controller=controller, client=client, state_updater=state_updater, page=page, obj_id=obj_id, on_click=__on_click)
         self.scene = scene
@@ -139,5 +140,5 @@ class SceneButtonObjectController(ButtonObjectController):
             scene_entity = name
             if not scene_entity.startswith(self.SCENE_ENTITY_PREFIX):
                 scene_entity = f"{self.SCENE_ENTITY_PREFIX}{scene_entity}"
-            controller.log(f"Activating scene {scene_entity}")
+            self.controller.logger.info(f"Activating scene {scene_entity}")
             return await controller.call_service("scene/turn_on", entity_id=scene_entity)

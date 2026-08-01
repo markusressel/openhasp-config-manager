@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from controller import HaadController
 from openhasp_config_manager.manager import ConfigManager
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 from openhasp_config_manager.processing.variables import VariableManager
@@ -12,7 +13,7 @@ class DeploymentController:
     """
 
     def __init__(self, controller: HaadController, name: str, config_dir: Path = Path("/conf/openhasp-configs"), output_dir: Path = Path("/conf/openhasp-configs.output")):
-        self.app = controller
+        self.controller = controller
         self._name = name
 
         self.config_dir = config_dir
@@ -40,17 +41,17 @@ class DeploymentController:
         :param show_diff: if true, the diff between the current and the new configuration will be shown
         :return: true if the configuration was changed, false otherwise
         """
-        self.controller.log(f"DEPLOY: Deploying configuration of {self.device.name}...")
+        self.controller.logger.info(f"DEPLOY: Deploying configuration of {self.device.name}...")
 
         devices = self._config_manager.analyze()
         device_names = list(map(lambda x: x.name, devices))
-        self.controller.log(f"DEPLOY: Analysis finished, found: {', '.join(device_names)}, processing...")
+        self.controller.logger.info(f"DEPLOY: Analysis finished, found: {', '.join(device_names)}, processing...")
         self.device = next(filter(lambda x: x.name == self._name, devices))
-        self.controller.log(f"DEPLOY: Device is: {self.device.name}, processing...")
+        self.controller.logger.info(f"DEPLOY: Device is: {self.device.name}, processing...")
         self._config_manager.process(self.device)
-        self.controller.log(f"DEPLOY: Finished processing {self.device.name}, uploading files...")
+        self.controller.logger.info(f"DEPLOY: Finished processing {self.device.name}, uploading files...")
         changed = self._uploader.upload(self.device, purge, show_diff)
-        self.controller.log(f"DEPLOY: {self.device.name} Done! Changed: {changed}")
+        self.controller.logger.info(f"DEPLOY: {self.device.name} Done! Changed: {changed}")
         return changed
 
     def deploy_config(self):

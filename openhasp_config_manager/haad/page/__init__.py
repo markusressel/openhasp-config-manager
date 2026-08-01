@@ -1,5 +1,6 @@
 from typing import Callable, Dict, Awaitable, Any, List, TYPE_CHECKING
 
+from controller import HaadController
 from openhasp_config_manager.haad.objects import ObjectController
 from openhasp_config_manager.haad.objects.button import ButtonObjectController, SceneButtonObjectController
 from openhasp_config_manager.haad.objects.image import ImageObjectController
@@ -23,12 +24,12 @@ class PageController:
 
     def __init__(
         self,
-        app: ADAPI,
+        controller: HaadController,
         state_updater: StateUpdater,
         plate: "PlateController",
         index: int,
     ):
-        self.app = app
+        self.controller = controller
         self.index = index
         self.state_updater = state_updater
         self.plate = plate
@@ -70,7 +71,7 @@ class PageController:
         :return: the text object controller
         """
         text = LabelObjectController(
-            controller=self.app,
+            controller=self.controller,
             client=self.client,
             state_updater=self.state_updater,
             page=self.index,
@@ -95,7 +96,7 @@ class PageController:
         :return: the button object controller
         """
         button = ButtonObjectController(
-            controller=self.app,
+            controller=self.controller,
             client=self.client,
             state_updater=self.state_updater,
             page=self.index,
@@ -117,7 +118,7 @@ class PageController:
         :return: the scene button object controller
         """
         button = SceneButtonObjectController(
-            controller=self.app,
+            controller=self.controller,
             client=self.client,
             state_updater=self.state_updater,
             page=self.index,
@@ -141,7 +142,7 @@ class PageController:
         :return: the switch object controller
         """
         switch: SwitchObjectController = SwitchObjectController(
-            controller=self.app,
+            controller=self.controller,
             client=self.client,
             state_updater=self.state_updater,
             page=self.index,
@@ -170,7 +171,7 @@ class PageController:
         :return: the slider object controller
         """
         slider = SliderObjectController(
-            controller=self.app,
+            controller=self.controller,
             client=self.client,
             state_updater=self.state_updater,
             page=self.index,
@@ -199,7 +200,7 @@ class PageController:
         :return: the progress object controller
         """
         bar = BarObjectController(
-            controller=self.app,
+            controller=self.controller,
             client=self.client,
             state_updater=self.state_updater,
             page=self.index,
@@ -221,7 +222,7 @@ class PageController:
         :return: the image object controller
         """
         image = ImageObjectController(
-            controller=self.app,
+            controller=self.controller,
             client=self.client,
             state_updater=self.state_updater,
             page=self.index,

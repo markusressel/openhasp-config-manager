@@ -22,17 +22,17 @@ class StateUpdater:
             if item is not None:
                 entries_to_sync = {name: item}
             else:
-                self.controller.log(f"StateUpdater: {name} not registered, ignoring request")
+                self.controller.logger.info(f"StateUpdater: {name} not registered, ignoring request")
                 return
         else:
             entries_to_sync = self._registered_objects
 
         if not entries_to_sync:
-            self.controller.log("StateUpdater: No registered objects to sync, ignoring request")
+            self.controller.logger.info("StateUpdater: No registered objects to sync, ignoring request")
             return
 
         for name, entry in list(entries_to_sync.items()):
-            self.controller.log(f"StateUpdater: Syncing {name}", level="DEBUG")
+            self.controller.logger.debug(f"StateUpdater: Syncing {name}")
             get_target_state_fun = entry["get"]
             set_state_fun = entry["set"]
 
@@ -41,14 +41,12 @@ class StateUpdater:
             try:
                 new_target_state = await get_target_state_fun()
             except Exception as e:
-                self.controller.log(f"StateUpdater: Error syncing {name}: Failed to retrieve current state: {e}", level="ERROR")
+                self.controller.logger.error(f"StateUpdater: Error syncing {name}: Failed to retrieve current state: {e}")
 
             try:
                 await set_state_fun(new_target_state)
             except Exception as e:
-                self.controller.log(
-                    f"StateUpdater: Error syncing {name}: Failed to set state '{new_target_state}': {e}", level="ERROR"
-                )
+                self.controller.logger.error(f"StateUpdater: Error syncing {name}: Failed to set state '{new_target_state}': {e}")
 
     def register(
         self,
@@ -57,7 +55,7 @@ class StateUpdater:
         update_obj: Callable[[Any], Awaitable[None]],
     ):
         if self._registered_objects.get(name, None) is not None:
-            self.controller.log(f"StateUpdater: {name} already registered, overwriting existing entry")
+            self.controller.logger.info(f"StateUpdater: {name} already registered, overwriting existing entry")
 
         self._registered_objects[name] = {
             "name": name,
@@ -66,5 +64,5 @@ class StateUpdater:
         }
 
     def clear(self):
-        self.controller.log("StateUpdater: Clearing registry.")
+        self.controller.logger.info("StateUpdater: Clearing registry.")
         self._registered_objects = {}

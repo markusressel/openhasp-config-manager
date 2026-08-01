@@ -1,5 +1,6 @@
 from typing import Callable, Awaitable, Any, List, TYPE_CHECKING
 
+from controller import HaadController
 from openhasp_config_manager.haad import STATE_UNKNOWN, STATE_UNAVAILABLE
 from openhasp_config_manager.haad.objects import ObjectController
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
@@ -55,7 +56,7 @@ class LabelObjectController(ObjectController):
             self._converter = lambda x: str(x) if x is not None else "-"
 
     async def init(self):
-        self.controller.log(f"Initializing label object {self.object_id} for entity {self._entity_ids}", level="DEBUG")
+        self.controller.logger.debug(f"Initializing label object {self.object_id} for entity {self._entity_ids}")
 
         if self._entity_ids is not None or self._get_state is not None:
             await self._setup_state_listeners_and_sync()

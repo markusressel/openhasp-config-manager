@@ -102,7 +102,7 @@ class PlateController:
             self.current_behavior_requests[behavior] = set()
         if self.has_behavior_request(behavior=behavior, page=page, store=self.current_behavior_requests):
             return
-        self.controller.log(f"Adding behavior '{behavior}' to plate {self._name}")
+        self.controller.logger.info(f"Adding behavior '{behavior}' to plate {self._name}")
         previous_behaviors = copy.deepcopy(self.current_behavior_requests)
         self.current_behavior_requests[behavior].add(page.index)
         await self.update_plate_behavior(previous_behaviors)
@@ -115,7 +115,7 @@ class PlateController:
         """
         previous_behaviors = copy.deepcopy(self.current_behavior_requests)
         if self.has_behavior_request(behavior=behavior, page=page, store=self.current_behavior_requests):
-            self.controller.log(f"Removing behavior '{behavior}' from plate {self._name}")
+            self.controller.logger.info(f"Removing behavior '{behavior}' from plate {self._name}")
             self.current_behavior_requests[behavior].remove(page.index)
             await self.update_plate_behavior(previous_behaviors)
 
@@ -138,7 +138,7 @@ class PlateController:
         return len(pages_with_behavior) > 0
 
     async def update_plate_behavior(self, previous_requests: Dict[PlateBehavior, Set[int]]):
-        self.controller.log(f"Updating behaviors for plate {self._name}: {list(self.current_behavior_requests.keys())}")
+        self.controller.logger.info(f"Updating behaviors for plate {self._name}: {list(self.current_behavior_requests.keys())}")
         if self.has_behavior_request(PlateBehavior.ALWAYS_ON_DISPLAY):
             await self.set_gui_config2(idle1=15, idle2=0)
             await self.screen_controller.set_idle(state="short")
@@ -150,7 +150,7 @@ class PlateController:
         return self.deployment_controller.client
 
     def add_page(self, page: PageController) -> PageController:
-        self.controller.log(f"Adding page '{page.__class__.__name__}' at index {page.index} to plate {self._name}")
+        self.controller.logger.info(f"Adding page '{page.__class__.__name__}' at index {page.index} to plate {self._name}")
         self.pages[page.index] = page
         return page
 
@@ -159,7 +159,7 @@ class PlateController:
 
     def create_page(self, index: int) -> PageController:
         page = PageController(
-            app=self.controller,
+            controller=self.controller,
             plate=self,
             state_updater=self.state_updater,
             index=index,
@@ -171,12 +171,12 @@ class PlateController:
         await self.screen_controller.init()
         await self.setup_auto_brightness()
 
-        self.controller.log(f"Initializing {len(self.pages)} pages for plate {self._name}...")
+        self.controller.logger.info(f"Initializing {len(self.pages)} pages for plate {self._name}...")
 
         for page in self.pages.values():
-            self.controller.log(f"Initializing page {page.index} for plate {self._name}")
+            self.controller.logger.info(f"Initializing page {page.index} for plate {self._name}")
             await page.register_objects()
-            self.controller.log(f"Initializing objects for page {page.index} for plate {self._name}")
+            self.controller.logger.info(f"Initializing objects for page {page.index} for plate {self._name}")
             await page.initialize_objects()
 
     async def setup_auto_brightness(self):
@@ -191,25 +191,25 @@ class PlateController:
         async def _on_status_event(event_topic: str, event_payload: bytes):
             event_payload = event_payload.decode("utf-8")
             if event_payload == "off":
-                self.controller.log(f"Activating screen, due to state/idle event: {event_payload}")
+                self.controller.logger.info(f"Activating screen, due to state/idle event: {event_payload}")
                 await self.screen_controller.set_backlight(
                     state=self._config.screen_brightness_default.on,
                     brightness=self._config.screen_brightness_default.brightness,
                 )
             elif event_payload == "short":
-                self.controller.log("Device idle for short time")
+                self.controller.logger.info("Device idle for short time")
                 await self.screen_controller.set_backlight(
                     state=self._config.screen_brightness_short_idle.on,
                     brightness=self._config.screen_brightness_short_idle.brightness,
                 )
             elif event_payload == "long":
-                self.controller.log("Device idle for long time")
+                self.controller.logger.info("Device idle for long time")
                 await self.screen_controller.set_backlight(
                     state=self._config.screen_brightness_long_idle.on,
                     brightness=self._config.screen_brightness_long_idle.brightness,
                 )
             else:
-                self.controller.log(f"Got unexpected state/idle event: {event_topic} - {event_payload}")
+                self.controller.logger.info(f"Got unexpected state/idle event: {event_topic} - {event_payload}")
 
         self._screen_brightness_task = await self.listen_openhasp_event(path="state/idle", callback=_on_status_event)
 
@@ -273,7 +273,7 @@ class PlateController:
         return await self._set_config(submodule="gui", parameters=parameters)
 
     async def _set_config(self, submodule: str, parameters: Dict):
-        self.controller.log(f"Setting {submodule} config: {parameters}")
+        self.controller.logger.info(f"Setting {submodule} config: {parameters}")
         return await util_openhasp.config(
             controller=self.controller,
             plate=self._name,

@@ -1,5 +1,6 @@
 from typing import Callable, TYPE_CHECKING, Any, Awaitable
 
+from controller import HaadController
 from openhasp_config_manager.haad import STATE_UNKNOWN, STATE_UNAVAILABLE
 from openhasp_config_manager.haad.objects import ObjectController
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
@@ -50,7 +51,7 @@ class CheckboxObjectController(ObjectController):
         self._converter = converter
 
     async def init(self):
-        self.controller.log(f"Initializing checkbox object {self.object_id} for entity {self._entity_id}", level="DEBUG")
+        self.controller.logger.debug(f"Initializing checkbox object {self.object_id} for entity {self._entity_id}")
 
         if self._entity_id is not None or self.__get_checkbox_state is not None:
             await self._setup_state_listener_and_sync()

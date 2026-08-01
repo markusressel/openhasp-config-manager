@@ -1,5 +1,6 @@
 from typing import Dict, Callable, Awaitable, Any
 
+from controller import HaadController
 from openhasp_config_manager.haad.page.state_updater import StateUpdater
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 
@@ -78,7 +79,7 @@ class ObjectController:
         """
         Sets the properties of an object on the plate of this controller
         :param properties: the properties to set
-        :param force: if True, bypasses deduplication and forces the properties to be sent
+        :param force: if True, bypasses deduplication, and forces the properties to be sent
         """
         changed_properties = {}
         for k, v in properties.items():
@@ -91,7 +92,7 @@ class ObjectController:
         for k, v in changed_properties.items():
             self._last_properties[k] = v
 
-        self.controller.log(f"Setting properties of {self.object_id}: {changed_properties}", level="DEBUG")
+        self.controller.logger.debug(f"Setting properties of {self.object_id}: {changed_properties}")
         return await self.client.set_object_properties(
             obj=self.object_id,
             properties=changed_properties,

@@ -24,10 +24,10 @@ async def listen_event(
     :param path: mqtt path to listen for
     :return: A handle that can be used to cancel the callback.
     """
-    controller.log(f"Listening for '{path}' events")
+    controller.logger.info(f"Listening for '{path}' events")
 
     async def _callback(topic: str, payload: bytes):
-        controller.log(f"Received event on '{topic}': {payload}")
+        controller.logger.info(f"Received event on '{topic}': {payload}")
         await callback(topic, payload)
 
     await client.listen_event(path, _callback)
@@ -62,10 +62,10 @@ async def listen_state(
     :param callback: callback to call when a matching event is received
     :return: A handle that can be used to cancel the callback.
     """
-    controller.log(f"Listening for '{obj}' state changes")
+    controller.logger.info(f"Listening for '{obj}' state changes")
 
     async def _callback(event_topic: str, event_payload: bytes):
-        controller.log(f"Received state change on '{event_topic}': {event_payload}")
+        controller.logger.info(f"Received state change on '{event_topic}': {event_payload}")
         parsed_payload = json.loads(event_payload)
         await callback(event_topic, parsed_payload)
 
