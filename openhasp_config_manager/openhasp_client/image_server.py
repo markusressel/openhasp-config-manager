@@ -33,7 +33,7 @@ class ImageServer:
         if self.access_port is None or self.access_port == 0:
             self.access_port = self.port
         self._is_running = True
-        self.LOGGER.info(f"ImageServer started on {self.listen_host}:{self.port}")
+        self.LOGGER.info(f"ImageServer started and listening on {self.listen_host}:{self.port}")
 
     async def stop(self):
         if self.runner:
