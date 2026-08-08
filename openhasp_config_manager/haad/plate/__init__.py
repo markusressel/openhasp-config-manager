@@ -191,25 +191,25 @@ class PlateController:
         async def _on_status_event(event_topic: str, event_payload: bytes):
             event_payload = event_payload.decode("utf-8")
             if event_payload == "off":
-                self.controller.logger.info(f"Activating screen, due to state/idle event: {event_payload}")
+                self.controller.logger.debug(f"Activating screen, due to state/idle event: {event_payload}")
                 await self.screen_controller.set_backlight(
                     state=self._config.screen_brightness_default.on,
                     brightness=self._config.screen_brightness_default.brightness,
                 )
             elif event_payload == "short":
-                self.controller.logger.info("Device idle for short time")
+                self.controller.logger.debug("Device idle for short time")
                 await self.screen_controller.set_backlight(
                     state=self._config.screen_brightness_short_idle.on,
                     brightness=self._config.screen_brightness_short_idle.brightness,
                 )
             elif event_payload == "long":
-                self.controller.logger.info("Device idle for long time")
+                self.controller.logger.debug("Device idle for long time")
                 await self.screen_controller.set_backlight(
                     state=self._config.screen_brightness_long_idle.on,
                     brightness=self._config.screen_brightness_long_idle.brightness,
                 )
             else:
-                self.controller.logger.info(f"Got unexpected state/idle event: {event_topic} - {event_payload}")
+                self.controller.logger.warning(f"Got unexpected state/idle event: {event_topic} - {event_payload}")
 
         self._screen_brightness_task = await self.listen_openhasp_event(path="state/idle", callback=_on_status_event)
 

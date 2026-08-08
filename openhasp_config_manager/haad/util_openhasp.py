@@ -27,7 +27,7 @@ async def listen_event(
     controller.logger.info(f"Listening for '{path}' events")
 
     async def _callback(topic: str, payload: bytes):
-        controller.logger.info(f"Received event on '{topic}': {payload}")
+        controller.logger.debug(f"Received event on '{topic}': {payload}")
         await callback(topic, payload)
 
     await client.listen_event(path, _callback)
