@@ -5,7 +5,7 @@ from temppathlib import NamedTemporaryFile
 
 
 class OpenHaspImageProcessor:
-    def image_to_rgb565(self, in_image, out_image, size: Tuple[int or None, int or None], fitscreen: bool):
+    async def image_to_rgb565(self, in_image, out_image, size: Tuple[int | None, int | None], fitscreen: bool):
         """
         Transforms an image to rgb565 format according to LVGL requirements.
         :param in_image: the image to transform
@@ -16,7 +16,7 @@ class OpenHaspImageProcessor:
         import struct
 
         if in_image.startswith("http"):
-            tmp_file_container = self._fetch_image_from_url(in_image)
+            tmp_file_container = await self._fetch_image_from_url(in_image)
         else:
             # copy file to temp file
             tmp_file_container = NamedTemporaryFile(delete=False)
@@ -53,7 +53,7 @@ class OpenHaspImageProcessor:
             tmp_file_container.path.unlink()
 
     @staticmethod
-    def _fetch_image_from_url(in_image) -> NamedTemporaryFile:
+    async def _fetch_image_from_url(in_image) -> NamedTemporaryFile:
         import requests
 
         # consider last part of the url as filename

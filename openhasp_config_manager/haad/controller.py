@@ -80,8 +80,7 @@ class OpenHaspController(HaadController):
         timeout = 10
 
         # ensure the plate is online
-        loop = asyncio.get_event_loop()
-        res = await loop.run_in_executor(None, self.__online_check)
+        res = await self.__online_check()
         if not res:
             self.logger.info(f"Plate '{self._name}' is not online yet, retrying in {timeout}...")
             self._plate_setup_scheduled_task = await self.schedule(
@@ -107,9 +106,9 @@ class OpenHaspController(HaadController):
             #     action=self.__failsafe_plate_setup,
             # )
 
-    def __online_check(self) -> bool:
+    async def __online_check(self) -> bool:
         try:
-            self.plate_controller.client.get_files()
+            await self.plate_controller.client.get_files()
             return True
         except Exception:
             return False

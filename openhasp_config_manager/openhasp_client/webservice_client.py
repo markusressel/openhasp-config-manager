@@ -1,7 +1,7 @@
 from typing import Dict, List, Any, Optional
 
+import aiohttp
 import orjson
-import requests
 
 from openhasp_config_manager.openhasp_client.model.configuration.debug_config import DebugConfig
 from openhasp_config_manager.openhasp_client.model.configuration.gui_config import GuiConfig
@@ -21,16 +21,16 @@ class WebserviceClient:
         self._password = password
         self._base_url = self._compute_base_url(url)
 
-    def reboot(self):
+    async def reboot(self):
         """
         Request a reboot
         """
-        self._do_request(
+        await self._do_request(
             method=GET,
             url=self._base_url + "reboot",
         )
 
-    def set_hasp_config(self, config: HaspConfig):
+    async def set_hasp_config(self, config: HaspConfig):
         """
         Set the "HASP" configuration
         :param config: the configuration to set
@@ -49,14 +49,14 @@ class WebserviceClient:
         # ignore keys with None value
         data = {k: v for k, v in data.items() if v is not None}
 
-        self._do_request(
+        await self._do_request(
             method=POST,
             url=self._base_url + "config",
             data=data,
         )
 
-    def get_http_config(self) -> HttpConfig:
-        data = self._do_request(
+    async def get_http_config(self) -> HttpConfig:
+        data = await self._do_request(
             method=GET,
             url=self._base_url + "api/config/http/",
         )
@@ -67,7 +67,7 @@ class WebserviceClient:
             password=data["pass"],
         )
 
-    def set_http_config(self, config: HttpConfig):
+    async def set_http_config(self, config: HttpConfig):
         """
         Set the HTTP configuration
         :param config: the configuration to set
@@ -81,14 +81,14 @@ class WebserviceClient:
         # ignore keys with None value
         data = {k: v for k, v in data.items() if v is not None}
 
-        self._do_request(
+        await self._do_request(
             method=POST,
             url=self._base_url + "config",
             data=data,
         )
 
-    def get_mqtt_config(self) -> MqttConfig:
-        data: Dict[str, Any] = self._do_request(
+    async def get_mqtt_config(self) -> MqttConfig:
+        data: Dict[str, Any] = await self._do_request(
             method=GET,
             url=self._base_url + "api/config/mqtt/",
         )
@@ -107,7 +107,7 @@ class WebserviceClient:
             ),
         )
 
-    def set_mqtt_config(self, config: MqttConfig):
+    async def set_mqtt_config(self, config: MqttConfig):
         """
         Set the MQTT configuration
         :param config: the configuration to set
@@ -130,14 +130,14 @@ class WebserviceClient:
         # ignore keys with None value
         data = {k: v for k, v in data.items() if v is not None}
 
-        self._do_request(
+        await self._do_request(
             method=POST,
             url=self._base_url + "config",
             data=data,
         )
 
-    def get_gui_config(self) -> GuiConfig:
-        data = self._do_request(
+    async def get_gui_config(self) -> GuiConfig:
+        data = await self._do_request(
             method=GET,
             url=self._base_url + "api/config/gui/",
         )
@@ -153,7 +153,7 @@ class WebserviceClient:
             calibration=data["calibration"],
         )
 
-    def set_gui_config(self, config: GuiConfig):
+    async def set_gui_config(self, config: GuiConfig):
         """
         Set the GUI configuration
         :param config: the configuration to set
@@ -170,13 +170,13 @@ class WebserviceClient:
         # ignore keys with None value
         data = {k: v for k, v in data.items() if v is not None}
 
-        self._do_request(
+        await self._do_request(
             method=POST,
             url=self._base_url + "config",
             data=data,
         )
 
-    def set_telnet_config(self, config: TelnetConfig):
+    async def set_telnet_config(self, config: TelnetConfig):
         """
         Set the Debug configuration
         :param config: the configuration to set
@@ -190,13 +190,13 @@ class WebserviceClient:
         # ignore keys with None value
         data = {k: v for k, v in data.items() if v is not None}
 
-        self._do_request(
+        await self._do_request(
             method=POST,
             url=self._base_url + "config",
             data=data,
         )
 
-    def set_debug_config(self, config: DebugConfig):
+    async def set_debug_config(self, config: DebugConfig):
         """
         Set the Debug configuration
         :param config: the configuration to set
@@ -215,38 +215,38 @@ class WebserviceClient:
         # ignore keys with None value
         data = {k: v for k, v in data.items() if v is not None}
 
-        self._do_request(
+        await self._do_request(
             method=POST,
             url=self._base_url + "config",
             data=data,
         )
 
-    def upload_files(self, files: Dict[str, bytes]):
+    async def upload_files(self, files: Dict[str, bytes]):
         """
         Upload a collection of files
         :param files: "target file name"->"file content" mapping
         """
         for name, content in files.items():
-            self.upload_file(name, content)
+            await self.upload_file(name, content)
 
-    def upload_file(self, name: str, content: bytes):
+    async def upload_file(self, name: str, content: bytes):
         """
         Upload a single file
         :param name: the target name of the file on the device
         :param content: the file content
         """
-        self._do_request(
+        await self._do_request(
             method=POST,
             url=self._base_url + "edit",
             files={f"{name}": content},
         )
 
-    def get_files(self) -> List[str]:
+    async def get_files(self) -> List[str]:
         """
         Retrieve a list of all file on the device
         :return: a list of all files on the device
         """
-        response = self._do_request(
+        response = await self._do_request(
             method=GET,
             url=self._base_url + "list?dir=/",
         )
@@ -256,9 +256,9 @@ class WebserviceClient:
         file_names = list(map(lambda x: x["name"], files))
         return file_names
 
-    def get_file_content(self, file_name: str) -> Optional[bytes]:
+    async def get_file_content(self, file_name: str) -> Optional[bytes]:
         try:
-            response = self._do_request(
+            response = await self._do_request(
                 method=GET,
                 url=self._base_url + file_name,
             )
@@ -267,30 +267,30 @@ class WebserviceClient:
         except Exception:
             return None
 
-    def delete_file(self, file_name: str):
+    async def delete_file(self, file_name: str):
         """
         Delete a file on the device
         :param file_name: the name of the file
         """
-        self._do_request(
+        await self._do_request(
             method=DELETE,
             url=self._base_url + "edit",
             data={"path": "/" + file_name},
         )
 
-    def take_screenshot(self) -> bytes:
+    async def take_screenshot(self) -> bytes:
         """
         Requests a screenshot from the device.
         :return:
         """
-        return self._do_request(
+        return await self._do_request(
             method=GET,
             url=self._base_url + "screenshot",
             params={"q": "0"},
             stream=True,
         )
 
-    def _do_request(
+    async def _do_request(
         self,
         method: str = GET,
         url: str = "/",
@@ -301,40 +301,37 @@ class WebserviceClient:
         headers: Dict = None,
         stream: bool = None,
     ) -> Optional[List | Dict | bytes]:
-        """
-        Executes a http request based on the given parameters
-
-        :param method: the method to use (GET, POST)
-        :param url: the url to use
-        :param params: query parameters that will be appended to the url
-        :param json: request body
-        :param headers: custom headers
-        :return: the response parsed as a json
-        """
         _headers = {}
         if headers is not None:
             _headers.update(headers)
 
-        response = requests.request(
-            method,
-            url,
-            headers=_headers,
-            params=params,
-            json=json,
-            files=files,
-            data=data,
-            auth=(self._username, self._password),
-            timeout=5,
-            stream=stream,
-        )
+        if files:
+            # simple multipart form data
+            form = aiohttp.FormData()
+            for k, v in files.items():
+                form.add_field(k, v, filename=k)
+            data = form
 
-        response.raise_for_status()
-        if len(response.content) > 0:
-            if "application/json" in response.headers.get("Content-Type", ""):
-                return response.json()
-            else:
-                return response.content
-        return None
+        auth = aiohttp.BasicAuth(self._username, self._password)
+        async with aiohttp.ClientSession() as session:
+            async with session.request(
+                method,
+                url,
+                headers=_headers,
+                params=params,
+                json=json,
+                data=data,
+                auth=auth,
+                timeout=aiohttp.ClientTimeout(total=5),
+            ) as response:
+                response.raise_for_status()
+                content = await response.read()
+                if len(content) > 0:
+                    if "application/json" in response.headers.get("Content-Type", ""):
+                        return orjson.loads(content)
+                    else:
+                        return content
+                return None
 
     @staticmethod
     def _compute_base_url(url: str) -> str:

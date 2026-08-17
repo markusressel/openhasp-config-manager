@@ -223,7 +223,7 @@ class PlateController:
         """
         Reboots the device
         """
-        return self.client.reboot()
+        return await self.client.reboot()
 
     async def wakeup(self):
         """
@@ -255,7 +255,7 @@ class PlateController:
             invert=None,
             calibration=None,
         )
-        self.client.set_gui_config(gui_config)
+        await self.client.set_gui_config(gui_config)
 
     async def set_gui_config(
         self, idle1: int = None, idle2: int = None, rotate: int = None, cursor: int = None, bckl: int = None

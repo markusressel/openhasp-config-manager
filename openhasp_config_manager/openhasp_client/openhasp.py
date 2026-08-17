@@ -98,7 +98,7 @@ class OpenHaspClient:
 
         try:
             with open(temp_path, 'wb') as f:
-                self._image_processor.image_to_rgb565(
+                await self._image_processor.image_to_rgb565(
                     in_image=image,
                     out_image=f,
                     size=size,
@@ -451,98 +451,98 @@ class OpenHaspClient:
         object_id = self.compute_object_id(page, obj)
         await self.bring_object_to_back(object_id)
 
-    def get_files(self) -> List[str]:
+    async def get_files(self) -> List[str]:
         """
         Retrieve a list of all file on the device
         :return: a list of all files on the device
         """
-        return self._webservice_client.get_files()
+        return await self._webservice_client.get_files()
 
-    def get_file_content(self, file_name: str) -> Optional[bytes]:
-        return self._webservice_client.get_file_content(file_name)
+    async def get_file_content(self, file_name: str) -> Optional[bytes]:
+        return await self._webservice_client.get_file_content(file_name)
 
-    def delete_file(self, file_name: str):
+    async def delete_file(self, file_name: str):
         """
         Delete a file on the device
         :param file_name: the name of the file
         """
-        self._webservice_client.delete_file(file_name)
+        await self._webservice_client.delete_file(file_name)
 
-    def reboot(self):
+    async def reboot(self):
         """
         Request a reboot
         """
-        self._webservice_client.reboot()
+        await self._webservice_client.reboot()
 
-    def set_hasp_config(self, config: HaspConfig):
+    async def set_hasp_config(self, config: HaspConfig):
         """
         Set the "HASP" configuration
         :param config: the configuration to set
         """
-        self._webservice_client.set_hasp_config(config)
+        await self._webservice_client.set_hasp_config(config)
 
-    def get_http_config(self) -> HttpConfig:
+    async def get_http_config(self) -> HttpConfig:
         """
         Get the HTTP configuration
         :return: the HTTP configuration
         """
-        return self._webservice_client.get_http_config()
+        return await self._webservice_client.get_http_config()
 
-    def set_http_config(self, config: HttpConfig):
+    async def set_http_config(self, config: HttpConfig):
         """
         Set the HTTP configuration
         :param config: the configuration to set
         """
-        self._webservice_client.set_http_config(config)
+        await self._webservice_client.set_http_config(config)
 
-    def get_mqtt_config(self) -> MqttConfig:
-        return self._webservice_client.get_mqtt_config()
+    async def get_mqtt_config(self) -> MqttConfig:
+        return await self._webservice_client.get_mqtt_config()
 
-    def set_mqtt_config(self, config: MqttConfig):
+    async def set_mqtt_config(self, config: MqttConfig):
         """
         Set the MQTT configuration
         :param config: the configuration to set
         :return:
         """
-        self._webservice_client.set_mqtt_config(config)
+        await self._webservice_client.set_mqtt_config(config)
 
-    def get_gui_config(self) -> GuiConfig:
+    async def get_gui_config(self) -> GuiConfig:
         """
         Get the GUI configuration
         :return: the GUI configuration
         """
-        return self._webservice_client.get_gui_config()
+        return await self._webservice_client.get_gui_config()
 
-    def set_gui_config(self, config: GuiConfig):
+    async def set_gui_config(self, config: GuiConfig):
         """
         Set the GUI configuration
         :param config: the configuration to set
         :return:
         """
-        self._webservice_client.set_gui_config(config)
+        await self._webservice_client.set_gui_config(config)
 
-    def upload_files(self, files: Dict[str, bytes]):
+    async def upload_files(self, files: Dict[str, bytes]):
         """
         Upload a collection of files
         :param files: "target file name"->"file content" mapping
         """
-        self._webservice_client.upload_files(files)
+        await self._webservice_client.upload_files(files)
 
-    def upload_file(self, name: str, content: bytes):
+    async def upload_file(self, name: str, content: bytes):
         """
         Upload a single file
         :param name: the target name of the file on the device
         :param content: the file content
         """
         info(f"Uploading '{name}'...")
-        self._webservice_client.upload_file(name, content)
+        await self._webservice_client.upload_file(name, content)
 
-    def take_screenshot(self) -> bytes:
+    async def take_screenshot(self) -> bytes:
         """
         Requests a screenshot from the device.
         :return:
         """
-        return self._webservice_client.take_screenshot()
+        return await self._webservice_client.take_screenshot()
 
     async def shell(self):
         await self._telnet_client.shell()

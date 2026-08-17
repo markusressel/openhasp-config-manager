@@ -39,4 +39,4 @@ class ScreenController:
         return await self.client.set_idle_state(state)
 
     async def set_default_auto_brightness_config(self):
-        self.deployment_controller.deploy_config()
+        await self.deployment_controller.deploy_config()
