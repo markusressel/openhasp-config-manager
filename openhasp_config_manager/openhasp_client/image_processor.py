@@ -31,11 +31,23 @@ class OpenHaspImageProcessor:
                 width, height = size
 
                 if not fitscreen:
-                    w = min(w for w in [width, original_width] if w is not None and w > 0)
-                    h = min(h for h in [height, original_height] if h is not None and h > 0)
-                    im.thumbnail((h, w), Image.Resampling.LANCZOS)
+                    valid_w: list[int] = []
+                    for x in (width, original_width):
+                        if x is not None and x > 0:
+                            valid_w.append(x)
+                    w = min(valid_w) if valid_w else original_width
+                    
+                    valid_h: list[int] = []
+                    for x in (height, original_height):
+                        if x is not None and x > 0:
+                            valid_h.append(x)
+                    h = min(valid_h) if valid_h else original_height
+                    
+                    im.thumbnail((int(h), int(w)), Image.Resampling.LANCZOS)
                 else:
-                    im = im.resize((height, width), Image.Resampling.LANCZOS)
+                    h_val = height if height is not None else original_height
+                    w_val = width if width is not None else original_width
+                    im = im.resize((int(h_val), int(w_val)), Image.Resampling.LANCZOS)
                 w, h = im.size  # actual size after resize
 
                 out_image.write(struct.pack("I", h << 21 | w << 10 | 4))
