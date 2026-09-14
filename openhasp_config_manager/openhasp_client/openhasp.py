@@ -3,6 +3,7 @@ import logging
 from typing import Dict, List, Any, Callable, Tuple, Optional, Awaitable
 
 import orjson
+
 from openhasp_config_manager.gui.util import info
 from openhasp_config_manager.openhasp_client.image_processor import OpenHaspImageProcessor
 from openhasp_config_manager.openhasp_client.model.configuration.gui_config import GuiConfig
@@ -64,7 +65,7 @@ class OpenHaspClient:
         listen_port: int = 0,
         access_port: int = None,
         timeout: int = 10,
-        size: Tuple[int or None, int or None] = (None, None),
+        size: Tuple[int | None, int | None] = (None, None),
         fitscreen: bool = False,
         image_server=None,
     ):

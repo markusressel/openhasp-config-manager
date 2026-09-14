@@ -72,7 +72,7 @@ def _create_config_manager(config_dir, output_dir) -> ConfigManager:
     return config_manager
 
 
-def _analyze_and_filter(config_manager: ConfigManager, device_filter: str or None) -> Tuple[List[Device], List[Device]]:
+def _analyze_and_filter(config_manager: ConfigManager, device_filter: str | None) -> Tuple[List[Device], List[Device]]:
     """
 
     :param config_manager:
