@@ -62,3 +62,17 @@ class DeploymentController:
         #     idle1=self._device.config.gui.idle1,
         #     idle2=self._device.config.gui.idle2,
         # )
+
+    async def set_gui_config(self, idle1: int, idle2: int, rotate: int, cursor: int, bckl: int):
+        data = {
+            "idle1": idle1,
+            "idle2": idle2,
+            "rotate": rotate,
+            "cursor": cursor,
+            "bckl": bckl,
+        }
+
+        # ignore keys with None value
+        data = {k: v for k, v in data.items() if v is not None}
+
+        await self.client.command(keyword="config/gui", params=data)

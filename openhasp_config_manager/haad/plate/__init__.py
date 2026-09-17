@@ -4,6 +4,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Dict, Callable, Set, Optional, Awaitable, Any
 
+from haad.controller import HaadController
 from openhasp_config_manager.haad import util_openhasp
 from openhasp_config_manager.haad.page import PageController
 from openhasp_config_manager.haad.page.state_updater import StateUpdater
@@ -11,8 +12,6 @@ from openhasp_config_manager.haad.plate.deployment import DeploymentController
 from openhasp_config_manager.haad.plate.screen import ScreenController
 from openhasp_config_manager.openhasp_client.model.configuration.gui_config import GuiConfig
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
-
-from haad.controller import HaadController
 
 
 class ScreenState:
@@ -143,7 +142,10 @@ class PlateController:
             await self.set_gui_config2(idle1=15, idle2=0)
             await self.screen_controller.set_idle(state="short")
         else:
-            await self.screen_controller.set_default_auto_brightness_config()
+            default_gui_config = self.deployment_controller.device.config.gui
+            await self.set_gui_config(idle1=default_gui_config.idle1, idle2=default_gui_config.idle2)
+            await self.set_gui_config2(idle1=default_gui_config.idle1, idle2=default_gui_config.idle2)
+            await self.screen_controller.set_idle(state="off")
 
     @property
     def client(self) -> OpenHaspClient:
@@ -245,6 +247,16 @@ class PlateController:
     async def set_gui_config2(
         self, idle1: int = None, idle2: int = None, rotate: int = None, cursor: int = None, bckl: int = None
     ):
+        """
+        Publishes UI config via the Webserver REST API to the OpenHASP plate.
+        Only the parameters that are not None will be set, the rest will be left unchanged.
+        :param idle1:
+        :param idle2:
+        :param rotate:
+        :param cursor:
+        :param bckl:
+        :return:
+        """
         gui_config = GuiConfig(
             idle1=idle1,
             idle2=idle2,
@@ -260,6 +272,16 @@ class PlateController:
     async def set_gui_config(
         self, idle1: int = None, idle2: int = None, rotate: int = None, cursor: int = None, bckl: int = None
     ):
+        """
+        Publishes UI config via MQTT to the OpenHASP plate.
+        Only the parameters that are not None will be set, the rest will be left unchanged.
+
+        :param idle1:
+        :param idle2:
+        :param rotate:
+        :param cursor:
+        :param bckl:
+        """
         parameters = {
             "idle1": idle1,
             "idle2": idle2,
