@@ -3,9 +3,8 @@ import json
 from asyncio import Task
 from typing import Callable, Any, List, Awaitable, Dict
 
-from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
-
 from haad.controller import HaadController
+from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 
 _background_tasks = set()
 
@@ -106,8 +105,8 @@ async def config(
         payload = " ".join(params)
     elif isinstance(payload, dict):
         payload = json.dumps(payload)
-    return await controller.call_service(
-        "mqtt/publish",
+    return await controller.ha.perform_action(
+        action="mqtt/publish",
         topic=f"hasp/{plate}/config/{submodule}",
         payload=payload,
     )
