@@ -106,7 +106,7 @@ async def config(
     elif isinstance(payload, dict):
         payload = json.dumps(payload)
     return await controller.ha.perform_action(
-        action="mqtt.publish",
+        action="mqtt/publish",
         data={
             "topic": f"hasp/{plate}/config/{submodule}",
             "payload": payload,
