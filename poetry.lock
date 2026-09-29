@@ -1456,14 +1456,14 @@ files = [
 
 [[package]]
 name = "telnetlib3"
-version = "4.0.5"
+version = "5.0.1"
 description = "Python Telnet server and client CLI and Protocol library"
 optional = false
 python-versions = ">=3.9"
 groups = ["main"]
 files = [
-    {file = "telnetlib3-4.0.5-py3-none-any.whl", hash = "sha256:d075d8625511af54d904c2a0341c5bd15481486fe716270e7b2c54811a47ed44"},
-    {file = "telnetlib3-4.0.5.tar.gz", hash = "sha256:37f584609917a3394302cac6c2f78683add80115820c19a4ce35e0fd499f6ad6"},
+    {file = "telnetlib3-5.0.1-py3-none-any.whl", hash = "sha256:3a257d41981d460f6377f00e713a91979c5fe706434b4d3a52933789606cceeb"},
+    {file = "telnetlib3-5.0.1.tar.gz", hash = "sha256:6fde197ffb71cf26ad27fe2c88694d8364f4b1cc962a37762e0cf7e79b9afaed"},
 ]
 
 [package.dependencies]
