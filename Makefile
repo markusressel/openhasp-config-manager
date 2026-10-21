@@ -15,6 +15,10 @@ lint:
 test:
 	cd tests && poetry run pytest
 
+# the tests of the haad integration (tests/haad) need haad and Python 3.14: they run in haad's environment
+test-haad:
+	PYTHONPATH=../haad uv run --project ../haad pytest tests/haad --cov=openhasp_config_manager/haad --cov-branch --cov-report=term-missing --cov-fail-under=100
+
 docker-latest:
 	docker build . --file Dockerfile --tag ghcr.io/markusressel/openhasp-config-manager:latest
 

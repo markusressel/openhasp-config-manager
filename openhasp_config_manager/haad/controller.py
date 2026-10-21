@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any
 
 from openhasp_config_manager.haad.page.state_updater import StateUpdater
 from openhasp_config_manager.haad.plate import PlateConfig, PlateController
+from openhasp_config_manager.haad.plate.device_factory import MqttBroker, build_device
 
 from haad.controller import HaadController, HaadContext
 from haad.triggers import TimeTrigger
@@ -33,14 +34,29 @@ class OpenHaspController(HaadController):
         self._config_dir = self.context.config.config_dir
         self._output_dir = self.context.config.output_dir
 
+        plate_config = self.plate_config
+        device = None
+        if self._config_dir is None:
+            # no openhasp-configs directory: connection settings from haad.yaml, the rest from the PlateConfig
+            mqtt = self.runtime.config
+            device = build_device(
+                name=self._name,
+                settings=self.controller_config(),
+                plate_config=plate_config,
+                default_broker=MqttBroker(host=mqtt.MQTT_BROKER.value, port=mqtt.MQTT_PORT.value, user=mqtt.MQTT_USERNAME.value,
+                                          password=mqtt.MQTT_PASSWORD.value),
+            )
+
         self.state_updater = StateUpdater(controller=self)
         self.plate_controller = PlateController(
             controller=self,
             state_updater=self.state_updater,
             name=self._name,
-            config=self.plate_config,
+            config=plate_config,
             config_dir=self._config_dir,
             output_dir=self._output_dir,
+            device=device,
+            layout_dump_dir=self.context.config.layout_dump_dir,
         )
 
         await self.before_setup_plate()
@@ -141,9 +157,10 @@ class OpenHaspController(HaadController):
             self.logger.info(f"Received LWT event for plate {self._name}: {event_payload}")
             if event_payload == "online":
                 self.logger.info(f"Reinitializing plate {self._name} due to online event")
-                # await self.teardown_plate_setup()
-                # await self.before_setup_plate()
-                # await self.plate_controller.change_page(index=1)
+                # the plate either rebooted or only reconnected. After a reboot, its boot.cmd may have put JSONL objects
+                # from flash on code-defined pages, and an update can't change an object's type: clear them
+                await self.plate_controller.push_layout()
+                await self.plate_controller.set_navigation()
                 await self.schedule_sync()
 
         self._lwt_task = asyncio.create_task(self.plate_controller.listen_openhasp_event(

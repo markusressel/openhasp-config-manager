@@ -28,6 +28,8 @@ class SwitchObjectController(ObjectController):
     Controller for a switch object on the OpenHASP plate.
     """
 
+    OBJ_TYPE = "switch"
+
     def __init__(
         self,
         controller: HaadController,
@@ -63,7 +65,7 @@ class SwitchObjectController(ObjectController):
 
     async def _setup_state_listener_and_sync(self):
         switch_sync_name = f"switch:{self.object_id}:{self._entity_id}"
-        self.state_updater.register(
+        self.register_state(
             name=switch_sync_name,
             get_state=self.__get_switch_state,
             update_obj=self.__set_switch_obj_state,

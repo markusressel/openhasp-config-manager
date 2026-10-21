@@ -2,7 +2,7 @@ from asyncio import Task
 from typing import Optional
 
 from haad.controller import HaadController
-from openhasp_config_manager.haad.plate import DeploymentController
+from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 
 
@@ -11,10 +11,10 @@ class ScreenController:
     Controller for the screen settings of the OpenHASP plate.
     """
 
-    def __init__(self, controller: HaadController, client: OpenHaspClient, deployment_controller: DeploymentController):
+    def __init__(self, controller: HaadController, client: OpenHaspClient, device: Device):
         self.controller = controller
         self.client = client
-        self.deployment_controller = deployment_controller
+        self.device = device
 
         self._screen_brightness_task: Optional[Task] = None
 
@@ -40,4 +40,4 @@ class ScreenController:
 
     async def set_default_auto_brightness_config(self):
         self.controller.logger.info("Setting default auto brightness config")
-        await self.deployment_controller.deploy_config()
+        await self.client.set_gui_config(config=self.device.config.gui)

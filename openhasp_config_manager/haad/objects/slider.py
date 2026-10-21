@@ -17,6 +17,9 @@ class SliderEvent(StrEnum):
 
 
 class SliderObjectController(ObjectController):
+
+    OBJ_TYPE = "slider"
+
     def __init__(
         self,
         controller: HaadController,
@@ -69,7 +72,7 @@ class SliderObjectController(ObjectController):
 
     async def _setup_state_listener_and_sync(self):
         slider_sync_name = f"slider:{self.object_id}:{self._entity_id}"
-        self.state_updater.register(
+        self.register_state(
             name=slider_sync_name,
             get_state=self.__get_slider_state,
             update_obj=self.__set_slider_obj_state,

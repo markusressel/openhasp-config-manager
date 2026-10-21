@@ -16,6 +16,8 @@ class CheckboxObjectController(ObjectController):
     Controller for a checkbox object on the OpenHASP plate.
     """
 
+    OBJ_TYPE = "checkbox"
+
     def __init__(
         self,
         controller: HaadController,
@@ -58,7 +60,7 @@ class CheckboxObjectController(ObjectController):
 
     async def _setup_state_listener_and_sync(self):
         text_sync_name = f"checkbox:{self.object_id}:{self._entity_id}"
-        self.state_updater.register(
+        self.register_state(
             name=text_sync_name,
             get_state=self.__get_checkbox_state,
             update_obj=self.__set_checkbox_obj_state,

@@ -1,5 +1,5 @@
 from enum import StrEnum
-from typing import Dict, Callable, Awaitable, Any, TYPE_CHECKING
+from typing import Dict, Callable, Awaitable, Any, Optional, TYPE_CHECKING
 
 from haad.controller import HaadController
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
@@ -21,6 +21,8 @@ class ButtonObjectController(ObjectController):
     Controller for a button object on the OpenHASP plate.
     """
 
+    OBJ_TYPE = "btn"
+
     def __init__(
         self,
         controller: HaadController,
@@ -28,7 +30,7 @@ class ButtonObjectController(ObjectController):
         state_updater: StateUpdater,
         page: int,
         obj_id: int,
-        on_click: Callable[[str, Dict], Awaitable[Any]],
+        on_click: Optional[Callable[[], Awaitable[Any]]],
     ):
         """
         Sets up a button object.
@@ -40,24 +42,23 @@ class ButtonObjectController(ObjectController):
         :param state_updater: the state updater to use
         :param page: the page id
         :param obj_id: the object id
-        :param on_click: the callback to call when the button is clicked, with the topic and payload of the click event as parameters
+        :param on_click: called when the button is clicked; None: the button does not react to clicks
         """
         super().__init__(controller=controller, client=client, state_updater=state_updater, page=page, obj_id=obj_id)
         self._on_click = on_click
 
     async def init(self):
         self.controller.logger.debug(f"Initializing button object {self.object_id}")
+        if self._on_click is None:
+            return
 
         async def _click_callback(topic, payload: Dict):
             if payload["event"] == ButtonEvent.UP:
-                await self.__on_click(topic, payload)
+                await self._on_click()
 
         return await self.listen_obj(
             callback=_click_callback,
         )
-
-    async def __on_click(self, topic: str, payload: Dict):
-        await self._on_click(topic, payload)
 
     async def set_is_toggle(self, is_toggle: bool):
         """
@@ -125,7 +126,7 @@ class SceneButtonObjectController(ButtonObjectController):
         :param scene: the name of the scene to activate
         """
 
-        async def __on_click(topic: str, payload: Dict):
+        async def __on_click():
             await _activate_scene(controller=self.controller, name=self.scene)
 
         super().__init__(controller=controller, client=client, state_updater=state_updater, page=page, obj_id=obj_id, on_click=__on_click)

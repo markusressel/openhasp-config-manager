@@ -18,6 +18,8 @@ class BarObjectController(ObjectController):
     Controller for a bar object on the OpenHASP plate.
     """
 
+    OBJ_TYPE = "bar"
+
     def __init__(
         self,
         controller: HaadController,
@@ -63,7 +65,7 @@ class BarObjectController(ObjectController):
 
     async def _setup_state_listener_and_sync(self):
         progress_sync_name = f"progress:{self.object_id}:{self._entity_id}"
-        self.state_updater.register(
+        self.register_state(
             name=progress_sync_name,
             get_state=self.__get_progress_state,
             update_obj=self.__set_progress_obj_state,

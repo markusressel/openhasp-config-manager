@@ -19,6 +19,8 @@ class LabelObjectController(ObjectController):
     Controller for a label object on the OpenHASP plate.
     """
 
+    OBJ_TYPE = "label"
+
     def __init__(
         self,
         controller: HaadController,
@@ -64,7 +66,7 @@ class LabelObjectController(ObjectController):
     async def _setup_state_listeners_and_sync(self):
         ids_str = ",".join(self._entity_ids) if self._entity_ids else "None"
         text_sync_name = f"label:{self.object_id}:{ids_str}"
-        self.state_updater.register(
+        self.register_state(
             name=text_sync_name,
             get_state=self.__get_text_state,
             update_obj=self.__set_text_obj_state,
@@ -116,7 +118,7 @@ class LabelObjectController(ObjectController):
         Sets the text for this text object
         :param text: the text to set
         """
-        return await self.client.set_text(obj=self.object_id, text=text)
+        return await self.send_properties({"text": text})
 
     async def set_color(self, color: str):
         """

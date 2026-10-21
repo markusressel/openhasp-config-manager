@@ -43,6 +43,9 @@ class ImageObjectController(ObjectController):
     """
     Controller for an image object on the OpenHASP plate.
     """
+
+    OBJ_TYPE = "img"
+
     LOGGER = logging.getLogger(__name__)
 
     async def init(self):
