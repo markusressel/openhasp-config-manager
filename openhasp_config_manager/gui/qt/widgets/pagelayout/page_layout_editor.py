@@ -509,6 +509,7 @@ class PageLayoutEditorWidget(QWidget):
             self.selectedObjectComponentChanged.emit(None)
 
     def _on_property_changed(self, _widget: EditableWidget, _key: str, _value: Any):
+        self.page_preview_widget.refresh_items()
         self._mark_dirty()
         self.jsonl_preview.set_objects(self.page_objects)
 
@@ -563,6 +564,7 @@ class PageLayoutEditorWidget(QWidget):
         item.refresh()
 
     def _after_geometry_edit(self):
+        self.page_preview_widget.refresh_items()
         self._mark_dirty()
         self.jsonl_preview.set_objects(self.page_objects)
         self.property_editor.refresh()

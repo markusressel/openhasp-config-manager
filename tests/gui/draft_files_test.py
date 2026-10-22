@@ -123,6 +123,23 @@ class TestDraftFiles(TestBase):
         assert "Unknown variable" in session.check_template(label, "{{ nope }}")
         assert "Invalid template" in session.check_template(label, "{{ unclosed")
 
+    def test_templates_see_the_objects_of_the_draft(self, cfg_root):
+        # GIVEN
+        session = _load(cfg_root)
+        [component] = session.components
+        label, button = session.working_objects[component.key]
+        session.set_source_value(button, "w", 50)
+        session.set_source_value(label, "w", "{{ p9b2.w }}")
+        assert label["w"] == 50 or label["w"] == "50"
+
+        # WHEN
+        session.set_source_value(button, "w", 70)
+
+        # THEN
+        assert int(label["w"]) == 70
+        assert session.check_template(label, "{{ p9b2.w }}") is None
+        assert dict(session.template_suggestions(label))["{{ p9b2.w }}"] == 70
+
     def test_flatten_template_variables(self):
         assert flatten_template_variables({"a": {"b": 1, "not-an-identifier": 2, "c": [1]}, "d": "x"}) == [
             ("{{ a.b }}", 1),

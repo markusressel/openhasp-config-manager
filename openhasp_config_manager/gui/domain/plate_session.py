@@ -21,6 +21,10 @@ class DraftRenderer(Protocol):
 
     def render_object(self, component: str, source: Dict[str, Any]) -> Dict[str, Any]: ...
 
+    def set_draft_sources(self, sources: Dict[str, List[Dict[str, Any]]]):
+        """Templates that refer to other objects (`{{ p1b2.x }}`) see these source objects, per component key."""
+        ...
+
     def check_template(self, component: str, template: str) -> Optional[str]:
         """:return: why the template can't be rendered, or None if it can"""
         ...
@@ -65,6 +69,10 @@ class ComponentChanges:
     expected_sources: List[Dict[str, Any]] = field(default_factory=list)
 
 
+def _has_template(source: Dict[str, Any]) -> bool:
+    return any(isinstance(value, str) and "{{" in value for value in source.values())
+
+
 class PlateSession:
     """
     The draft of a device's pages (of one cmd component) during an app session.
@@ -97,6 +105,7 @@ class PlateSession:
         """Discards all changes of the draft. The rendered objects are new objects afterwards."""
         self._working_objects = OrderedDict()
         self._entries = {}
+        self._renderer.set_draft_sources({component.key: component.sources for component in self._components.values()})
         for component in self._components.values():
             self._working_objects[component.key] = [
                 self._create(component.key, index, copy.deepcopy(source)) for index, source in enumerate(component.sources)
@@ -169,6 +178,7 @@ class PlateSession:
         rendered = self._render_with(obj, key, value)
         self._entry(obj).source[key] = value
         self._apply(obj, rendered)
+        self._render_dependents(obj)
 
     def computed_position_reasons(self, obj: Dict, max_length: int = 40) -> List[str]:
         """:return: why the position is computed, e.g. ["x is a template: {{ nav.x }}", "y is a percentage: 15%"]"""
@@ -196,6 +206,7 @@ class PlateSession:
         """
         self._entry(obj).source.pop(key)
         self._render(obj)
+        self._render_dependents(obj)
 
     def add_object(self, component: str, source: Dict[str, Any]) -> Dict:
         """
@@ -205,6 +216,7 @@ class PlateSession:
         obj = self._create(component, None, copy.deepcopy(source))
         self._working_objects[component].append(obj)
         self.is_dirty = True
+        self._render_dependents(obj)
         return obj
 
     def duplicate_object(self, obj: Dict, offset: int = 10) -> Dict:
@@ -275,6 +287,7 @@ class PlateSession:
         objects.pop(next(i for i, other in enumerate(objects) if other is obj))
         del self._entries[id(obj)]
         self.is_dirty = True
+        self._render_dependents(obj)
 
     # --- saving ---
 
@@ -319,6 +332,22 @@ class PlateSession:
     def _render(self, obj: Dict):
         entry = self._entry(obj)
         self._apply(obj, self._renderer.render_object(entry.component, entry.source))
+
+    def _render_dependents(self, changed: Dict):
+        """
+        Render the objects with templates again, after the source of `changed` changed (or it was added or removed):
+        templates can refer to other objects (`{{ p1b2.x }}`).
+        """
+        self._renderer.set_draft_sources(
+            {key: [self._entry(obj).source for obj in objects] for key, objects in self._working_objects.items()}
+        )
+        for objects in self._working_objects.values():
+            for obj in objects:
+                entry = self._entry(obj)
+                if obj is not changed and _has_template(entry.source):
+                    rendered = self._renderer.render_object(entry.component, entry.source)
+                    if rendered != obj:
+                        self._apply(obj, rendered)
 
     def _render_with(self, obj: Dict, key: str, value: Any) -> Dict:
         """:return: the object rendered with a different source value, without changing it"""

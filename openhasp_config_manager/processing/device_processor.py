@@ -1,5 +1,6 @@
 import json
-from typing import List, Dict, Any
+from pathlib import Path
+from typing import List, Dict, Any, Optional
 
 import orjson
 
@@ -81,12 +82,16 @@ class DeviceProcessor:
             for ob in self._jsonl_preprocessor.split_jsonl_objects(component.content)
         ]
 
-    def jsonl_template_variables(self, component: JsonlComponent) -> Dict[str, Any]:
+    def jsonl_template_variables(
+        self, component: JsonlComponent, draft_objects: Optional[Dict[Path, List[Dict[str, Any]]]] = None
+    ) -> Dict[str, Any]:
         """
         :param component: the component, which must have been added to this processor
+        :param draft_objects: component path -> its source objects (see parse_jsonl_objects), to use instead of the
+            objects in the files of those components
         :return: the variables the templates of the component's objects are rendered with
         """
-        return self._compute_jsonl_template_variables(self._device, component)
+        return self._compute_jsonl_template_variables(self._device, component, draft_objects)
 
     def render_jsonl_object(self, source_object: Dict[str, Any], template_vars: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -117,7 +122,9 @@ class DeviceProcessor:
     def _normalize_cmd(self, _device_config, component: CmdComponent, template_vars: Dict[str, any]) -> str:
         return _render_template(component.content, template_vars)
 
-    def _compute_jsonl_template_variables(self, device: Device, component: Component) -> Dict[str, Any]:
+    def _compute_jsonl_template_variables(
+        self, device: Device, component: Component, draft_objects: Optional[Dict[Path, List[Dict[str, Any]]]] = None
+    ) -> Dict[str, Any]:
         """
         Computes a map of "variable" -> "evaluated value in the given path context" for the given component.
 
@@ -130,7 +137,6 @@ class DeviceProcessor:
         sorted_components = list(sorted(self._jsonl_components, key=lambda x: x == component))
         assert sorted_components[-1] == component
         for c in sorted_components:
-            jsonl_objects = self._jsonl_preprocessor.split_jsonl_objects(c.content)
 
             component_template_vars = self._variable_manager.get_vars(c.path)
             component_template_vars["device"] = self._device.config.openhasp_config_manager.device
@@ -139,7 +145,10 @@ class DeviceProcessor:
                 device_vars = self._variable_manager.get_vars(device.path)
                 component_template_vars = merge_dict_recursive(component_template_vars, device_vars)
 
-            c_result = self._compute_object_map(jsonl_objects)
+            if draft_objects is not None and c.path in draft_objects:
+                c_result = self._object_map(draft_objects[c.path])
+            else:
+                c_result = self._object_map(self.parse_jsonl_objects(c))
             merged_template_variables = merge_dict_recursive(result, component_template_vars)
             merged_template_variables = merge_dict_recursive(merged_template_variables, component_template_vars)
 
@@ -154,18 +163,11 @@ class DeviceProcessor:
             raise AssertionError("Unexpected None value")
         return result
 
-    def _compute_object_map(self, jsonl_objects: List[str]) -> Dict[str, dict]:
+    def _object_map(self, source_objects: List[Dict[str, Any]]) -> Dict[str, dict]:
         """
-        :param jsonl_objects:
-        :return: a map
+        :return: "p<page>b<id>" -> the source object
         """
-        result = {}
-        for o in jsonl_objects:
-            o = self._jsonl_preprocessor.cleanup_object_for_json_parsing(o)
-            parsed_object = orjson.loads(o)
-            object_key = self._compute_object_key(parsed_object)
-            result[object_key] = parsed_object
-        return result
+        return {self._compute_object_key(source_object): source_object for source_object in source_objects}
 
     @staticmethod
     def _compute_object_key(jsonl_object: Dict) -> str:

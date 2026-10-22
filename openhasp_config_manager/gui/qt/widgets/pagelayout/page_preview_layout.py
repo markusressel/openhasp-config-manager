@@ -150,6 +150,12 @@ class PagePreviewWidget(QGraphicsView):
         """Decides which objects can be dragged in edit mode (others can still be selected)."""
         self._is_movable = is_movable
 
+    def refresh_items(self):
+        """Redraw all objects, e.g. after the edit of an object changed those with templates that refer to it."""
+        for item in self.editable_items():
+            item.refresh()
+        self.refresh_movable()
+
     def refresh_movable(self):
         """Ask the movable predicate again, e.g. after the position of an object changed from a template to pixels."""
         for item in self.editable_items():

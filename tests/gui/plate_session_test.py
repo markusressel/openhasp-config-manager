@@ -26,6 +26,9 @@ class FakeRenderer:
         result.setdefault("bg_color", "#THEME")
         return result
 
+    def set_draft_sources(self, sources: Dict[str, List[Dict[str, Any]]]):
+        pass
+
     def check_template(self, component: str, template: str) -> Optional[str]:
         return None if template.strip("{} ") in self.variables else "Unknown variable"
 

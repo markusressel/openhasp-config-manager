@@ -1,3 +1,4 @@
+import copy
 import dataclasses
 from dataclasses import dataclass
 from pathlib import Path
@@ -26,16 +27,33 @@ class ProcessorDraftRenderer:
     would send, and suggests the template variables a deployment would provide.
     """
 
-    def __init__(self, processor: DeviceProcessor, template_vars: Dict[str, Dict[str, Any]]):
+    def __init__(self, processor: DeviceProcessor, components: List[JsonlComponent]):
         """
-        :param template_vars: component key -> the template variables of the component (DeviceProcessor.jsonl_template_variables)
+        :param components: the jsonl components of the draft, in the order of the deployment
         """
         self._processor = processor
-        self._template_vars = template_vars
+        self._components = {str(component.path): component for component in components}
+        # component key -> the template variables of the component, computed when needed
+        self._template_var_cache: Dict[str, Dict[str, Any]] = {}
+        # component path -> its source objects in the draft, None while the objects are those on disk
+        self._draft_objects: Optional[Dict[Path, List[Dict[str, Any]]]] = None
         self._suggestions: Dict[str, List[Tuple[str, Any]]] = {}
 
+    def set_draft_sources(self, sources: Dict[str, List[Dict[str, Any]]]):
+        # templates like `{{ p1b2.x }}` refer to the objects as they are in the draft
+        self._draft_objects = {self._components[key].path: copy.deepcopy(objects) for key, objects in sources.items()}
+        self._template_var_cache = {}
+        self._suggestions = {}
+
+    def _vars_of(self, key: str) -> Dict[str, Any]:
+        if key not in self._template_var_cache:
+            self._template_var_cache[key] = self._processor.jsonl_template_variables(
+                self._components[key], self._draft_objects
+            )
+        return self._template_var_cache[key]
+
     def render_object(self, component: str, source: Dict[str, Any]) -> Dict[str, Any]:
-        return self._processor.render_jsonl_object(source, self._template_vars[component])
+        return self._processor.render_jsonl_object(source, self._vars_of(component))
 
     def check_template(self, component: str, template: str) -> Optional[str]:
         # a deployment renders unknown variables as they are written (DebugUndefined): check them strictly instead
@@ -44,7 +62,7 @@ class ProcessorDraftRenderer:
         except TemplateSyntaxError as ex:
             return f"Invalid template: {ex.message}"
         try:
-            parsed.render(self._template_vars[component])
+            parsed.render(self._vars_of(component))
         except UndefinedError as ex:
             return f"Unknown variable: {ex.message}"
         except TemplateError as ex:
@@ -53,7 +71,7 @@ class ProcessorDraftRenderer:
 
     def template_suggestions(self, component: str) -> List[Tuple[str, Any]]:
         if component not in self._suggestions:
-            self._suggestions[component] = sorted(flatten_template_variables(self._template_vars[component]))
+            self._suggestions[component] = sorted(flatten_template_variables(self._vars_of(component)))
         return self._suggestions[component]
 
 
@@ -163,11 +181,9 @@ def load_device(config_manager: ConfigManager, name: str) -> LoadedDevice:
     device_processor = config_manager.create_device_processor(device)
     common_dir = Path(config_manager.cfg_root, COMMON_FOLDER_NAME)
     components = []
-    template_vars = {}
     for jsonl_component in jsonl_components:
         # names can repeat in different folders, paths can't
         key = str(jsonl_component.path)
-        template_vars[key] = device_processor.jsonl_template_variables(jsonl_component)
         components.append(
             ComponentSource(
                 key=key,
@@ -186,7 +202,7 @@ def load_device(config_manager: ConfigManager, name: str) -> LoadedDevice:
         cmd_component=boot_cmd_component,
         jsonl_components=jsonl_components,
         components=components,
-        renderer=ProcessorDraftRenderer(device_processor, template_vars),
+        renderer=ProcessorDraftRenderer(device_processor, jsonl_components),
         files=files,
         used_files=used,
         used_variable_files=used_variable_files(files, used, device.path),
