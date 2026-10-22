@@ -148,7 +148,8 @@ def run_async(
     :param coro: The coroutine to run (e.g., client.set_page(1))
     :param on_done: Optional callback function to run on the MAIN THREAD when finished.
     :param on_success: Optional callback function to run on the MAIN THREAD if coro succeeds, receives result as argument.
-    :param on_error: Optional callback function to run on the MAIN THREAD if coro raises an
+    :param on_error: Optional callback function to run on the MAIN THREAD if coro raises an exception.
+    on_done runs after on_success/on_error, even if they raise.
     """
     loop = get_global_async_loop()
 
@@ -156,24 +157,29 @@ def run_async(
     async def task_wrapper():
         try:
             result = await coro
-
-            def __run_callbacks():
-                if on_success:
-                    on_success(result)
-                if on_done:
-                    on_done()
-
-            run_in_main(__run_callbacks)
         except Exception as ex:
             logging.exception(f"Async task failed: {ex}")
             exception = ex  # Capture the exception for use in the callback
 
             def __run_error_callback():
-                if on_error:
-                    on_error(exception)
+                try:
+                    if on_error:
+                        on_error(exception)
+                finally:
+                    if on_done:
+                        on_done()
+
+            run_in_main(__run_error_callback)
+            return
+
+        def __run_callbacks():
+            try:
+                if on_success:
+                    on_success(result)
+            finally:
                 if on_done:
                     on_done()
 
-            run_in_main(__run_error_callback)
+        run_in_main(__run_callbacks)
 
     return asyncio.run_coroutine_threadsafe(task_wrapper(), loop)

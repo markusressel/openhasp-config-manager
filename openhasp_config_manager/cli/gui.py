@@ -3,7 +3,6 @@ import sys
 import threading
 from pathlib import Path
 
-import qt_themes
 from PyQt6.QtWidgets import QApplication
 
 from openhasp_config_manager.gui.qt.util import setup_global_async_loop, get_global_async_loop
@@ -11,7 +10,12 @@ from openhasp_config_manager.gui.qt.util import setup_global_async_loop, get_glo
 
 def c_gui(config_dir: Path, output_dir: Path):
     app = QApplication(sys.argv)
-    qt_themes.set_theme("one_dark_two")
+
+    from openhasp_config_manager.gui.qt.main import create_application_settings
+    from openhasp_config_manager.gui.qt.theme import apply_theme, load_theme_mode
+
+    create_application_settings()
+    apply_theme(load_theme_mode())
 
     # 1. Start a background thread to host the asyncio loop
     setup_global_async_loop(asyncio.new_event_loop())

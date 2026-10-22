@@ -1,0 +1,143 @@
+from collections import OrderedDict
+
+import pytest
+
+from openhasp_config_manager.gui.domain.page_objects import (
+    OpenHASPWidgetType,
+    add_object,
+    count_objects,
+    create_object,
+    duplicate_object,
+    find_target_component,
+    get_navigable_page_indices,
+    get_page_objects,
+    is_id_used,
+    next_free_id,
+    remove_object,
+)
+from tests import TestBase
+
+
+def _draft() -> OrderedDict:
+    return OrderedDict(
+        [
+            ("nav.jsonl", [{"page": 0, "id": 1, "obj": "btn"}]),
+            (
+                "home.jsonl",
+                [
+                    {"page": 1, "id": 1, "obj": "label"},
+                    {"page": 1, "id": 2, "obj": "btn", "hidden": True},
+                    {"page": 2, "id": 1, "obj": "label"},
+                ],
+            ),
+            ("empty.jsonl", []),
+        ]
+    )
+
+
+class TestPageObjects(TestBase):
+    def test_page_objects_include_global_objects_last(self):
+        # WHEN
+        result = get_page_objects(_draft(), index=1)
+
+        # THEN
+        assert [(obj["page"], obj["id"]) for obj in result] == [(1, 1), (0, 1)]
+
+    def test_page_objects_without_global_objects(self):
+        # WHEN
+        result = get_page_objects(_draft(), index=2, include_global=False)
+
+        # THEN
+        assert [(obj["page"], obj["id"]) for obj in result] == [(2, 1)]
+
+    def test_navigable_pages_skip_page_0(self):
+        assert get_navigable_page_indices(_draft()) == [1, 2]
+
+    def test_count_objects(self):
+        assert count_objects(_draft()) == 4
+
+    def test_next_free_id_fills_gaps(self):
+        # GIVEN
+        draft = _draft()
+        draft["home.jsonl"].append({"page": 1, "id": 4, "obj": "label"})
+
+        # THEN
+        assert next_free_id(draft, page=1) == 3
+        assert next_free_id(draft, page=7) == 1
+
+    def test_next_free_id_raises_when_page_is_full(self):
+        # GIVEN
+        draft = OrderedDict([("a.jsonl", [{"page": 1, "id": i} for i in range(1, 255)])])
+
+        # THEN
+        with pytest.raises(ValueError):
+            next_free_id(draft, page=1)
+
+    def test_id_used_ignores_the_object_itself(self):
+        # GIVEN
+        draft = _draft()
+        label = draft["home.jsonl"][0]
+
+        # THEN
+        assert is_id_used(draft, page=1, obj_id=1, ignore=label) is False
+        assert is_id_used(draft, page=1, obj_id=2, ignore=label) is True
+        assert is_id_used(draft, page=2, obj_id=2, ignore=label) is False
+
+    def test_create_object_is_centered(self):
+        # WHEN
+        obj = create_object(OpenHASPWidgetType.BUTTON, page=3, obj_id=5, screen_width=480, screen_height=320)
+
+        # THEN
+        assert obj["obj"] == "btn"
+        assert (obj["page"], obj["id"]) == (3, 5)
+        assert obj["x"] == (480 - obj["w"]) // 2
+        assert obj["y"] == (320 - obj["h"]) // 2
+
+    def test_target_component_is_the_one_with_most_objects_on_the_page(self):
+        assert find_target_component(_draft(), page=1) == "home.jsonl"
+
+    def test_target_component_falls_back_to_the_last_component(self):
+        assert find_target_component(_draft(), page=9) == "empty.jsonl"
+
+    def test_target_component_without_components(self):
+        assert find_target_component(OrderedDict(), page=1) is None
+
+    def test_add_object_after_another_one(self):
+        # GIVEN
+        draft = _draft()
+        first = draft["home.jsonl"][0]
+        new = {"page": 1, "id": 9}
+
+        # WHEN
+        add_object(draft, "home.jsonl", new, after=first)
+
+        # THEN
+        assert draft["home.jsonl"][1] is new
+
+    def test_remove_object_uses_identity_and_searches_all_components(self):
+        # GIVEN
+        draft = _draft()
+        draft["empty.jsonl"].append({"page": 0, "id": 1, "obj": "btn"})  # equal to the one in nav.jsonl
+        target = draft["empty.jsonl"][0]
+
+        # WHEN
+        removed = remove_object(draft, target)
+
+        # THEN
+        assert removed is True
+        assert draft["empty.jsonl"] == []
+        assert len(draft["nav.jsonl"]) == 1
+
+    def test_duplicate_object(self):
+        # GIVEN
+        draft = _draft()
+        original = draft["home.jsonl"][0]
+        original.update({"x": 10, "y": 20})
+
+        # WHEN
+        duplicate = duplicate_object(draft, original)
+
+        # THEN
+        assert duplicate is not original
+        assert (duplicate["id"], duplicate["x"], duplicate["y"]) == (3, 20, 30)
+        assert draft["home.jsonl"][1] is duplicate

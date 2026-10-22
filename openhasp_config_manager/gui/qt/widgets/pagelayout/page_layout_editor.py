@@ -1,343 +1,574 @@
 import asyncio
+import logging
 from collections import OrderedDict
-from typing import List, Dict, Set
+from typing import List, Dict, Optional, Any
 
-from PyQt6.QtWidgets import QWidget
-from orjson import orjson
+from PyQt6 import QtCore
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QAction
+from PyQt6.QtWidgets import QWidget, QToolBar, QComboBox, QMessageBox, QToolButton
 
+from openhasp_config_manager.gui.domain.page_objects import (
+    OpenHASPWidgetType,
+    get_page_objects,
+    get_navigable_page_indices,
+    count_objects,
+    next_free_id,
+    is_id_used,
+    create_object,
+    find_target_component,
+    add_object,
+    remove_object,
+    duplicate_object,
+)
 from openhasp_config_manager.gui.domain.plate_session import PlateSession
 from openhasp_config_manager.gui.qt.components import UiComponents
-from openhasp_config_manager.gui.qt.util import qBridge, run_async, parse_icons
+from openhasp_config_manager.gui.qt.operations import BusyState, OperationStatus, run_busy, error_text
+from openhasp_config_manager.gui.qt.util import qBridge
+from openhasp_config_manager.gui.qt.widgets.message_panel import ErrorBanner
 from openhasp_config_manager.gui.qt.widgets.pagelayout import OpenHaspDevicePagesData
-from openhasp_config_manager.gui.qt.widgets.pagelayout.editor_controls import EditorControlsWidget
 from openhasp_config_manager.gui.qt.widgets.pagelayout.jsonl_preview import PageJsonlPreviewWidget
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widget_picker import OpenHASPWidgetPicker
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widget_property_editor import OpenHASPWidgetPropertyEditor
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
 from openhasp_config_manager.gui.qt.widgets.pagelayout.page_preview_layout import PagePreviewWidget, PreviewMode
-from openhasp_config_manager.manager import ConfigManager
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
+
+LOGGER = logging.getLogger(__name__)
+
+# delay between two objects when deploying a page, to avoid overwhelming the device
+DEPLOY_DELAY_SECONDS = 0.1
+
+NUDGE_STEP = 1
+NUDGE_STEP_LARGE = 10
 
 
 class PageLayoutEditorWidget(QWidget):
-    def __init__(self, config_manager: ConfigManager):
+    """
+    The page layout editor: the plate preview with the widget picker, and the editor actions in `toolbar`.
+    The property editor (`property_editor`) and the JSONL view (`jsonl_preview`) belong to it,
+    but are placed by the main window.
+    """
+
+    # (current page index, number of navigable pages)
+    pageChanged = QtCore.pyqtSignal(int, int)
+    dirtyChanged = QtCore.pyqtSignal(bool)
+
+    def __init__(self, status: OperationStatus):
         super().__init__()
-        self.config_manager = config_manager
-        self.device_processor = None
+        self.status = status
+        self.busy = BusyState(self)
+        self.busy.changed.connect(lambda _: self._update_actions())
 
-        self.device_pages_data = None
+        self.session: Optional[PlateSession] = None
+        self.device_pages_data: Optional[OpenHaspDevicePagesData] = None
         self.current_index = 1
+        self.page_objects: List[Dict] = []
 
-        self.create_layout()
+        self.property_editor = OpenHASPWidgetPropertyEditor()
+        self.property_editor.removeObjectClicked.connect(self.remove_selected_objects)
+        self.property_editor.duplicateObjectClicked.connect(self.duplicate_selected_objects)
+        self.property_editor.propertyChanged.connect(self._on_property_changed)
+        self.property_editor.set_validator(self._validate_property)
 
-    def create_layout(self):
-        self.layout = UiComponents.create_column(self)
+        self.jsonl_preview = PageJsonlPreviewWidget()
 
-        self.title_label = UiComponents.create_label(":mdi6.book-open-page-variant: Page Layout Editor")
-        self.layout.addWidget(self.title_label)
+        self._create_layout()
+        self._create_actions()
+        self._create_toolbar()
 
-        self.editor_controls_title_label = UiComponents.create_label(":mdi6.cog: Editor Controls")
-        self.layout.addWidget(self.editor_controls_title_label)
-        self.editor_controls = EditorControlsWidget()
-        self.editor_controls.previousPageClicked.connect(self._on_previous_page_clicked)
-        self.editor_controls.nextPageClicked.connect(self._on_next_page_clicked)
-        self.editor_controls.syncWithRealDeviceToggled.connect(self._on_sync_with_real_device_toggled)
-        self.editor_controls.deployClicked.connect(self._on_deploy_page_clicked)
-        self.editor_controls.clearClicked.connect(self._on_clear_page_clicked)
-        self.layout.addWidget(self.editor_controls)
+        self.page_preview_widget.set_mode(PreviewMode.Interact)
+        self._update_actions()
 
-        self.device_preview_container_layout = UiComponents.create_column()
-        self.layout.addLayout(self.device_preview_container_layout)
+    @property
+    def working_objects(self) -> OrderedDict[str, List[Dict]]:
+        return self.session.working_objects
 
-        self.device_preview_container_title_label = UiComponents.create_label(":mdi6.eye: Page Preview")
-        self.device_preview_container_layout.addWidget(self.device_preview_container_title_label)
+    @property
+    def edit_mode(self) -> bool:
+        return self.page_preview_widget.mode == PreviewMode.Edit
 
-        self.editor_mode_button = UiComponents.create_button(
-            title="",
-            on_click=self._on_editor_mode_clicked,
-        )
-        self.device_preview_container_layout.addWidget(self.editor_mode_button)
+    # --- layout ---
 
-        self.device_preview_row = UiComponents.create_row()
-        self.device_preview_container_layout.addLayout(self.device_preview_row)
+    def _create_layout(self):
+        row = UiComponents.create_row(parent=self)
 
         self.widget_picker = OpenHASPWidgetPicker()
-        self.device_preview_row.addWidget(self.widget_picker)
+        self.widget_picker.addItem.connect(self.add_object)
+        row.addWidget(self.widget_picker)
+
+        column = UiComponents.create_column()
+        row.addLayout(column, 1)
+
+        self.error_banner = ErrorBanner()
+        column.addWidget(self.error_banner)
 
         self.page_preview_widget = PagePreviewWidget()
         self.page_preview_widget.buttonClicked.connect(self.__on_preview_layout_button_clicked)
         self.page_preview_widget.modeChanged.connect(self._on_editor_mode_changed)
         self.page_preview_widget.selectionChanged.connect(self._on_openhasp_widget_selection_changed)
-        self.device_preview_row.addWidget(self.page_preview_widget)
+        self.page_preview_widget.itemsMoved.connect(self._on_items_moved)
+        self.page_preview_widget.addObjectRequested.connect(lambda: self.add_object(OpenHASPWidgetType.LABEL))
+        column.addWidget(self.page_preview_widget, 1)
 
-        self.widget_property_editor = OpenHASPWidgetPropertyEditor()
-        self.widget_property_editor.removeObjectClicked.connect(self._on_remove_currently_selected_object_clicked)
-        self.device_preview_row.addWidget(self.widget_property_editor)
-        self.widget_property_editor.setVisible(False)
+    def _create_actions(self):
+        create = UiComponents.create_action
+        canvas = Qt.ShortcutContext.WidgetWithChildrenShortcut
 
-        self.page_jsonl_preview = PageJsonlPreviewWidget()
-        self.device_preview_container_layout.addWidget(self.page_jsonl_preview)
+        self.action_previous_page = create(
+            self, "Previous page", "chevron-left", self._on_previous_page_clicked, shortcut="Alt+Left"
+        )
+        self.action_next_page = create(self, "Next page", "chevron-right", self._on_next_page_clicked, shortcut="Alt+Right")
 
-        self.page_preview_widget.set_mode(PreviewMode.Interact)
+        self.page_combo = QComboBox()
+        self.page_combo.setToolTip("Page")
+        self.page_combo.setMinimumContentsLength(8)
+        self.page_combo.activated.connect(lambda i: self._go_to_page(self.page_combo.itemData(i)))
 
-    @qBridge()
-    def _on_remove_currently_selected_object_clicked(self):
-        selected_items: List[EditableWidget] = self.page_preview_widget.scene().selectedItems()
-        if not selected_items:
-            return
+        self.action_edit_mode = create(
+            self,
+            "Edit mode",
+            "pencil",
+            shortcut="Ctrl+E",
+            tooltip="Edit mode: select, move and change objects. Off: interact with the page like on the plate",
+            checkable=True,
+        )
+        self.action_edit_mode.toggled.connect(self._on_edit_mode_toggled)
 
-        # Modify the working draft directly
-        component_name = self.device_pages_data.jsonl_components[0].name
-        target_list = self.session.working_objects.get(component_name, [])
+        self.action_snap = create(
+            self,
+            "Snap",
+            "grid",
+            shortcut="Ctrl+G",
+            tooltip="Snap to the grid and to other objects (hold Alt to move freely)",
+            checkable=True,
+        )
+        self.action_snap.setChecked(True)
+        self.action_snap.toggled.connect(self.page_preview_widget.set_snap_enabled)
 
-        for item in selected_items:
-            if item.obj_data in target_list:
-                target_list.remove(item.obj_data)
-                self.session.is_dirty = True
+        self.action_duplicate = create(
+            self, "Duplicate", "content-copy", self.duplicate_selected_objects, shortcut="Ctrl+D", context=canvas
+        )
+        self.action_delete = create(self, "Remove", "delete", self.remove_selected_objects, shortcut="Del", context=canvas)
 
+        self.action_zoom_in = create(
+            self, "Zoom in", "magnify-plus-outline", self.page_preview_widget.zoom_in, shortcut="Ctrl++"
+        )
+        self.action_zoom_out = create(
+            self, "Zoom out", "magnify-minus-outline", self.page_preview_widget.zoom_out, shortcut="Ctrl+-"
+        )
+        self.action_zoom_fit = create(
+            self, "Fit to window", "fit-to-screen-outline", self.page_preview_widget.fit_to_view, shortcut="Ctrl+0"
+        )
+
+        self.action_sync = create(
+            self,
+            "Sync",
+            "sync",
+            tooltip="Show the page of the editor on the real device",
+            checkable=True,
+        )
+        self.action_sync.toggled.connect(self._on_sync_with_real_device_toggled)
+        self.action_deploy = create(
+            self,
+            "Deploy",
+            "upload",
+            self._on_deploy_page_clicked,
+            tooltip="Clear the page on the device and send all of its objects",
+        )
+        self.action_clear = create(
+            self, "Clear", "eraser", self._on_clear_page_clicked, tooltip="Clear the page on the device"
+        )
+
+        # keyboard only, while the preview has the focus
+        canvas_actions = [
+            self.action_delete,
+            self.action_duplicate,
+            create(self, "Previous page", "chevron-left", self._on_previous_page_clicked, shortcut="PgUp", context=canvas),
+            create(self, "Next page", "chevron-right", self._on_next_page_clicked, shortcut="PgDown", context=canvas),
+        ]
+        for key, dx, dy in [("Left", -1, 0), ("Right", 1, 0), ("Up", 0, -1), ("Down", 0, 1)]:
+            for modifier, step in [("", NUDGE_STEP), ("Shift+", NUDGE_STEP_LARGE)]:
+                canvas_actions.append(
+                    create(
+                        self,
+                        f"Nudge {key.lower()}",
+                        "arrow-all",
+                        lambda dx=dx, dy=dy, step=step: self.nudge_selected_objects(dx * step, dy * step),
+                        shortcut=f"{modifier}{key}",
+                        context=canvas,
+                    )
+                )
+        self.page_preview_widget.addActions(canvas_actions)
+
+    def _create_toolbar(self):
+        self.toolbar = QToolBar("Editor")
+        self.toolbar.setObjectName("editor_toolbar")
+        self.toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.toolbar.setMovable(False)
+
+        icon_only: List[QAction] = []
+
+        self.toolbar.addAction(self.action_previous_page)
+        self.toolbar.addWidget(self.page_combo)
+        self.toolbar.addAction(self.action_next_page)
+        icon_only += [self.action_previous_page, self.action_next_page]
+        self.toolbar.addSeparator()
+
+        self.toolbar.addAction(self.action_edit_mode)
+        self.toolbar.addAction(self.action_snap)
+        self.toolbar.addAction(self.action_duplicate)
+        self.toolbar.addAction(self.action_delete)
+        icon_only += [self.action_duplicate, self.action_delete]
+        self.toolbar.addSeparator()
+
+        self.toolbar.addAction(self.action_zoom_out)
+        self.toolbar.addAction(self.action_zoom_fit)
+        self.toolbar.addAction(self.action_zoom_in)
+        icon_only += [self.action_zoom_out, self.action_zoom_fit, self.action_zoom_in]
+
+        spacer = QWidget()
+        spacer.setSizePolicy(spacer.sizePolicy().Policy.Expanding, spacer.sizePolicy().Policy.Preferred)
+        self.toolbar.addWidget(spacer)
+
+        self.toolbar.addAction(self.action_sync)
+        self.toolbar.addAction(self.action_clear)
+        self.toolbar.addAction(self.action_deploy)
+
+        for action in icon_only:
+            button: QToolButton = self.toolbar.widgetForAction(action)
+            button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+
+    def _update_actions(self):
+        has_data = self.session is not None
+        pages = get_navigable_page_indices(self.working_objects) if has_data else []
+        can_navigate = len(pages) > 1 or (len(pages) == 1 and self.current_index not in pages)
+        has_selection = bool(self.page_preview_widget.selected_items())
+        busy = self.busy.busy
+
+        for action in [
+            self.action_edit_mode,
+            self.action_snap,
+            self.action_zoom_in,
+            self.action_zoom_out,
+            self.action_zoom_fit,
+            self.action_sync,
+        ]:
+            action.setEnabled(has_data)
+        self.page_combo.setEnabled(has_data and self.page_combo.count() > 1)
+        self.action_previous_page.setEnabled(can_navigate)
+        self.action_next_page.setEnabled(can_navigate)
+        self.action_duplicate.setEnabled(self.edit_mode and has_selection)
+        self.action_delete.setEnabled(self.edit_mode and has_selection)
+        self.action_deploy.setEnabled(has_data and not busy and len(self.page_objects) > 0)
+        self.action_clear.setEnabled(has_data and not busy)
+        self.widget_picker.setEnabled(has_data and len(self.working_objects) > 0)
+
+    # --- data ---
+
+    def clear(self):
+        self.session = None
+        self.device_pages_data = None
+        self.current_index = 1
+        self.page_objects = []
+        self.page_preview_widget.set_objects([])
+        self.jsonl_preview.set_objects([])
+        self.error_banner.hide()
+        self._update_actions()
+
+    def set_data(
+        self,
+        session: PlateSession,
+        device_pages_data: OpenHaspDevicePagesData,
+        raw_data: OrderedDict[str, List[Dict]],
+    ):
+        """
+        :param raw_data: the normalized objects of the jsonl components, loaded into the session if it has no draft yet
+        """
+        self.session = session
+        self.device_pages_data = device_pages_data
+        self.error_banner.hide()
+
+        if not self.session.working_objects:
+            self.session.load_from_disk(raw_data)
+
+        screen = device_pages_data.device.config.openhasp_config_manager.device.screen
+        self.page_preview_widget.set_screen_size(screen.width, screen.height)
+
+        pages = get_navigable_page_indices(self.working_objects)
+        self.set_page_index(pages[0] if pages else 1)
+        self.dirtyChanged.emit(self.session.is_dirty)
+
+    def set_page_index(self, index: int):
+        LOGGER.debug(f"Setting page index {index}")
+        self.current_index = index
+        self.page_objects = get_page_objects(self.working_objects, index=index)
+        self.page_preview_widget.set_objects(self.page_objects)
+        self.jsonl_preview.set_objects(self.page_objects)
+        self.property_editor.set_editable_widgets([])
+
+        pages = get_navigable_page_indices(self.working_objects)
+        self._update_page_combo(pages)
+        self._update_empty_hint()
+        self._update_actions()
+        self.pageChanged.emit(index, len(pages))
+
+    def _update_page_combo(self, pages: List[int]):
+        self.page_combo.blockSignals(True)
+        self.page_combo.clear()
+        for page in sorted(set(pages) | {self.current_index}):
+            self.page_combo.addItem(f"Page {page}", page)
+        self.page_combo.setCurrentIndex(self.page_combo.findData(self.current_index))
+        self.page_combo.blockSignals(False)
+
+    def _update_empty_hint(self):
+        if not self.working_objects:
+            self.page_preview_widget.set_empty_hint(
+                f"This device has no .jsonl files.\nAdd one to {self.device_pages_data.device.path} to create pages."
+            )
+        elif count_objects(self.working_objects) == 0:
+            self.page_preview_widget.set_empty_hint("This device has no objects yet.", show_add_button=True)
+        elif not any(obj.get("page") == self.current_index for obj in self.page_objects):
+            self.page_preview_widget.set_empty_hint(f"Page {self.current_index} is empty.", show_add_button=True)
+        else:
+            self.page_preview_widget.set_empty_hint(None)
+
+    def _mark_dirty(self):
+        self.session.is_dirty = True
+        self.dirtyChanged.emit(True)
+
+    def _reload_page(self, select: List[Dict] = ()):
+        """Rebuilds the preview from the draft after objects were added or removed, and selects the given objects."""
         self.set_page_index(self.current_index)
+        for obj in select:
+            for item in self.page_preview_widget.editable_items():
+                if item.obj_data is obj:
+                    item.setSelected(True)
+        self.page_preview_widget.setFocus()
+
+    # --- page navigation ---
+
+    def _go_to_page(self, index: int):
+        self.set_page_index(index)
+        if self.action_sync.isChecked():
+            self._sync_device_page(index)
+
+    def _step_page(self, step: int):
+        pages = get_navigable_page_indices(self.working_objects)
+        if not pages:
+            return
+        if self.current_index in pages:
+            new_index = pages[(pages.index(self.current_index) + step) % len(pages)]
+        else:
+            new_index = pages[0]
+        self._go_to_page(new_index)
 
     @qBridge()
     def _on_previous_page_clicked(self):
-        self.previous_page_index()
-        if self.editor_controls.is_sync_with_real_device_enabled():
-            self._sync_device_page_with_device()
+        if self.session is not None:
+            self._step_page(-1)
 
     @qBridge()
     def _on_next_page_clicked(self):
-        self.next_page_index()
-        if self.editor_controls.is_sync_with_real_device_enabled():
-            self._sync_device_page_with_device()
+        if self.session is not None:
+            self._step_page(1)
 
-    @qBridge(bool)
-    def _on_sync_with_real_device_toggled(self, enabled: bool):
-        if enabled:
-            self._sync_device_page_with_device()
-
-    def _sync_device_page_with_device(self):
-        async def __async_work():
-            # switch the device to this page
-            device = self.device_pages_data.device
-            client = OpenHaspClient(device)
-            await client.set_page(self.current_index)
-
-        run_async(
-            coro=__async_work(),
-        )
-
-    def clear(self):
-        self.page_preview_widget.set_data(None)
-        self.current_index = 1
-
-    def set_data(self, session: PlateSession, device_pages_data: OpenHaspDevicePagesData):
-        self.session = session
-        self.device_pages_data = device_pages_data
-
-        self.clear()
-
-        if not self.session.working_objects:
-            raw_data = self._load_jsonl_component_objects(device_pages_data)
-            self.session.load_from_disk(raw_data)
-
-        self.page_preview_widget.set_data(device_pages_data)
-        self.set_page_index(index=1)
-
-    def _load_jsonl_component_objects(self, data: OpenHaspDevicePagesData) -> OrderedDict[str, List[Dict]]:
-        self.device_processor = self.config_manager.create_device_processor(data.device)
-
-        jsonl_component_objects = OrderedDict()
-        # load jsonl component objects
-        for jsonl_component in data.jsonl_components:
-            normalized_jsonl_component = self.device_processor.normalize(data.device, jsonl_component)
-            objects_in_jsonl = normalized_jsonl_component.splitlines()
-            loaded_objects = list(map(orjson.loads, objects_in_jsonl))
-            jsonl_component_objects[jsonl_component.name] = loaded_objects
-
-        return jsonl_component_objects
+    def go_to_home_page(self):
+        pages = get_navigable_page_indices(self.working_objects)
+        if pages:
+            self._go_to_page(pages[0])
 
     @qBridge(dict)
     def __on_preview_layout_button_clicked(self, obj: dict):
-        print(f"Clicked on object in preview: {obj}")
+        LOGGER.debug(f"Clicked on object in preview: {obj}")
         action = obj.get("action", None)
+        if action == "next":
+            self._step_page(1)
+        elif action == "prev":
+            self._step_page(-1)
+        elif action == "back":
+            self.go_to_home_page()
 
-        if action in ("next", "prev", "back"):
-            if action == "next":
-                self.next_page_index()
-            elif action == "prev":
-                self.previous_page_index()
-            elif action == "back":
-                self.go_to_home_page()
+    # --- editing ---
 
-            if self.editor_controls.is_sync_with_real_device_enabled():
-                self._sync_device_page_with_device()
+    def _on_edit_mode_toggled(self, enabled: bool):
+        self.page_preview_widget.set_mode(PreviewMode.Edit if enabled else PreviewMode.Interact)
 
     @qBridge(PreviewMode)
     def _on_editor_mode_changed(self, mode: PreviewMode):
-        if mode == PreviewMode.Edit:
-            self.editor_mode_button.setText(parse_icons(":mdi6.pencil: Edit Mode"))
-            self.widget_picker.setVisible(True)
-            self.widget_property_editor.setVisible(True)
-        elif mode == PreviewMode.Interact:
-            self.editor_mode_button.setText(parse_icons(":mdi6.eye: Interaction Mode"))
-            self.widget_picker.setVisible(False)
-            self.widget_property_editor.setVisible(False)
-        self.editor_mode_button.update()
+        edit = mode == PreviewMode.Edit
+        self.action_edit_mode.setChecked(edit)
+        self.widget_picker.setVisible(edit)
+        self.property_editor.set_edit_mode(edit)
+        self._update_actions()
+
+    @qBridge(list)
+    def _on_openhasp_widget_selection_changed(self, editable_widgets: List[EditableWidget]):
+        self.property_editor.set_editable_widgets(editable_widgets)
+        self._update_actions()
+
+    def _on_property_changed(self, _widget: EditableWidget, _key: str, _value: Any):
+        self._mark_dirty()
+        self.jsonl_preview.set_objects(self.page_objects)
+
+    def _validate_property(self, obj: Dict, key: str, value: Any) -> Optional[str]:
+        if key == "id" and is_id_used(self.working_objects, obj.get("page"), value, ignore=obj):
+            return f"Id {value} is already used on page {obj.get('page')}."
+        return None
+
+    def _on_items_moved(self, items: List[EditableWidget]):
+        for item in items:
+            item.obj_data["x"] = item.live_x
+            item.obj_data["y"] = item.live_y
+        self._after_geometry_edit()
+
+    def nudge_selected_objects(self, dx: int, dy: int):
+        items = self.page_preview_widget.selected_items()
+        if not self.edit_mode or not items:
+            return
+        for item in items:
+            item.obj_data["x"] = item.obj_x + dx
+            item.obj_data["y"] = item.obj_y + dy
+            item.setPos(float(item.obj_x), float(item.obj_y))
+        self._after_geometry_edit()
+
+    def _after_geometry_edit(self):
+        self._mark_dirty()
+        self.jsonl_preview.set_objects(self.page_objects)
+        self.property_editor.refresh()
+
+    def add_object(self, widget_type: OpenHASPWidgetType):
+        component = find_target_component(self.working_objects, self.current_index)
+        if component is None:
+            return
+        if not self.edit_mode:
+            self.action_edit_mode.setChecked(True)
+
+        screen = self.device_pages_data.device.config.openhasp_config_manager.device.screen
+        obj = create_object(
+            widget_type,
+            page=self.current_index,
+            obj_id=next_free_id(self.working_objects, self.current_index),
+            screen_width=screen.width,
+            screen_height=screen.height,
+        )
+        add_object(self.working_objects, component, obj)
+        self._mark_dirty()
+        self._reload_page(select=[obj])
+
+    def duplicate_selected_objects(self):
+        items = self.page_preview_widget.selected_items()
+        if not self.edit_mode or not items:
+            return
+        duplicates = [duplicate_object(self.working_objects, item.obj_data) for item in items]
+        self._mark_dirty()
+        self._reload_page(select=duplicates)
+
+    def remove_selected_objects(self):
+        items = self.page_preview_widget.selected_items()
+        if not self.edit_mode or not items:
+            return
+        names = ", ".join(f"p{item.obj_data.get('page')}b{item.obj_id}" for item in items)
+        answer = QMessageBox.question(
+            self,
+            "Remove objects" if len(items) > 1 else "Remove object",
+            f"Remove {names} from the page?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Cancel,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+
+        for item in items:
+            remove_object(self.working_objects, item.obj_data)
+        self._mark_dirty()
+        self._reload_page()
+
+    # --- device ---
+
+    @qBridge(bool)
+    def _on_sync_with_real_device_toggled(self, enabled: bool):
+        if enabled and self.session is not None:
+            self._sync_device_page(self.current_index)
+
+    def _sync_device_page(self, index: int):
+        device = self.device_pages_data.device
+        client = OpenHaspClient(device)
+        description = f"Switching {device.name} to page {index}"
+        run_busy(
+            client.set_page(index),
+            busy=self.busy,
+            status=self.status,
+            description=description,
+            success_message=f"{device.name} shows page {index}",
+            on_error=lambda ex: self.error_banner.show_error(
+                f"{description} failed: {error_text(ex)}", retry=lambda: self._sync_device_page(index)
+            ),
+        )
 
     @qBridge()
     def _on_clear_page_clicked(self):
-        """
-        Clear the current page index on the device.
-        """
-        if self.current_index is None:
-            return
-
-        self.editor_controls.button_clear_page.setEnabled(False)
-
         device = self.device_pages_data.device
-        current_index = self.current_index
+        index = self.current_index
+        answer = QMessageBox.question(
+            self,
+            "Clear page",
+            f"Clear page {index} on {device.name}?\n\nThis removes all objects of the page from the device "
+            f"until the page is deployed again. The draft in the editor is not changed.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Cancel,
+        )
+        if answer == QMessageBox.StandardButton.Yes:
+            self._clear_page(index)
 
-        print(f"Clearing page {self.current_index} on device {device.name}")
+    def _clear_page(self, index: int):
+        device = self.device_pages_data.device
         client = OpenHaspClient(device)
-
-        async def __async_work():
-            await client.clear_page(current_index)
-
-        def __on_done():
-            self.editor_controls.button_clear_page.setEnabled(True)
-
-        run_async(
-            coro=__async_work(),
-            on_done=__on_done,
+        description = f"Clearing page {index} on {device.name}"
+        self.error_banner.hide()
+        run_busy(
+            client.clear_page(index),
+            busy=self.busy,
+            status=self.status,
+            description=description,
+            success_message=f"Cleared page {index} on {device.name}",
+            on_error=lambda ex: self.error_banner.show_error(
+                f"{description} failed: {error_text(ex)}", retry=lambda: self._clear_page(index)
+            ),
         )
 
     @qBridge()
     def _on_deploy_page_clicked(self):
+        self._deploy_page(self.current_index)
+
+    def _deploy_page(self, index: int):
         """
-        Deploy the current page index to the device.
+        Clear the given page on the device and send all of its objects (including the global ones of page 0).
         """
-        if self.page_objects is None or len(self.page_objects) == 0:
+        device = self.device_pages_data.device
+        page_objects = get_page_objects(self.working_objects, index=index, include_global=True)
+        if not page_objects:
             return
 
-        self.editor_controls.button_deploy_page.setEnabled(False)
-
-        device = self.device_pages_data.device
-        current_index = self.current_index
-        page_objects = self.get_page_objects(index=current_index, include_global=True)
-
-        print(f"Deploying page {self.current_index} to device {device.name}")
         client = OpenHaspClient(device)
+        status = self.status
+        description = f"Deploying page {index} to {device.name}"
+        self.error_banner.hide()
 
         async def __async_work():
-            # clear the page first
-            print(f"Clearing page {current_index}")
-            await client.clear_page(current_index)
-
-            print(f"Sending {len(page_objects)} on page {current_index} to device {device.name}")
-            # send all objects for the current page index
-            for obj in page_objects:
+            await client.clear_page(index)
+            for sent, obj in enumerate(page_objects, start=1):
                 await client.jsonl(obj)
-                await asyncio.sleep(0.1)  # small delay to avoid overwhelming the device
+                status.report_progress(sent, len(page_objects))
+                await asyncio.sleep(DEPLOY_DELAY_SECONDS)
 
-        def __on_done():
-            print(f"Finished deploying page {current_index} to device {device.name}")
-            self.editor_controls.button_deploy_page.setEnabled(True)
-
-        run_async(
-            coro=__async_work(),
-            on_done=__on_done,
+        run_busy(
+            __async_work(),
+            busy=self.busy,
+            status=status,
+            description=description,
+            success_message=f"Deployed page {index} to {device.name} ({len(page_objects)} objects)",
+            on_error=lambda ex: self.error_banner.show_error(
+                f"{description} failed: {error_text(ex)}", retry=lambda: self._deploy_page(index)
+            ),
         )
-
-    @qBridge()
-    def _on_editor_mode_clicked(self):
-        if self.page_preview_widget.mode == PreviewMode.Edit:
-            self.page_preview_widget.set_mode(PreviewMode.Interact)
-        else:
-            self.page_preview_widget.set_mode(PreviewMode.Edit)
-
-    @qBridge(list)
-    def _on_openhasp_widget_selection_changed(self, editable_widgets: List[EditableWidget]):
-        self.widget_property_editor.set_editable_widgets(editable_widgets)
-
-    def go_to_home_page(self):
-        usable_page_indices = self.get_navigable_page_indices()
-        if len(usable_page_indices) == 0:
-            return
-        self.set_page_index(usable_page_indices[0])
-
-    def set_page_index(self, index: int):
-        print("Setting page index", index)
-        self.current_index = index
-        self.page_objects = self.get_page_objects(index=index)
-        print(f"Page objects: {self.page_objects}")
-        self.page_preview_widget.set_objects(self.page_objects)
-        self.page_jsonl_preview.set_objects(self.page_objects)
-
-    def next_page_index(self):
-        """
-        Cycle to the next available page index, skipping page 0 and rolling over to the first page.
-        """
-        usable_page_indices = self.get_navigable_page_indices()
-        current_page_index_position_in_set = usable_page_indices.index(self.current_index)
-        new_page_index_position_in_set = (current_page_index_position_in_set + 1) % len(usable_page_indices)
-        self.set_page_index(usable_page_indices[new_page_index_position_in_set])
-
-    def previous_page_index(self):
-        """
-        Cycle to the previous available page index, skipping page 0 and rolling over to the last page.
-        """
-        usable_page_indices = self.get_navigable_page_indices()
-        current_page_index_position_in_set = usable_page_indices.index(self.current_index)
-        new_page_index_position_in_set = (current_page_index_position_in_set - 1) % len(usable_page_indices)
-        self.set_page_index(usable_page_indices[new_page_index_position_in_set])
-
-    def get_navigable_page_indices(self) -> List[int]:
-        usable_page_indices = self.get_used_page_indices() - {0}
-        return list(sorted(usable_page_indices))
-
-    def get_used_page_indices(self) -> Set[int]:
-        """
-        Get the used page indices from the jsonl component objects.
-        :return: a list of used page indices
-        """
-        if self.device_pages_data is None:
-            return set()
-
-        used_page_indices = set()
-        for jsonl_component_name, objects_in_jsonl in self.session.working_objects.items():
-            for obj in objects_in_jsonl:
-                object_page_index = obj.get("page", None)
-                if object_page_index is not None:
-                    used_page_indices.add(object_page_index)
-
-        print(f"Used page indices: {used_page_indices}")
-
-        return used_page_indices
-
-    def get_page_objects(self, index: int, include_global: bool = True) -> List[dict]:
-        """
-        Get the page objects for the given page index.
-        :param index: the index of the page
-        :param include_global: whether to include global objects (page 0)
-        :return: a list of objects for the page
-        """
-        if self.device_pages_data is None:
-            return []
-
-        # FIX: Changed from self.state_holder.plate_state... to self.session.working_objects
-        result = []
-        for objects_in_jsonl in self.session.working_objects.values():
-            result.extend(objects_in_jsonl)
-
-        # Filter the objects based on the index
-        result = [obj for obj in result if obj.get("page") == index or (obj.get("page") == 0 if include_global else False)]
-
-        # Filter hidden objects
-        result = [obj for obj in result if not obj.get("hidden", False)]
-
-        # Draw objects on page 0 last (on top)
-        result.sort(key=lambda obj: obj.get("page") == 0)
-
-        return result
-
-    def get_page_index(self) -> int:
-        return self.current_index

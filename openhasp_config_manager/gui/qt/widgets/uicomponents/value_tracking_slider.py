@@ -41,10 +41,10 @@ class ValueTrackingSlider(QSlider):
             target_x = right_limit
 
         # 7. Draw the text
-        # Y position is roughly 8px above the handle
+        # baseline 2px above the handle, but never above the top of the widget
         text_pos = QPoint(
             target_x,
-            handle_rect.top() - 8,
+            max(font_metrics.ascent(), handle_rect.top() - 2),
         )
 
         painter.drawText(text_pos, value_text)

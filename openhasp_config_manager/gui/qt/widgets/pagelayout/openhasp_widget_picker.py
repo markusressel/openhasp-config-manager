@@ -1,21 +1,16 @@
-from enum import StrEnum
-
 from PyQt6 import QtCore
 from PyQt6.QtWidgets import QWidget
 
+from openhasp_config_manager.gui.dimensions import UiDimensions
+from openhasp_config_manager.gui.domain.page_objects import OpenHASPWidgetType, WIDGET_TYPES
 from openhasp_config_manager.gui.qt.components import UiComponents
 
 
-class OpenHASPWidgetType(StrEnum):
-    BUTTON = "button"
-    LABEL = "label"
-    IMAGE = "image"
-    SLIDER = "slider"
-    SWITCH = "switch"
-    BAR = "bar"
-
-
 class OpenHASPWidgetPicker(QWidget):
+    """
+    The list of object types that can be added to the current page.
+    """
+
     addItem = QtCore.pyqtSignal(OpenHASPWidgetType)
 
     def __init__(self, parent=None):
@@ -24,21 +19,21 @@ class OpenHASPWidgetPicker(QWidget):
         self._create_layout()
 
     def _create_layout(self):
-        self.layout = UiComponents.create_column(parent=self)
+        layout = UiComponents.create_column(parent=self)
+        layout.addWidget(UiComponents.create_label("Add object", role="section"))
+        for widget_type, info in WIDGET_TYPES.items():
+            layout.addWidget(self._create_widget_picker_button(widget_type))
+        layout.addStretch(1)
+        self.setFixedWidth(UiDimensions.eight * 3)
 
-        self._add_widget_picker_button(title=":mdi6.plus: Label", widget_type=OpenHASPWidgetType.LABEL)
-        self._add_widget_picker_button(title=":mdi6.plus: Button", widget_type=OpenHASPWidgetType.BUTTON)
-        self._add_widget_picker_button(title=":mdi6.plus: Switch", widget_type=OpenHASPWidgetType.SWITCH)
-        self._add_widget_picker_button(title=":mdi6.plus: Image", widget_type=OpenHASPWidgetType.IMAGE)
-        self._add_widget_picker_button(title=":mdi6.plus: Bar", widget_type=OpenHASPWidgetType.BAR)
-        self._add_widget_picker_button(title=":mdi6.plus: Slider", widget_type=OpenHASPWidgetType.SLIDER)
-
-    def _add_widget_picker_button(self, title: str, widget_type: OpenHASPWidgetType):
-        def _on_button_clicked():
-            print(f"Add {widget_type} button clicked")
-            self.addItem.emit(widget_type)
-
-        widget = UiComponents.create_button(
-            title=title, alignment=QtCore.Qt.AlignmentFlag.AlignLeft, on_click=_on_button_clicked
+    def _create_widget_picker_button(self, widget_type: OpenHASPWidgetType) -> QWidget:
+        info = WIDGET_TYPES[widget_type]
+        button = UiComponents.create_button(
+            title=f"{info.title}\n{info.description}",
+            icon=info.icon,
+            tooltip=f"Add a {info.title.lower()} ({widget_type}) to the page: {info.description.lower()}",
+            variant="picker",
+            on_click=lambda: self.addItem.emit(widget_type),
         )
-        self.layout.addWidget(widget)
+        button.setIconSize(QtCore.QSize(UiDimensions.three, UiDimensions.three))
+        return button

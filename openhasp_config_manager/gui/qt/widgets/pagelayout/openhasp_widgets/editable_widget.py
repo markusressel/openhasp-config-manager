@@ -3,6 +3,8 @@ from typing import Dict
 from PyQt6 import QtGui, QtCore, QtWidgets
 from PyQt6.QtWidgets import QGraphicsObject, QGraphicsItem
 
+from openhasp_config_manager.gui.qt.theme import current_colors
+
 
 class EditableWidget(QGraphicsObject):
     @property
@@ -32,6 +34,9 @@ class EditableWidget(QGraphicsObject):
     def __init__(self, object_data: Dict, *args, **kwargs):
         self._object_data = object_data
         super().__init__(*args, **kwargs)
+
+        # itemChange() is only called for position changes with this flag, it is needed for snapping
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges, True)
 
         # Initial sync: Move the item to the position defined in the JSON data
         self.setPos(float(self.obj_x), float(self.obj_y))
@@ -76,6 +81,8 @@ class EditableWidget(QGraphicsObject):
         if change == QGraphicsItem.GraphicsItemChange.ItemPositionChange:
             # This is called WHENEVER the item is moved (dragging or setPos)
             # 'value' is the new QPointF the item is moving to.
+            if self.scene() is not None:
+                value = self.scene().snap_position(self, value)
             self.update()
 
         return super().itemChange(change, value)
@@ -107,7 +114,7 @@ class EditableWidget(QGraphicsObject):
         """
         if self.is_selected:
             # Draw a selection rectangle around the widget when selected
-            selection_color = QtGui.QColor("red")  # Semi-transparent blue
+            selection_color = QtGui.QColor(current_colors().accent)
             selection_pen = QtGui.QPen(selection_color, 2, QtCore.Qt.PenStyle.DashLine)
             painter.setPen(selection_pen)
             painter.setBrush(QtCore.Qt.BrushStyle.NoBrush)

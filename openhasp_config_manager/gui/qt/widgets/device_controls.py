@@ -1,9 +1,9 @@
-from typing import Optional
+from typing import Optional, Awaitable
 
-from PyQt6 import QtCore
-from PyQt6.QtWidgets import QWidget, QLayout
+from PyQt6.QtWidgets import QWidget, QGroupBox, QMessageBox
 
 from openhasp_config_manager.gui.qt.components import UiComponents
+from openhasp_config_manager.gui.qt.operations import BusyState, OperationStatus, run_busy, error_text
 from openhasp_config_manager.gui.qt.util import run_async, qBridge
 from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
@@ -17,202 +17,121 @@ class DeviceControlsWidget(QWidget):
       - switch pages
     """
 
-    def __init__(self, parent=None):
+    def __init__(self, status: OperationStatus, parent=None):
         super().__init__(parent)
+        self.status = status
         self.device: Optional[Device] = None
+        self.client: Optional[OpenHaspClient] = None
+        self.busy = BusyState(self)
+        self.busy.changed.connect(lambda _: self._update_enabled())
 
         self._create_layout()
+        self._update_enabled()
 
     def set_device(self, device: Optional[Device]):
         self.device = device
-        self.client = OpenHaspClient(self.device)
+        self.client = None if device is None else OpenHaspClient(device)
+        self._update_enabled()
+
+    def _update_enabled(self):
+        self._content.setEnabled(self.device is not None and not self.busy.busy)
 
     def _create_layout(self):
-        self.setFixedWidth(350)
-        self.layout = UiComponents.create_column(
-            parent=self,
-            alignment=QtCore.Qt.AlignmentFlag.AlignLeft,
+        outer = UiComponents.create_column(parent=self)
+        self._content = QWidget()
+        outer.addWidget(self._content)
+        layout = UiComponents.create_column(parent=self._content)
+
+        screen_group = QGroupBox("Screen")
+        screen_layout = UiComponents.create_column(parent=screen_group)
+        screen_on_off_row = UiComponents.create_row()
+        screen_on_off_row.addWidget(
+            UiComponents.create_button(title="On", icon="lightbulb-on", on_click=self.on_turn_on_clicked), 1
         )
-
-        self.screen_controls_layout = self._create_screen_controls_layout()
-        self.layout.addWidget(UiComponents.create_label(":mdi6.cellphone-screenshot: Screen Controls"))
-        self.layout.addLayout(self.screen_controls_layout)
-
-        self.page_controls_layout = self._create_page_controls_layout()
-        self.layout.addWidget(UiComponents.create_label(":mdi6.book-open-page-variant: Page Controls"))
-        self.layout.addLayout(self.page_controls_layout)
-
-        self.device_controls_layout = self._create_device_controls_layout()
-        self.layout.addWidget(UiComponents.create_label(":mdi6.cog: Device Controls"))
-        self.layout.addLayout(self.device_controls_layout)
-
-        self.layout.addStretch(1)
-
-    def _create_device_controls_layout(self) -> QLayout:
-        layout = UiComponents.create_row(
-            alignment=QtCore.Qt.AlignmentFlag.AlignCenter,
+        screen_on_off_row.addWidget(
+            UiComponents.create_button(title="Off", icon="lightbulb-outline", on_click=self.on_turn_off_clicked), 1
         )
-
-        button_reboot = UiComponents.create_button(
-            title=":power-plug: Reboot Device",
-            on_click=self.on_reboot_clicked,
+        screen_layout.addLayout(screen_on_off_row)
+        screen_layout.addWidget(
+            UiComponents.create_slider(
+                title="Brightness",
+                initial_value=100,
+                min_value=1,
+                on_change=self.__on_brightness_changed,
+            )
         )
-        layout.addWidget(button_reboot)
-
-        return layout
-
-    def _create_screen_controls_layout(self) -> QLayout:
-        column = UiComponents.create_column()
-
-        screen_on_off_row = UiComponents.create_row(
-            alignment=QtCore.Qt.AlignmentFlag.AlignCenter,
-        )
-        column.addLayout(screen_on_off_row)
-
-        button_turn_on = UiComponents.create_button(
-            title=":lightbulb-on: Screen ON",
-            on_click=self.on_turn_on_clicked,
-        )
-        screen_on_off_row.addWidget(button_turn_on)
-
-        button_turn_off = UiComponents.create_button(
-            title=":lightbulb: Screen OFF",
-            on_click=self.on_turn_off_clicked,
-        )
-        screen_on_off_row.addWidget(button_turn_off)
-
-        brightness_slider = UiComponents.create_slider(
-            title="Brightness",
-            initial_value=100,
-            min_value=1,
-            on_change=self.__on_brightness_changed,
-        )
+        layout.addWidget(screen_group)
 
         # TODO: listening to brightness changes from the device
         #     this is harder than anticipated because
         #     1. it requires a continuous async listener to MQTT events, which is difficult in PyQT environment
         #     2. the listener needs to be changed when the device is changed
         #     3. the listener can only be started after a device has been set
-        #
-        # async def _callback(event_topic: str, event_payload: bytes):
-        #     try:
-        #         # OpenHASP state payloads are usually JSON: {"text": "12345", "val": 10, ...}
-        #         brightness = int(str(event_payload, "utf-8"))
-        #         brightness_slider.set_value(brightness)
-        #     except Exception:
-        #         # If it's not JSON, just return the raw payload
-        #         pass
-        #
-        # async def __listen_brightness():
-        #     listen_path = f"state/backlight"
-        #     await self.client.listen_event(
-        #         path=listen_path,
-        #         callback=_callback,
-        #     )
-        #
-        # run_async(__listen_brightness())
-        column.addWidget(brightness_slider)
 
-        return column
-
-    def _create_page_controls_layout(self) -> QLayout:
-        layout = UiComponents.create_row(
-            alignment=QtCore.Qt.AlignmentFlag.AlignCenter,
+        page_group = QGroupBox("Pages on the device")
+        page_row = UiComponents.create_row(parent=page_group)
+        page_row.addWidget(
+            UiComponents.create_button(
+                title="", icon="arrow-left", tooltip="Previous page", on_click=self.on_prev_page_clicked
+            ),
+            1,
         )
-
-        button_prev_page = UiComponents.create_button(
-            title=":arrow-left: Previous",
-            on_click=self.on_prev_page_clicked,
+        page_row.addWidget(
+            UiComponents.create_button(title="", icon="home", tooltip="Home page", on_click=self.on_home_page_clicked), 1
         )
-        layout.addWidget(button_prev_page)
-
-        button_home_page = UiComponents.create_button(
-            title=":home:\nHome",
-            on_click=self.on_home_page_clicked,
+        page_row.addWidget(
+            UiComponents.create_button(title="", icon="arrow-right", tooltip="Next page", on_click=self.on_next_page_clicked),
+            1,
         )
-        layout.addWidget(button_home_page)
+        layout.addWidget(page_group)
 
-        button_next_page = UiComponents.create_button(
-            title="Next :arrow-right:",
-            on_click=self.on_next_page_clicked,
-        )
-        layout.addWidget(button_next_page)
+        device_group = QGroupBox("Device")
+        device_row = UiComponents.create_row(parent=device_group)
+        device_row.addWidget(UiComponents.create_button(title="Reboot", icon="restart", on_click=self.on_reboot_clicked), 1)
+        layout.addWidget(device_group)
 
-        return layout
+    def _run(self, coro: Awaitable, description: str):
+        run_busy(coro, busy=self.busy, status=self.status, description=f"{description} ({self.device.name})")
 
     @qBridge(int)
     def __on_brightness_changed(self, value: int):
         if self.device is None:
             return
-        print(f"Setting brightness to {value} for device: {self.device.name}")
-
-        async def __set_brightness():
-            await self.client.set_backlight(brightness=value)
-
-        run_async(__set_brightness())
+        description = f"Setting the brightness of {self.device.name} to {value}"
+        # not run_busy: disabling the slider would interrupt dragging it
+        run_async(
+            self.client.set_backlight(brightness=value),
+            on_error=lambda ex: self.status.failed.emit(description, error_text(ex)),
+        )
 
     @qBridge()
     def on_turn_on_clicked(self):
-        if self.device is None:
-            return
-        print(f"Turning on screen for device: {self.device.name}")
-
-        async def __turn_on_screen():
-            await self.client.set_backlight(state=True)
-
-        run_async(__turn_on_screen())
+        self._run(self.client.set_backlight(state=True), "Turning the screen on")
 
     @qBridge()
     def on_turn_off_clicked(self):
-        if self.device is None:
-            return
-        print(f"Turning off screen for device: {self.device.name}")
-
-        async def __turn_off_screen():
-            await self.client.set_backlight(state=False)
-
-        run_async(__turn_off_screen())
+        self._run(self.client.set_backlight(state=False), "Turning the screen off")
 
     @qBridge()
     def on_reboot_clicked(self):
-        if self.device is None:
-            return
-        print(f"Rebooting device: {self.device.name}")
-
-        async def __reboot_device():
-            self.client.reboot()
-
-        run_async(__reboot_device())
+        answer = QMessageBox.question(
+            self,
+            "Reboot device",
+            f"Reboot {self.device.name}?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Cancel,
+        )
+        if answer == QMessageBox.StandardButton.Yes:
+            self._run(self.client.reboot(), "Rebooting")
 
     @qBridge()
     def on_prev_page_clicked(self):
-        if self.device is None:
-            return
-        print(f"Switching to previous page on device: {self.device.name}")
-
-        async def __prev_page():
-            await self.client.previous_page()
-
-        run_async(__prev_page())
+        self._run(self.client.previous_page(), "Switching to the previous page")
 
     @qBridge()
     def on_home_page_clicked(self):
-        if self.device is None:
-            return
-        print(f"Switching to home page on device: {self.device.name}")
-
-        async def __home_page():
-            await self.client.set_page(1)
-
-        run_async(__home_page())
+        self._run(self.client.set_page(1), "Switching to the home page")
 
     @qBridge()
     def on_next_page_clicked(self):
-        if self.device is None:
-            return
-        print(f"Switching to next page on device: {self.device.name}")
-
-        async def __next_page():
-            await self.client.next_page()
-
-        run_async(__next_page())
+        self._run(self.client.next_page(), "Switching to the next page")
