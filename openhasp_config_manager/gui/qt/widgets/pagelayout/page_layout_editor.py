@@ -50,6 +50,7 @@ SEND_DELAY_SECONDS = 0.1
 LIVE_PREVIEW_INTERVAL_MS = 50
 
 LOCKED_POSITION_HINT = "the position is a template or a percentage: use pixels for x/y in the properties to move it"
+LOCKED_POSITION_FIX = "To move it, use pixels for x/y in the properties: this replaces the template or percentage."
 
 RESTORE_PLATE_HINT = "Values sent by haad or Home Assistant appear again with their next update."
 
@@ -519,8 +520,13 @@ class PageLayoutEditorWidget(QWidget):
         return not self.session.has_computed_position(obj)
 
     def _report_locked(self, items: List[EditableWidget]):
+        """Explain why objects can't be moved: in the status bar, and next to the first of them."""
         names = ", ".join(f"p{item.obj_data.get('page')}b{item.obj_id}" for item in items)
         self.status.failed.emit(f"Moving {names}", LOCKED_POSITION_HINT)
+        first = items[0]
+        reasons = "\n".join(self.session.computed_position_reasons(first.obj_data))
+        name = f"p{first.obj_data.get('page')}b{first.obj_id}"
+        self.page_preview_widget.show_message(f"{name} can't be moved:\n{reasons}\n{LOCKED_POSITION_FIX}", near=first)
 
     def use_pixel_positions(self):
         """Replace the templates and percentages in x and y of the selected objects with pixels, so they can be moved."""

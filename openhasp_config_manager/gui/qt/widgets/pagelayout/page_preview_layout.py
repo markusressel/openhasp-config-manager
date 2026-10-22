@@ -32,6 +32,9 @@ ZOOM_STEP = 1.25
 MIN_ZOOM = 0.25
 MAX_ZOOM = 8.0
 
+# how long a message next to an object stays (see show_message)
+MESSAGE_DURATION_MS = 6000
+
 
 class PreviewMode(StrEnum):
     Interact = "interact"
@@ -103,6 +106,17 @@ class PagePreviewWidget(QGraphicsView):
         )
         self._add_object_button.setParent(self.viewport())
         self._add_object_button.hide()
+
+        # a message next to an object, e.g. why it can't be dragged
+        self._message = UiComponents.create_label("", word_wrap=True)
+        self._message.setProperty("role", "floating")
+        self._message.setContentsMargins(UiDimensions.one, UiDimensions.half, UiDimensions.one, UiDimensions.half)
+        self._message.setMaximumWidth(360)
+        self._message.setParent(self.viewport())
+        self._message.hide()
+        self._message_timer = QtCore.QTimer(self)
+        self._message_timer.setSingleShot(True)
+        self._message_timer.timeout.connect(self._message.hide)
 
         # floating bars on the preview: fitting the plate keeps their rows free
         self._overlays: List[Tuple[QWidget, OverlayAnchor]] = []
@@ -330,6 +344,7 @@ class PagePreviewWidget(QGraphicsView):
 
     def mousePressEvent(self, event):
         self._add_ripple(event)
+        self._message.hide()
         self._locked_press = None
         if self.mode == PreviewMode.Edit and event.button() == Qt.MouseButton.LeftButton:
             item = self._editable_item_at(event.position().toPoint())
@@ -346,6 +361,22 @@ class PagePreviewWidget(QGraphicsView):
             self._locked_press = None
             self.viewport().setCursor(Qt.CursorShape.ForbiddenCursor)
             self.lockedDragAttempted.emit([item])
+
+    def show_message(self, text: str, near: EditableWidget):
+        """Show a message below an object (above it, if there is no room), until the next click or MESSAGE_DURATION_MS."""
+        self._message.setText(text)
+        self._message.adjustSize()
+        viewport = self.viewport().rect()
+        rect = self.mapFromScene(near.sceneBoundingRect()).boundingRect()
+        margin = UiDimensions.half
+        y = rect.bottom() + margin
+        if y + self._message.height() > viewport.bottom():
+            y = rect.top() - margin - self._message.height()
+        x = min(max(rect.left(), margin), viewport.right() - self._message.width() - margin)
+        self._message.move(x, max(y, margin))
+        self._message.show()
+        self._message.raise_()
+        self._message_timer.start(MESSAGE_DURATION_MS)
 
     def _editable_item_at(self, point: QtCore.QPoint) -> Optional[EditableWidget]:
         """:return: the object under a point of the viewport (also when a child item of it, e.g. its text, is there)"""

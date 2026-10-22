@@ -337,6 +337,8 @@ class TestLockedPosition(TestBase):
         from PyQt6.QtWidgets import QApplication
 
         # GIVEN
+        editor.resize(900, 700)
+        editor.show()
         obj = self._lock(editor, 2)
         failures = []
         editor.status.failed.connect(lambda *args: failures.append(args))
@@ -366,8 +368,35 @@ class TestLockedPosition(TestBase):
         assert len(failures) == 1
         assert failures[0][0] == "Moving p9b2"
         assert cursor == Qt.CursorShape.ForbiddenCursor
+        message = preview._message
+        assert message.isVisible()
+        assert message.text() == (
+            "p9b2 can't be moved:\nx is a percentage: 10%\n"
+            "To move it, use pixels for x/y in the properties: this replaces the template or percentage."
+        )
+        assert viewport.rect().contains(message.geometry())
         assert viewport.cursor().shape() != Qt.CursorShape.ForbiddenCursor
         assert editor.session.source_of(obj)["x"] == "10%"
+
+    def test_nudging_a_locked_object_explains_it_until_the_next_click(self, editor):
+        from PyQt6.QtCore import Qt
+        from PyQt6.QtTest import QTest
+
+        # GIVEN
+        editor.resize(900, 700)
+        editor.show()
+        obj = self._lock(editor, 2)
+        editor.page_preview_widget.select_object(obj)
+        message = editor.page_preview_widget._message
+
+        # WHEN
+        editor.nudge_selected_objects(1, 0)
+        shown = message.isVisible()
+        QTest.mouseClick(editor.page_preview_widget.viewport(), Qt.MouseButton.LeftButton)
+
+        # THEN
+        assert shown
+        assert message.isVisible() is False
 
     def test_use_pixel_positions_makes_the_selected_objects_movable(self, editor):
         # GIVEN

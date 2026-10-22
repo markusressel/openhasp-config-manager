@@ -121,6 +121,21 @@ class TestPlateSession(TestBase):
         assert label["bg_color"] == "#THEME"
         assert session.changes() == []
 
+    def test_computed_position_reasons_name_the_properties_and_their_values(self):
+        # GIVEN
+        session = _session()
+        button, label = session.working_objects["a.jsonl"]
+        session.set_source_value(button, "y", "{{ right }}")
+
+        # WHEN
+        result = [session.computed_position_reasons(obj, max_length=10) for obj in (button, label)]
+
+        # THEN
+        assert result == [
+            ["x is a template: {{ left }}", "y is a template: {{ right …"],
+            ["y is a percentage: 15%"],
+        ]
+
     def test_use_pixel_position_replaces_a_computed_position_with_its_pixels(self):
         # GIVEN
         session = _session()

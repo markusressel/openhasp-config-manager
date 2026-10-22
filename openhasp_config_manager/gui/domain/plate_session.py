@@ -170,6 +170,19 @@ class PlateSession:
         self._entry(obj).source[key] = value
         self._apply(obj, rendered)
 
+    def computed_position_reasons(self, obj: Dict, max_length: int = 40) -> List[str]:
+        """:return: why the position is computed, e.g. ["x is a template: {{ nav.x }}", "y is a percentage: 15%"]"""
+        result = []
+        for key in ("x", "y"):
+            value = str(self.source_of(obj).get(key))
+            if len(value) > max_length:
+                value = value[: max_length - 1] + "…"
+            if self.is_template(obj, key):
+                result.append(f"{key} is a template: {value}")
+            elif self.is_percentage(obj, key):
+                result.append(f"{key} is a percentage: {value}")
+        return result
+
     def use_pixel_position(self, obj: Dict):
         """Replace a template or a percentage in x and y with the pixels it renders to, so the object can be moved."""
         for key in ("x", "y"):
