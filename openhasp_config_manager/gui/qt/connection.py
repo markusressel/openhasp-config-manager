@@ -5,7 +5,7 @@ from PyQt6 import QtCore
 
 from openhasp_config_manager.gui.domain.connection import ConnectionStatus
 from openhasp_config_manager.gui.qt.operations import error_text
-from openhasp_config_manager.gui.qt.util import run_async
+from openhasp_config_manager.gui.qt.async_bridge import run_async
 from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 

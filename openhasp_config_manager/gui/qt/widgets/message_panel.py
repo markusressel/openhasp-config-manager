@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import QWidget, QProgressBar, QFrame, QVBoxLayout, QHBoxLay
 
 from openhasp_config_manager.gui.dimensions import UiDimensions
 from openhasp_config_manager.gui.qt.components import UiComponents, ThemedIcons
-from openhasp_config_manager.gui.qt.util import clear_layout
+from openhasp_config_manager.gui.qt.layouts import clear_layout
 
 # (title, mdi6 icon, callback)
 type PanelAction = Tuple[str, str, Callable[[], None]]

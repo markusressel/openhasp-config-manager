@@ -6,7 +6,7 @@ from typing import List, Set, Optional
 import orjson
 
 from openhasp_config_manager.const import COMMON_FOLDER_NAME, DEVICES_FOLDER_NAME, SYSTEM_SCRIPTS
-from openhasp_config_manager.gui.util import warn
+from openhasp_config_manager.console import warn
 from openhasp_config_manager.openhasp_client.model.component import (
     Component,
     TextComponent,

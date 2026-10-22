@@ -2,7 +2,7 @@ from typing import Any, Awaitable, Callable, Optional
 
 from PyQt6 import QtCore
 
-from openhasp_config_manager.gui.qt.util import run_async
+from openhasp_config_manager.gui.qt.async_bridge import run_async
 
 
 class BusyState(QtCore.QObject):

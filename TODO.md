@@ -4,16 +4,17 @@ Findings from a review of `openhasp_config_manager/gui` (PyQt6 page layout edito
 
 ## 1. Structure and cleanup
 
-- [ ] Move `gui/util.py` (console helpers `error`, `warn`, `info`, `success`, `echo`, `print_diff_to_console`) out of the `gui` package. It is
-  CLI code, and all of `cli/*.py` imports it from `gui`.
-- [ ] Delete `gui/qt/file_browser.py`: nothing imports it, `clear_entries` calls `clear_layout(self.layout)` on a `QTreeWidget` (broken), and it
+- [x] Move `gui/util.py` (console helpers `error`, `warn`, `info`, `success`, `echo`, `print_diff_to_console`) out of the `gui` package. It is
+  CLI code, and all of `cli/*.py` imports it from `gui`. (Now `openhasp_config_manager/console.py`: the manager, uploader, template rendering
+  and `OpenHaspClient` use it too.)
+- [x] Delete `gui/qt/file_browser.py`: nothing imports it, `clear_entries` calls `clear_layout(self.layout)` on a `QTreeWidget` (broken), and it
   loads icons from the relative path `assets/*.ico`.
-- [ ] Split `gui/qt/util.py` (icon parsing, `clear_layout`, global asyncio loop, `ThreadBridge`, `qBridge`, `run_async`) into focused modules and
-  move the mid-file imports to the top.
-- [ ] Replace the `print()` calls (`page_layout_editor.py`, `property editor`, ...) with a logger.
-- [ ] Stop shadowing `QWidget.layout()` with `self.layout = ...` in widgets.
+- [x] Split `gui/qt/util.py` (icon parsing, `clear_layout`, global asyncio loop, `ThreadBridge`, `qBridge`, `run_async`) into focused modules and
+  move the mid-file imports to the top. (`gui/qt/icons.py`, `gui/qt/layouts.py`, `gui/qt/async_bridge.py`)
+- [x] Replace the `print()` calls (`page_layout_editor.py`, `property editor`, ...) with a logger.
+- [x] Stop shadowing `QWidget.layout()` with `self.layout = ...` in widgets.
 - [x] `run_async`: run `on_done` even if `on_success` raises (a failed callback leaves the deploy button disabled).
-- [ ] Remove the commented-out code in `MainWindow.select_device`.
+- [x] Remove the commented-out code in `MainWindow.select_device`.
 
 ## 2. Session and editing bugs
 

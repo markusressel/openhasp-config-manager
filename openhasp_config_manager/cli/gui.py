@@ -7,7 +7,7 @@ from pathlib import Path
 from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QApplication, QWidget
 
-from openhasp_config_manager.gui.qt.util import setup_global_async_loop, get_global_async_loop
+from openhasp_config_manager.gui.qt.async_bridge import setup_global_async_loop, get_global_async_loop
 
 
 def c_gui(config_dir: Path, output_dir: Path):

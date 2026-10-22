@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Tuple, List
 
-from openhasp_config_manager.gui.util import info
+from openhasp_config_manager.console import info
 from openhasp_config_manager.manager import ConfigManager
 from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.processing.variables import VariableManager

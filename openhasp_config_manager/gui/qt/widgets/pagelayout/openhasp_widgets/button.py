@@ -5,7 +5,7 @@ from PyQt6 import QtCore, QtGui
 from PyQt6.QtGui import QColor, QFont, QPen, QBrush
 from PyQt6.QtWidgets import QGraphicsTextItem
 
-from openhasp_config_manager.gui.qt.util import qBridge
+from openhasp_config_manager.gui.qt.async_bridge import qBridge
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
 
 

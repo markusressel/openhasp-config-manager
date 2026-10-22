@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Dict
 
 from openhasp_config_manager.cli.common import _create_config_manager, _analyze_and_filter
-from openhasp_config_manager.gui.util import success, error
+from openhasp_config_manager.console import success, error
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 
 

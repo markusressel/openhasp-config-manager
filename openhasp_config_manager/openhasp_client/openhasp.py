@@ -4,7 +4,7 @@ from typing import Dict, List, Any, Callable, Tuple, Optional, Awaitable
 
 import orjson
 
-from openhasp_config_manager.gui.util import info
+from openhasp_config_manager.console import info
 from openhasp_config_manager.openhasp_client.image_processor import OpenHaspImageProcessor
 from openhasp_config_manager.openhasp_client.model.configuration.gui_config import GuiConfig
 from openhasp_config_manager.openhasp_client.model.configuration.hasp_config import HaspConfig

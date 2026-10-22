@@ -4,7 +4,7 @@ from PyQt6.QtWidgets import QWidget, QGroupBox, QMessageBox
 
 from openhasp_config_manager.gui.qt.components import UiComponents
 from openhasp_config_manager.gui.qt.operations import BusyState, OperationStatus, run_busy, error_text
-from openhasp_config_manager.gui.qt.util import run_async, qBridge
+from openhasp_config_manager.gui.qt.async_bridge import run_async, qBridge
 from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 

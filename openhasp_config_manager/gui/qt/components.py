@@ -18,7 +18,7 @@ from PyQt6.QtWidgets import (
 )
 
 from openhasp_config_manager.gui.dimensions import UiDimensions
-from openhasp_config_manager.gui.qt.util import parse_icons
+from openhasp_config_manager.gui.qt.icons import parse_icons
 from openhasp_config_manager.gui.qt.widgets.uicomponents.value_tracking_slider import ValueTrackingSlider
 
 

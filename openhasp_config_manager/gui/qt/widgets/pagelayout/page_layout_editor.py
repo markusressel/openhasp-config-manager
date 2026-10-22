@@ -24,7 +24,7 @@ from openhasp_config_manager.gui.domain.page_objects import (
 from openhasp_config_manager.gui.domain.plate_session import PlateSession
 from openhasp_config_manager.gui.qt.components import UiComponents
 from openhasp_config_manager.gui.qt.operations import BusyState, OperationStatus, run_busy, error_text
-from openhasp_config_manager.gui.qt.util import qBridge
+from openhasp_config_manager.gui.qt.async_bridge import qBridge
 from openhasp_config_manager.gui.qt.widgets.message_panel import ErrorBanner
 from openhasp_config_manager.gui.qt.widgets.pagelayout import OpenHaspDevicePagesData
 from openhasp_config_manager.gui.qt.widgets.pagelayout.jsonl_preview import PageJsonlPreviewWidget

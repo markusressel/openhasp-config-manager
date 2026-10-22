@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import QGraphicsView
 from openhasp_config_manager.gui.dimensions import UiDimensions
 from openhasp_config_manager.gui.qt.components import UiComponents
 from openhasp_config_manager.gui.qt.theme import current_colors
-from openhasp_config_manager.gui.qt.util import qBridge
+from openhasp_config_manager.gui.qt.async_bridge import qBridge
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.bar import HaspBarItem
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.button import HaspButtonItem
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget

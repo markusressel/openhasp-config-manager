@@ -33,7 +33,7 @@ from openhasp_config_manager.gui.qt.components import UiComponents, ThemedIcons
 from openhasp_config_manager.gui.qt.connection import ConnectionController
 from openhasp_config_manager.gui.qt.operations import OperationStatus, error_text
 from openhasp_config_manager.gui.qt.theme import ThemeMode, apply_theme, current_mode, current_colors
-from openhasp_config_manager.gui.qt.util import run_async
+from openhasp_config_manager.gui.qt.async_bridge import run_async
 from openhasp_config_manager.gui.qt.widgets.device_controls import DeviceControlsWidget
 from openhasp_config_manager.gui.qt.widgets.device_list import DeviceListWidget
 from openhasp_config_manager.gui.qt.widgets.message_panel import MessagePanel

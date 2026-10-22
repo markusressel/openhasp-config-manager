@@ -54,10 +54,10 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
 ## Code style
 
 - 4-space indent for Python, 2 spaces otherwise (`.editorconfig`). Ruff with line length 127 (`pyproject.toml`).
-- Type hints on public functions. Use `logging` (module loggers), not `print()`, except for user-facing CLI output (`gui/util.py`).
+- Type hints on public functions. Use `logging` (module loggers), not `print()`, except for user-facing CLI output (`console.py`).
 - Fail fast: no defensive fallbacks that hide configuration or programming errors.
 - GUI: keep logic that does not need Qt in `gui/domain/` so it can be tested without a display. Long-running work (config analysis,
-  device communication) runs through `run_async` (`gui/qt/util.py`) so the window stays responsive; never block the Qt main thread.
+  device communication) runs through `run_async` (`gui/qt/async_bridge.py`) so the window stays responsive; never block the Qt main thread.
 
 ## Testing
 

@@ -25,7 +25,7 @@ from openhasp_config_manager.gui.domain.properties import (
     PIXEL_PROPERTIES,
 )
 from openhasp_config_manager.gui.qt.components import UiComponents, ThemedIcons
-from openhasp_config_manager.gui.qt.util import clear_layout
+from openhasp_config_manager.gui.qt.layouts import clear_layout
 from openhasp_config_manager.gui.qt.widgets.pagelayout.icon_picker import IconPickerDialog
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
 

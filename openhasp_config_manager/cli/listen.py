@@ -2,7 +2,7 @@ import asyncio
 from pathlib import Path
 
 from openhasp_config_manager.cli.common import _create_config_manager, _analyze_and_filter
-from openhasp_config_manager.gui.util import success, error, info
+from openhasp_config_manager.console import success, error, info
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 
 
