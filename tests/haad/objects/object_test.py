@@ -49,36 +49,49 @@ async def test_set_enabled_and_hidden(page: PageController, plate: FakePlate):
     assert plate.commands == ["p1b5.enabled=False", "p1b5.hidden=1", "p1b5.hidden=1", "p1b5.hidden=0"]
 
 
-async def test_checkbox_init_fails(simulator, page: PageController, plate: FakePlate, caplog):
-    """
-    CheckboxObjectController is not used by any page (PageController has no add_checkbox) and is broken: its sync passes
-    the whole state cache to a HaadStateEvent with missing arguments, and with an entity, EntityTrigger is not imported.
-    """
+async def test_checkbox_follows_its_entity(simulator, page: PageController, plate: FakePlate):
     await simulator.ha.trigger_state_change("input_boolean.x", "on")
     checkbox = _object(page, CheckboxObjectController, entity_id="input_boolean.x")
 
-    with pytest.raises(NameError, match="EntityTrigger"):
-        await checkbox.init()
+    await checkbox.init()
+    await plate.settle()
+    await simulator.ha.trigger_state_change("input_boolean.x", "off")
+    await plate.settle()
+    # haad's EntityTrigger does not report changes to unavailable
+    await simulator.ha.trigger_state_change("input_boolean.x", "unavailable")
+    await plate.settle()
 
     assert list(page.state_updater._registered_objects) == ["checkbox:p1b5:input_boolean.x"]
-    assert "HaadStateEvent" in caplog.text
-    assert plate.commands == []
+    assert plate.commands == ["p1b5.enabled=True", "p1b5.text=on", "p1b5.text=off"]
 
 
-async def test_checkbox_init_without_entity(page: PageController, plate: FakePlate, caplog):
+async def test_checkbox_is_disabled_while_its_entity_is_unavailable(simulator, page: PageController, plate: FakePlate):
+    await simulator.ha.trigger_state_change("input_boolean.x", "unavailable")
+    checkbox = _object(page, CheckboxObjectController, entity_id="input_boolean.x")
+
+    await checkbox.init()
+    await plate.settle()
+
+    assert plate.commands == ["p1b5.enabled=False"]
+
+
+async def test_checkbox_follows_an_attribute(simulator, page: PageController, plate: FakePlate):
+    await simulator.ha.trigger_state_change("input_boolean.x", "on", {"a": 3})
+    checkbox = _object(page, CheckboxObjectController, entity_id="input_boolean.x", attribute="a")
+
+    await checkbox.init()
+    await plate.settle()
+
+    assert plate.commands == ["p1b5.enabled=True", "p1b5.text=3"]
+
+
+async def test_checkbox_without_a_state_source_registers_nothing(page: PageController, plate: FakePlate):
     checkbox = _object(page, CheckboxObjectController)
 
     await checkbox.init()
 
-    assert list(page.state_updater._registered_objects) == ["checkbox:p1b5:None"]
-    assert "HaadStateEvent" in caplog.text
-
-
-async def test_checkbox_init_with_attribute_fails(simulator, page: PageController, caplog):
-    checkbox = _object(page, CheckboxObjectController, entity_id="input_boolean.x", attribute="a")
-
-    with pytest.raises(NameError, match="EntityTrigger"):
-        await checkbox.init()
+    assert page.state_updater._registered_objects == {}
+    assert plate.commands == []
 
 
 async def test_checkbox_state_sources(simulator, page: PageController):
@@ -92,10 +105,7 @@ async def test_checkbox_state_sources(simulator, page: PageController):
     for kwargs in [dict(get_state=get_state), dict(entity_id="input_boolean.x", attribute="a")]:
         checkbox = _object(page, CheckboxObjectController, **kwargs)
         page.state_updater.clear()
-        try:
-            await checkbox.init()
-        except NameError:
-            pass
+        await checkbox.init()
         getters.append(next(iter(page.state_updater._registered_objects.values()))["get"])
 
     assert [await getter() for getter in getters] == ["from get_state", 3]
@@ -111,18 +121,7 @@ async def test_checkbox_property_setters(page: PageController, plate: FakePlate)
     assert plate.commands == ["p1b5.text=abc", "p1b5.val=1", "p1b5.val=0"]
 
 
-async def test_checkbox_without_any_state_source(page: PageController, plate: FakePlate):
-    """Unreachable: init()'s check tests the bound getter method, which is never None."""
-    checkbox = _object(page, CheckboxObjectController)
-    checkbox._CheckboxObjectController__get_checkbox_state = None
-
-    await checkbox.init()
-
-    assert page.state_updater._registered_objects == {}
-
-
 async def test_checkbox_state_change_handler(page: PageController, plate: FakePlate):
-    """Unreachable today (see test_checkbox_init_fails): what the handler does with a state."""
     checkbox = _object(page, CheckboxObjectController, converter=lambda x: f"<{x}>")
 
     await checkbox._on_state_changed(HaadStateEvent(None, None, None, "unavailable", None))

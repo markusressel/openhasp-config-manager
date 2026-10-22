@@ -5,6 +5,9 @@ from openhasp_config_manager.haad import STATE_UNKNOWN, STATE_UNAVAILABLE
 from openhasp_config_manager.haad.objects import ObjectController
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 
+from haad import HaadStateEvent
+from haad.triggers import EntityTrigger
+
 if TYPE_CHECKING:
     from openhasp_config_manager.haad.page.state_updater import StateUpdater
 else:
@@ -55,7 +58,7 @@ class CheckboxObjectController(ObjectController):
     async def init(self):
         self.controller.logger.debug(f"Initializing checkbox object {self.object_id} for entity {self._entity_id}")
 
-        if self._entity_id is not None or self.__get_checkbox_state is not None:
+        if self._entity_id is not None or self._get_state is not None:
             await self._setup_state_listener_and_sync()
 
     async def _setup_state_listener_and_sync(self):
@@ -93,10 +96,11 @@ class CheckboxObjectController(ObjectController):
             return await self.controller.ha.get_state(self._entity_id)
 
     async def __set_checkbox_obj_state(self, state: str):
-        await self._on_state_changed(HaadStateEvent(new=state))
+        await self._on_state_changed(HaadStateEvent(None, None, None, state, None))
 
     async def _on_state_changed(self, event: HaadStateEvent):
-        if event.new in [STATE_UNKNOWN, STATE_UNAVAILABLE]:
+        # haad reports an entity without a valid state as None (react_to with immediately=True)
+        if event.new in [STATE_UNKNOWN, STATE_UNAVAILABLE, None]:
             await self.set_enabled(False)
             return
         await self.set_enabled(True)

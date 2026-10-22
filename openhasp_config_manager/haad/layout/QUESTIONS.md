@@ -39,9 +39,9 @@ Each one is pinned by a test in `tests/haad/` (named in brackets).
 7. **A label with `get_state` calls it twice per sync** (once in the getter, once more in the change handler).
    (`test_label_with_get_state_and_entity_list`)
 8. **The slider doesn't follow its entity**, it is only set on syncs (plate setup, reconnect). (`test_slider_syncs_entity_state_but_does_not_follow_it`)
-9. **`CheckboxObjectController` is broken**: `EntityTrigger` and `HaadStateEvent` are not imported, the check in `init()` is always
-   true (`self.__get_checkbox_state is not None`), and without an entity its getter returns the whole state cache. No page uses it,
-   `PageController` has no `add_checkbox()`. Fix or delete? The design (4.4) lists a `Checkbox` leaf. (`test_checkbox_*`)
+9. ~~**`CheckboxObjectController` is broken**~~: fixed. It imports `EntityTrigger` and `HaadStateEvent`, only registers a state when it
+   has an entity or a `get_state`, and stays disabled while the entity has no valid state. It still only sets the text, not `val`
+   (checked), and no page uses it yet (24). (`test_checkbox_*`)
 10. **Object event subscriptions are never cancelled.** `OpenHaspClient.listen_state()` subscribes a wrapper of the callback, while
     the cancel task of `util_openhasp.listen_state()` unsubscribes the callback itself, which matches nothing. Buttons, switches and
     sliders stay subscribed after `terminate()`. Harmless while haad never sets a plate up twice in one process, but the design's
@@ -80,7 +80,8 @@ Each one is pinned by a test in `tests/haad/` (named in brackets).
 23. **Owned objects defer property changes until their page is pushed**: `set_object_properties()`, `set_text()` and `set_hidden()`
     merge into the object's `props` (and with them into the JSONL) instead of sending commands that the push's `clearpage` would wipe.
     Not covered: `push_image()` on an owned image in `register_objects()` still sends right away (and is lost). Defer it too, or raise?
-24. **No `Checkbox` leaf / `add_checkbox()`** yet (§4.4 lists them), because `CheckboxObjectController` is broken (9).
+24. **No `Checkbox` leaf / `add_checkbox()`** yet (§4.4 lists them). `CheckboxObjectController` works now (9); should it follow the
+    entity with `val` (checked) instead of the text?
 25. **The page frame is `MarkusCodePageController`**, a separate class next to `MarkusPageController` (§4.7 put it into
     `MarkusPageController`). Its `build_layout()` creates owned objects, which would turn every existing flash page into a mixed page,
     and mixed pages raise. Merge the two once all pages are code-defined?
