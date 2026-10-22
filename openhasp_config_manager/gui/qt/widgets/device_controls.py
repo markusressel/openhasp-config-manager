@@ -57,6 +57,7 @@ class DeviceControlsWidget(QWidget):
             ThemedIcons.apply(result, icon)
             result.setToolTip(tooltip)
             result.setAutoRaise(True)
+            result.setCursor(Qt.CursorShape.PointingHandCursor)
             result.clicked.connect(lambda _checked=False: on_click())
             # keep the keyboard focus on the plate, for its shortcuts
             result.setFocusPolicy(Qt.FocusPolicy.NoFocus)

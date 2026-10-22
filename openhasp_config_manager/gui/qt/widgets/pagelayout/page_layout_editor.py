@@ -377,6 +377,7 @@ class PageLayoutEditorWidget(QWidget):
                 button = QToolButton()
                 button.setDefaultAction(item)
                 button.setAutoRaise(True)
+                button.setCursor(Qt.CursorShape.PointingHandCursor)
                 # keep the keyboard focus on the plate, for its shortcuts
                 button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
                 button.setToolButtonStyle(
