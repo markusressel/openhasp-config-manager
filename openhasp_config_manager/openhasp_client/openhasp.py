@@ -120,7 +120,7 @@ class OpenHaspClient:
                 try:
                     await asyncio.wait_for(future, timeout)
                 except asyncio.TimeoutError:
-                    self.LOGGER.debug(f"Timeout reached waiting for plate to fetch image. Continuing.")
+                    self.LOGGER.debug("Timeout reached waiting for plate to fetch image. Continuing.")
             else:
                 # Legacy / CLI mode: Create a temporary server
                 server = ImageServer(

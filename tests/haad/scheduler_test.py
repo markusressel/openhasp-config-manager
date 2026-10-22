@@ -1,7 +1,7 @@
 """Page claims: which page a plate shows, when it stays on, rotation, and touches (PageScheduler)."""
 
 from datetime import timedelta
-from typing import Awaitable, Callable
+from typing import Callable
 
 import pytest
 

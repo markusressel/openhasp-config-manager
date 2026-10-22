@@ -256,7 +256,7 @@ async def test_hidden_nodes_take_no_space_in_their_column(simulator, start_plate
 
 
 async def test_collapsing_before_the_first_layout_pass_changes_nothing_on_the_plate():
-    with Page() as page:
+    with Page():
         label = Label(size=40)
     await label.set_collapsed(True)
     await label.set_collapsed(True)
@@ -351,7 +351,7 @@ async def test_removed_items_stop_following_their_entities(simulator, start_plat
 
 async def test_repeat_in_a_row_and_a_reordered_list(simulator, start_plate, plate: FakePlate):
     items = ["a", "b"]
-    controller = await start_plate(OwnedPlate, pages=[page_at(1, _repeat_page(items, direction="row"))])
+    await start_plate(OwnedPlate, pages=[page_at(1, _repeat_page(items, direction="row"))])
     plate.clear()
 
     items[:] = ["b", "a"]
