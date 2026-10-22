@@ -1,4 +1,5 @@
 import logging
+import time
 from enum import StrEnum
 from typing import List, Optional, Dict, Callable
 
@@ -8,6 +9,7 @@ from PyQt6.QtGui import QPainter, QColor, QPen, QFont
 from PyQt6.QtWidgets import QGraphicsView
 
 from openhasp_config_manager.gui.dimensions import UiDimensions
+from openhasp_config_manager.gui.domain.ripple import Ripple, active_ripples
 from openhasp_config_manager.gui.qt.components import UiComponents
 from openhasp_config_manager.gui.qt.theme import current_colors
 from openhasp_config_manager.gui.qt.async_bridge import qBridge
@@ -60,6 +62,12 @@ class PagePreviewWidget(QGraphicsView):
         self._fit_to_view = True
         self._empty_hint: Optional[str] = None
         self._is_movable: Callable[[Dict], bool] = lambda _obj: True
+
+        # click feedback in interact mode, painted in drawForeground (not as scene items: reloading a page clears the scene)
+        self._ripples: List[Ripple] = []
+        self._ripple_timer = QtCore.QTimer(self)
+        self._ripple_timer.setInterval(16)
+        self._ripple_timer.timeout.connect(self._on_ripple_tick)
 
         # Make it scale smoothly
         self.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
@@ -207,6 +215,28 @@ class PagePreviewWidget(QGraphicsView):
             self.fit_to_view()
         self._position_add_object_button()
 
+    def mousePressEvent(self, event):
+        self._add_ripple(event)
+        super().mousePressEvent(event)
+
+    def mouseDoubleClickEvent(self, event):
+        # the second press of a fast double click arrives here instead of in mousePressEvent
+        self._add_ripple(event)
+        super().mouseDoubleClickEvent(event)
+
+    def _add_ripple(self, event):
+        if self.mode == PreviewMode.Interact and event.button() == Qt.MouseButton.LeftButton:
+            position = self.mapToScene(event.position().toPoint())
+            if self.scene().sceneRect().contains(position):
+                self._ripples.append(Ripple(x=position.x(), y=position.y(), started=time.monotonic()))
+                self._ripple_timer.start()
+
+    def _on_ripple_tick(self):
+        self._ripples = active_ripples(self._ripples, time.monotonic())
+        if not self._ripples:
+            self._ripple_timer.stop()
+        self.viewport().update()
+
     def mouseReleaseEvent(self, event):
         super().mouseReleaseEvent(event)
         self.scene().clear_guides()
@@ -245,6 +275,8 @@ class PagePreviewWidget(QGraphicsView):
             x += grid
 
     def drawForeground(self, painter: QPainter, rect: QRectF):
+        self._draw_ripples(painter)
+
         plate = self.scene().sceneRect()
 
         guides_x, guides_y = self.scene().guides_x, self.scene().guides_y
@@ -269,6 +301,18 @@ class PagePreviewWidget(QGraphicsView):
                 int(Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap),
                 self._empty_hint,
             )
+
+    def _draw_ripples(self, painter: QPainter):
+        now = time.monotonic()
+        # the ripples have a size on screen, the painter works in scene coordinates
+        scale = self.transform().m11()
+        color = QColor(255, 255, 255)
+        for ripple in self._ripples:
+            radius = ripple.radius(now) / scale
+            color.setAlphaF(0.5 * ripple.opacity(now))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(color)
+            painter.drawEllipse(QtCore.QPointF(ripple.x, ripple.y), radius, radius)
 
     def _position_add_object_button(self):
         if self._add_object_button.isHidden():

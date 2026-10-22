@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import pytest
+from jinja2 import TemplateSyntaxError
 
 from openhasp_config_manager.gui.domain.plate_session import ComponentSource, PlateSession
 from tests import TestBase
@@ -17,7 +18,10 @@ class FakeRenderer:
         result = {}
         for key, value in source.items():
             if isinstance(value, str) and value.startswith("{{"):
-                value = self.variables[value.strip("{} ")]
+                name = value.strip("{} ")
+                if name not in self.variables:
+                    raise TemplateSyntaxError(f"broken: {value}", 1)
+                value = self.variables[name]
             result[key] = value
         result.setdefault("bg_color", "#THEME")
         return result
@@ -45,7 +49,7 @@ def _session() -> PlateSession:
             ),
             ComponentSource(key="b.jsonl", path=Path("b.jsonl"), content="", is_common=True, sources=[]),
         ],
-        FakeRenderer({"left": 10, "right": 400}),
+        FakeRenderer({"left": 10, "right": 400, "name": "Markus"}),
     )
     return session
 
@@ -174,3 +178,32 @@ class TestPlateSession(TestBase):
         assert session.check_template(button, "{{ left }}") is None
         assert session.check_template(button, "{{ nope }}") == "Unknown variable"
         assert ("{{ left }}", 10) in session.template_suggestions(button)
+
+    def test_a_value_that_does_not_render_changes_nothing(self):
+        # GIVEN
+        session = _session()
+        label = session.working_objects["a.jsonl"][1]
+
+        # WHEN
+        with pytest.raises(TemplateSyntaxError):
+            session.set_source_value(label, "text", "{{ broken")
+
+        # THEN
+        assert session.source_of(label)["text"] == "B"
+        assert label["text"] == "B"
+        assert session.is_dirty is False
+
+    def test_check_value(self):
+        # GIVEN
+        session = _session()
+        label = session.working_objects["a.jsonl"][1]
+
+        # THEN
+        assert session.check_value(label, "x", "{{ left }}") is None
+        assert session.check_value(label, "text", "{{ name }}") is None
+        assert session.check_value(label, "text", "{{ broken") == "Invalid template: broken: {{ broken"
+        assert session.check_value(label, "x", "{{ name }}") == "Must be a number, renders to 'Markus'."
+        # only exact names of numeric properties, not e.g. "hidden" for "h"
+        assert session.check_value(label, "hidden", "{{ name }}") is None
+        # the check does not change the object
+        assert label["text"] == "B" and session.is_dirty is False

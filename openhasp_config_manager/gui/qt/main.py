@@ -163,6 +163,7 @@ class MainWindow(QMainWindow):
         self._session_key: Optional[Tuple[str, str]] = None
         # the page to show after a draft was reloaded (saved or reverted), per session key
         self._page_after_reload: Dict[Tuple[str, str], int] = {}
+        self._discard_drafts_on_close = False
 
         self.status = OperationStatus(self)
 
@@ -340,9 +341,20 @@ class MainWindow(QMainWindow):
         if state is not None:
             self.restoreState(state)
 
-    def closeEvent(self, event):
-        dirty = [f"{device} ({cmd})" for (device, cmd), session in self.sessions.items() if session.is_dirty]
+    def quit_discarding_drafts(self):
+        """Close without asking about unsaved drafts, e.g. on SIGTERM: the drafts are lost."""
+        dirty = self._dirty_draft_names()
         if dirty:
+            LOGGER.warning(f"Quitting, discarding the unsaved changes of: {', '.join(dirty)}")
+        self._discard_drafts_on_close = True
+        self.close()
+
+    def _dirty_draft_names(self) -> List[str]:
+        return [f"{device} ({cmd})" for (device, cmd), session in self.sessions.items() if session.is_dirty]
+
+    def closeEvent(self, event):
+        dirty = self._dirty_draft_names()
+        if dirty and not self._discard_drafts_on_close:
             answer = QMessageBox.question(
                 self,
                 "Unsaved changes",
@@ -420,6 +432,7 @@ class MainWindow(QMainWindow):
         self.device = None
         self.device_control_widget.set_device(None)
         self.page_layout_editor_widget.clear()
+        self._update_draft_actions()
         self.status_bar.set_device(name)
         self.status_bar.set_page(None)
         self.status_bar.set_dirty(False)
@@ -525,7 +538,8 @@ class MainWindow(QMainWindow):
         key = (loaded.device.name, pages_data.name)
         session = self.sessions.setdefault(key, PlateSession(device=loaded.device))
         session.device = loaded.device
-        if not session.is_loaded:
+        # a draft without changes follows the files on disk, one with changes is kept (Save detects conflicts)
+        if not session.is_loaded or not session.is_dirty:
             session.load(loaded.components, loaded.renderer)
         self._session_key = key
         self.device_control_widget.set_device(self.device)

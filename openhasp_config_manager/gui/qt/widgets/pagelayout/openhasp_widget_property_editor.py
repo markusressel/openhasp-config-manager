@@ -251,6 +251,8 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         self.refresh()
 
     def _restore(self, widget: EditableWidget, key: str):
+        # before the size changes, so the scene updates its index
+        widget.prepareGeometryChange()
         if key in self._original_snapshot:
             self._session.set_source_value(widget.obj_data, key, copy.deepcopy(self._original_snapshot[key]))
         else:
@@ -315,9 +317,10 @@ class OpenHASPWidgetPropertyEditor(QWidget):
             value_label.setVisible(self._session.is_template(obj_data, key))
 
         def apply(text: str):
-            error = (
-                "Enter a template, e.g. {{ variable }}." if "{{" not in text else self._session.check_template(obj_data, text)
-            )
+            if "{{" not in text:
+                error = "Enter a template, e.g. {{ variable }}."
+            else:
+                error = self._session.check_template(obj_data, text) or self._session.check_value(obj_data, key, text)
             error_label.setText(error or "")
             error_label.setVisible(error is not None)
             if error is None:
@@ -434,15 +437,19 @@ class OpenHASPWidgetPropertyEditor(QWidget):
             return "Use pixels (e.g. 120) or a percentage of the screen (e.g. 15%)."
         if key in ("w", "h") and isinstance(value, int) and value < 1:
             return "Must be at least 1 px."
-        if self._validator is not None:
-            return self._validator(obj_data, key, value)
-        return None
+        if isinstance(value, str) and "{{" in value:
+            return "This is a template: switch to template mode with the { } button."
+        if self._validator is not None and (error := self._validator(obj_data, key, value)) is not None:
+            return error
+        return self._session.check_value(obj_data, key, value)
 
     def _on_property_edited(self, key, value, widget):
         """
         Sets the property in the source of the object (a value or a template) and redraws it.
         'value' can be str (from LineEdit) or int (from SpinBox).
         """
+        # before the size changes, so the scene updates its index
+        widget.prepareGeometryChange()
         self._session.set_source_value(widget.obj_data, key, value)
         widget.refresh()
         self.propertyChanged.emit(widget, key, value)

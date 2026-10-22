@@ -5,6 +5,7 @@ from PyQt6.QtWidgets import QWidget, QGroupBox, QMessageBox
 from openhasp_config_manager.gui.qt.components import UiComponents
 from openhasp_config_manager.gui.qt.operations import BusyState, OperationStatus, run_busy, error_text
 from openhasp_config_manager.gui.qt.async_bridge import run_async, qBridge
+from openhasp_config_manager.gui.qt.throttle import LatestValueThrottle
 from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 
@@ -24,11 +25,15 @@ class DeviceControlsWidget(QWidget):
         self.client: Optional[OpenHaspClient] = None
         self.busy = BusyState(self)
         self.busy.changed.connect(lambda _: self._update_enabled())
+        # dragging the slider changes the value many times per second: one command per value would flood MQTT
+        self._brightness = LatestValueThrottle(self._set_brightness, interval_ms=50, parent=self)
 
         self._create_layout()
         self._update_enabled()
 
     def set_device(self, device: Optional[Device]):
+        # a brightness for the previous device must not reach the new one
+        self._brightness.cancel()
         self.device = device
         self.client = None if device is None else OpenHaspClient(device)
         self._update_enabled()
@@ -97,6 +102,9 @@ class DeviceControlsWidget(QWidget):
     def __on_brightness_changed(self, value: int):
         if self.device is None:
             return
+        self._brightness.push(value)
+
+    def _set_brightness(self, value: int):
         description = f"Setting the brightness of {self.device.name} to {value}"
         # not run_busy: disabling the slider would interrupt dragging it
         run_async(

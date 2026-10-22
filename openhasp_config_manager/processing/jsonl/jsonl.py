@@ -9,6 +9,10 @@ LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(logging.DEBUG)
 
 
+# the properties whose values are converted to int (e.g. after rendering a template), as a regex alternation
+NUMERIC_PROPERTY_NAMES = "page|id|x|y|w|h|text_font|value_font|radius|pad_.+|margin_.+|border_width|min|max|prev|next"
+
+
 class ObjectDimensionsProcessor(JsonlObjectProcessor):
     """
     Used to process .jsonl files to add support for additional features.
@@ -42,10 +46,7 @@ class ObjectDimensionsProcessor(JsonlObjectProcessor):
         # normalize value types, in case of templates
         for key, value in result.items():
             try:
-                match = re.match(
-                    "^(page|id|x|y|w|h|text_font|value_font|radius|pad_.+|margin_.+|border_width|min|max|prev|next).*$",
-                    string=key,
-                )
+                match = re.match(f"^({NUMERIC_PROPERTY_NAMES}).*$", string=key)
 
                 if match and isinstance(value, str):
                     result[key] = int(float(value))

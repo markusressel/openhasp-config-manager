@@ -3,11 +3,16 @@ import signal
 import sys
 import threading
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from PyQt6.QtCore import QTimer
-from PyQt6.QtWidgets import QApplication, QWidget
+from PyQt6.QtWidgets import QApplication
 
 from openhasp_config_manager.gui.qt.async_bridge import setup_global_async_loop, get_global_async_loop
+
+if TYPE_CHECKING:
+    # imported in c_gui(), after the QApplication exists
+    from openhasp_config_manager.gui.qt.main import MainWindow
 
 
 def c_gui(config_dir: Path, output_dir: Path):
@@ -42,13 +47,14 @@ def c_gui(config_dir: Path, output_dir: Path):
     sys.exit(app.exec())
 
 
-def _quit_on_signals(app: QApplication, window: QWidget):
+def _quit_on_signals(app: QApplication, window: "MainWindow"):
     """
     Close the window (which saves its state and stops the plate connection) and quit on SIGINT (Ctrl+C) and SIGTERM.
     """
 
     def _handle(_signum, _frame):
-        window.close()
+        # no dialogs from a signal handler: unsaved drafts are discarded (and logged)
+        window.quit_discarding_drafts()
         app.quit()
 
     signal.signal(signal.SIGINT, _handle)

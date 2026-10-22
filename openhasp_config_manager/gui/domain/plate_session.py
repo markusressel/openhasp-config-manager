@@ -1,12 +1,17 @@
 import copy
+import re
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Dict, Optional, Any, Protocol, Set, Tuple
 
+from jinja2 import TemplateError
+
 from openhasp_config_manager.gui.domain.page_objects import next_free_id
 from openhasp_config_manager.openhasp_client.model.device import Device
-from openhasp_config_manager.processing.jsonl.jsonl import ObjectDimensionsProcessor
+from openhasp_config_manager.processing.jsonl.jsonl import ObjectDimensionsProcessor, NUMERIC_PROPERTY_NAMES
+
+_NUMERIC_PROPERTY = re.compile(NUMERIC_PROPERTY_NAMES)
 
 
 class DraftRenderer(Protocol):
@@ -138,12 +143,28 @@ class PlateSession:
 
     # --- editing ---
 
+    def check_value(self, obj: Dict, key: str, value: Any) -> Optional[str]:
+        """
+        Check a value for a property, as written in the source (a literal or a template), before setting it.
+        :return: why it can't be set, or None if it can
+        """
+        try:
+            rendered = self._render_with(obj, key, value)
+        except TemplateError as ex:
+            return f"Invalid template: {ex.message}"
+        result = rendered.get(key)
+        if _NUMERIC_PROPERTY.fullmatch(key) and not isinstance(result, (int, float)):
+            return f"Must be a number, renders to {result!r}."
+        return None
+
     def set_source_value(self, obj: Dict, key: str, value: Any):
         """
         Set a property as it is written in the source, a literal or a template, and render the object again.
+        Nothing changes if the object can't be rendered with it (see check_value).
         """
+        rendered = self._render_with(obj, key, value)
         self._entry(obj).source[key] = value
-        self._render(obj)
+        self._apply(obj, rendered)
 
     def remove_source_value(self, obj: Dict, key: str):
         """
@@ -225,7 +246,14 @@ class PlateSession:
 
     def _render(self, obj: Dict):
         entry = self._entry(obj)
-        rendered = self._renderer.render_object(entry.component, entry.source)
+        self._apply(obj, self._renderer.render_object(entry.component, entry.source))
+
+    def _render_with(self, obj: Dict, key: str, value: Any) -> Dict:
+        """:return: the object rendered with a different source value, without changing it"""
+        entry = self._entry(obj)
+        return self._renderer.render_object(entry.component, {**entry.source, key: value})
+
+    def _apply(self, obj: Dict, rendered: Dict):
         # the preview holds the rendered dict: keep its identity
         obj.clear()
         obj.update(rendered)

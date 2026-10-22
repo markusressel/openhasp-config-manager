@@ -55,3 +55,58 @@ class TestTemplateCompleter(TestBase):
 
         assert result.startswith('{{ <b style="color: #ff0000;">a</b>&lt;<b style="color: #ff0000;">b</b> }}')
         assert result.endswith('<span style="color: #888;">= &#x27;x&#x27;</span>')
+
+
+@pytest.mark.usefixtures("qapp")
+class TestPagePreviewWidget(TestBase):
+    def _click(self, preview, scene_x: float, scene_y: float):
+        from PyQt6 import QtCore
+        from PyQt6.QtTest import QTest
+
+        point = preview.mapFromScene(QtCore.QPointF(scene_x, scene_y))
+        QTest.mouseClick(preview.viewport(), QtCore.Qt.MouseButton.LeftButton, pos=point)
+
+    def test_click_in_interact_mode_starts_a_ripple_on_the_plate_only(self):
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.page_preview_layout import PagePreviewWidget, PreviewMode
+
+        preview = PagePreviewWidget()
+        preview.resize(600, 400)
+        preview.set_mode(PreviewMode.Interact)
+        preview.fit_to_view()
+
+        self._click(preview, 100, 100)
+        # outside of the plate
+        self._click(preview, -100, -100)
+
+        assert [(round(r.x), round(r.y)) for r in preview._ripples] == [(100, 100)]
+        assert preview._ripple_timer.isActive()
+
+    def test_fast_clicks_start_one_ripple_each(self):
+        from PyQt6 import QtCore
+        from PyQt6.QtTest import QTest
+
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.page_preview_layout import PagePreviewWidget, PreviewMode
+
+        preview = PagePreviewWidget()
+        preview.resize(600, 400)
+        preview.set_mode(PreviewMode.Interact)
+        preview.fit_to_view()
+
+        point = preview.mapFromScene(QtCore.QPointF(100, 100))
+        QTest.mouseClick(preview.viewport(), QtCore.Qt.MouseButton.LeftButton, pos=point)
+        # the second click of a double click is a double click event, not a press
+        QTest.mouseDClick(preview.viewport(), QtCore.Qt.MouseButton.LeftButton, pos=point)
+
+        assert len(preview._ripples) == 2
+
+    def test_no_ripple_in_edit_mode(self):
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.page_preview_layout import PagePreviewWidget, PreviewMode
+
+        preview = PagePreviewWidget()
+        preview.resize(600, 400)
+        preview.set_mode(PreviewMode.Edit)
+        preview.fit_to_view()
+
+        self._click(preview, 100, 100)
+
+        assert preview._ripples == []

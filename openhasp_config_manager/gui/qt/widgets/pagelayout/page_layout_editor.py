@@ -453,11 +453,16 @@ class PageLayoutEditorWidget(QWidget):
         if not self.edit_mode:
             self.action_edit_mode.setChecked(True)
 
+        try:
+            obj_id = next_free_id(self.working_objects, self.current_index)
+        except ValueError as ex:
+            self.status.failed.emit(f"Adding a {widget_type}", error_text(ex))
+            return
         screen = self.device_pages_data.device.config.openhasp_config_manager.device.screen
         obj = create_object(
             widget_type,
             page=self.current_index,
-            obj_id=next_free_id(self.working_objects, self.current_index),
+            obj_id=obj_id,
             screen_width=screen.width,
             screen_height=screen.height,
         )
@@ -469,7 +474,13 @@ class PageLayoutEditorWidget(QWidget):
         items = self.page_preview_widget.selected_items()
         if not self.edit_mode or not items:
             return
-        duplicates = [self.session.duplicate_object(item.obj_data) for item in items]
+        duplicates = []
+        for item in items:
+            try:
+                duplicates.append(self.session.duplicate_object(item.obj_data))
+            except ValueError as ex:
+                self.status.failed.emit(f"Duplicating p{item.obj_data.get('page')}b{item.obj_id}", error_text(ex))
+                break
         self._mark_dirty()
         self._reload_page(select=duplicates)
 

@@ -24,6 +24,11 @@ Findings from a review of `openhasp_config_manager/gui` (PyQt6 page layout edito
 - [x] Templates in the editor: every property can be switched to a Jinja template, with the variables of a deployment as suggestions
   (`DeviceProcessor.jsonl_template_variables`) and the rendered value shown below it.
 - [ ] Insert template variables inside longer texts (the suggestions replace the whole value today).
+- [ ] Templates that refer to other objects (`{{ p1b5.x }}`) are rendered with the objects as they are on disk, not with the draft.
+- [ ] A template that is not valid yet is lost when the property panel is rebuilt (e.g. after moving the object).
+- [ ] Checking a template for a numeric property that renders to text logs a traceback from `ObjectDimensionsProcessor` (it logs
+  failed conversions with `LOGGER.exception` and `print`); log one line instead.
+- [x] The brightness slider of the device controls sends a command for every value while dragging; throttle it (50 ms, the last value is always sent).
 - [x] `MainWindow.load_plates()` runs `analyze()` on every device click and builds new `Device` objects, while `sessions` is keyed by `Device`.
   Key the sessions by `device.name` (check `Device.__eq__`/`__hash__`), so a draft survives re-selecting a device.
 - [x] `PageLayoutEditorWidget.set_data` loads from disk only when `working_objects` is empty: selecting another cmd component reuses the stale
