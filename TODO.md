@@ -4,12 +4,7 @@ Open work and known issues. Done items are removed; the git history has them.
 
 ## 1. Bugs
 
-- [ ] `ad`: `OpenHaspClient.set_gui_config` is called without `await` in `ad/plate/deployment.py` (`deploy_config`, which is not async
-  itself, called from `ad/plate/screen.py`) and `ad/plate/__init__.py` (`set_gui_config`), so the GUI config is never sent.
-- [ ] Templates that refer to other objects (`{{ p1b5.x }}`) are rendered with the objects as they are on disk, not with the draft.
-- [ ] A template that is not valid yet is lost when the property panel is rebuilt (e.g. after moving the object).
-- [ ] Checking a template for a numeric property that renders to text logs a traceback from `ObjectDimensionsProcessor` (it logs
-  failed conversions with `LOGGER.exception` and `print`); log one line instead.
+None known.
 
 ## 2. Editor
 

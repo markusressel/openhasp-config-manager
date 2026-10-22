@@ -45,14 +45,11 @@ class ObjectDimensionsProcessor(JsonlObjectProcessor):
 
         # normalize value types, in case of templates
         for key, value in result.items():
-            try:
-                match = re.match(f"^({NUMERIC_PROPERTY_NAMES}).*$", string=key)
-
-                if match and isinstance(value, str):
+            if isinstance(value, str) and re.match(f"^({NUMERIC_PROPERTY_NAMES}).*$", string=key):
+                try:
                     result[key] = int(float(value))
-            except Exception as ex:
-                LOGGER.exception(ex)
-                print(f"{key}: {value}: {ex}, {input}")
+                except ValueError as ex:
+                    LOGGER.warning(f"{key}: {value!r} is not a number ({ex}), object: {input}")
 
         return result
 
