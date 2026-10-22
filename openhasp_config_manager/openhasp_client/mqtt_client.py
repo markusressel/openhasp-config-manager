@@ -19,6 +19,7 @@ class MqttClient:
 
         self._mqtt_client_task: Optional[asyncio.Task] = None
         self._callbacks: Dict[str, List[Callable[[str, bytes], Awaitable[None]]]] = {}
+        self._connection_listeners: List[Callable[[bool, Optional[Exception]], None]] = []
         self.__mqtt_client: Optional[Client] = None
 
     async def publish(self, topic: str, payload: str | Dict | List = None):
@@ -71,6 +72,21 @@ class MqttClient:
         if not any(self._callbacks.values()):
             await self._stop_mqtt_client_task()
 
+    def add_connection_listener(self, listener: Callable[[bool, Optional[Exception]], None]):
+        """
+        Get notified when the subscription connection (started by `subscribe`) connects to the broker,
+        or fails to connect or loses the connection (it reconnects on its own).
+        :param listener: called with (connected, the error if not connected)
+        """
+        self._connection_listeners.append(listener)
+
+    def remove_connection_listener(self, listener: Callable[[bool, Optional[Exception]], None]):
+        self._connection_listeners.remove(listener)
+
+    def _notify_connection(self, connected: bool, error: Optional[Exception]):
+        for listener in list(self._connection_listeners):
+            listener(connected, error)
+
     def _create_mqtt_client(self) -> Client:
         return Client(
             hostname=self._host,
@@ -95,6 +111,7 @@ class MqttClient:
                     self.__mqtt_client = client
                     try:
                         await client.subscribe("hasp/#")
+                        self._notify_connection(True, None)
                         async for message in client.messages:
                             await self._handle_message(message)
                     finally:
@@ -102,6 +119,7 @@ class MqttClient:
             except asyncio.CancelledError:
                 break
             except Exception as ex:
+                self._notify_connection(False, ex)
                 _LOGGER.warning(f"Error: {ex}; Reconnecting in {self._reconnect_interval_seconds} seconds ...")
                 await asyncio.sleep(self._reconnect_interval_seconds)
 

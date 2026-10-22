@@ -352,6 +352,17 @@ class OpenHaspClient:
         topic = f"hasp/{self._device.config.mqtt.name}/{path}"
         await self._mqtt_client.subscribe(topic, callback)
 
+    def add_connection_listener(self, listener: Callable[[bool, Optional[Exception]], None]):
+        """
+        Get notified when the connection used by listen_event (and listen_state) connects to the MQTT broker,
+        or fails to connect or loses the connection.
+        :param listener: called with (connected, the error if not connected)
+        """
+        self._mqtt_client.add_connection_listener(listener)
+
+    def remove_connection_listener(self, listener: Callable[[bool, Optional[Exception]], None]):
+        self._mqtt_client.remove_connection_listener(listener)
+
     async def cancel_callback(self, callback: Callable = None):
         """
         Cancel a callback which was previously registered, f.ex. via listen_event (or listen_state)

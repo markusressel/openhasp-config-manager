@@ -54,8 +54,8 @@ Plan:
   Never queue one message per mouse move.
 - [ ] **Ordering and ids.** Check how the editor assigns object ids and whether they are stable when objects are added or removed. Z-order follows
   creation order on the plate, so reordering needs a delete and re-add of the objects above.
-- [ ] **Failure handling.** Show connection state in the controls (connected, sending, out of sync, failed). If a message fails, mark the plate
-  "out of sync" and offer a resync, don't retry silently.
+- [x] **Failure handling.** Show connection state in the controls (connected, sending, out of sync, failed). If a message fails, mark the plate
+  "out of sync" and offer a resync, don't retry silently. (Done for Deploy and Clear; the live sync operations must report to it too.)
 - [ ] **Edit the code-defined pages, not only JSONL.** Render a `Page` of the composition system into the preview with `render.py`/`dump.py`, so
   the editor can show pages like the alerts page. Unlike JSONL pages these have no file to write back to, so the editor shows them read-only
   at first, and the live connection shows the real runtime values.
@@ -88,7 +88,8 @@ Plan:
   inspector (properties), and the JSONL view as a collapsible bottom panel. Today everything is stacked in one column.
 - [x] A toolbar for the editor controls (previous/next page, page selector, sync, deploy, clear) with icons and tooltips, and a status bar for
   dirty state and the last operation.
-- [ ] Connection state in the status bar: needs the live connection of section 3 (there is no persistent connection to show yet).
+- [x] Connection state in the status bar: MQTT broker reachable, the plate's LWT (online/offline), sending, and pages out of sync
+  after a failed deploy or a clear (click to deploy again).
 - [x] A consistent theme: replace the per-widget `setStyleSheet` padding strings with one application stylesheet and the `UiDimensions` scale.
   Support a dark theme.
 - [x] Confirm dialogs for Clear Page, removing objects and rebooting the device.

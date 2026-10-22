@@ -3,11 +3,13 @@ import logging
 from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Callable
+
+import qtawesome as qta
 
 from PyQt6 import QtCore
 from PyQt6.QtCore import Qt, QSettings
-from PyQt6.QtGui import QActionGroup, QKeySequence
+from PyQt6.QtGui import QActionGroup, QKeySequence, QColor, QPalette
 from PyQt6.QtWidgets import (
     QWidget,
     QMainWindow,
@@ -18,15 +20,19 @@ from PyQt6.QtWidgets import (
     QProgressBar,
     QLabel,
     QSplitter,
+    QToolButton,
+    QApplication,
 )
 from orjson import orjson
 
 from openhasp_config_manager.const import DEVICES_FOLDER_NAME
 from openhasp_config_manager.gui.dimensions import UiDimensions
+from openhasp_config_manager.gui.domain.connection import ConnectionStatus, Severity, LinkState
 from openhasp_config_manager.gui.domain.plate_session import PlateSession
 from openhasp_config_manager.gui.qt.components import UiComponents, ThemedIcons
+from openhasp_config_manager.gui.qt.connection import ConnectionController
 from openhasp_config_manager.gui.qt.operations import OperationStatus, error_text
-from openhasp_config_manager.gui.qt.theme import ThemeMode, apply_theme, current_mode
+from openhasp_config_manager.gui.qt.theme import ThemeMode, apply_theme, current_mode, current_colors
 from openhasp_config_manager.gui.qt.util import run_async
 from openhasp_config_manager.gui.qt.widgets.device_controls import DeviceControlsWidget
 from openhasp_config_manager.gui.qt.widgets.device_list import DeviceListWidget
@@ -88,11 +94,17 @@ def load_device(config_manager: ConfigManager, name: str) -> LoadedDevice:
 
 class StatusBarController:
     """
-    Shows the selected device, the page, the draft state and the last operation in the status bar.
+    Shows the selected device, the connection to it, the page, the draft state and the last operation in the status bar.
     """
 
-    def __init__(self, window: QMainWindow, status: OperationStatus):
+    def __init__(self, window: QMainWindow, status: OperationStatus, on_resync: Callable[[int], None]):
         bar = window.statusBar()
+        self._on_resync = on_resync
+        self._connection_status = ConnectionStatus()
+        self._connection = QToolButton()
+        self._connection.setAutoRaise(True)
+        self._connection.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self._connection.clicked.connect(self._on_connection_clicked)
         self._device = QLabel("No device")
         self._page = QLabel("")
         self._dirty = QLabel("")
@@ -108,6 +120,7 @@ class StatusBarController:
         bar.addPermanentWidget(self._dirty)
         bar.addPermanentWidget(self._page)
         bar.addPermanentWidget(self._device)
+        bar.addPermanentWidget(self._connection)
 
         status.started.connect(self._on_started)
         status.progressed.connect(self._on_progressed)
@@ -117,6 +130,31 @@ class StatusBarController:
 
     def set_device(self, name: Optional[str]):
         self._device.setText(name or "No device")
+
+    def set_connection(self, connection_status: ConnectionStatus):
+        self._connection_status = connection_status
+        text, severity = connection_status.summary
+        colors = current_colors()
+        color = {
+            Severity.NEUTRAL: QApplication.palette().color(QPalette.ColorRole.PlaceholderText),
+            Severity.OK: QColor(colors.success),
+            Severity.WARNING: QColor(colors.warning),
+            Severity.ERROR: QColor(colors.error),
+        }[severity]
+        self._connection.setVisible(connection_status.link != LinkState.NO_DEVICE)
+        self._connection.setText(text)
+        self._connection.setIcon(qta.icon("mdi6.circle", color=color))
+        self._connection.setToolTip(connection_status.details)
+        self._connection.setProperty("severity", severity.value)
+        self._connection.style().unpolish(self._connection)
+        self._connection.style().polish(self._connection)
+
+    def refresh_theme(self):
+        self.set_connection(self._connection_status)
+
+    def _on_connection_clicked(self):
+        if self._connection_status.out_of_sync_pages:
+            self._on_resync(min(self._connection_status.out_of_sync_pages))
 
     def set_page(self, index: Optional[int], count: int = 0):
         self._page.setText("" if index is None else f"Page {index}  ·  {count} pages")
@@ -219,7 +257,16 @@ class MainWindow(QMainWindow):
         self.resizeDocks([self.jsonl_dock], [200], Qt.Orientation.Vertical)
         self.resizeDocks([self.devices_dock, self.properties_dock], [280, 360], Qt.Orientation.Horizontal)
 
-        self.status_bar = StatusBarController(self, self.status)
+        self.status_bar = StatusBarController(self, self.status, on_resync=self.page_layout_editor_widget.resync_page)
+
+        # the connection to the selected plate
+        self.connection = ConnectionController(self)
+        self.connection.changed.connect(self.status_bar.set_connection)
+        self.status_bar.set_connection(self.connection.status)
+        self.page_layout_editor_widget.pageOutOfSync.connect(self.connection.page_out_of_sync)
+        self.page_layout_editor_widget.pageDeployed.connect(self.connection.page_deployed)
+        for busy in [self.page_layout_editor_widget.busy, self.device_control_widget.busy]:
+            busy.changed.connect(lambda _: self._update_sending())
 
     def _scrollable(self, widget: QWidget) -> QScrollArea:
         scroll = QScrollArea()
@@ -287,9 +334,13 @@ class MainWindow(QMainWindow):
             theme_group.addAction(action)
             theme_menu.addAction(action)
 
+    def _update_sending(self):
+        self.connection.set_sending(self.page_layout_editor_widget.busy.busy or self.device_control_widget.busy.busy)
+
     def set_theme(self, mode: ThemeMode):
         apply_theme(mode)
         ThemedIcons.refresh()
+        self.status_bar.refresh_theme()
         self.page_layout_editor_widget.jsonl_preview.refresh_theme()
         self.page_layout_editor_widget.page_preview_widget.viewport().update()
 
@@ -307,6 +358,7 @@ class MainWindow(QMainWindow):
             self.restoreState(state)
 
     def closeEvent(self, event):
+        self.connection.stop()
         settings = QSettings()
         settings.setValue("window/geometry", self.saveGeometry())
         settings.setValue("window/state", self.saveState())
@@ -370,6 +422,8 @@ class MainWindow(QMainWindow):
     def on_device_selected(self, name: str):
         """Reload the devices (to reflect any changes on disk) and load the pages of the selected one in the background."""
         self._selected_name = name
+        if self.device is None or self.device.name != name:
+            self.connection.set_device(None)
         self.device = None
         self.device_control_widget.set_device(None)
         self.page_layout_editor_widget.clear()
@@ -403,6 +457,7 @@ class MainWindow(QMainWindow):
         self.device = loaded.device
         session = self.sessions[loaded.device]
         self.device_control_widget.set_device(self.device)
+        self.connection.set_device(self.device)
         self.page_layout_editor_widget.set_data(session=session, device_pages_data=loaded.pages_data, raw_data=loaded.raw_data)
         self.center_stack.setCurrentWidget(self.page_layout_editor_widget)
         self.page_layout_editor_widget.page_preview_widget.fit_to_view()

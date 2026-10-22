@@ -103,5 +103,8 @@ QLabel[role="error"] {{ color: {colors.error}; }}
 QLabel[role="success"] {{ color: {colors.success}; }}
 QLabel[role="icon"] {{ color: {_rgba(text, 160)}; }}
 QFrame[role="banner"] {{ background: {_rgba(QColor(colors.error), 40)}; border: 1px solid {colors.error}; border-radius: {d.half}px; }}
+QToolButton[severity="ok"] {{ color: {colors.success}; }}
+QToolButton[severity="warning"] {{ color: {colors.warning}; }}
+QToolButton[severity="error"] {{ color: {colors.error}; }}
 QStatusBar::item {{ border: none; margin: 0px {d.one}px; }}
 """

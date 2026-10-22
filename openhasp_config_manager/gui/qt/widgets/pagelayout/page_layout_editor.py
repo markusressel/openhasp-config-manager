@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from collections import OrderedDict
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Callable
 
 from PyQt6 import QtCore
 from PyQt6.QtCore import Qt
@@ -53,6 +53,9 @@ class PageLayoutEditorWidget(QWidget):
     # (current page index, number of navigable pages)
     pageChanged = QtCore.pyqtSignal(int, int)
     dirtyChanged = QtCore.pyqtSignal(bool)
+    # a page on the device may differ from the draft: sending it failed, or it was cleared
+    pageOutOfSync = QtCore.pyqtSignal(int)
+    pageDeployed = QtCore.pyqtSignal(int)
 
     def __init__(self, status: OperationStatus):
         super().__init__()
@@ -532,9 +535,9 @@ class PageLayoutEditorWidget(QWidget):
             status=self.status,
             description=description,
             success_message=f"Cleared page {index} on {device.name}",
-            on_error=lambda ex: self.error_banner.show_error(
-                f"{description} failed: {error_text(ex)}", retry=lambda: self._clear_page(index)
-            ),
+            # the page on the device is empty now, the draft is not
+            on_success=lambda _: self.pageOutOfSync.emit(index),
+            on_error=lambda ex: self._on_send_failed(index, description, ex, retry=lambda: self._clear_page(index)),
         )
 
     @qBridge()
@@ -568,7 +571,17 @@ class PageLayoutEditorWidget(QWidget):
             status=status,
             description=description,
             success_message=f"Deployed page {index} to {device.name} ({len(page_objects)} objects)",
-            on_error=lambda ex: self.error_banner.show_error(
-                f"{description} failed: {error_text(ex)}", retry=lambda: self._deploy_page(index)
-            ),
+            on_success=lambda _: self.pageDeployed.emit(index),
+            on_error=lambda ex: self._on_send_failed(index, description, ex, retry=lambda: self._deploy_page(index)),
         )
+
+    def _on_send_failed(self, index: int, description: str, ex: Exception, retry: Callable[[], None]):
+        self.pageOutOfSync.emit(index)
+        self.error_banner.show_error(f"{description} failed: {error_text(ex)}", retry=retry)
+
+    def resync_page(self, index: int):
+        """Show the given page and deploy it, to bring the device back in sync with the draft."""
+        if self.session is None:
+            return
+        self._go_to_page(index)
+        self._deploy_page(index)
