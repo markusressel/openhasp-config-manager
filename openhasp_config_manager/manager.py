@@ -67,6 +67,10 @@ class ConfigManager:
 
         self._variable_manager = variable_manager
 
+    @property
+    def output_root(self) -> Path:
+        return self._output_root
+
     def analyze(self) -> List[Device]:
         """
         Analyze the configuration file tree and the contents of relevant files.

@@ -6,7 +6,6 @@ from openhasp_config_manager.gui.domain.page_objects import (
     OpenHASPWidgetType,
     count_objects,
     create_object,
-    find_target_component,
     get_navigable_page_indices,
     get_page_objects,
     is_hidden,
@@ -110,12 +109,3 @@ class TestPageObjects(TestBase):
         assert (obj["page"], obj["id"]) == (3, 5)
         assert obj["x"] == (480 - obj["w"]) // 2
         assert obj["y"] == (320 - obj["h"]) // 2
-
-    def test_target_component_is_the_one_with_most_objects_on_the_page(self):
-        assert find_target_component(_draft(), page=1) == "home.jsonl"
-
-    def test_target_component_falls_back_to_the_last_component(self):
-        assert find_target_component(_draft(), page=9) == "empty.jsonl"
-
-    def test_target_component_without_components(self):
-        assert find_target_component(OrderedDict(), page=1) is None

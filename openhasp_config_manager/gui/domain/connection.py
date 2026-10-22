@@ -78,6 +78,10 @@ class ConnectionStatus:
     def with_page_deployed(self, page: int) -> "ConnectionStatus":
         return dataclasses.replace(self, out_of_sync_pages=self.out_of_sync_pages - {page})
 
+    def with_plate_restored(self) -> "ConnectionStatus":
+        """The plate shows its files again (restored or restarted): no page differs from what it should show."""
+        return dataclasses.replace(self, out_of_sync_pages=frozenset())
+
     @property
     def summary(self) -> Tuple[str, Severity]:
         """
@@ -109,5 +113,8 @@ class ConnectionStatus:
         }
         result = [lines[self.link]]
         if self.out_of_sync_pages:
-            result.append("Sending failed, the plate may show something else than the editor. Click to deploy again.")
+            result.append(
+                "The plate may show something else than it should: sending failed, or a page was cleared. "
+                "Click to send the page again (Live preview) or to restore the plate."
+            )
         return "\n".join(result)

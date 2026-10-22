@@ -34,7 +34,7 @@ class DeviceListWidget(QWidget):
         layout.addLayout(header)
 
         self._list = QListWidget()
-        self._list.setMinimumHeight(120)
+        self._list.setMinimumHeight(60)
         self._list.itemClicked.connect(self._on_item_clicked)
         layout.addWidget(self._list, 1)
 

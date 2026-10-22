@@ -161,18 +161,3 @@ def create_object(
     obj["x"] = max(0, (screen_width - obj["w"]) // 2)
     obj["y"] = max(0, (screen_height - obj["h"]) // 2)
     return obj
-
-
-def find_target_component(component_objects: OrderedDict[str, List[Dict]], page: int) -> Optional[str]:
-    """
-    Choose the jsonl component a new object of the given page goes into: the one with the most objects on that page,
-    otherwise the last one.
-    :return: the name of the component, or None if the draft has no components
-    """
-    if not component_objects:
-        return None
-    counts = {name: sum(1 for obj in objects if obj.get("page") == page) for name, objects in component_objects.items()}
-    best = max(counts, key=lambda name: counts[name])
-    if counts[best] > 0:
-        return best
-    return next(reversed(component_objects))

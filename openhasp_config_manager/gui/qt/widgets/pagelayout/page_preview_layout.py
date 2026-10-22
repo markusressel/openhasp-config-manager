@@ -1,12 +1,12 @@
 import logging
 import time
-from enum import StrEnum
-from typing import List, Optional, Dict, Callable
+from enum import Enum, StrEnum
+from typing import List, Optional, Dict, Callable, Tuple
 
 from PyQt6 import QtCore
 from PyQt6.QtCore import Qt, QRectF
 from PyQt6.QtGui import QPainter, QColor, QPen, QFont
-from PyQt6.QtWidgets import QGraphicsView
+from PyQt6.QtWidgets import QGraphicsView, QWidget
 
 from openhasp_config_manager.gui.dimensions import UiDimensions
 from openhasp_config_manager.gui.domain.ripple import Ripple, active_ripples
@@ -38,6 +38,14 @@ class PreviewMode(StrEnum):
     Edit = "edit"
 
 
+class OverlayAnchor(Enum):
+    """Where a floating bar sits on the preview (see `PagePreviewWidget.add_overlay`)."""
+
+    TOP_RIGHT = "top_right"
+    BOTTOM_CENTER = "bottom_center"
+    BOTTOM_RIGHT = "bottom_right"
+
+
 class PagePreviewWidget(QGraphicsView):
     """
     The plate preview: the page in the native resolution of the plate, scaled to fit the view (or zoomed),
@@ -62,6 +70,7 @@ class PagePreviewWidget(QGraphicsView):
         self._fit_to_view = True
         self._empty_hint: Optional[str] = None
         self._is_movable: Callable[[Dict], bool] = lambda _obj: True
+        self._is_dimmed: Callable[[Dict], bool] = lambda _obj: False
 
         # click feedback in interact mode, painted in drawForeground (not as scene items: reloading a page clears the scene)
         self._ripples: List[Ripple] = []
@@ -89,6 +98,9 @@ class PagePreviewWidget(QGraphicsView):
         )
         self._add_object_button.setParent(self.viewport())
         self._add_object_button.hide()
+
+        # floating bars on the preview: fitting the plate keeps their rows free
+        self._overlays: List[Tuple[QWidget, OverlayAnchor]] = []
 
     def scene(self) -> PlateScene:
         return super().scene()
@@ -133,6 +145,12 @@ class PagePreviewWidget(QGraphicsView):
         self._position_add_object_button()
         self.viewport().update()
 
+    def set_dimmed_predicate(self, is_dimmed: Callable[[Dict], bool]):
+        """Which objects to dim, e.g. those that are not in the file highlighted in the file tree."""
+        self._is_dimmed = is_dimmed
+        for item in self.editable_items():
+            item.set_dimmed(is_dimmed(item.obj_data))
+
     def set_objects(self, loaded_objects: List[dict]):
         self.objects = loaded_objects
         self.load_objects()
@@ -163,6 +181,7 @@ class PagePreviewWidget(QGraphicsView):
                 LOGGER.debug(f"Adding '{obj_type}' item to scene: {item}")
                 item.movable = self.mode == PreviewMode.Edit and self._is_movable(item.obj_data)
                 item.editable = self.mode == PreviewMode.Edit
+                item.set_dimmed(self._is_dimmed(item.obj_data))
                 self.scene().addItem(item)
 
     def editable_items(self) -> List[EditableWidget]:
@@ -185,10 +204,78 @@ class PagePreviewWidget(QGraphicsView):
     def zoom_out(self):
         self._zoom_by(1 / ZOOM_STEP)
 
+    def add_overlay(self, widget: QWidget, anchor: OverlayAnchor):
+        """Show a widget (e.g. a toolbar) floating on the preview. The plate is fitted between the top and bottom ones."""
+        widget.setParent(self.viewport())
+        widget.show()
+        self._overlays.append((widget, anchor))
+        # never narrower than a bar: it would be cut off
+        widest = max(overlay.sizeHint().width() for overlay, _anchor in self._overlays)
+        self.setMinimumWidth(widest + 2 * UiDimensions.one + 2 * self.frameWidth())
+        self._position_overlays()
+
     def fit_to_view(self):
+        """Scale the plate to fill the view, with the rows of the floating bars above and below it kept free."""
         self._fit_to_view = True
-        self.fitInView(self._padded_scene_rect(), Qt.AspectRatioMode.KeepAspectRatio)
+        plate = self._padded_scene_rect()
+        top, bottom = self._overlay_margins()
+        viewport = self.viewport().rect()
+        available_height = max(1, viewport.height() - top - bottom)
+        scale = min(viewport.width() / plate.width(), available_height / plate.height())
+        # the view shows the plate and the rows of the bars: fitting it centers the plate between them
+        self.setSceneRect(plate.adjusted(0, -top / scale, 0, bottom / scale))
+        self.fitInView(self.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
         self._position_add_object_button()
+
+    def _overlay_margins(self) -> Tuple[int, int]:
+        """:return: the height to keep free above and below the plate for the floating bars"""
+        _positions, top, bottom = self._overlay_layout()
+        return top, bottom
+
+    def _position_overlays(self):
+        positions, _top, _bottom = self._overlay_layout()
+        for widget, position in positions.items():
+            widget.move(position)
+
+    def _overlay_layout(self) -> Tuple[Dict[QWidget, QtCore.QPoint], int, int]:
+        """
+        Where the floating bars go: the top right one in its corner, the bottom right one in its corner, and the bottom
+        center one centered next to it, or in a row above it if they don't fit next to each other.
+        :return: the position of each bar, and the height of the rows above and below the plate
+        """
+        margin = UiDimensions.one
+        width = self.viewport().width()
+        height = self.viewport().height()
+        positions = {}
+        top_row_bottom = 0
+        bottom_row_top = height
+        right_edge = width - margin
+        visible = [(widget, anchor) for widget, anchor in self._overlays if not widget.isHidden()]
+        for widget, anchor in visible:
+            widget.adjustSize()
+            x = max(margin, width - widget.width() - margin)
+            if anchor == OverlayAnchor.TOP_RIGHT:
+                positions[widget] = QtCore.QPoint(x, margin)
+                top_row_bottom = max(top_row_bottom, margin + widget.height())
+            elif anchor == OverlayAnchor.BOTTOM_RIGHT:
+                y = height - widget.height() - margin
+                positions[widget] = QtCore.QPoint(x, y)
+                right_edge = min(right_edge, x - margin)
+                bottom_row_top = min(bottom_row_top, y)
+        last_row_top = bottom_row_top
+        for widget, anchor in visible:
+            if anchor == OverlayAnchor.BOTTOM_CENTER:
+                x = min((width - widget.width()) // 2, right_edge - widget.width())
+                y = height - widget.height() - margin
+                if x < margin:
+                    # no room next to the bar on the right: above it
+                    x = max(margin, (width - widget.width()) // 2)
+                    y = last_row_top - margin - widget.height()
+                positions[widget] = QtCore.QPoint(x, y)
+                bottom_row_top = min(bottom_row_top, y)
+        top = top_row_bottom + margin if top_row_bottom else 0
+        bottom = height - bottom_row_top + margin if bottom_row_top < height else 0
+        return positions, top, bottom
 
     def _zoom_by(self, factor: float):
         current = self.transform().m11()
@@ -211,6 +298,7 @@ class PagePreviewWidget(QGraphicsView):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
+        self._position_overlays()
         if self._fit_to_view:
             self.fit_to_view()
         self._position_add_object_button()

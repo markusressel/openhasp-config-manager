@@ -23,7 +23,6 @@ async def c_deploy(config_dir: Path, output_dir: Path, device: str, purge: bool,
             await _deploy(
                 config_manager=config_manager,
                 device=device,
-                output_dir=output_dir,
                 purge=purge,
                 show_diff=diff,
             )

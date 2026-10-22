@@ -312,6 +312,24 @@ class OpenHaspClient:
         """
         return await self.command(keyword="clearpage", params="all")
 
+    async def restore_from_files(self):
+        """
+        Rebuild all pages from the files on the plate, like the plate does when it starts, without restarting it:
+        clear all pages, load the startup layout (the `pages` file of the hasp config), show the start page, then run
+        `boot.cmd` and `online.cmd`. Files that are not on the plate are skipped.
+        Values sent to the plate at runtime (e.g. by Home Assistant) are lost until they are sent again.
+        """
+        files = await self.get_files()
+        hasp = self._device.config.hasp
+        await self.clear_all_pages()
+        if hasp.pages and hasp.pages.lstrip("/") in files:
+            await self.command(keyword="run", params=f"/{hasp.pages.lstrip('/')}")
+        if hasp.startpage is not None:
+            await self.set_page(hasp.startpage)
+        for script in ["boot.cmd", "online.cmd"]:
+            if script in files:
+                await self.command(keyword="run", params=f"/{script}")
+
     async def set_hidden(self, obj: str, hidden: bool):
         """
         Set the "hidden" property of an object

@@ -22,7 +22,8 @@ from PyQt6.QtWidgets import (
     QApplication,
     QMessageBox,
 )
-from openhasp_config_manager.const import DEVICES_FOLDER_NAME
+from openhasp_config_manager.const import DEVICES_FOLDER_NAME, COMMON_FOLDER_NAME
+from openhasp_config_manager.deployment import deploy_device
 from openhasp_config_manager.gui.domain.draft_files import (
     LoadedDevice,
     load_device,
@@ -35,16 +36,18 @@ from openhasp_config_manager.gui.domain.connection import ConnectionStatus, Seve
 from openhasp_config_manager.gui.domain.plate_session import PlateSession
 from openhasp_config_manager.gui.qt.components import UiComponents, ThemedIcons
 from openhasp_config_manager.gui.qt.connection import ConnectionController
-from openhasp_config_manager.gui.qt.operations import OperationStatus, error_text
+from openhasp_config_manager.gui.qt.operations import OperationStatus, error_text, run_busy
 from openhasp_config_manager.gui.qt.theme import ThemeMode, apply_theme, current_mode, current_colors
 from openhasp_config_manager.gui.qt.async_bridge import run_async
 from openhasp_config_manager.gui.qt.widgets.device_controls import DeviceControlsWidget
 from openhasp_config_manager.gui.qt.widgets.device_list import DeviceListWidget
+from openhasp_config_manager.gui.qt.widgets.file_tree import FileTreeWidget
 from openhasp_config_manager.gui.qt.widgets.message_panel import MessagePanel
 from openhasp_config_manager.gui.qt.widgets.pagelayout import OpenHaspDevicePagesData
 from openhasp_config_manager.gui.qt.widgets.pagelayout.page_layout_editor import PageLayoutEditorWidget
 from openhasp_config_manager.manager import ConfigManager
 from openhasp_config_manager.openhasp_client.model.device import Device
+from openhasp_config_manager.processing.variables import VariableManager
 
 LOGGER = logging.getLogger(__name__)
 
@@ -150,6 +153,11 @@ class StatusBarController:
             self._progress.hide()
 
 
+# the device selected last, and the config directory it belongs to
+_SELECTED_DEVICE_KEY = "devices/selected"
+_SELECTED_DEVICE_CONFIG_ROOT_KEY = "devices/selected_config_root"
+
+
 class MainWindow(QMainWindow):
     def __init__(self, config_manager: ConfigManager):
         super().__init__()
@@ -164,6 +172,8 @@ class MainWindow(QMainWindow):
         # the page to show after a draft was reloaded (saved or reverted), per session key
         self._page_after_reload: Dict[Tuple[str, str], int] = {}
         self._discard_drafts_on_close = False
+        # select the device of the last session once the devices are loaded the first time
+        self._restore_selection = True
 
         self.status = OperationStatus(self)
 
@@ -173,6 +183,7 @@ class MainWindow(QMainWindow):
 
         self.create_basic_layout()
         self._create_menus()
+        self._update_draft_actions()
         self._restore_window_state()
         self.load_plates()
 
@@ -198,13 +209,23 @@ class MainWindow(QMainWindow):
         self.device_list_widget.reloadClicked.connect(self.load_plates)
         self.device_control_widget = DeviceControlsWidget(status=self.status)
 
-        sidebar = QSplitter(Qt.Orientation.Vertical)
-        sidebar.addWidget(self.device_list_widget)
-        sidebar.addWidget(self._scrollable(self.device_control_widget))
-        sidebar.setStretchFactor(0, 1)
-        sidebar.setChildrenCollapsible(False)
-        sidebar.setMinimumWidth(260)
-        self.devices_dock = self._add_dock("Devices", "devices_dock", sidebar, Qt.DockWidgetArea.LeftDockWidgetArea)
+        # the files of the selected device, and which of them new objects go into
+        editor = self.page_layout_editor_widget
+        self.file_tree_widget = FileTreeWidget()
+        self.file_tree_widget.highlightRequested.connect(editor.highlight_component)
+        self.file_tree_widget.targetRequested.connect(editor.set_target_component)
+        editor.selectedObjectComponentChanged.connect(self.file_tree_widget.reveal)
+        editor.fileStateChanged.connect(self._update_file_tree_state)
+
+        self.sidebar = QSplitter(Qt.Orientation.Vertical)
+        self.sidebar.addWidget(self.device_list_widget)
+        self.sidebar.addWidget(self.file_tree_widget)
+        self.sidebar.addWidget(self._scrollable(self.device_control_widget))
+        # the file tree grows with the window
+        self.sidebar.setStretchFactor(1, 1)
+        self.sidebar.setChildrenCollapsible(False)
+        self.sidebar.setMinimumWidth(260)
+        self.devices_dock = self._add_dock("Devices", "devices_dock", self.sidebar, Qt.DockWidgetArea.LeftDockWidgetArea)
 
         # right: the properties of the selected object
         self.properties_dock = self._add_dock(
@@ -229,8 +250,10 @@ class MainWindow(QMainWindow):
         self.status_bar.set_connection(self.connection.status)
         self.page_layout_editor_widget.pageOutOfSync.connect(self.connection.page_out_of_sync)
         self.page_layout_editor_widget.pageDeployed.connect(self.connection.page_deployed)
+        self.page_layout_editor_widget.plateRestored.connect(self.connection.plate_restored)
         for busy in [self.page_layout_editor_widget.busy, self.device_control_widget.busy]:
             busy.changed.connect(lambda _: self._update_sending())
+            busy.changed.connect(lambda _: self._update_draft_actions())
 
     def _scrollable(self, widget: QWidget) -> QScrollArea:
         scroll = QScrollArea()
@@ -267,11 +290,19 @@ class MainWindow(QMainWindow):
         self.action_revert = create(
             self, "Revert", "restore", self.revert_draft, tooltip="Discard the changes of the draft and load the files again"
         )
+        self.action_deploy = create(
+            self,
+            "Deploy",
+            "upload",
+            self.deploy_saved_files,
+            tooltip="Upload the saved files to the plate, like the deploy command of the CLI. "
+            "The plate restarts if anything changed.\nUnsaved changes of the draft are not deployed.",
+        )
         toolbar = editor.toolbar
+        toolbar.addAction(self.action_deploy)
         first = toolbar.actions()[0]
         toolbar.insertAction(first, self.action_save)
         toolbar.insertAction(first, self.action_revert)
-        toolbar.insertSeparator(first)
 
         file_menu = self.menuBar().addMenu("&File")
         file_menu.addAction(self.action_save)
@@ -293,14 +324,19 @@ class MainWindow(QMainWindow):
             editor.action_previous_page,
             editor.action_next_page,
             None,
-            editor.action_sync,
             editor.action_clear,
-            editor.action_deploy,
         ]:
             if action is None:
                 page_menu.addSeparator()
             else:
                 page_menu.addAction(action)
+
+        plate_menu = self.menuBar().addMenu("P&late")
+        for action in [editor.action_live_preview, editor.action_restore_plate, None, self.action_deploy]:
+            if action is None:
+                plate_menu.addSeparator()
+            else:
+                plate_menu.addAction(action)
 
         view_menu = self.menuBar().addMenu("&View")
         for action in [editor.action_zoom_in, editor.action_zoom_out, editor.action_zoom_fit]:
@@ -318,6 +354,10 @@ class MainWindow(QMainWindow):
             theme_group.addAction(action)
             theme_menu.addAction(action)
 
+    def _update_file_tree_state(self):
+        if self.page_layout_editor_widget.session is not None:
+            self.file_tree_widget.update_state(*self.page_layout_editor_widget.file_state())
+
     def _update_sending(self):
         self.connection.set_sending(self.page_layout_editor_widget.busy.busy or self.device_control_widget.busy.busy)
 
@@ -325,6 +365,7 @@ class MainWindow(QMainWindow):
         apply_theme(mode)
         ThemedIcons.refresh()
         self.status_bar.refresh_theme()
+        self.file_tree_widget.refresh_theme()
         self.page_layout_editor_widget.jsonl_preview.refresh_theme()
         self.page_layout_editor_widget.page_preview_widget.viewport().update()
 
@@ -340,6 +381,16 @@ class MainWindow(QMainWindow):
         state = settings.value("window/state")
         if state is not None:
             self.restoreState(state)
+        sidebar = settings.value("window/sidebar")
+        if sidebar is None or not self.sidebar.restoreState(sidebar):
+            # once the window has its size: the device list compact, the device controls as tall as they need
+            QtCore.QTimer.singleShot(0, self._size_sidebar)
+
+    def _size_sidebar(self):
+        total = sum(self.sidebar.sizes())
+        devices = 130
+        controls = self.device_control_widget.sizeHint().height()
+        self.sidebar.setSizes([devices, max(120, total - devices - controls), controls])
 
     def quit_discarding_drafts(self):
         """Close without asking about unsaved drafts, e.g. on SIGTERM: the drafts are lost."""
@@ -369,6 +420,7 @@ class MainWindow(QMainWindow):
         settings = QSettings()
         settings.setValue("window/geometry", self.saveGeometry())
         settings.setValue("window/state", self.saveState())
+        settings.setValue("window/sidebar", self.sidebar.saveState())
         super().closeEvent(event)
 
     # --- devices ---
@@ -398,8 +450,22 @@ class MainWindow(QMainWindow):
                 actions=[("Reload", "refresh", self.load_plates)],
             )
             self.center_stack.setCurrentWidget(self.message_panel)
-        elif self.device is None:
+            return
+        restore, self._restore_selection = self._restore_selection, False
+        if self.device is not None:
+            return
+        name = self._last_selected_device() if restore else None
+        if name is not None and any(device.name == name for device in devices):
+            self.on_device_selected(name)
+        else:
             self._show_no_device_selected()
+
+    def _last_selected_device(self) -> Optional[str]:
+        """:return: the device selected in the last session, if it was in the same config directory"""
+        settings = QSettings()
+        if settings.value(_SELECTED_DEVICE_CONFIG_ROOT_KEY) != str(Path(self.config_manager.cfg_root).resolve()):
+            return None
+        return settings.value(_SELECTED_DEVICE_KEY)
 
     def _on_devices_failed(self, ex: Exception):
         self.device_list_widget.show_error()
@@ -425,13 +491,18 @@ class MainWindow(QMainWindow):
     def on_device_selected(self, name: str):
         """Reload the devices (to reflect any changes on disk) and load the pages of the selected one in the background."""
         self._selected_name = name
+        settings = QSettings()
+        settings.setValue(_SELECTED_DEVICE_KEY, name)
+        settings.setValue(_SELECTED_DEVICE_CONFIG_ROOT_KEY, str(Path(self.config_manager.cfg_root).resolve()))
         if self.device is None or self.device.name != name:
             # another device: start without a connection and in interaction mode, not editing its objects by accident
             self.connection.set_device(None)
             self.page_layout_editor_widget.set_edit_mode(False)
+            self.page_layout_editor_widget.stop_live_preview()
         self.device = None
         self.device_control_widget.set_device(None)
         self.page_layout_editor_widget.clear()
+        self.file_tree_widget.clear()
         self._update_draft_actions()
         self.status_bar.set_device(name)
         self.status_bar.set_page(None)
@@ -469,17 +540,21 @@ class MainWindow(QMainWindow):
         dirty = self.session is not None and self.session.is_dirty
         self.action_save.setEnabled(dirty)
         self.action_revert.setEnabled(dirty)
+        self.action_deploy.setEnabled(self.device is not None and not self.page_layout_editor_widget.busy.busy)
 
-    def save_draft(self):
-        """Write the changes of the draft into the source files, then load them again."""
+    def save_draft(self) -> bool:
+        """
+        Write the changes of the draft into the source files, then load them again.
+        :return: whether the draft was saved
+        """
         session = self.session
         if session is None or not session.is_dirty:
-            return
+            return False
         try:
             changes = plan_save(session)
         except (SaveConflictError, ValueError) as ex:
             QMessageBox.critical(self, "Save failed", error_text(ex))
-            return
+            return False
 
         common = [change for change in changes if change.is_common]
         if common:
@@ -500,15 +575,70 @@ class MainWindow(QMainWindow):
                 QMessageBox.StandardButton.Cancel,
             )
             if answer != QMessageBox.StandardButton.Save:
-                return
+                return False
 
         try:
             write_save(changes)
         except OSError as ex:
             QMessageBox.critical(self, "Save failed", error_text(ex))
-            return
+            return False
         self.status.succeeded.emit(f"Saved {len(changes)} file{'' if len(changes) == 1 else 's'}")
         self._reload_draft()
+        return True
+
+    def deploy_saved_files(self):
+        """Deploy the files of the current device as they are on disk, like the deploy command of the CLI."""
+        if self.device is None:
+            return
+        name = self.device.name
+        if self.session is not None and self.session.is_dirty:
+            box = QMessageBox(
+                QMessageBox.Icon.Question,
+                "Deploy",
+                f"The draft of {name} has unsaved changes. Deploy uploads only the saved files.",
+                parent=self,
+            )
+            save = box.addButton("Save and deploy", QMessageBox.ButtonRole.AcceptRole)
+            saved_only = box.addButton("Deploy without the changes", QMessageBox.ButtonRole.DestructiveRole)
+            box.addButton(QMessageBox.StandardButton.Cancel)
+            box.setDefaultButton(save)
+            box.exec()
+            if box.clickedButton() is save:
+                if not self.save_draft():
+                    return
+            elif box.clickedButton() is not saved_only:
+                return
+
+        # the plate shows its files after the deploy, not the draft
+        self.page_layout_editor_widget.stop_live_preview()
+        # its own ConfigManager: the editor may analyze the config directory at the same time (after Save)
+        config_manager = ConfigManager(
+            cfg_root=self.config_manager.cfg_root,
+            output_root=self.config_manager.output_root,
+            variable_manager=VariableManager(cfg_root=self.config_manager.cfg_root),
+        )
+
+        async def __deploy() -> bool:
+            devices = await asyncio.to_thread(config_manager.analyze)
+            device = next((device for device in devices if device.name == name), None)
+            if device is None:
+                raise ValueError(f"{name} is not in the config directory anymore")
+            return await deploy_device(config_manager, device)
+
+        def __on_success(changed: bool):
+            if changed:
+                self.status.succeeded.emit(f"Deployed {name}: the plate restarts to load the new files")
+                self.connection.plate_restored()
+            else:
+                self.status.succeeded.emit(f"{name} is already up to date")
+
+        run_busy(
+            __deploy(),
+            busy=self.page_layout_editor_widget.busy,
+            status=self.status,
+            description=f"Deploying the saved files of {name}",
+            on_success=__on_success,
+        )
 
     def revert_draft(self):
         session = self.session
@@ -542,6 +672,13 @@ class MainWindow(QMainWindow):
         if not session.is_loaded or not session.is_dirty:
             session.load(loaded.components, loaded.renderer)
         self._session_key = key
+        self.file_tree_widget.set_files(
+            loaded.files,
+            components={component.path: component.key for component in loaded.components},
+            used=loaded.used_files,
+            used_variables=loaded.used_variable_files,
+            common_path=Path(self.config_manager.cfg_root, COMMON_FOLDER_NAME),
+        )
         self.device_control_widget.set_device(self.device)
         self.connection.set_device(self.device)
         self.page_layout_editor_widget.set_data(

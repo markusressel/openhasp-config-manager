@@ -27,6 +27,7 @@ from openhasp_config_manager.gui.domain.properties import (
     DIMENSION_PROPERTIES,
     is_dimension,
 )
+from openhasp_config_manager.gui.domain.file_tree import relative_config_path
 from openhasp_config_manager.gui.domain.plate_session import PlateSession
 from openhasp_config_manager.gui.qt.components import UiComponents, ThemedIcons
 from openhasp_config_manager.gui.qt.layouts import clear_layout
@@ -114,6 +115,17 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         self.refresh()
         self.scroll_area.verticalScrollBar().setValue(0)
 
+    def _create_file_label(self, obj_data: Dict) -> QWidget:
+        """The file the object is defined in."""
+        component = self._session.component_of(obj_data)
+        location = relative_config_path(component.path, self._session.device.path)
+        label = UiComponents.create_label(
+            location + ("  ·  shared" if component.is_common else ""), role="hint", word_wrap=True
+        )
+        if component.is_common:
+            label.setToolTip("A file of the common folder: saving it changes the pages of every device that loads it.")
+        return label
+
     def refresh(self):
         """Rebuilds the editor from the current data, e.g. after the object was moved in the preview."""
         clear_layout(self.main_layout)
@@ -141,6 +153,7 @@ class OpenHASPWidgetPropertyEditor(QWidget):
             role="title",
         )
         self.main_layout.addWidget(header)
+        self.main_layout.addWidget(self._create_file_label(obj_data))
 
         for title, keys in group_properties(obj_data):
             group = QGroupBox(title)

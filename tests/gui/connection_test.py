@@ -51,6 +51,16 @@ class TestConnectionStatus(TestBase):
         # THEN
         assert status.summary == ("Online", Severity.OK)
 
+    def test_restoring_the_plate_ends_out_of_sync(self):
+        # GIVEN
+        status = ConnectionStatus.connecting().with_broker(True).with_lwt("online").with_send_failed(1).with_send_failed(2)
+
+        # WHEN
+        status = status.with_plate_restored()
+
+        # THEN
+        assert status.summary == ("Online", Severity.OK)
+
     def test_out_of_sync_does_not_lower_an_error(self):
         # WHEN
         status = ConnectionStatus.connecting().with_broker(False, "refused").with_send_failed(1)

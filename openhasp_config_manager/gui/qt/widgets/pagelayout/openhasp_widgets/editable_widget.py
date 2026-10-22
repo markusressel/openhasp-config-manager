@@ -8,6 +8,8 @@ from openhasp_config_manager.gui.qt.theme import current_colors
 
 # the opacity of objects that are hidden on the plate
 HIDDEN_OPACITY = 0.3
+# the opacity of objects that are not highlighted, while the objects of a file are (on top of HIDDEN_OPACITY)
+DIMMED_OPACITY = 0.25
 
 
 class EditableWidget(QGraphicsObject):
@@ -37,6 +39,7 @@ class EditableWidget(QGraphicsObject):
 
     def __init__(self, object_data: Dict, *args, **kwargs):
         self._object_data = object_data
+        self._dimmed = False
         super().__init__(*args, **kwargs)
 
         # itemChange() is only called for position changes with this flag, it is needed for snapping
@@ -57,9 +60,15 @@ class EditableWidget(QGraphicsObject):
         self._on_data_changed()
         self.update()
 
+    def set_dimmed(self, dimmed: bool):
+        """Dim the object, e.g. while the objects of another file are highlighted."""
+        self._dimmed = dimmed
+        self._update_hidden()
+
     def _update_hidden(self):
         # hidden objects stay selectable and editable, but are dimmed
-        self.setOpacity(HIDDEN_OPACITY if is_hidden(self.obj_data) else 1.0)
+        opacity = HIDDEN_OPACITY if is_hidden(self.obj_data) else 1.0
+        self.setOpacity(opacity * (DIMMED_OPACITY if self._dimmed else 1.0))
 
     def _on_data_changed(self):
         """

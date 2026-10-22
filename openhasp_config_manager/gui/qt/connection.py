@@ -90,6 +90,9 @@ class ConnectionController(QtCore.QObject):
     def page_deployed(self, page: int):
         self._set(self.status.with_page_deployed(page))
 
+    def plate_restored(self):
+        self._set(self.status.with_plate_restored())
+
     def _on_broker_changed(self, generation: int, connected: bool, error: Optional[str]):
         if generation == self._generation:
             self._set(self.status.with_broker(connected, error))

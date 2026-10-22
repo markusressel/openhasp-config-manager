@@ -41,6 +41,8 @@ class ThemedIcons:
 
     @classmethod
     def apply(cls, target: QAction | QAbstractButton | QLabel, name: str, size: Optional[int] = None):
+        # a target that changes its icon keeps one entry
+        cls._targets = [entry for entry in cls._targets if entry[0]() is not target]
         cls._targets.append((weakref.ref(target), name, size))
         cls._apply(target, name, size)
 

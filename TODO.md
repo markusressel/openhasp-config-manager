@@ -24,6 +24,11 @@ Findings from a review of `openhasp_config_manager/gui` (PyQt6 page layout edito
 - [x] Templates in the editor: every property can be switched to a Jinja template, with the variables of a deployment as suggestions
   (`DeviceProcessor.jsonl_template_variables`) and the rendered value shown below it.
 - [ ] Insert template variables inside longer texts (the suggestions replace the whole value today).
+- [x] Choose the file new objects go into: the Files tree in the sidebar shows `common/` and the device folder with their subfolders,
+  the pages of each loaded .jsonl file, highlights a file's objects, and double-click makes a file the target. Without a choice, new
+  objects go into the device's own file with the most objects on the page, never into a shared one unless the device has none.
+- [ ] Files tree, next steps: "New .jsonl file here" on a folder (adds the `run L:/<flattened name>` line to the right .cmd and checks
+  the 30 character limit), "Move to file" for an object, and remembering the chosen target across restarts (it is per app session now).
 - [ ] Templates that refer to other objects (`{{ p1b5.x }}`) are rendered with the objects as they are on disk, not with the draft.
 - [ ] A template that is not valid yet is lost when the property panel is rebuilt (e.g. after moving the object).
 - [ ] Checking a template for a numeric property that renders to text logs a traceback from `ObjectDimensionsProcessor` (it logs
@@ -40,11 +45,12 @@ Findings from a review of `openhasp_config_manager/gui` (PyQt6 page layout edito
 
 ## 3. Live editing on the real device, built on the composition system
 
-Goal: what the user does in the editor shows up on the real plate in near real time, and the "Sync with Real Device" switch becomes the
-switch for exactly that.
+Goal: what the user does in the editor shows up on the real plate in near real time.
 
-Today "sync" only mirrors the page number (`OpenHaspClient.set_page`), and "Deploy" clears the page and re-sends every object. The code-defined
-layouts (`haad/layout`, `haad/page`, `haad/plate`) already have most of the machinery for incremental updates:
+The editor has three plate actions with tooltips: **Live preview** (the draft on the plate while editing, nothing stored), **Restore plate**
+(rebuild all pages from the files on the plate, like a restart: `OpenHaspClient.restore_from_files`) and **Deploy** (upload the saved files
+like the CLI, restart if anything changed: `deployment.deploy_device`). "Revert" stays the name for discarding the draft, "Undo" is left
+for undo/redo. The code-defined layouts (`haad/layout`, `haad/page`, `haad/plate`) already have most of the machinery for incremental updates:
 
 - `Page.relayout()` re-runs the layout and sends only the changed `x`/`y`/`w`/`h`, updating `obj.jsonl` in place.
 - `Repeat` adds an object with a single JSONL message (`client.jsonl`) and removes one with `delete_object_id`, keeping `page.objects` and
@@ -57,15 +63,16 @@ Plan:
 - [ ] **One edit model.** Make the editor emit small edit operations (`add(obj)`, `remove(id)`, `set(id, property, value)`, `move/resize(id, rect)`)
   on the `PlateSession` draft instead of mutating dicts in the widget. The preview, the JSONL view, the dirty state and the live sync all
   subscribe to the same operations.
-- [ ] **Diff, don't redeploy.** A live-sync service turns each operation into the minimal openHASP command: a property change is
-  `p1b5.text="..."`, a move is `x`/`y`/`w`/`h`, a remove is `p1b5.delete`, an add is a single JSONL line. "Deploy" stays as the full resync (also
-  to recover from drift), and runs automatically when live sync is switched on.
-- [ ] **Coalesce.** Debounce rapid changes (dragging, typing): keep only the last value per `(object, property)` and send it every ~50–100 ms.
-  Never queue one message per mouse move.
+- [x] **Diff, don't redeploy.** Live preview compares the page with what it last sent (`gui/domain/live_preview.py`): a changed object
+  is one JSONL message with only the changed properties, a removed one `p1b5.delete`, a new one a single JSONL line. Turning it on or
+  switching the page clears the page and sends it in full; so does a removed property or a changed `obj`, which no command can undo.
+  Open: an object whose id changed is deleted and added again, so it ends up on top of the others on the plate.
+- [x] **Coalesce.** Live preview sends at most every 50 ms while dragging or typing, and always the last state.
 - [ ] **Ordering and ids.** Check how the editor assigns object ids and whether they are stable when objects are added or removed. Z-order follows
   creation order on the plate, so reordering needs a delete and re-add of the objects above.
 - [x] **Failure handling.** Show connection state in the controls (connected, sending, out of sync, failed). If a message fails, mark the plate
-  "out of sync" and offer a resync, don't retry silently. (Done for Deploy and Clear; the live sync operations must report to it too.)
+  "out of sync" and offer a resync, don't retry silently. (Live preview, Clear page and Restore plate report to it. The resync sends the
+  page again with Live preview on, and restores the plate without.)
 - [ ] **Edit the code-defined pages, not only JSONL.** Render a `Page` of the composition system into the preview with `render.py`/`dump.py`, so
   the editor can show pages like the alerts page. Unlike JSONL pages these have no file to write back to, so the editor shows them read-only
   at first, and the live connection shows the real runtime values.
@@ -73,8 +80,15 @@ Plan:
   `relayout()` and sends the diff. This is the same path haad uses at runtime for collapsed or repeated items.
 - [ ] **Preview from the real plate (optional).** Subscribe to the plate's state topics so the preview shows touch events and values coming from
   the device, and clicking in the preview can trigger the same action as touching the plate.
+- [ ] **Compare the draft with the plate (postponed).** Show which objects of the editor differ from what the plate has in memory right now.
+  openHASP 0.7.0 has no command to list objects, dump a page or read a whole object back: only single property getters
+  (`command/p1b2.text` with an empty payload answers on `state/p1b2`, see `OpenHaspClient.get_object_property`). So only the objects the
+  draft knows can be compared, one round trip per property (e.g. `x`, `y`, `w`, `h`, `text`, `val`, `hidden`). Objects that exist only on the
+  plate stay invisible; probing every id was rejected. Screenshots (`take_screenshot`) were rejected as well.
 - [ ] Verify on a real plate what is still unverified from the runtime work: `delete` cascading to children, a single JSONL add onto a shown
   page, and `x`/`y`/`w`/`h` commands.
+- [ ] Verify Restore plate on a real plate: whether `clearpage all` also clears page 0, and whether `run /pages.jsonl`, `page`,
+  `run /boot.cmd`, `run /online.cmd` rebuild it like a restart (the docs don't give the startup order).
 
 ## 4. UI polish
 

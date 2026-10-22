@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from jinja2 import Environment, StrictUndefined, TemplateError, TemplateSyntaxError, UndefinedError
 
 from openhasp_config_manager.const import DEVICES_FOLDER_NAME, COMMON_FOLDER_NAME
+from openhasp_config_manager.gui.domain.file_tree import FileNode, scan_file_tree, used_files, used_variable_files
 from openhasp_config_manager.gui.domain.plate_session import PlateSession, ComponentSource
 from openhasp_config_manager.manager import ConfigManager
 from openhasp_config_manager.openhasp_client.model.component import CmdComponent, JsonlComponent
@@ -131,6 +132,12 @@ class LoadedDevice:
     # the jsonl components as written on disk, and how to render them, to load a draft
     components: List[ComponentSource]
     renderer: ProcessorDraftRenderer
+    # the folders with the files of the device, for the file tree
+    files: List[FileNode]
+    # the .cmd and .jsonl files the plate runs -> the startup script that runs them (see `used_files`)
+    used_files: Dict[Path, str]
+    # the variable files those reference -> the names of the referenced variables (see `used_variable_files`)
+    used_variable_files: Dict[Path, List[str]]
 
 
 def load_device(config_manager: ConfigManager, name: str) -> LoadedDevice:
@@ -171,6 +178,8 @@ def load_device(config_manager: ConfigManager, name: str) -> LoadedDevice:
             )
         )
 
+    files = scan_file_tree(device.path)
+    used = used_files(device.cmd, device.jsonl)
     return LoadedDevice(
         devices=devices,
         device=device,
@@ -178,4 +187,7 @@ def load_device(config_manager: ConfigManager, name: str) -> LoadedDevice:
         jsonl_components=jsonl_components,
         components=components,
         renderer=ProcessorDraftRenderer(device_processor, template_vars),
+        files=files,
+        used_files=used,
+        used_variable_files=used_variable_files(files, used, device.path),
     )

@@ -110,3 +110,28 @@ class TestPagePreviewWidget(TestBase):
         self._click(preview, 100, 100)
 
         assert preview._ripples == []
+
+    @pytest.mark.parametrize("size", [(900, 600), (320, 600)])
+    def test_the_fitted_plate_is_fully_visible_and_not_covered_by_the_floating_bars(self, size):
+        # GIVEN
+        from PyQt6.QtWidgets import QPushButton
+
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.page_preview_layout import OverlayAnchor, PagePreviewWidget
+
+        preview = PagePreviewWidget()
+        preview.set_screen_size(480, 320)
+        bars = [QPushButton("Edit mode  Snap  Duplicate"), QPushButton("‹ Page 1 ›"), QPushButton("− fit +")]
+        for bar, anchor in zip(bars, [OverlayAnchor.TOP_RIGHT, OverlayAnchor.BOTTOM_CENTER, OverlayAnchor.BOTTOM_RIGHT]):
+            preview.add_overlay(bar, anchor)
+        preview.resize(*size)
+        preview.show()
+
+        # WHEN
+        preview.fit_to_view()
+
+        # THEN
+        plate = preview.mapFromScene(preview.scene().sceneRect()).boundingRect()
+        assert preview.viewport().rect().contains(plate)
+        for bar in bars:
+            assert preview.viewport().rect().contains(bar.geometry())
+            assert not bar.geometry().intersects(plate)
