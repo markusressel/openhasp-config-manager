@@ -21,13 +21,15 @@ from openhasp_config_manager.gui.domain.page_objects import (
     step_page,
 )
 from openhasp_config_manager.gui.domain.clipboard import PasteCascade, objects_from_text, objects_to_text, with_descendants
-from openhasp_config_manager.gui.domain.file_tree import default_target_component
+from openhasp_config_manager.gui.domain.file_tree import default_target_component, relative_config_path
 from openhasp_config_manager.gui.domain.live_preview import LivePage
 from openhasp_config_manager.gui.domain.plate_session import PlateSession
+from openhasp_config_manager.gui.domain.ui_session import DeviceSession
 from openhasp_config_manager.gui.qt.components import UiComponents
 from openhasp_config_manager.gui.qt.operations import BusyState, OperationStatus, run_busy, error_text
 from openhasp_config_manager.gui.qt.async_bridge import qBridge, run_async
 from openhasp_config_manager.gui.qt.throttle import LatestValueThrottle
+from openhasp_config_manager.gui.qt.ui_session_store import UiSessionStore
 from openhasp_config_manager.gui.qt.widgets.message_panel import ErrorBanner
 from openhasp_config_manager.gui.qt.widgets.pagelayout import OpenHaspDevicePagesData
 from openhasp_config_manager.gui.qt.widgets.pagelayout.jsonl_preview import PageJsonlPreviewWidget
@@ -78,7 +80,8 @@ class PageLayoutEditorWidget(QWidget):
     # the key of the component of the selected object, None if not exactly one object is selected
     selectedObjectComponentChanged = QtCore.pyqtSignal(object)
 
-    def __init__(self, status: OperationStatus):
+    def __init__(self, status: OperationStatus, ui_session: Optional[UiSessionStore] = None):
+        """:param ui_session: where the choices of the user are remembered for the next start (in memory if None)"""
         super().__init__()
         self.status = status
         self.busy = BusyState(self)
@@ -88,8 +91,7 @@ class PageLayoutEditorWidget(QWidget):
         self.device_pages_data: Optional[OpenHaspDevicePagesData] = None
         self.current_index = 1
         self.page_objects: List[Dict] = []
-        # the file the user chose for new objects, per device (component key)
-        self._chosen_targets: Dict[str, str] = {}
+        self._ui_session = ui_session or UiSessionStore.in_memory()
         # the component whose objects are highlighted (the others are dimmed)
         self._highlighted_component: Optional[str] = None
         self._paste_cascade = PasteCascade()
@@ -572,16 +574,21 @@ class PageLayoutEditorWidget(QWidget):
         """The key of the component new objects of the current page are added to: the one the user chose, or a default."""
         if self.session is None:
             return None
-        keys = [component.key for component in self.session.components]
-        chosen = self._chosen_targets.get(self.session.device.name)
-        if chosen in keys:
-            return chosen
+        chosen = self._device_ui_session().target_file
+        for component in self.session.components:
+            if relative_config_path(component.path, self.session.device.path) == chosen:
+                return component.key
         return default_target_component(self.session.components, self.working_objects, self.current_index)
 
     def set_target_component(self, key: str):
         """Add new objects to this component (of the current device) from now on."""
-        self._chosen_targets[self.session.device.name] = key
+        component = next(component for component in self.session.components if component.key == key)
+        self._device_ui_session().target_file = relative_config_path(component.path, self.session.device.path)
+        self._ui_session.save()
         self.fileStateChanged.emit()
+
+    def _device_ui_session(self) -> DeviceSession:
+        return self._ui_session.session.device(self.session.device.name)
 
     def file_state(self) -> Tuple[Dict[str, Set[int]], int, Optional[str]]:
         """:return: the pages each component has objects on, the current page, and the target component"""

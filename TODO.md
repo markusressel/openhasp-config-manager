@@ -28,7 +28,9 @@ Findings from a review of `openhasp_config_manager/gui` (PyQt6 page layout edito
   the pages of each loaded .jsonl file, highlights a file's objects, and double-click makes a file the target. Without a choice, new
   objects go into the device's own file with the most objects on the page, never into a shared one unless the device has none.
 - [ ] Files tree, next steps: "New .jsonl file here" on a folder (adds the `run L:/<flattened name>` line to the right .cmd and checks
-  the 30 character limit), "Move to file" for an object, and remembering the chosen target across restarts (it is per app session now).
+  the 30 character limit), and "Move to file" for an object.
+- [x] Remember the editor session across restarts, per config directory: the selected device and the chosen target file per device
+  (`gui/domain/ui_session.py`, stored by `gui/qt/ui_session_store.py`; new state is a dataclass field with a default).
 - [ ] Templates that refer to other objects (`{{ p1b5.x }}`) are rendered with the objects as they are on disk, not with the draft.
 - [ ] A template that is not valid yet is lost when the property panel is rebuilt (e.g. after moving the object).
 - [ ] Checking a template for a numeric property that renders to text logs a traceback from `ObjectDimensionsProcessor` (it logs

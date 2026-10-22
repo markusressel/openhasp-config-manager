@@ -217,6 +217,28 @@ class TestFiles(TestBase):
         assert (added["page"], added["obj"]) == (9, "label")
         assert editor.target_component == home
 
+    def test_the_chosen_file_is_remembered_for_the_next_start(self, editor, settings):
+        # GIVEN
+        from openhasp_config_manager.gui.domain.file_tree import config_root_of
+        from openhasp_config_manager.gui.qt.operations import OperationStatus
+        from openhasp_config_manager.gui.qt.ui_session_store import UiSessionStore
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.page_layout_editor import PageLayoutEditorWidget
+
+        root = config_root_of(editor.session.device.path)
+
+        def start():
+            widget = PageLayoutEditorWidget(status=OperationStatus(), ui_session=UiSessionStore(root, settings))
+            widget.set_data(session=editor.session, device_pages_data=editor.device_pages_data, page=9)
+            return widget
+
+        home = _key(editor, "page.jsonl")
+
+        # WHEN
+        start().set_target_component(home)
+
+        # THEN
+        assert start().target_component == home
+
     def test_without_a_choice_new_objects_go_to_the_file_of_the_page(self, editor):
         assert editor.target_component == _key(editor, "editor.jsonl")
 

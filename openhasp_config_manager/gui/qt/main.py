@@ -37,6 +37,7 @@ from openhasp_config_manager.gui.domain.plate_session import PlateSession
 from openhasp_config_manager.gui.qt.components import UiComponents, ThemedIcons
 from openhasp_config_manager.gui.qt.connection import ConnectionController
 from openhasp_config_manager.gui.qt.operations import OperationStatus, error_text, run_busy
+from openhasp_config_manager.gui.qt.ui_session_store import UiSessionStore
 from openhasp_config_manager.gui.qt.theme import ThemeMode, apply_theme, current_mode, current_colors
 from openhasp_config_manager.gui.qt.async_bridge import run_async
 from openhasp_config_manager.gui.qt.widgets.device_controls import DeviceControlsWidget
@@ -153,11 +154,6 @@ class StatusBarController:
             self._progress.hide()
 
 
-# the device selected last, and the config directory it belongs to
-_SELECTED_DEVICE_KEY = "devices/selected"
-_SELECTED_DEVICE_CONFIG_ROOT_KEY = "devices/selected_config_root"
-
-
 class MainWindow(QMainWindow):
     def __init__(self, config_manager: ConfigManager):
         super().__init__()
@@ -174,6 +170,8 @@ class MainWindow(QMainWindow):
         self._discard_drafts_on_close = False
         # select the device of the last session once the devices are loaded the first time
         self._restore_selection = True
+        # what is restored on the next start: the selected device, the file for new objects, ...
+        self.ui_session = UiSessionStore(Path(config_manager.cfg_root), QSettings())
 
         self.status = OperationStatus(self)
 
@@ -190,7 +188,7 @@ class MainWindow(QMainWindow):
     # --- layout ---
 
     def create_basic_layout(self):
-        self.page_layout_editor_widget = PageLayoutEditorWidget(status=self.status)
+        self.page_layout_editor_widget = PageLayoutEditorWidget(status=self.status, ui_session=self.ui_session)
         self.page_layout_editor_widget.pageChanged.connect(lambda index, count: self.status_bar.set_page(index, count))
         self.page_layout_editor_widget.dirtyChanged.connect(lambda dirty: self.status_bar.set_dirty(dirty))
         self.page_layout_editor_widget.dirtyChanged.connect(lambda _: self._update_draft_actions())
@@ -462,18 +460,11 @@ class MainWindow(QMainWindow):
         restore, self._restore_selection = self._restore_selection, False
         if self.device is not None:
             return
-        name = self._last_selected_device() if restore else None
+        name = self.ui_session.session.selected_device if restore else None
         if name is not None and any(device.name == name for device in devices):
             self.on_device_selected(name)
         else:
             self._show_no_device_selected()
-
-    def _last_selected_device(self) -> Optional[str]:
-        """:return: the device selected in the last session, if it was in the same config directory"""
-        settings = QSettings()
-        if settings.value(_SELECTED_DEVICE_CONFIG_ROOT_KEY) != str(Path(self.config_manager.cfg_root).resolve()):
-            return None
-        return settings.value(_SELECTED_DEVICE_KEY)
 
     def _on_devices_failed(self, ex: Exception):
         self.device_list_widget.show_error()
@@ -499,9 +490,8 @@ class MainWindow(QMainWindow):
     def on_device_selected(self, name: str):
         """Reload the devices (to reflect any changes on disk) and load the pages of the selected one in the background."""
         self._selected_name = name
-        settings = QSettings()
-        settings.setValue(_SELECTED_DEVICE_KEY, name)
-        settings.setValue(_SELECTED_DEVICE_CONFIG_ROOT_KEY, str(Path(self.config_manager.cfg_root).resolve()))
+        self.ui_session.session.selected_device = name
+        self.ui_session.save()
         if self.device is None or self.device.name != name:
             # another device: start without a connection and in interaction mode, not editing its objects by accident
             self.connection.set_device(None)
