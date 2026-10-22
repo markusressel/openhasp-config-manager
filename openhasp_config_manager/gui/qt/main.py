@@ -182,6 +182,8 @@ class MainWindow(QMainWindow):
         self.create_basic_layout()
         self._create_menus()
         self._update_draft_actions()
+        # the arrangement of the docks as built above, before the saved one is restored
+        self._default_dock_state = self.saveState()
         self._restore_window_state()
         self.load_plates()
 
@@ -237,8 +239,7 @@ class MainWindow(QMainWindow):
         self.jsonl_dock = self._add_dock(
             "JSONL", "jsonl_dock", self.page_layout_editor_widget.jsonl_preview, Qt.DockWidgetArea.BottomDockWidgetArea
         )
-        self.resizeDocks([self.jsonl_dock], [200], Qt.Orientation.Vertical)
-        self.resizeDocks([self.devices_dock, self.properties_dock], [280, 360], Qt.Orientation.Horizontal)
+        self._size_docks()
 
         self.status_bar = StatusBarController(self, self.status, on_resync=self.page_layout_editor_widget.resync_page)
 
@@ -252,6 +253,10 @@ class MainWindow(QMainWindow):
         for busy in [self.page_layout_editor_widget.busy, self.device_control_widget.busy]:
             busy.changed.connect(lambda _: self._update_sending())
             busy.changed.connect(lambda _: self._update_draft_actions())
+
+    def _size_docks(self):
+        self.resizeDocks([self.jsonl_dock], [200], Qt.Orientation.Vertical)
+        self.resizeDocks([self.devices_dock, self.properties_dock], [280, 360], Qt.Orientation.Horizontal)
 
     def _scrollable(self, widget: QWidget) -> QScrollArea:
         scroll = QScrollArea()
@@ -351,6 +356,16 @@ class MainWindow(QMainWindow):
         for dock in [self.devices_dock, self.properties_dock, self.jsonl_dock]:
             view_menu.addAction(dock.toggleViewAction())
         view_menu.addSeparator()
+        view_menu.addAction(
+            create(
+                self,
+                "Restore default layout",
+                "view-dashboard-outline",
+                self.restore_default_layout,
+                tooltip="Show all panels again and put them back where they were at the first start",
+            )
+        )
+        view_menu.addSeparator()
 
         theme_menu = view_menu.addMenu("Theme")
         theme_group = QActionGroup(self)
@@ -391,6 +406,13 @@ class MainWindow(QMainWindow):
         if sidebar is None or not self.sidebar.restoreState(sidebar):
             # once the window has its size: the device list compact, the device controls as tall as they need
             QtCore.QTimer.singleShot(0, self._size_sidebar)
+
+    def restore_default_layout(self):
+        for dock in [self.devices_dock, self.properties_dock, self.jsonl_dock]:
+            dock.setFloating(False)
+        self.restoreState(self._default_dock_state)
+        self._size_docks()
+        self._size_sidebar()
 
     def _size_sidebar(self):
         total = sum(self.sidebar.sizes())
