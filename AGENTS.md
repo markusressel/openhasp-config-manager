@@ -48,7 +48,7 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
 | `openhasp_config_manager/gui/`               | PyQt6 GUI. `gui/domain/` holds Qt-free logic, `gui/qt/` the widgets.          |
 | `openhasp_config_manager/haad/`              | haad integration: plate controllers, code-defined layouts (`layout/README.md`).|
 | `openhasp_config_manager/ad/`                | AppDaemon integration.                                                        |
-| `openhasp-configs/`                          | Example config directory (`common/`, `devices/<plate>/config.json`).          |
+| `openhasp-configs/`                          | The user's own config directory (gitignored, see Agent guidelines).           |
 | `tests/`                                     | pytest tests, `tests/_test_cfg_root` is the config directory used by them.    |
 
 ## Code style
@@ -58,6 +58,27 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
 - Fail fast: no defensive fallbacks that hide configuration or programming errors.
 - GUI: keep logic that does not need Qt in `gui/domain/` so it can be tested without a display. Long-running work (config analysis,
   device communication) runs through `run_async` (`gui/qt/async_bridge.py`) so the window stays responsive; never block the Qt main thread.
+- `OpenHaspClient` is async: every call must be awaited. A missing `await` fails silently (the coroutine never runs), which once broke
+  deploy, upload and screenshots.
+
+## GUI editor
+
+- **Draft**: `PlateSession` (`gui/domain/plate_session.py`) keeps every object twice: rendered (shown in the preview) and as written in its
+  file, with its templates. Change objects through the session (`set_source_value`, `add_object`, `paste_objects`, ...), never by
+  mutating the rendered dicts: Save patches only the changed source properties back into the files.
+- **Templates are never replaced implicitly.** Objects whose `x`/`y` is a template or a percentage can't be dragged or nudged; the
+  editor explains why, and "Use pixels for x/y" replaces them only when the user asks. Keep this for new edit operations.
+- **Files**: new objects go into the target file chosen in the Files tree (`gui/domain/file_tree.py` follows the folder structure of
+  `README.md`), by default the device's own file, never a shared `common/` file unless the device has none: saving a shared file changes
+  every device that loads it.
+- **Plate actions** (names and tooltips agreed with the user): *Live preview* sends the draft to the plate while editing (nothing is stored
+  on it), *Restore plate* rebuilds the pages from the files on the plate like a restart, *Deploy* uploads the saved files. *Revert*
+  discards the draft; *Undo* is reserved for undo/redo.
+- **Remembered state**: what should survive a restart for a config directory or a device goes into `UiSession`/`DeviceSession`
+  (`gui/domain/ui_session.py`) as a dataclass field with a default, then `ui_session.save()` (`gui/qt/ui_session_store.py`). App-wide
+  preferences (window geometry, theme, view toggles) are plain `QSettings` keys.
+- **Preview controls** float inside the preview (`PagePreviewWidget.add_overlay`); `fit_to_view` keeps their rows free, so the plate is
+  never covered. Messages about an object go next to it (`show_message`), errors also to the status bar (`OperationStatus.failed`).
 
 ## Testing
 
@@ -65,12 +86,20 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
 - `tests/haad` and `tests/ad` are skipped unless haad or AppDaemon are installed (`tests/conftest.py`). `tests/haad/README.md`
   explains the haad test setup (golden masters, `FakePlate`).
 - The GUI can be checked headless with `QT_QPA_PLATFORM=offscreen` and `QWidget.grab()` to render screenshots.
+- GUI tests: `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest tests/gui`. Fixtures in `tests/gui/conftest.py`: `qapp`,
+  `async_loop` (the background asyncio loop of the app) and `settings`.
+- Never touch the user's real GUI settings: tests that use `QSettings` (directly or through `MainWindow`, `UiSessionStore`, the Files
+  tree, ...) need the `settings` fixture, and headless runs of the app outside of pytest need `XDG_CONFIG_HOME` set to a temporary
+  directory.
 
 ## Agent guidelines
 
-- **Git**: do not stage, commit or push; the user handles git. Never use `git stash`, `reset` or `checkout` to compare with HEAD, use
+- **Git**: do not stage, commit or push unless the user asks for it. Never use `git stash`, `reset` or `checkout` to compare with HEAD, use
   `git show HEAD:<file>` instead.
 - **Secrets**: never print or copy plate credentials, `secrets.yaml` or MQTT passwords from config directories.
+- **Config directories**: `openhasp-configs/` is the user's real configuration. Read it only for analysis (structure, counts, without
+  printing values); run anything that writes on a copy in a temporary directory.
+- **Lock files**: this is a Poetry project; don't commit a `uv.lock` (`uv run` creates one).
 - **Real plates**: commands that deploy, clear pages or reboot affect physical devices. Do not run them against real plates unless
   the user asks for it.
 - Keep `TODO.md` current: tick items off when you complete them.
