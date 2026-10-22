@@ -18,7 +18,7 @@ async def c_screenshot(config_dir: Path, device: str, output: Path):
             client = OpenHaspClient(device)
             try:
                 info(f"Taking screenshot of device '{device.name}'...")
-                screenshot = client.take_screenshot()
+                screenshot = await client.take_screenshot()
                 image_file_path = Path(output, f"{device.name}.bmp")
                 image_file_path.write_bytes(screenshot)
             except Exception as ex:
