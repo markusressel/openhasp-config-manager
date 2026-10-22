@@ -21,27 +21,23 @@ async def test_unknown_device_raises(page: PageController, tmp_path):
         DeploymentController(controller=page.controller, name="unknown", config_dir=CFG_ROOT, output_dir=tmp_path)
 
 
-@pytest.mark.filterwarnings("ignore:coroutine 'OpenHaspClient.get_files' was never awaited")
-async def test_deploy_fails(page: PageController, plate: FakePlate):
-    """ConfigUploader calls the async OpenHaspClient.get_files() without awaiting it, so deploy() fails before uploading."""
-    with pytest.raises(TypeError, match="argument of type 'coroutine' is not"):
-        await page.plate.deployment_controller.deploy(purge=False)
+async def test_deploy_uploads_the_generated_files_and_the_config(page: PageController, plate: FakePlate):
+    plate.files = []
 
-    assert plate.traffic == []
+    assert await page.plate.deployment_controller.deploy(purge=False) is True
 
-
-async def test_deploy_returns_the_upload_result(page: PageController, monkeypatch):
-    """With an uploader that works (see test_deploy_fails), deploy() returns whether anything changed."""
-    deployment = page.plate.deployment_controller
-    uploads = []
-    monkeypatch.setattr(
-        deployment._uploader,
-        "upload",
-        lambda device, purge, show_diff: uploads.append((device.name, purge, show_diff)) or True,
-    )
-
-    assert await deployment.deploy(purge=True, show_diff=True) is True
-    assert uploads == [("test_device", True, True)]
+    assert [(request.method, request.url) for request in plate.http] == [
+        ("GET", "list?dir=/"),
+        ("POST", "edit"),
+        ("POST", "edit"),
+        ("POST", "edit"),
+        ("GET", "api/config/mqtt/"),
+        ("POST", "config"),
+        ("GET", "api/config/http/"),
+        ("POST", "config"),
+        ("GET", "api/config/gui/"),
+        ("POST", "config"),
+    ]
 
 
 async def test_deploy_config(page: PageController, plate: FakePlate):

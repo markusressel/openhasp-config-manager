@@ -46,8 +46,9 @@ Each one is pinned by a test in `tests/haad/` (named in brackets).
     the cancel task of `util_openhasp.listen_state()` unsubscribes the callback itself, which matches nothing. Buttons, switches and
     sliders stay subscribed after `terminate()`. Harmless while haad never sets a plate up twice in one process, but the design's
     re-push on `LWT online` must not register objects again. (`test_listen_state_parses_json_and_is_never_cancelled`)
-11. **`DeploymentController.deploy()` fails**: `ConfigUploader` calls the async `OpenHaspClient.get_files()` without awaiting it. Nothing
-    in haad-home calls `deploy()`. Fix it or remove it (the design keeps deployment in the CLI)? (`test_deploy_fails`)
+11. ~~**`DeploymentController.deploy()` fails**: `ConfigUploader` calls the async `OpenHaspClient.get_files()` without awaiting it.~~
+    Fixed: `ConfigUploader` is async now, which also fixes the CLI `deploy` and `upload`.
+    (`test_deploy_uploads_the_generated_files_and_the_config`)
 12. **The gui config goes to two different names.** `PlateController.set_gui_config()` publishes to `hasp/<controller name>/config/gui`
     (the haad registry name), everything else uses the plate's MQTT name from its config. They are the same for all of haad-home's
     plates; the device factory (§4.1) should use one source. (`test_always_on_display_while_any_page_requests_it`)

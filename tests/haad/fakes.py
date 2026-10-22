@@ -10,7 +10,7 @@ import asyncio
 import json
 import re
 from dataclasses import dataclass, field
-from typing import Any, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import aiohttp
 import orjson
@@ -22,6 +22,31 @@ from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 from openhasp_config_manager.openhasp_client.webservice_client import WebserviceClient
 
 _IMAGE_SOURCE = re.compile(r"^p\d+b\d+\.src=(http://\S+)$")
+
+
+def _default_config() -> Dict[str, Dict[str, Any]]:
+    """The configuration of a plate as `api/config/<section>/` returns it, for the sections the client reads."""
+    return {
+        "mqtt": {
+            "name": "plate",
+            "host": "mqtt.local",
+            "port": 1883,
+            "user": "user",
+            "pass": "********",
+            "topic": {"node": "plate", "group": "plates", "broadcast": "broadcast", "hass": "homeassistant"},
+        },
+        "http": {"port": 80, "user": "admin", "pass": "********"},
+        "gui": {
+            "idle1": 10,
+            "idle2": 60,
+            "rotate": 0,
+            "cursor": 0,
+            "bckl": 0,
+            "bcklinv": 0,
+            "invert": 0,
+            "calibration": [0, 0, 0, 0, 0],
+        },
+    }
 
 
 @dataclass(frozen=True)
@@ -50,11 +75,16 @@ class FakePlate:
     - `send()`: a message from the plate (`LWT`, `state/idle`, `state/p1b2`, ...), delivered to the client's subscriptions.
     - `online`: while False, HTTP requests fail like for a plate that can't be reached.
     - Images: when an object's `src` is set to an http URL, the plate downloads it, like the real one.
+    - Files: `files` lists the files of the flash filesystem, `file_contents` has the content of some of them. Uploads
+      (`POST edit`) and deletions (`DELETE edit`) only show up in the traffic.
+    - `config`: what `api/config/<section>/` returns.
     """
 
     mqtt_name: str = "mqtt_name"
     online: bool = True
     files: List[str] = field(default_factory=lambda: ["boot.cmd", "pages.jsonl"])
+    file_contents: Dict[str, bytes] = field(default_factory=dict)
+    config: Dict[str, Dict[str, Any]] = field(default_factory=_default_config)
     traffic: List[Mqtt | Http] = field(default_factory=list)
     downloaded_images: List[bytes] = field(default_factory=list)
     _connections: List["_FakeAiomqttClient"] = field(default_factory=list)
@@ -134,6 +164,10 @@ class FakePlate:
         self.traffic.append(Http(method=method, url=url, data=data))
         if url == "list?dir=/":
             return orjson.dumps([{"type": "file", "name": name} for name in self.files] + [{"type": "dir", "name": "dir"}])
+        if method == "GET" and url.startswith("api/config/"):
+            return self.config[url.removeprefix("api/config/").rstrip("/")]
+        if method == "GET" and url in self.file_contents:
+            return self.file_contents[url]
         return None
 
 

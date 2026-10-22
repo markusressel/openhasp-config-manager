@@ -14,7 +14,7 @@ class ConfigUploader:
         self._output_root = output_root
         self._cache_dir = Path(self._output_root, ".cache")
 
-    def upload(self, device: Device, purge: bool = False, print_diff: bool = False) -> bool:
+    async def upload(self, device: Device, purge: bool = False, print_diff: bool = False) -> bool:
         """
         Uploads configuration files and config properties to a device.
         :param device: The device to upload to.
@@ -25,14 +25,14 @@ class ConfigUploader:
         result = False
 
         if purge:
-            result |= self.cleanup_device(device)
+            result |= await self.cleanup_device(device)
 
-        result |= self._upload_files(device, print_diff)
-        result |= self._update_config(device)
+        result |= await self._upload_files(device, print_diff)
+        result |= await self._update_config(device)
         return result
 
-    def _upload_files(self, device: Device, print_diff: bool) -> bool:
-        existing_files = self._api_client.get_files()
+    async def _upload_files(self, device: Device, print_diff: bool) -> bool:
+        existing_files = await self._api_client.get_files()
 
         result = False
 
@@ -40,13 +40,13 @@ class ConfigUploader:
             info(f"Preparing '{file.name}' for upload...")
 
             if file.suffix in [".cmd", ".jsonl"]:
-                result |= self._upload_text_file(device, print_diff, file, existing_files)
+                result |= await self._upload_text_file(device, print_diff, file, existing_files)
             else:
-                result |= self._upload_binary_file(device, print_diff, file, existing_files)
+                result |= await self._upload_binary_file(device, print_diff, file, existing_files)
 
         return result
 
-    def _upload_text_file(self, device, print_diff, file, existing_files) -> bool:
+    async def _upload_text_file(self, device, print_diff, file, existing_files) -> bool:
         result = False
 
         content = file.read_text()
@@ -57,7 +57,7 @@ class ConfigUploader:
         # check if the checksum of the file has changed on the device
         file_content_on_device = ""
         if file.name in existing_files:
-            file_content_on_device = self._api_client.get_file_content(file.name).decode("utf-8")
+            file_content_on_device = (await self._api_client.get_file_content(file.name)).decode("utf-8")
             device_file_content_checksum = util.calculate_checksum(file_content_on_device.encode("utf-8"))
         else:
             device_file_content_checksum = None
@@ -78,7 +78,7 @@ class ConfigUploader:
                 )
                 print_diff_to_console(diff_output)
             try:
-                self._api_client.upload_file(file.name, content.encode("utf-8"))
+                await self._api_client.upload_file(file.name, content.encode("utf-8"))
                 checksum_file = self._get_checksum_file(file)
                 checksum_file.parent.mkdir(parents=True, exist_ok=True)
                 checksum_file.write_text(new_checksum)
@@ -89,7 +89,7 @@ class ConfigUploader:
 
         return result
 
-    def _upload_binary_file(self, device, print_diff, file, existing_files) -> bool:
+    async def _upload_binary_file(self, device, print_diff, file, existing_files) -> bool:
         result = False
 
         content = file.read_bytes()
@@ -100,7 +100,7 @@ class ConfigUploader:
         # check if the checksum of the file has changed on the device
         file_content_on_device = b""
         if file.name in existing_files:
-            file_content_on_device: bytes = self._api_client.get_file_content(file.name)
+            file_content_on_device: bytes = await self._api_client.get_file_content(file.name)
             device_file_content_checksum = util.calculate_checksum(file_content_on_device)
         else:
             device_file_content_checksum = None
@@ -116,7 +116,7 @@ class ConfigUploader:
             if print_diff:
                 info(f"Binary file '{file.name}' has changed ({device_file_content_checksum} -> {new_checksum})")
             try:
-                self._api_client.upload_file(file.name, content)
+                await self._api_client.upload_file(file.name, content)
                 checksum_file = self._get_checksum_file(file)
                 checksum_file.parent.mkdir(parents=True, exist_ok=True)
                 checksum_file.write_text(new_checksum)
@@ -127,7 +127,7 @@ class ConfigUploader:
 
         return result
 
-    def cleanup_device(self, device: Device) -> bool:
+    async def cleanup_device(self, device: Device) -> bool:
         """
         Delete files from the device, which are not present in the currently generated output
         :param device: the target device
@@ -140,12 +140,12 @@ class ConfigUploader:
             file_names.append(file.name)
 
         # cleanup files which are on the device, but not present in the generated output
-        files_on_device = self._api_client.get_files()
+        files_on_device = await self._api_client.get_files()
         for f in files_on_device:
             if f not in file_names:
                 result = True
                 info(f"Deleting file '{f}' from device '{device.name}'")
-                self._api_client.delete_file(f)
+                await self._api_client.delete_file(f)
         return result
 
     def _check_if_checksum_will_change(self, file: Path, original_checksum: str, new_content: bytes) -> Optional[str]:
@@ -179,31 +179,31 @@ class ConfigUploader:
             file.name + ".md5",
         )
 
-    def _update_config(self, device: Device):
+    async def _update_config(self, device: Device):
         config_has_changed = False
 
-        current_mqtt_config = self._api_client.get_mqtt_config()
+        current_mqtt_config = await self._api_client.get_mqtt_config()
         if current_mqtt_config == device.config.mqtt:
             info("MQTT config has not changed")
         else:
             info("Updating MQTT config...")
-            self._api_client.set_mqtt_config(device.config.mqtt)
+            await self._api_client.set_mqtt_config(device.config.mqtt)
             config_has_changed = True
 
-        current_http_config = self._api_client.get_http_config()
+        current_http_config = await self._api_client.get_http_config()
         if current_http_config == device.config.http:
             info("HTTP config has not changed")
         else:
             info("Updating HTTP config...")
-            self._api_client.set_http_config(device.config.http)
+            await self._api_client.set_http_config(device.config.http)
             config_has_changed = True
 
-        current_gui_config = self._api_client.get_gui_config()
+        current_gui_config = await self._api_client.get_gui_config()
         if current_gui_config == device.config.gui:
             info("GUI config has not changed")
         else:
             info("Updating GUI config...")
-            self._api_client.set_gui_config(device.config.gui)
+            await self._api_client.set_gui_config(device.config.gui)
             config_has_changed = True
 
         return config_has_changed

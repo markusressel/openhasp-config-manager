@@ -57,7 +57,7 @@ class DeploymentController:
         self.app.log(f"DEPLOY: Device is: {self.device.name}, processing...")
         self._config_manager.process(self.device)
         self.app.log(f"DEPLOY: Finished processing {self.device.name}, uploading files...")
-        changed = self._uploader.upload(self.device, purge, show_diff)
+        changed = await self._uploader.upload(self.device, purge, show_diff)
         self.app.log(f"DEPLOY: {self.device.name} Done! Changed: {changed}")
         return changed
 

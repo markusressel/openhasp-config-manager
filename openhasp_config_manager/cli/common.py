@@ -23,7 +23,7 @@ async def _upload(device: Device, output_dir: Path, purge: bool, show_diff: bool
     uploader = ConfigUploader(output_dir, client)
 
     info(f"Uploading files to device '{device.name}'...")
-    return uploader.upload(device, purge, show_diff)
+    return await uploader.upload(device, purge, show_diff)
 
 
 async def _deploy(config_manager: ConfigManager, device: Device, output_dir: Path, purge: bool, show_diff: bool):
@@ -51,7 +51,7 @@ async def _reboot(device: Device):
 
     client = OpenHaspClient(device)
     info(f"Rebooting {device.name}...")
-    client.reboot()
+    await client.reboot()
 
 
 async def _cmd(device: Device, command: str, payload: str):
