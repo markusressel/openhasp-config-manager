@@ -49,6 +49,7 @@ class HaspLabelItem(EditableWidget):
         """Processes font, color, icons, and alignment."""
         raw_text = self.text
         if not raw_text:
+            self.text_item.setPlainText("")
             return
 
         pixel_size = self.text_font
@@ -86,6 +87,9 @@ class HaspLabelItem(EditableWidget):
             x_pos = 0
 
         self.text_item.setPos(x_pos, y_pos)
+
+    def _on_data_changed(self):
+        self._setup_text()
 
     def paint(self, painter, option, widget=None):
         """Draws optional backgrounds or borders for the label container."""

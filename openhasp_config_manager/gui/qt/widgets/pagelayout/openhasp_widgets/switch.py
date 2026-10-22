@@ -41,6 +41,9 @@ class HaspSwitchItem(EditableWidget):
 
         self.setPos(self.obj_x, self.obj_y)
 
+    def _on_data_changed(self):
+        self._val = self.val
+
     def paint(self, painter, option, widget=None):
         local_rect = self.obj_rect
 

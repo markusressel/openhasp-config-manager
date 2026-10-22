@@ -340,17 +340,6 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         return None
 
     def _on_property_edited(self, key, value, widget):
-        """Updates the internal data. 'value' can be str (from LineEdit) or int (from SpinBox)."""
-        # Update the underlying dict
-        widget.obj_data[key] = value
-
-        # If position changed, update the QGraphicsObject immediately
-        if key == "x" or key == "y":
-            widget.setPos(float(widget.obj_x), float(widget.obj_y))
-
-        # If size changed (w, h), notify the scene
-        if key in ["w", "h"]:
-            widget.prepareGeometryChange()
-
-        widget.update()
+        """Updates the object and redraws it. 'value' can be str (from LineEdit) or int (from SpinBox)."""
+        widget.set_property(key, value)
         self.propertyChanged.emit(widget, key, value)

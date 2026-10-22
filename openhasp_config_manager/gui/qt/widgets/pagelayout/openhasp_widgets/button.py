@@ -67,6 +67,7 @@ class HaspButtonItem(EditableWidget):
         """Applies Rich Text (HTML) to support both regular fonts and icons."""
         raw_text = str(self.text)
         if not raw_text:
+            self.text_item.setPlainText("")
             return
 
         pixel_size = self.text_font
@@ -95,6 +96,9 @@ class HaspButtonItem(EditableWidget):
             (self.obj_w - t_rect.width()) / 2,
             (self.obj_h - t_rect.height()) / 2,
         )
+
+    def _on_data_changed(self):
+        self._setup_text()
 
     def paint(self, painter, option, widget=None):
         """Draws the button shape in native coordinates."""

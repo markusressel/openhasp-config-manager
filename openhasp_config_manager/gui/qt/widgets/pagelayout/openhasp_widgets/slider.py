@@ -56,6 +56,9 @@ class HaspSliderItem(EditableWidget):
         margin = max(0.0, self.knob_radius - (self.obj_h / 2))
         return QtCore.QRectF(-margin, -margin, self.obj_w + (margin * 2), self.obj_h + (margin * 2))
 
+    def _on_data_changed(self):
+        self._val = self.val
+
     def paint(self, painter, option, widget=None):
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
 

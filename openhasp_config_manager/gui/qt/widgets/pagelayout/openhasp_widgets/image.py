@@ -41,6 +41,11 @@ class HaspImageItem(EditableWidget):
                 QtCore.Qt.TransformationMode.SmoothTransformation,
             )
 
+    def _on_data_changed(self):
+        self.pixmap = None
+        if self.src:
+            self._load_pixmap(self.src)
+
     def paint(self, painter, option, widget=None):
         local_rect = self.obj_rect
 

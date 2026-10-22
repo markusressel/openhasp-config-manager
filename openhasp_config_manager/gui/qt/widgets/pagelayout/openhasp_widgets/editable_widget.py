@@ -41,6 +41,23 @@ class EditableWidget(QGraphicsObject):
         # Initial sync: Move the item to the position defined in the JSON data
         self.setPos(float(self.obj_x), float(self.obj_y))
 
+    def set_property(self, key: str, value):
+        """
+        Change a property of the object and redraw it from its data.
+        """
+        # the bounding rect depends on w and h
+        self.prepareGeometryChange()
+        self.obj_data[key] = value
+        self.setPos(float(self.obj_x), float(self.obj_y))
+        self._on_data_changed()
+        self.update()
+
+    def _on_data_changed(self):
+        """
+        Called after a property changed. Subclasses that derive child items or state from the data
+        (text items, images, values) update them here.
+        """
+
     @property
     def live_x(self) -> int:
         """The current X position in the scene (after user drag)."""
