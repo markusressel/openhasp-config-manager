@@ -102,4 +102,4 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
 - **Lock files**: this is a Poetry project; don't commit a `uv.lock` (`uv run` creates one).
 - **Real plates**: commands that deploy, clear pages or reboot affect physical devices. Do not run them against real plates unless
   the user asks for it.
-- Keep `TODO.md` current: tick items off when you complete them.
+- Keep `TODO.md` current: remove items when you complete them (the git history keeps them), add bugs you find but don't fix.
