@@ -5,10 +5,11 @@ blocks like the haad dashboards (`haad.ui`).
 Containers only compute positions (except `Panel`, which is an openHASP object). Leaves are openHASP objects: mounting a
 page calls the matching `PageController.add_*` method once per leaf, so a leaf has exactly the bindings of an add_* call.
 """
+import asyncio
 import math
 import os
 import sys
-from typing import Any, Awaitable, Callable, Dict, Generic, List, Literal, Optional, Sequence, TypeVar, TYPE_CHECKING
+from typing import Any, Awaitable, Callable, Dict, Generic, Hashable, List, Literal, Optional, Sequence, TypeVar, TYPE_CHECKING
 
 from haad.triggers.resolver import TriggerInput
 from haad.util.composition import Composable
@@ -48,6 +49,8 @@ class LayoutNode(Composable, family=True):
         self.declaration = _declaration_site()
         # set by the layout pass: the node's rectangle, relative to the openHASP object it is placed in (or the screen)
         self.rect: Optional[Rect] = None
+        # whether the node is hidden by a `hidden=Bound(...)`: it takes no space in its parent's flow then
+        self.collapsed = False
 
         page = self.page
         if page is not None and page is not self and page.external:
@@ -90,6 +93,19 @@ class LayoutNode(Composable, family=True):
         """Layout pass: places this node at `rect` and its children inside it."""
         self.rect = rect
 
+    async def set_collapsed(self, collapsed: bool):
+        """
+        Hides or shows the node in the flow of its parent: the layout is computed again without a collapsed node, and the
+        objects that moved or changed their size are updated on the plate. Called when a bound `hidden` changes.
+        """
+        if collapsed == self.collapsed:
+            return
+        self.collapsed = collapsed
+        page = self.page
+        # nothing to move before the first layout pass
+        if page.rect is not None:
+            await page.relayout()
+
 
 class Container(LayoutNode):
     """A node that places its children; it is no object on the plate (except `Panel`)."""
@@ -109,7 +125,7 @@ class Container(LayoutNode):
         for child in self.children:
             if child.at is not None:
                 child._place(child.at.resolve(content.w, content.h).offset(content.x, content.y))
-            else:
+            elif not child.collapsed:
                 flow.append(child)
         for child, child_rect in zip(flow, self._arrange(content, flow)):
             child._place(child_rect)
@@ -186,10 +202,55 @@ class Page(Column):
         super().__init__(padding=padding)
         self.external = external
         self.pin_ids = pin_ids
+        # held while the tree and the objects of the page change at runtime (collapsing, `Repeat`)
+        self.lock = asyncio.Lock()
+        self.controller: Optional["PageController"] = None
 
     def layout(self, width: int, height: int):
         """The layout pass: computes the rectangles of all nodes, for a screen of the given size."""
         self._place(Rect(0, 0, width, height))
+
+    async def relayout(self):
+        """
+        The layout pass again, after a node collapsed or reappeared (`set_collapsed()`): sends the new position and size
+        of every mounted object that changed to the plate, and keeps its rendered JSONL up to date, so a push after a
+        reconnect has the current layout.
+        """
+        async with self.lock:
+            await self.apply_layout()
+
+    async def apply_layout(self):
+        """relayout() for a caller that holds `lock`."""
+        self.layout(self.rect.w, self.rect.h)
+        for node in self.nodes():
+            obj = node._obj if isinstance(node, _Mounted) else None
+            # collapsed nodes keep their old rect
+            if obj is None or obj.rect is None or node.rect == obj.rect:
+                continue
+            changed = {key: getattr(node.rect, key) for key in ("x", "y", "w", "h") if getattr(node.rect, key) != getattr(obj.rect, key)}
+            obj.rect = node.rect
+            obj.jsonl.update(changed)
+            await obj.send_properties(changed)
+
+    async def expand(self):
+        """Builds the items of the page's `Repeat`s, before the first layout pass."""
+        await self.expand_nodes(self.children)
+
+    async def expand_nodes(self, nodes: Sequence["LayoutNode"]):
+        for node in nodes:
+            if isinstance(node, Repeat):
+                await node.reconcile()
+            await self.expand_nodes(node.children)
+
+    async def activate(self):
+        """Starts the `Repeat`s of the page: from now on they follow their sources, see `Repeat`."""
+        await self.activate_nodes(self.children)
+
+    async def activate_nodes(self, nodes: Sequence["LayoutNode"]):
+        for node in nodes:
+            if isinstance(node, Repeat):
+                await node.activate()
+            await self.activate_nodes(node.children)
 
     async def mount(self, page: "PageController"):
         """
@@ -203,24 +264,137 @@ class Page(Column):
                 reason = "Page(external=True)" if self.external else "Page(pin_ids=True)"
                 raise ValueError(f"{reason} needs an obj_id on every leaf, missing on: "
                                  + ", ".join(f"{type(leaf).__name__} ({leaf.declaration})" for leaf in missing))
+        self.controller = page
+        page.layout_root = self
         page.reserve_ids([node.obj_id for node in self.nodes() if isinstance(node, (Leaf, Panel)) and node.obj_id is not None])
         if not self.external and self.rect is None:
             raise ValueError("Page.mount() of an owned page needs a layout() first")
-        await self._mount_children(self, page, parent=None)
+        await self.mount_nodes(self.children, parent=None)
 
-    async def _mount_children(self, node: LayoutNode, page: "PageController", parent: Optional[ObjectController]):
-        for child in node.children:
+    async def mount_nodes(self, nodes: Sequence[LayoutNode], parent: Optional[ObjectController]):
+        """Creates the objects of `nodes` and their subtrees, below the object `parent`."""
+        for child in nodes:
             if isinstance(child, Leaf):
-                await child._mount(page, None if self.external else child.rect, parent)
+                await child._mount(self.controller, None if self.external else child.rect, parent)
             elif isinstance(child, Panel):
-                await child._mount(page, child.rect, parent)
-                await self._mount_children(child, page, child.obj)
+                await child._mount(self.controller, child.rect, parent)
+                await self.mount_nodes(child.children, child.obj)
             else:
-                await self._mount_children(child, page, parent)
+                await self.mount_nodes(child.children, parent)
+
+    async def unmount_nodes(self, nodes: Sequence[LayoutNode]):
+        """Removes the objects of `nodes` and their subtrees from the page and the plate, and stops their `Repeat`s."""
+        subtree = [n for node in nodes for n in [node, *node.nodes()]]
+        objects = [n._obj for n in subtree if isinstance(n, _Mounted) and n._obj is not None]
+        for obj in objects:
+            # the plate deletes the children of an object with it
+            await self.controller.remove_object(obj, delete=not any(obj.parent is o for o in objects))
+        for node in subtree:
+            if isinstance(node, _Mounted):
+                node._obj = None
 
 
 class Spacer(LayoutNode):
     """Takes space in a `Row`/`Column`, and nothing else."""
+
+
+class Repeat(_Linear):
+    """
+    A list that follows a source, like a `LazyColumn` in Jetpack Compose: places the nodes that `item` declares for every
+    value of `source()`, like a `Column` (`direction="column"`) or a `Row`. When `trigger` fires, `source()` is evaluated again
+    and the list is reconciled by `key`:
+
+    - a value with a new key gets its nodes (`item(value)` runs once for it, inside this node), whose objects are created on
+      the plate,
+    - a key that is gone loses its objects (they are deleted on the plate, their reactions cancelled),
+    - the nodes of the other keys keep their objects and only move.
+
+    The content of an item that changes while its key stays has to follow its own source (`Bound`, `get_state`, `entity`).
+    Nodes of the items should have a fixed `size=`, or they share the list's space. Not for `Page(external=True)`.
+    """
+
+    def __init__(self, source: Callable[[], Awaitable[Sequence[Any]]], item: Callable[[Any], Awaitable[None]],
+                 trigger: TriggerInput, key: Callable[[Any], Hashable] = lambda value: value,
+                 direction: Literal["row", "column"] = "column", gap: int = 0, padding: int | Padding = 0, **sizing):
+        super().__init__(gap=gap, padding=padding, **sizing)
+        if direction not in ("row", "column"):
+            raise ValueError(f"Invalid direction: {direction!r}, expected 'row' or 'column'")
+        self._horizontal = direction == "row"
+        self.source = source
+        self.item = item
+        self.trigger = trigger
+        self.key = key
+        # the nodes of every item, by key
+        self._items: Dict[Hashable, List[LayoutNode]] = {}
+        self._reaction = None
+        # whether an update removed this list with its item
+        self._removed = False
+
+    async def reconcile(self) -> tuple[List[LayoutNode], List[LayoutNode]]:
+        """
+        Builds the tree to the source's current values, in their order.
+        :return: the nodes that were removed and the nodes that were added
+        """
+        values = list(await self.source())
+        keys = [self.key(value) for value in values]
+        if len(set(keys)) != len(keys):
+            raise ValueError(f"Repeat ({self.declaration}): the keys of its values are not unique: {keys}")
+        removed = [node for key in list(self._items) if key not in keys for node in self._items.pop(key)]
+        for node in removed:
+            self.children.remove(node)
+            # a running update of a nested list is waiting for the page's lock: it must not touch the removed nodes
+            for lists in [node, *node.nodes()]:
+                if isinstance(lists, Repeat):
+                    lists._removed = True
+        added = []
+        for value, key in zip(values, keys):
+            if key not in self._items:
+                start = len(self.children)
+                with self:
+                    await self.item(value)
+                self._items[key] = self.children[start:]
+                added.extend(self._items[key])
+        self.children[:] = [node for key in keys for node in self._items[key]]
+        return removed, added
+
+    async def activate(self):
+        """Follows the source from now on."""
+        self._reaction = await self.page.controller.controller.react_to(trigger=self.trigger, action=self.update, immediately=True)
+
+    async def deactivate(self):
+        await self.page.controller.controller.cancel_reaction(self._reaction)
+        self._reaction = None
+
+    async def update(self):
+        """Reconciles the list with the source, on the plate."""
+        page = self.page
+        async with page.lock:
+            if self._removed:
+                return
+            removed, added = await self.reconcile()
+            await page.unmount_nodes(removed)
+            await page.expand_nodes(added)
+            await page.apply_layout()
+            if added:
+                await page.mount_nodes(added, self._parent_object())
+                objects = [n._obj for top in added for n in [top, *top.nodes()] if isinstance(n, _Mounted) and n._obj is not None]
+                await page.controller.push_objects(objects)
+            elif removed:
+                page.controller.plate.render_layout(page.controller)
+        # outside of the lock: cancelling a nested list waits for its running update, which needs the lock, and the new
+        # nested lists update right away
+        for lists in [n for top in removed for n in [top, *top.nodes()] if isinstance(n, Repeat)]:
+            await lists.deactivate()
+        await page.activate_nodes(added)
+
+    def _parent_object(self) -> Optional[ObjectController]:
+        """The object this list's nodes are placed in: the one of the closest panel above it."""
+        node = self.parent
+        while node is not None:
+            if isinstance(node, Panel):
+                return node.obj
+            node = node.parent
+        return None
 
 
 class _Mounted(Generic[T]):
@@ -239,6 +413,7 @@ class _Mounted(Generic[T]):
 
     def _mounted(self, obj: T) -> T:
         obj.declaration = f"{self.declaration} {type(self).__name__}"
+        obj.layout_node = self
         self._obj = obj
         return obj
 

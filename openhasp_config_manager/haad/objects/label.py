@@ -76,14 +76,14 @@ class LabelObjectController(ObjectController):
         if self._entity_ids is not None:
             if self._attribute is not None:
                 for entity_id in self._entity_ids:
-                    await self.controller.react_to(
+                    await self.react_to(
                         trigger=EntityTrigger(entities=entity_id, attribute=self._attribute),
                         action=self._on_state_changed,
                         immediately=True,
                     )
             else:
                 for entity_id in self._entity_ids:
-                    await self.controller.react_to(
+                    await self.react_to(
                         trigger=EntityTrigger(entities=entity_id),
                         action=self._on_state_changed,
                         immediately=True,

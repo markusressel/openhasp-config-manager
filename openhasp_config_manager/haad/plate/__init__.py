@@ -208,6 +208,7 @@ class PlateController:
         """build_layout() and its mount, then register_objects()."""
         layout = await page.build_layout()
         if layout is not None:
+            await layout.expand()
             if not layout.external:
                 layout.layout(self.screen.width, self.screen.height)
             await layout.mount(page)

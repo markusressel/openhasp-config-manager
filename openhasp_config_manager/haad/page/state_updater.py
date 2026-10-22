@@ -63,6 +63,10 @@ class StateUpdater:
             "set": update_obj,
         }
 
+    def unregister(self, name: str):
+        """Removes an entry, e.g. of an object that was removed from its page."""
+        self._registered_objects.pop(name, None)
+
     def clear(self):
         self.controller.logger.info("StateUpdater: Clearing registry.")
         self._registered_objects = {}

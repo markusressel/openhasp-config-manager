@@ -4,9 +4,10 @@ from datetime import timedelta
 
 import pytest
 
-from openhasp_config_manager.haad.layout.components import Column, Label, Page, Row, Switch
+from openhasp_config_manager.haad.layout.components import Button, Column, Label, Page, Panel, Repeat, Row, Switch
 from openhasp_config_manager.haad.layout.geometry import Rect
 from openhasp_config_manager.haad.layout.theme import Theme
+from openhasp_config_manager.haad.objects.bound import Bound
 from openhasp_config_manager.haad.page import PageController
 from openhasp_config_manager.haad.plate import GuiDefaults, PlateConfig, Screen
 from tests.haad.conftest import PlateUnderTest, page_at
@@ -197,3 +198,200 @@ async def test_large_pages_are_pushed_in_batches(start_plate, plate: FakePlate, 
     assert len(payloads) > 1
     assert all(len(p.encode()) <= 1920 for p in payloads)
     assert sum(p.count("\n") + 1 for p in payloads) == count + 1
+
+
+class ListPage(PageController):
+    async def build_layout(self) -> Page:
+        with Page() as page:
+            with Column(gap=10):
+                for entity in ["sensor.a", "sensor.b", "sensor.c"]:
+                    Label(entity=entity, size=40, hidden=Bound(entity, lambda state: 1 if state is None else 0))
+        return page
+
+
+async def test_hidden_nodes_take_no_space_in_their_column(simulator, start_plate, plate: FakePlate):
+    await simulator.ha.trigger_state_change("sensor.c", "1")
+    controller = await start_plate(OwnedPlate, pages=[page_at(1, ListPage)])
+    plate.clear()
+
+    # c is the only one shown: it moved to the top (a and b keep the rect they had when they were hidden)
+    ys = {o.obj_id: o.rect.y for o in controller.plate_controller.pages[1].objects.values() if o.obj_id}
+    assert ys == {1: 0, 2: 0, 3: 0}
+    assert controller.plate_controller.rendered[1][3]["y"] == 0
+
+    await simulator.ha.trigger_state_change("sensor.a", "1")
+    await plate.settle()
+
+    ys = {o.obj_id: o.rect.y for o in controller.plate_controller.pages[1].objects.values() if o.obj_id}
+    assert ys == {1: 0, 2: 0, 3: 50}
+    assert "p1b3.y=50" in plate.commands
+    assert [r["y"] for r in controller.plate_controller.rendered[1][1:]] == [0, 0, 50]
+
+
+async def test_collapsing_before_the_first_layout_pass_changes_nothing_on_the_plate():
+    with Page() as page:
+        label = Label(size=40)
+    await label.set_collapsed(True)
+    await label.set_collapsed(True)
+
+    assert label.collapsed and label.rect is None
+
+
+async def _noop():
+    pass
+
+
+def _repeat_page(items: list, direction="column", panel=False):
+    """A page with a list of labels (or panels with a label), one per value of `items`; `sensor.entry_<value>` is shown."""
+
+    class RepeatPage(PageController):
+        async def build_layout(self) -> Page:
+            async def source():
+                return list(items)
+
+            async def item(value):
+                if panel:
+                    with Panel(size=40):
+                        Label(entity=f"sensor.{value}")
+                        Button(text=value, on_click=_noop)
+                else:
+                    Label(entity=f"sensor.{value}", size=40)
+
+            with Page() as page:
+                Repeat(source, item, trigger="sensor.trigger", direction=direction, gap=10)
+            return page
+
+    return RepeatPage
+
+
+def _commands(plate: FakePlate):
+    """The plain commands (`p1b2.y=0`, `p1b1.delete`) sent to the plate, without the JSONL."""
+    return [c.removesuffix(" None") for c in plate.commands if not c.startswith("jsonl")]
+
+
+async def test_repeat_follows_its_source(simulator, start_plate, plate: FakePlate):
+    items = ["a", "b"]
+    for name in "abc":
+        await simulator.ha.trigger_state_change(f"sensor.{name}", name)
+    controller = await start_plate(OwnedPlate, pages=[page_at(1, _repeat_page(items))])
+    page = controller.plate_controller.pages[1]
+    # the initial items are part of the pushed page
+    assert [(o["id"], o["y"]) for o in controller.plate_controller.rendered[1][1:]] == [(1, 0), (2, 50)]
+    plate.clear()
+
+    # a is gone, c is new: c takes the freed id, b moves up
+    items[:] = ["b", "c"]
+    await simulator.ha.trigger_state_change("sensor.trigger", "1")
+    await plate.settle()
+
+    assert sorted(page.objects) == [1, 2]
+    assert [(o["id"], o["y"]) for o in controller.plate_controller.rendered[1][1:]] == [(2, 0), (1, 50)]
+    commands = _commands(plate)
+    assert commands[:2] == ["p1b1.delete", "p1b2.y=0"]
+    new_object = [json.loads(m[1]) for m in plate.mqtt if m[0].endswith("/jsonl")]
+    assert [(o["id"], o["y"]) for o in new_object] == [(1, 50)]
+    # c is bound: its text arrived
+    assert "p1b1.text=c" in commands
+
+    # the page pushed after a reconnect has the current items
+    plate.clear()
+    await plate.send("LWT", "online")
+    await simulator.advance(timedelta(seconds=1))
+    await plate.settle()
+    pushed = json.loads("[" + ",".join(m[1].replace("\n", ",") for m in plate.mqtt if m[0].endswith("/jsonl")) + "]")
+    assert [(o["id"], o["y"]) for o in pushed[1:]] == [(2, 0), (1, 50)]
+
+
+async def test_removed_items_stop_following_their_entities(simulator, start_plate, plate: FakePlate):
+    items = ["a", "b"]
+    await simulator.ha.trigger_state_change("sensor.a", "1")
+    await simulator.ha.trigger_state_change("sensor.b", "1")
+    await start_plate(OwnedPlate, pages=[page_at(1, _repeat_page(items, panel=True))])
+
+    items[:] = ["b"]
+    await simulator.ha.trigger_state_change("sensor.trigger", "1")
+    await plate.settle()
+    commands = _commands(plate)
+    # only the panel is deleted: the plate deletes its label with it
+    assert [c for c in commands if c.endswith(".delete")] == ["p1b1.delete"]
+
+    plate.clear()
+    await simulator.ha.trigger_state_change("sensor.a", "2")
+    await simulator.ha.trigger_state_change("sensor.b", "2")
+    await plate.settle()
+    assert _commands(plate) == ["p1b5.text=2"]
+
+
+async def test_repeat_in_a_row_and_a_reordered_list(simulator, start_plate, plate: FakePlate):
+    items = ["a", "b"]
+    controller = await start_plate(OwnedPlate, pages=[page_at(1, _repeat_page(items, direction="row"))])
+    plate.clear()
+
+    items[:] = ["b", "a"]
+    await simulator.ha.trigger_state_change("sensor.trigger", "1")
+    await plate.settle()
+
+    # nothing was created or deleted, the objects swapped places
+    assert sorted(_commands(plate)) == ["p1b1.x=50", "p1b2.x=0"]
+
+
+async def test_repeat_rejects_duplicate_keys_and_unknown_directions():
+    async def source():
+        return ["a", "a"]
+
+    async def item(value):
+        Label()
+
+    with Page():
+        repeat = Repeat(source, item, trigger="sensor.trigger")
+        with pytest.raises(ValueError, match="Invalid direction"):
+            Repeat(source, item, trigger="sensor.trigger", direction="diagonal")
+
+    with pytest.raises(ValueError, match="not unique"):
+        await repeat.reconcile()
+
+
+async def test_nested_repeats_are_removed_with_their_item(simulator, start_plate, plate: FakePlate):
+    outer = ["a", "b"]
+    extra = {}
+
+    class NestedPage(PageController):
+        async def build_layout(self) -> Page:
+            async def inner_item(value):
+                Label(text=value, size=20)
+
+            async def outer_item(value):
+                async def inner_source():
+                    return [f"{value}1", f"{value}2", *extra.get(value, [])]
+
+                with Panel(size=60):
+                    Repeat(inner_source, inner_item, trigger="sensor.trigger")
+
+            async def outer_source():
+                return list(outer)
+
+            with Page() as page:
+                Repeat(outer_source, outer_item, trigger="sensor.trigger")
+            return page
+
+    controller = await start_plate(OwnedPlate, pages=[page_at(1, NestedPage)])
+    page = controller.plate_controller.pages[1]
+    assert len(page.objects) == 6
+
+    plate.clear()
+    outer[:] = ["b", "c"]
+    await simulator.ha.trigger_state_change("sensor.trigger", "1")
+    await plate.settle()
+
+    assert len(page.objects) == 6
+    pushed = [json.loads(line) for m in plate.mqtt if m[0].endswith("/jsonl") for line in m[1].split("\n")]
+    assert [o["text"] for o in pushed if "text" in o] == ["c1", "c2"]
+
+    # an item added to a list inside of an item is created inside of that item's panel
+    plate.clear()
+    extra["b"] = ["b3"]
+    await simulator.ha.trigger_state_change("sensor.trigger", "2")
+    await plate.settle()
+
+    pushed = [json.loads(line) for m in plate.mqtt if m[0].endswith("/jsonl") for line in m[1].split("\n")]
+    assert [(o["text"], o["parentid"]) for o in pushed] == [("b3", 4)]

@@ -83,7 +83,7 @@ class SwitchObjectController(ObjectController):
         )
 
         if self._entity_id is not None:
-            await self.controller.react_to(
+            await self.react_to(
                 trigger=self._entity_id,
                 action=self.__state_update_callback,
                 immediately=True,

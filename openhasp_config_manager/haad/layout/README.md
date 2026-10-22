@@ -284,6 +284,29 @@ Binding the object registers one `react_to(immediately=True)` and one `StateUpda
 `Bound` on a time trigger without `get_state` raises (there is no entity state to convert). The pushed JSONL leaves bound properties out;
 the first sync sets them.
 
+**Lists:** a node of an owned page with a bound `hidden` takes no space in its `Row`/`Column`/`Grid` while it is hidden (a truthy value
+other than `"0"`). When it changes, the layout pass runs again without the hidden nodes, and only the `x`/`y`/`w`/`h` of the objects that
+moved or changed their size are sent; the rendered JSONL is updated too, so a push after a reconnect has the current positions. Objects are
+never added or removed at runtime. Give the items of such a list a fixed `size=`: with weights the shown ones grow into the hidden
+ones' space. A hidden node keeps the rectangle it had before.
+
+**Dynamic lists (`Repeat`):** like a `LazyColumn` in Jetpack Compose, `Repeat(source, item, trigger=, key=)` places the nodes that
+`item(value)` declares for every value of `source()`, and reconciles them by `key` whenever `trigger` fires:
+
+```python
+Repeat(self._alerts, self._card, trigger=[humidity, co2, EVERY_10_SECONDS], key=lambda alert: alert.key, gap=8)
+```
+
+- A new key: `item(value)` runs once, inside the `Repeat`; its objects are rendered and sent to the plate as single JSONL objects (no
+  `clearpage`), then initialized and bound like the objects of the first push.
+- A key that is gone: its objects are unbound (reactions, event listeners, `StateUpdater` entries) and deleted on the plate (`pXbY.delete`,
+  which deletes the children of an object as well), and their ids are free again.
+- The other keys keep their objects; only those that moved or changed size get `x`/`y`/`w`/`h`.
+- `item(value)` runs once per key: what changes for a key has to follow its own source (`Bound`, `get_state`, `entity`).
+- `PageController.objects` and the plate's rendered JSONL are kept current, so a re-push after a reconnect has the current items.
+- The initial items are built before the first layout pass, so they are part of the first push.
+- Lists can be nested (a `Repeat` inside the item of another). Give the items a fixed `size=`, or they share the list's space.
+
 ### 4.5 Style: `Theme` and props
 
 ```python

@@ -116,9 +116,13 @@ Each one is pinned by a test in `tests/haad/` (named in brackets).
     overrides `plate_config` without a theme; it has no code-defined pages.
 36. **(Partly done.) The alerts are fixed when the page is built** (once per haad process): the tree has one card per alert.
     Now each card follows a source (`Bound` colours, icon and text from `get_state`, `hidden` while there is no alert), e.g. the
-    front door card only shows while the door is open. A hidden card keeps its space, so conditional cards go last. Live alerts need either
-    a fixed number of slots whose text, colours and `hidden` follow a source (`Bound` with `get_state` on a trigger), or rebuilding
-    and re-pushing a page at runtime (a non-goal so far: §2, "no partial layout updates"). Where should the alerts come from?
+    front door card only shows while the door is open. A node with a bound `hidden` takes no space in its `Row`/`Column`/`Grid`
+    while hidden (`LayoutNode.set_collapsed()`): the layout is computed again and only the `x`/`y`/`w`/`h` of the objects that moved
+    are sent, so a column of conditional cards is a list from the top. This is no general partial layout update: objects are
+    never added or removed at runtime. Give cards in such a column a fixed `size=`: with weights, the shown ones grow into the
+    space of the hidden ones. Where should the alerts come from?
+    Since then: `Repeat` (README §4.4.1) creates and deletes the cards at runtime, one per current alert. Not verified on a real plate yet:
+    that `delete` removes the children of an object, and that a single JSONL object can be added to a page that is shown.
 37. **Clock in the header**: `MarkusCodePageController` binds `TIME_ENTITY` like `register_header_clock()` does on the flash pages.
 38. **Vertical centring of card text**: labels only align horizontally, so a card centres a label of one line between spacers.
     28 px was too low for `text_font=24` (the font's line height includes the merged MDI icons): the text overflowed, so "dots" cut

@@ -6,6 +6,7 @@ from haad.controller import HaadController
 from haad.hass.entity import HAEntity
 from haad.triggers.resolver import TriggerInput
 from openhasp_config_manager.haad.layout.geometry import Rect
+from openhasp_config_manager.haad.layout.render import batch_lines
 from openhasp_config_manager.haad.objects import ObjectController
 from openhasp_config_manager.haad.objects.bound import Bound
 from openhasp_config_manager.haad.objects.button import ButtonObjectController, SceneButtonObjectController
@@ -68,6 +69,8 @@ class PageController:
         self.objects: Dict[int, ObjectController] = {}
         # ids that are taken by explicit obj_ids of the page's layout tree, before its objects are added
         self._reserved_ids: set[int] = set()
+        # the page's component tree, set by Page.mount()
+        self.layout_root: Optional["Page"] = None
 
     async def build_layout(self) -> Optional["Page"]:
         """
@@ -83,9 +86,35 @@ class PageController:
         """
 
     async def initialize_objects(self):
-        for ob in self.objects.values():
+        for ob in list(self.objects.values()):
             await ob.init()
             await ob.bind()
+        if self.layout_root is not None:
+            await self.layout_root.activate()
+
+    async def push_objects(self, objects: Sequence[ObjectController]):
+        """
+        Adds objects to the page that is live on the plate already (see `Repeat`): renders the page again, sends only these
+        objects, and initializes and binds them. The plate's cleared-and-pushed copy of the page includes them from now on.
+        """
+        self.plate.render_layout(self)
+        for payload in batch_lines([o.jsonl for o in objects]):
+            await self.client.jsonl(payload)
+        for obj in objects:
+            obj.live = True
+        for obj in objects:
+            await obj.init()
+            await obj.bind()
+
+    async def remove_object(self, obj: ObjectController, delete: bool = True):
+        """
+        Removes an object from the page: cancels its reactions and listeners, and deletes it (and its children) on the plate.
+        :param delete: whether to delete the object on the plate; False for the children of an object that was deleted
+        """
+        await obj.unbind()
+        del self.objects[obj.obj_id]
+        if delete:
+            await self.client.delete_object_id(self.index, obj.obj_id)
 
     @property
     def owned(self) -> bool:

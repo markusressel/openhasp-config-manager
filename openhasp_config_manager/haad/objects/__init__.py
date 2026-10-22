@@ -51,6 +51,8 @@ class ObjectController:
         self.rect: Optional[Rect] = None
         self.props: Mapping[str, Any] = {}
         self.parent: Optional["ObjectController"] = None
+        # the layout node this object was mounted from, if any: a bound `hidden` collapses it
+        self.layout_node = None
         self.trigger: Optional[TriggerInput] = None
         # where the object was declared, for the layout dumps
         self.declaration: Optional[str] = None
@@ -59,6 +61,9 @@ class ObjectController:
         # whether the object exists on the plate: external objects always, owned ones once their page was pushed
         self.live = False
         self._sync_names: List[str] = []
+        # what bind() and init() registered, for unbind()
+        self._reactions: List[Any] = []
+        self._listeners: List[Any] = []
 
     @property
     def obj_type(self) -> str:
@@ -92,6 +97,24 @@ class ObjectController:
     def bound_props(self) -> Dict[str, Bound]:
         return {k: v for k, v in self.props.items() if isinstance(v, Bound)}
 
+    async def react_to(self, **kwargs):
+        """`HaadController.react_to()`, remembering the reaction so unbind() can cancel it."""
+        handle = await self.controller.react_to(**kwargs)
+        self._reactions.append(handle)
+        return handle
+
+    async def unbind(self):
+        """Cancels everything init() and bind() registered: reactions, event listeners and StateUpdater entries."""
+        reactions, self._reactions = self._reactions, []
+        for handle in reactions:
+            await self.controller.cancel_reaction(handle)
+        listeners, self._listeners = self._listeners, []
+        for listener in listeners:
+            listener.cancel()
+        names, self._sync_names = self._sync_names, []
+        for name in names:
+            self.state_updater.unregister(name)
+
     def register_state(self, name: str, get_state: Callable[[], Awaitable[Any]], update_obj: Callable[[Any], Awaitable[None]]):
         """Registers a StateUpdater entry of this object, see refresh()."""
         self.state_updater.register(name=name, get_state=get_state, update_obj=update_obj)
@@ -108,7 +131,7 @@ class ObjectController:
         external objects (set now and on every sync; owned objects get them with the pushed JSONL), and bound properties.
         """
         if self.trigger is not None:
-            await self.controller.react_to(trigger=self.trigger, action=self.refresh)
+            await self.react_to(trigger=self.trigger, action=self.refresh)
 
         static_props = self.static_props
         if static_props and not self.owned:
@@ -136,13 +159,15 @@ class ObjectController:
             if bound.convert is not None:
                 value = bound.convert(value)
             await self.set_object_properties(properties={key: value})
+            if key == "hidden" and self.layout_node is not None:
+                await self.layout_node.set_collapsed(value not in (None, 0, False, "0", ""))
 
         self.register_state(name=name, get_state=_get_value, update_obj=_set_value)
 
         async def _on_trigger():
             await self.state_updater.sync(name)
 
-        await self.controller.react_to(trigger=bound.entity_id or bound.trigger, action=_on_trigger, immediately=True)
+        await self.react_to(trigger=bound.entity_id or bound.trigger, action=_on_trigger, immediately=True)
 
     def clear_cache(self):
         """
@@ -211,9 +236,11 @@ class ObjectController:
         """
         from openhasp_config_manager.haad import util_openhasp
 
-        return await util_openhasp.listen_state(
+        listener = await util_openhasp.listen_state(
             controller=self.controller,
             client=self.client,
             obj=self.object_id,
             callback=callback,
         )
+        self._listeners.append(listener)
+        return listener

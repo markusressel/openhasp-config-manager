@@ -73,7 +73,7 @@ class BarObjectController(ObjectController):
         await self.state_updater.sync(progress_sync_name)
 
         if self._entity_id is not None:
-            await self.controller.react_to(
+            await self.react_to(
                 trigger=self._entity_id,
                 action=self.__on_state_changed,
                 immediately=True,
