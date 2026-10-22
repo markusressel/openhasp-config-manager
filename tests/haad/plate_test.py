@@ -8,6 +8,7 @@ from openhasp_config_manager.haad.plate import PlateConfig, PlateController, Scr
 from tests.haad.conftest import PlateUnderTest, page_at
 from tests.haad.fakes import FakePlate, Http
 
+
 @pytest.fixture
 def plate_controller(page: PageController) -> PlateController:
     return page.plate
@@ -22,7 +23,8 @@ async def test_keep_awake_applies_the_always_on_config_or_the_gui_defaults(simul
 
     await plate_controller.set_keep_awake(True)
     assert [m if isinstance(m, Http) else f"{m.topic.rsplit('/', 1)[1]} {m.payload}" for m in plate.traffic] == [
-        Http("POST", "config", {"idle1": 15, "idle2": 0, "save": "gui"}), "idle short",
+        Http("POST", "config", {"idle1": 15, "idle2": 0, "save": "gui"}),
+        "idle short",
     ]
     assert _gui_config_publishes(simulator) == []
     plate.clear()
@@ -30,9 +32,12 @@ async def test_keep_awake_applies_the_always_on_config_or_the_gui_defaults(simul
     # back to the device's gui defaults, over MQTT (through Home Assistant, to the plate's *controller* name) and HTTP
     await plate_controller.set_keep_awake(False)
     assert [m if isinstance(m, Http) else f"{m.topic.rsplit('/', 1)[1]} {m.payload}" for m in plate.traffic] == [
-        Http("POST", "config", {"idle1": 60, "idle2": 120, "save": "gui"}), "idle off",
+        Http("POST", "config", {"idle1": 60, "idle2": 120, "save": "gui"}),
+        "idle off",
     ]
-    assert _gui_config_publishes(simulator) == [{"topic": "hasp/test_device/config/gui", "payload": '{"idle1": 60, "idle2": 120}'}]
+    assert _gui_config_publishes(simulator) == [
+        {"topic": "hasp/test_device/config/gui", "payload": '{"idle1": 60, "idle2": 120}'}
+    ]
 
 
 async def test_pages(plate_controller, page: PageController):
@@ -163,4 +168,3 @@ async def test_listen_openhasp_event(plate_controller, plate: FakePlate):
     await plate.send("custom", "x")
 
     assert events == [("hasp/mqtt_name/custom", b"x")]
-

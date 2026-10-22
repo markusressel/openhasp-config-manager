@@ -17,27 +17,29 @@ _server_lock = asyncio.Lock()
 
 import socket
 
+
 def get_local_ip() -> str:
     """
     Dynamically determines the host's primary outbound local IP address.
-    
+
     This works by creating a UDP socket and connecting to a dummy external IP.
     It doesn't actually send any packets; instead, it asks the OS networking stack:
-    'If I were to send a packet out to the local subnet/internet, which local IP 
+    'If I were to send a packet out to the local subnet/internet, which local IP
     interface would the routing table choose?'
-    
-    This reliably ignores Docker bridges, loopbacks, and virtual interfaces, 
+
+    This reliably ignores Docker bridges, loopbacks, and virtual interfaces,
     and accurately grabs the primary LAN IP.
     """
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
-        s.connect(('10.255.255.255', 1))
+        s.connect(("10.255.255.255", 1))
         ip = s.getsockname()[0]
     except Exception:
-        ip = '127.0.0.1'
+        ip = "127.0.0.1"
     finally:
         s.close()
     return ip
+
 
 class ImageObjectController(ObjectController):
     """
@@ -66,12 +68,12 @@ class ImageObjectController(ObjectController):
         """
         try:
             ip = OPENHASP_IMAGE_HOST or get_local_ip()
-            
+
             async with _server_lock:
                 if not _global_image_server._is_running:
                     _global_image_server.access_host = ip
                     await _global_image_server.start()
-                
+
             plate_id = self.client._device.name
             async with plate_locks[plate_id]:
                 await self.client.set_image(

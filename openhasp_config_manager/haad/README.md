@@ -35,19 +35,19 @@ from openhasp_config_manager.haad.page import PageController
 
 
 class MyPlatePage(PageController):
-  """Example of a custom page controller. You can create multiple pages and switch between them as needed."""
+    """Example of a custom page controller. You can create multiple pages and switch between them as needed."""
 
-  async def register_objects(self):
-    await super().register_objects()
+    async def register_objects(self):
+        await super().register_objects()
 
-    async def __callback(topic: str, payload: Dict):
-      await self.plate.reboot()
+        async def __callback(topic: str, payload: Dict):
+            await self.plate.reboot()
 
-      # Example "Reboot" Button
-      await self.add_button(
-        obj_id=50,
-        on_click=__callback,
-      )
+            # Example "Reboot" Button
+            await self.add_button(
+                obj_id=50,
+                on_click=__callback,
+            )
 ```
 
 #### 2. Register the Page in your Controller
@@ -61,15 +61,14 @@ from openhasp_config_manager.haad.controller import OpenHaspController
 
 
 class MyPlateController(OpenHaspController):
+    async def setup_plate(self):
+        """Logic to run when the plate comes online."""
 
-  async def setup_plate(self):
-    """Logic to run when the plate comes online."""
+        # Initialize and add your custom page (index 1)
+        main_page = MyPlatePage(app=self, index=1)
+        self.add_page(main_page)
 
-    # Initialize and add your custom page (index 1)
-    main_page = MyPlatePage(app=self, index=1)
-    self.add_page(main_page)
-
-    self.logger.info(f"Plate {self._name} UI initialized with custom page logic.")
+        self.logger.info(f"Plate {self._name} UI initialized with custom page logic.")
 ```
 
 ### Key Workflow

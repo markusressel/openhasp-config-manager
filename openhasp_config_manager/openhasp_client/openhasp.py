@@ -98,7 +98,7 @@ class OpenHaspClient:
         os.close(fd)
 
         try:
-            with open(temp_path, 'wb') as f:
+            with open(temp_path, "wb") as f:
                 await self._image_processor.image_to_rgb565(
                     in_image=image,
                     out_image=f,
@@ -110,13 +110,13 @@ class OpenHaspClient:
                 # Persistent mode
                 future = asyncio.Future()
                 access_url = image_server.register_image(temp_path, delete_on_serve=True, future=future)
-                
+
                 # set the object properties to point to the image url, the plate will download the image immediately
                 await self.set_object_properties(
                     obj=obj,
                     properties={"src": access_url},
                 )
-                
+
                 try:
                     await asyncio.wait_for(future, timeout)
                 except asyncio.TimeoutError:
@@ -124,22 +124,19 @@ class OpenHaspClient:
             else:
                 # Legacy / CLI mode: Create a temporary server
                 server = ImageServer(
-                    listen_host=listen_host,
-                    listen_port=listen_port,
-                    access_host=access_host,
-                    access_port=access_port
+                    listen_host=listen_host, listen_port=listen_port, access_host=access_host, access_port=access_port
                 )
                 await server.start()
-                
+
                 future = asyncio.Future()
                 access_url = server.register_image(temp_path, delete_on_serve=True, future=future)
-                
+
                 # set the object properties to point to the image url, the plate will download the image immediately
                 await self.set_object_properties(
                     obj=obj,
                     properties={"src": access_url},
                 )
-                
+
                 try:
                     await asyncio.wait_for(future, timeout)
                 except asyncio.TimeoutError:

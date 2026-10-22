@@ -43,7 +43,9 @@ async def test_button_property_setters(page: PageController, plate: FakePlate):
     ]
 
 
-async def test_scene_button_click_fails_and_drops_the_mqtt_connection(simulator, page: PageController, plate: FakePlate, caplog):
+async def test_scene_button_click_fails_and_drops_the_mqtt_connection(
+    simulator, page: PageController, plate: FakePlate, caplog
+):
     """
     HaadController has no call_service(): the click raises inside the MQTT message handler, which ends the client's MQTT
     connection (MqttClient reconnects after 5 seconds). No scene is activated.

@@ -36,6 +36,7 @@ class ScreenState:
 @dataclass(frozen=True)
 class Screen:
     """The size of a plate's screen in pixels, as the pages see it (i.e. after rotation)."""
+
     width: int
     height: int
 
@@ -43,6 +44,7 @@ class Screen:
 @dataclass(frozen=True)
 class GuiDefaults:
     """The plate's idle timeouts, restored when no page claims the screen to stay on."""
+
     idle1: int  # seconds until "short" idle
     idle2: int  # seconds until "long" idle
 

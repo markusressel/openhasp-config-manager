@@ -5,6 +5,7 @@ blocks like the haad dashboards (`haad.ui`).
 Containers only compute positions (except `Panel`, which is an openHASP object). Leaves are openHASP objects: mounting a
 page calls the matching `PageController.add_*` method once per leaf, so a leaf has exactly the bindings of an add_* call.
 """
+
 import asyncio
 import math
 import os
@@ -57,7 +58,9 @@ class LayoutNode(Composable, family=True):
             if isinstance(self, (Container, Spacer)):
                 raise ValueError(f"{type(self).__name__} in Page(external=True): the layout is on the plate's flash")
             if size is not None or weight is not None or at is not None:
-                raise ValueError(f"{type(self).__name__}: size=, weight= and at= in Page(external=True): the layout is on the plate's flash")
+                raise ValueError(
+                    f"{type(self).__name__}: size=, weight= and at= in Page(external=True): the layout is on the plate's flash"
+                )
 
     @property
     def page(self) -> Optional["Page"]:
@@ -144,17 +147,21 @@ class _Linear(Container):
     def _arrange(self, content: Rect, children: Sequence[LayoutNode]) -> List[Rect]:
         sizes = [child.main_axis_size for child in children]
         if self._horizontal:
-            return [Rect(content.x + offset, content.y, length, content.h) for offset, length in split(content.w, sizes, self.gap)]
+            return [
+                Rect(content.x + offset, content.y, length, content.h) for offset, length in split(content.w, sizes, self.gap)
+            ]
         return [Rect(content.x, content.y + offset, content.w, length) for offset, length in split(content.h, sizes, self.gap)]
 
 
 class Column(_Linear):
     """Places its children top to bottom."""
+
     _horizontal = False
 
 
 class Row(_Linear):
     """Places its children left to right."""
+
     _horizontal = True
 
 
@@ -176,7 +183,7 @@ class Grid(Container):
             return []
         rows = math.ceil(len(children) / self.columns)
         cells = [cell for row in content.grid(rows, self.columns, self.gap) for cell in row]
-        return cells[:len(children)]
+        return cells[: len(children)]
 
 
 class Stack(Container):
@@ -227,7 +234,11 @@ class Page(Column):
             # collapsed nodes keep their old rect
             if obj is None or obj.rect is None or node.rect == obj.rect:
                 continue
-            changed = {key: getattr(node.rect, key) for key in ("x", "y", "w", "h") if getattr(node.rect, key) != getattr(obj.rect, key)}
+            changed = {
+                key: getattr(node.rect, key)
+                for key in ("x", "y", "w", "h")
+                if getattr(node.rect, key) != getattr(obj.rect, key)
+            }
             obj.rect = node.rect
             obj.jsonl.update(changed)
             await obj.send_properties(changed)
@@ -262,8 +273,10 @@ class Page(Column):
             missing = [leaf for leaf in leaves if leaf.obj_id is None]
             if missing:
                 reason = "Page(external=True)" if self.external else "Page(pin_ids=True)"
-                raise ValueError(f"{reason} needs an obj_id on every leaf, missing on: "
-                                 + ", ".join(f"{type(leaf).__name__} ({leaf.declaration})" for leaf in missing))
+                raise ValueError(
+                    f"{reason} needs an obj_id on every leaf, missing on: "
+                    + ", ".join(f"{type(leaf).__name__} ({leaf.declaration})" for leaf in missing)
+                )
         self.controller = page
         page.layout_root = self
         page.reserve_ids([node.obj_id for node in self.nodes() if isinstance(node, (Leaf, Panel)) and node.obj_id is not None])
@@ -313,9 +326,17 @@ class Repeat(_Linear):
     Nodes of the items should have a fixed `size=`, or they share the list's space. Not for `Page(external=True)`.
     """
 
-    def __init__(self, source: Callable[[], Awaitable[Sequence[Any]]], item: Callable[[Any], Awaitable[None]],
-                 trigger: TriggerInput, key: Callable[[Any], Hashable] = lambda value: value,
-                 direction: Literal["row", "column"] = "column", gap: int = 0, padding: int | Padding = 0, **sizing):
+    def __init__(
+        self,
+        source: Callable[[], Awaitable[Sequence[Any]]],
+        item: Callable[[Any], Awaitable[None]],
+        trigger: TriggerInput,
+        key: Callable[[Any], Hashable] = lambda value: value,
+        direction: Literal["row", "column"] = "column",
+        gap: int = 0,
+        padding: int | Padding = 0,
+        **sizing,
+    ):
         super().__init__(gap=gap, padding=padding, **sizing)
         if direction not in ("row", "column"):
             raise ValueError(f"Invalid direction: {direction!r}, expected 'row' or 'column'")
@@ -359,7 +380,9 @@ class Repeat(_Linear):
 
     async def activate(self):
         """Follows the source from now on."""
-        self._reaction = await self.page.controller.controller.react_to(trigger=self.trigger, action=self.update, immediately=True)
+        self._reaction = await self.page.controller.controller.react_to(
+            trigger=self.trigger, action=self.update, immediately=True
+        )
 
     async def deactivate(self):
         await self.page.controller.controller.cancel_reaction(self._reaction)
@@ -377,7 +400,9 @@ class Repeat(_Linear):
             await page.apply_layout()
             if added:
                 await page.mount_nodes(added, self._parent_object())
-                objects = [n._obj for top in added for n in [top, *top.nodes()] if isinstance(n, _Mounted) and n._obj is not None]
+                objects = [
+                    n._obj for top in added for n in [top, *top.nodes()] if isinstance(n, _Mounted) and n._obj is not None
+                ]
                 await page.controller.push_objects(objects)
             elif removed:
                 page.controller.plate.render_layout(page.controller)
@@ -408,7 +433,9 @@ class _Mounted(Generic[T]):
     def obj(self) -> T:
         """The object controller this node was mounted as (available from register_objects() on)."""
         if self._obj is None:
-            raise RuntimeError(f"{type(self).__name__} ({self.declaration}) is not mounted yet: use .obj from register_objects() on")
+            raise RuntimeError(
+                f"{type(self).__name__} ({self.declaration}) is not mounted yet: use .obj from register_objects() on"
+            )
         return self._obj
 
     def _mounted(self, obj: T) -> T:
@@ -424,9 +451,17 @@ class Panel(_Linear, _Mounted[GenericObjectController]):
     background, border, radius, ...): its children are created with `parentid` and positions relative to it.
     """
 
-    def __init__(self, gap: int = 0, padding: int | Padding = 0, direction: Literal["row", "column"] = "column",
-                 obj_id: Optional[int] = None, size: Optional[Length] = None, weight: Optional[float] = None,
-                 at: Optional[Rect] = None, **props):
+    def __init__(
+        self,
+        gap: int = 0,
+        padding: int | Padding = 0,
+        direction: Literal["row", "column"] = "column",
+        obj_id: Optional[int] = None,
+        size: Optional[Length] = None,
+        weight: Optional[float] = None,
+        at: Optional[Rect] = None,
+        **props,
+    ):
         super().__init__(gap=gap, padding=padding, size=size, weight=weight, at=at)
         if direction not in ("row", "column"):
             raise ValueError(f"Invalid direction: {direction!r}, expected 'row' or 'column'")
@@ -445,8 +480,14 @@ class Panel(_Linear, _Mounted[GenericObjectController]):
 class Leaf(LayoutNode, _Mounted[T]):
     """An openHASP object. Keyword arguments that are not part of the signature are openHASP properties (values or Bound)."""
 
-    def __init__(self, obj_id: Optional[int] = None, size: Optional[Length] = None, weight: Optional[float] = None,
-                 at: Optional[Rect] = None, **props):
+    def __init__(
+        self,
+        obj_id: Optional[int] = None,
+        size: Optional[Length] = None,
+        weight: Optional[float] = None,
+        at: Optional[Rect] = None,
+        **props,
+    ):
         super().__init__(size=size, weight=weight, at=at)
         self.obj_id = obj_id
         self.props: Dict[str, Any] = props
@@ -461,9 +502,15 @@ class Leaf(LayoutNode, _Mounted[T]):
 class Label(Leaf[LabelObjectController]):
     """A `label`, see PageController.add_label()."""
 
-    def __init__(self, text: str | Callable[[Any], str] = lambda x: str(x), entity: "EntityRef | Sequence[EntityRef]" = None,
-                 attribute: Optional[str] = None, get_state: Optional[Callable[[], Awaitable[Any]]] = None,
-                 trigger: Optional[TriggerInput] = None, **kwargs):
+    def __init__(
+        self,
+        text: str | Callable[[Any], str] = lambda x: str(x),
+        entity: "EntityRef | Sequence[EntityRef]" = None,
+        attribute: Optional[str] = None,
+        get_state: Optional[Callable[[], Awaitable[Any]]] = None,
+        trigger: Optional[TriggerInput] = None,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
         self.binding = dict(text=text, entity=entity, attribute=attribute, get_state=get_state, trigger=trigger)
 
@@ -496,8 +543,13 @@ class SceneButton(Leaf[SceneButtonObjectController]):
 class Switch(Leaf[SwitchObjectController]):
     """A `switch`, see PageController.add_switch()."""
 
-    def __init__(self, entity: "EntityRef | Sequence[EntityRef]" = None, get_state: Optional[Callable[[], Awaitable[Any]]] = None,
-                 trigger: Optional[TriggerInput] = None, **kwargs):
+    def __init__(
+        self,
+        entity: "EntityRef | Sequence[EntityRef]" = None,
+        get_state: Optional[Callable[[], Awaitable[Any]]] = None,
+        trigger: Optional[TriggerInput] = None,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
         self.binding = dict(entity=entity, get_state=get_state, trigger=trigger)
 
@@ -508,12 +560,19 @@ class Switch(Leaf[SwitchObjectController]):
 class Slider(Leaf[SliderObjectController]):
     """A `slider`, see PageController.add_slider()."""
 
-    def __init__(self, entity: "EntityRef | Sequence[EntityRef]" = None, get_state: Optional[Callable[[], Awaitable[Any]]] = None,
-                 on_changed: Optional[Callable[[Any], Awaitable[None]]] = None,
-                 on_released: Optional[Callable[[Any], Awaitable[None]]] = None,
-                 trigger: Optional[TriggerInput] = None, **kwargs):
+    def __init__(
+        self,
+        entity: "EntityRef | Sequence[EntityRef]" = None,
+        get_state: Optional[Callable[[], Awaitable[Any]]] = None,
+        on_changed: Optional[Callable[[Any], Awaitable[None]]] = None,
+        on_released: Optional[Callable[[Any], Awaitable[None]]] = None,
+        trigger: Optional[TriggerInput] = None,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
-        self.binding = dict(entity=entity, get_state=get_state, on_changed=on_changed, on_released=on_released, trigger=trigger)
+        self.binding = dict(
+            entity=entity, get_state=get_state, on_changed=on_changed, on_released=on_released, trigger=trigger
+        )
 
     async def _add(self, page: "PageController", common: Dict[str, Any]) -> SliderObjectController:
         return await page.add_slider(**self.binding, **common)
@@ -522,8 +581,14 @@ class Slider(Leaf[SliderObjectController]):
 class Bar(Leaf[BarObjectController]):
     """A `bar`, see PageController.add_bar()."""
 
-    def __init__(self, entity: "EntityRef | Sequence[EntityRef]" = None, get_state: Optional[Callable[[], Awaitable[Any]]] = None,
-                 transform_value: Optional[Callable[[Any], int]] = None, trigger: Optional[TriggerInput] = None, **kwargs):
+    def __init__(
+        self,
+        entity: "EntityRef | Sequence[EntityRef]" = None,
+        get_state: Optional[Callable[[], Awaitable[Any]]] = None,
+        transform_value: Optional[Callable[[Any], int]] = None,
+        trigger: Optional[TriggerInput] = None,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
         self.binding = dict(entity=entity, get_state=get_state, transform_value=transform_value, trigger=trigger)
 

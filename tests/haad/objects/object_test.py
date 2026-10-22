@@ -9,8 +9,9 @@ from tests.haad.fakes import FakePlate
 
 
 def _object(page: PageController, cls=ObjectController, **kwargs) -> ObjectController:
-    return cls(controller=page.controller, client=page.client, state_updater=page.state_updater, page=page.index, obj_id=5,
-               **kwargs)
+    return cls(
+        controller=page.controller, client=page.client, state_updater=page.state_updater, page=page.index, obj_id=5, **kwargs
+    )
 
 
 async def test_object_id(page: PageController):

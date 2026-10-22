@@ -1,4 +1,5 @@
 """The additions of the code-defined layouts to the page API (README §4.4, §4.8): props, Bound, trigger=, ids, owned objects."""
+
 from datetime import timedelta
 
 import pytest
@@ -103,7 +104,9 @@ async def test_bound_property_with_get_state_on_any_trigger(simulator, page: Pag
         ticks.append(1)
         return len(ticks)
 
-    bar = await page.add_bar(obj_id=28, props={"max": Bound(Trigger.Time.every(interval=timedelta(seconds=1)), get_state=get_state)})
+    bar = await page.add_bar(
+        obj_id=28, props={"max": Bound(Trigger.Time.every(interval=timedelta(seconds=1)), get_state=get_state)}
+    )
 
     await bar.init()
     await bar.bind()

@@ -5,7 +5,21 @@ import pytest
 from haad.triggers import Trigger
 from haad.ui import Card
 from openhasp_config_manager.haad.layout.components import (
-    Bar, Button, Column, Grid, Image, Label, Obj, Page, Panel, Row, SceneButton, Slider, Spacer, Stack, Switch,
+    Bar,
+    Button,
+    Column,
+    Grid,
+    Image,
+    Label,
+    Obj,
+    Page,
+    Panel,
+    Row,
+    SceneButton,
+    Slider,
+    Spacer,
+    Stack,
+    Switch,
 )
 from openhasp_config_manager.haad.layout.geometry import Padding, Rect
 from openhasp_config_manager.haad.objects.bound import Bound
@@ -178,7 +192,18 @@ async def test_mount_owned_page(page: PageController, plate: FakePlate):
     await layout.mount(page)
 
     # explicit ids are reserved, the others are allocated in declaration order (the panel first)
-    assert [n.obj.obj_id for n in [panel, title, switch, scene, button, slider, bar, image, arc, border]] == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    assert [n.obj.obj_id for n in [panel, title, switch, scene, button, slider, bar, image, arc, border]] == [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+    ]
     assert title.obj.parent is panel.obj
     assert switch.obj.parent is None
     assert title.obj.rect == Rect(0, 0, 320, 40)
@@ -213,7 +238,9 @@ async def test_mount_external_page_needs_ids(page: PageController):
         Switch(obj_id=22)
         Label()
 
-    with pytest.raises(ValueError, match="Page\\(external=True\\) needs an obj_id on every leaf, missing on: Label \\(components_test"):
+    with pytest.raises(
+        ValueError, match="Page\\(external=True\\) needs an obj_id on every leaf, missing on: Label \\(components_test"
+    ):
         await layout.mount(page)
 
 

@@ -105,14 +105,18 @@ async def test_image_property_setters(page: PageController, plate: FakePlate):
     await img.set_antialiasing()
 
     assert plate.commands == [
-        "p1b45.offset_x=1", "p1b45.offset_y=2",
-        "p1b45.offset_x=0", "p1b45.offset_y=0",
+        "p1b45.offset_x=1",
+        "p1b45.offset_y=2",
+        "p1b45.offset_x=0",
+        "p1b45.offset_y=0",
         "p1b45.zoom=128",
         "p1b45.zoom=256",
         "p1b45.angle=458",
         "p1b45.angle=0",
-        "p1b45.pivot_x=3", "p1b45.pivot_y=4",
-        "p1b45.pivot_x=0", "p1b45.pivot_y=0",
+        "p1b45.pivot_x=3",
+        "p1b45.pivot_y=4",
+        "p1b45.pivot_x=0",
+        "p1b45.pivot_y=0",
         "p1b45.antialias=True",
         "p1b45.antialias=False",
     ]

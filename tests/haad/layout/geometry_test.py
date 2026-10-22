@@ -3,12 +3,15 @@ import pytest
 from openhasp_config_manager.haad.layout.geometry import Padding, Rect, Weight, resolve_length, split
 
 
-@pytest.mark.parametrize("length, total, expected", [
-    (48, 100, 48),
-    ("25%", 480, 120),
-    ("33.3%", 320, 106),  # rounded down, like ObjectDimensionsProcessor
-    ("0%", 320, 0),
-])
+@pytest.mark.parametrize(
+    "length, total, expected",
+    [
+        (48, 100, 48),
+        ("25%", 480, 120),
+        ("33.3%", 320, 106),  # rounded down, like ObjectDimensionsProcessor
+        ("0%", 320, 0),
+    ],
+)
 def test_resolve_length(length, total, expected):
     assert resolve_length(length, total) == expected
 

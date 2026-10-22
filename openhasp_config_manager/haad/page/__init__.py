@@ -137,6 +137,7 @@ class PageController:
         :param wake: wakes the screen when the claim shows this page
         """
         from openhasp_config_manager.haad.plate.scheduler import Priority
+
         return await self.plate.scheduler.register(
             page=self, active=active, trigger=trigger, priority=priority or Priority.NORMAL, keep_awake=keep_awake, wake=wake
         )

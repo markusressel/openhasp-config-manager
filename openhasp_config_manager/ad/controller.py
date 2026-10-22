@@ -40,7 +40,7 @@ class OpenHaspController(ADAPI):
             name=self._name,
             config=self.plate_config,
             config_dir=self._config_dir,
-            output_dir=self._config_dir
+            output_dir=self._config_dir,
         )
 
         await self.before_setup_plate()

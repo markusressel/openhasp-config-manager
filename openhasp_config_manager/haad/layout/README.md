@@ -78,15 +78,18 @@ async def build_layout(self) -> Page:
             Switch(entity=desk.entity, weight=1)
     return page
 
+
 # with tree, layout on flash
 async def build_layout(self) -> Page:
     with Page(external=True) as page:
         Switch(obj_id=22, entity=desk.entity)
     return page
 
+
 # explicit calls, layout in code
 async def register_objects(self):
     await self.add_switch(rect=Rect(x=200, y=60, w=100, h=48), entity=desk.entity)
+
 
 # explicit calls, layout on flash
 async def register_objects(self):
@@ -137,9 +140,9 @@ class GuiDefaults:
 class PlateConfig:
     def __init__(
         self,
-        screen: Screen | None = None,            # required for code-defined objects
+        screen: Screen | None = None,  # required for code-defined objects
         theme: Theme = Theme(),
-        gui: GuiDefaults | None = None,          # replaces device.config.gui from config.json
+        gui: GuiDefaults | None = None,  # replaces device.config.gui from config.json
         screen_brightness_default: ScreenState = ...,
         screen_brightness_short_idle: ScreenState = ...,
         screen_brightness_long_idle: ScreenState = ...,
@@ -276,7 +279,7 @@ Any property, as a leaf kwarg or in `add_*(props={...})`, for owned and external
 @dataclass(frozen=True)
 class Bound[T]:
     trigger: HAEntity | str | Trigger
-    convert: Callable[[Any], T] | None = None              # gets the entity state; None for unknown/unavailable
+    convert: Callable[[Any], T] | None = None  # gets the entity state; None for unknown/unavailable
     get_state: Callable[[], Awaitable[Any]] | None = None  # value source instead of the entity state, like get_state on leaves
 ```
 
@@ -426,12 +429,12 @@ All `add_*` methods get the same arguments. Example for the switch:
 ```python
 async def add_switch(
     self,
-    obj_id: int | None = None,          # optional for owned objects: auto-assigned
+    obj_id: int | None = None,  # optional for owned objects: auto-assigned
     entity: HAEntity | str | list[HAEntity | str] | None = None,  # was entity_id: str
     get_state: Callable[[], Awaitable[Any]] | None = None,
     trigger: Trigger | None = None,
     *,
-    rect: Rect | None = None,           # set: the object is owned by haad and pushed to the plate
+    rect: Rect | None = None,  # set: the object is owned by haad and pushed to the plate
     props: Mapping[str, Any | Bound] | None = None,
     parent: ObjectController | None = None,  # openHASP parentid; rect is then relative to the parent
 ) -> SwitchObjectController: ...
@@ -479,7 +482,9 @@ class MarkusPage(MarkusPageController):
     async def build_header_items(self):
         self.co2_sensor: Co2Sensor = Registry.markus_room_controller.co2_sensors[0]
         Label(
-            entity=self.co2_sensor.carbon_dioxide, text=lambda x: f"{int(x)}ppm", align="right",
+            entity=self.co2_sensor.carbon_dioxide,
+            text=lambda x: f"{int(x)}ppm",
+            align="right",
             border_width=Bound(self.co2_sensor.carbon_dioxide, lambda x: 3 if x is not None and float(x) > 1000 else 0),
         )
         Label(entity=self.co2_sensor.temperature, text=lambda x: f"{float(x)}°C", align="right")
@@ -544,13 +549,14 @@ in haad, `haad/util/composition.py`:
 ```python
 class Composable:
     """A node that attaches itself to the enclosing `with` block of the same family."""
+
     _active_parent: ClassVar[ContextVar["Composable | None"]]  # one ContextVar per family
 
     children: list[Self]
 
-    def __init__(self): ...                 # append to _active_parent.get(), if any
-    def __enter__(self) -> Self: ...        # set self as active parent
-    def __exit__(self, *exc) -> None: ...   # reset the token, also on exceptions
+    def __init__(self): ...  # append to _active_parent.get(), if any
+    def __enter__(self) -> Self: ...  # set self as active parent
+    def __exit__(self, *exc) -> None: ...  # reset the token, also on exceptions
 ```
 
 `UIComponent` and the openHASP `LayoutNode` both extend it, each family with its own `ContextVar`. That way a `Label` created inside a
@@ -590,12 +596,20 @@ class BathroomPage(MarkusPageController):
         bath = Registry.bathroom_controller
         with Column(gap=8):
             with Row(size=64, gap=4):
-                Label(entity=bath._mirror_light.entity, text_font=32, align="center",
-                      text=lambda x: IntegratedIcon.LIGHTBULB_ON if x == STATE_ON else IntegratedIcon.LIGHTBULB)
+                Label(
+                    entity=bath._mirror_light.entity,
+                    text_font=32,
+                    align="center",
+                    text=lambda x: IntegratedIcon.LIGHTBULB_ON if x == STATE_ON else IntegratedIcon.LIGHTBULB,
+                )
                 Label(text="Mirror", weight=2, text_font=32)
                 Switch(entity=bath._mirror_light.entity, weight=2)
-            Label(entity=bath._presence_radar.presence, size=48, text_font=32,
-                  text=lambda x: IntegratedIcon.RUN if x == STATE_ON else " ")
+            Label(
+                entity=bath._presence_radar.presence,
+                size=48,
+                text_font=32,
+                text=lambda x: IntegratedIcon.RUN if x == STATE_ON else " ",
+            )
             Spacer()
 ```
 
@@ -617,10 +631,14 @@ class A3DPrinterPage(MarkusPageController):
     async def build_header_items(self):
         x1 = Registry.x1carbon
         Label(
-            entity=x1.nozzle_temperature_sensor, text=lambda x: f"T: {int(float(x))}°C", align="right",
+            entity=x1.nozzle_temperature_sensor,
+            text=lambda x: f"T: {int(float(x))}°C",
+            align="right",
             hidden=Bound(x1.nozzle_target_temperature_number, lambda t: t is None),
-            text_color=Bound(x1.nozzle_target_temperature_number,
-                             lambda t: HtmlColor.FireBrick.value if t is not None and float(t) > 0 else HtmlColor.White.value),
+            text_color=Bound(
+                x1.nozzle_target_temperature_number,
+                lambda t: HtmlColor.FireBrick.value if t is not None and float(t) > 0 else HtmlColor.White.value,
+            ),
         )
         ...  # bed temperature: the same with the bed entities
 
@@ -640,7 +658,9 @@ class A3DPrinterPage(MarkusPageController):
 
     async def register_objects(self):
         x1 = Registry.x1carbon
-        await self.controller.react_to(action=self._on_stage_changed, trigger=x1.current_stage_sensor.entity_id, immediately=True)
+        await self.controller.react_to(
+            action=self._on_stage_changed, trigger=x1.current_stage_sensor.entity_id, immediately=True
+        )
         await self.controller.react_to(action=self._update_camera, trigger=x1.current_layer_sensor.entity_id, immediately=True)
 
     async def _update_camera(self):
@@ -659,9 +679,15 @@ The same page with explicit calls and its layout still on flash keeps today's sh
 async def register_objects(self):
     x1 = Registry.x1carbon
     await self.add_label(
-        obj_id=12, entity=x1.nozzle_temperature_sensor, text=lambda x: f"T: {int(float(x))}°C",
-        props={"text_color": Bound(x1.nozzle_target_temperature_number,
-                                   lambda t: HtmlColor.FireBrick.value if t is not None and float(t) > 0 else HtmlColor.White.value)},
+        obj_id=12,
+        entity=x1.nozzle_temperature_sensor,
+        text=lambda x: f"T: {int(float(x))}°C",
+        props={
+            "text_color": Bound(
+                x1.nozzle_target_temperature_number,
+                lambda t: HtmlColor.FireBrick.value if t is not None and float(t) > 0 else HtmlColor.White.value,
+            )
+        },
     )
     await self.add_label(obj_id=26, entity=x1.current_stage_sensor, get_state=self._status_text, props={"mode": "scroll"})
     await self.add_label(obj_id=30, get_state=self._elapsed, trigger=EVERY_SECOND)

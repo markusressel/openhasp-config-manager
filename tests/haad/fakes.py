@@ -5,6 +5,7 @@ The real `OpenHaspClient`, `MqttClient` and `WebserviceClient` are used; only th
 client and the HTTP request) are replaced. That way the topic and payload formatting of the client is part of what the
 tests pin, and the fakes have the shape of the real thing.
 """
+
 import asyncio
 import json
 import re
@@ -26,6 +27,7 @@ _IMAGE_SOURCE = re.compile(r"^p\d+b\d+\.src=(http://\S+)$")
 @dataclass(frozen=True)
 class Mqtt:
     """A message the client published."""
+
     topic: str
     payload: Any
 
@@ -33,6 +35,7 @@ class Mqtt:
 @dataclass(frozen=True)
 class Http:
     """A request the client sent to the plate's web server (url relative to the plate's base url)."""
+
     method: str
     url: str
     data: Any = None
@@ -48,6 +51,7 @@ class FakePlate:
     - `online`: while False, HTTP requests fail like for a plate that can't be reached.
     - Images: when an object's `src` is set to an http URL, the plate downloads it, like the real one.
     """
+
     mqtt_name: str = "mqtt_name"
     online: bool = True
     files: List[str] = field(default_factory=lambda: ["boot.cmd", "pages.jsonl"])
@@ -72,7 +76,7 @@ class FakePlate:
         for topic, payload in self.mqtt:
             if not topic.startswith(prefix):
                 raise AssertionError(f"Unexpected topic: {topic}")
-            keyword = topic[len(prefix) + 1:]
+            keyword = topic[len(prefix) + 1 :]
             result.append(f"{payload}" if not keyword else f"{keyword} {payload}")
         return result
 
@@ -181,7 +185,7 @@ class FakeWebserviceClient(WebserviceClient):
 
     async def _do_request(self, method: str = "GET", url: str = "/", data: Any = None, **kwargs) -> Optional[Any]:
         assert url.startswith(self._base_url), url
-        return self._plate._request(method, url[len(self._base_url):], data)
+        return self._plate._request(method, url[len(self._base_url) :], data)
 
 
 class FakeOpenHaspClient(OpenHaspClient):

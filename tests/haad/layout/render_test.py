@@ -41,12 +41,35 @@ async def test_render_owned_objects(owned_page: PageController):
         {"page": 1, "id": 0, "bg_color": "#111111"},
         {"page": 1, "id": 1, "obj": "obj", "x": 0, "y": 0, "w": 480, "h": 32, "bg_color": "#558B2F"},
         # theme < typed args (text) < props; text_font normalized to int like in JSONL files
-        {"page": 1, "id": 2, "obj": "label", "parentid": 1, "x": 0, "y": 0, "w": 480, "h": 32, "text": "Title", "align": "center",
-         "text_font": 32, "text_color": "#FFFFFF"},
+        {
+            "page": 1,
+            "id": 2,
+            "obj": "label",
+            "parentid": 1,
+            "x": 0,
+            "y": 0,
+            "w": 480,
+            "h": 32,
+            "text": "Title",
+            "align": "center",
+            "text_font": 32,
+            "text_color": "#FFFFFF",
+        },
         # Bound properties are not pushed
         {"page": 1, "id": 3, "obj": "switch", "x": 8, "y": 40, "w": 464, "h": 272, "radius": 20},
-        {"page": 1, "id": 4, "obj": "label", "x": 240, "y": 160, "w": 48, "h": 20, "mode": "scroll", "text": "Explicit",
-         "text_color": "#FFFFFF", "align": "left"},
+        {
+            "page": 1,
+            "id": 4,
+            "obj": "label",
+            "x": 240,
+            "y": 160,
+            "w": 48,
+            "h": 20,
+            "mode": "scroll",
+            "text": "Explicit",
+            "text_color": "#FFFFFF",
+            "align": "left",
+        },
     ]
     assert owned_page.objects[3].jsonl == rendered[3]
 

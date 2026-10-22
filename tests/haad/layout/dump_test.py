@@ -19,9 +19,7 @@ def test_dump_lines():
     objects = [{"page": 1, "id": 0}, {"page": 1, "id": 1, "obj": "label"}]
 
     assert dump_lines(objects, {1: "page.py:3 Label"}) == (
-        '{"page":1,"id":0}\n'
-        "// page.py:3 Label\n"
-        '{"page":1,"id":1,"obj":"label"}\n'
+        '{"page":1,"id":0}\n// page.py:3 Label\n{"page":1,"id":1,"obj":"label"}\n'
     )
 
 

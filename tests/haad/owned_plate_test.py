@@ -1,4 +1,5 @@
 """Plates with code-defined (owned) pages: render, push, re-push on LWT online, navigation (README §5)."""
+
 import json
 from datetime import timedelta
 
@@ -59,12 +60,25 @@ class OwnedPlate(PlateUnderTest):
 
 
 def _jsonl(*objects) -> Mqtt:
-    return Mqtt("hasp/mqtt_name/command/jsonl", "\n".join(json.dumps(o, separators=(",", ":"), ensure_ascii=False) for o in objects))
+    return Mqtt(
+        "hasp/mqtt_name/command/jsonl", "\n".join(json.dumps(o, separators=(",", ":"), ensure_ascii=False) for o in objects)
+    )
 
 
 PAGE_1 = [
     {"page": 1, "id": 0, "bg_color": "#101010"},
-    {"page": 1, "id": 1, "obj": "label", "x": 10, "y": 10, "w": 300, "h": 40, "text_font": 32, "text": "Desk", "text_color": "#FFFFFF"},
+    {
+        "page": 1,
+        "id": 1,
+        "obj": "label",
+        "x": 10,
+        "y": 10,
+        "w": 300,
+        "h": 40,
+        "text_font": 32,
+        "text": "Desk",
+        "text_color": "#FFFFFF",
+    },
     {"page": 1, "id": 2, "obj": "label", "x": 10, "y": 60, "w": 145, "h": 170, "border_width": 1, "text_color": "#FFFFFF"},
     {"page": 1, "id": 3, "obj": "switch", "x": 165, "y": 60, "w": 145, "h": 170},
 ]
@@ -78,7 +92,9 @@ async def test_owned_pages_are_cleared_and_pushed_before_their_objects_are_bound
     await simulator.ha.trigger_state_change("sensor.time", "12:00")
     await simulator.ha.trigger_state_change("light.desk", "on")
 
-    controller = await start_plate(OwnedPlate, pages=[page_at(1, TreePage), page_at(2, ExplicitPage), page_at(3, ExternalTreePage)])
+    controller = await start_plate(
+        OwnedPlate, pages=[page_at(1, TreePage), page_at(2, ExplicitPage), page_at(3, ExternalTreePage)]
+    )
 
     assert plate.traffic == [
         Http("GET", "list?dir=/"),
@@ -86,16 +102,27 @@ async def test_owned_pages_are_cleared_and_pushed_before_their_objects_are_bound
         # page 1 (register_objects()' border_width of p1b2 is part of the pushed JSONL)
         Mqtt("hasp/mqtt_name/command/clearpage", 1),
         _jsonl(*PAGE_1),
-        *[Mqtt("hasp/mqtt_name/command", c) for c in ["p1b2.text=12:00", "p1b2.text=12:00", "p1b3.val=1", "p1b3.enabled=True"]],
+        *[
+            Mqtt("hasp/mqtt_name/command", c)
+            for c in ["p1b2.text=12:00", "p1b2.text=12:00", "p1b3.val=1", "p1b3.enabled=True"]
+        ],
         # page 2
         Mqtt("hasp/mqtt_name/command/clearpage", 2),
         _jsonl(*PAGE_2),
         # page 3: external, nothing pushed; the static property of its leaf is set on bind
         *[Mqtt("hasp/mqtt_name/command", c) for c in ["p3b10.text=12:00", "p3b10.text=12:00", "p3b10.mode=scroll"]],
         # navigation: swiping cycles through pages 1-3
-        *[Mqtt("hasp/mqtt_name/command", c) for c in [
-            "p1b0.prev=3", "p1b0.next=2", "p2b0.prev=1", "p2b0.next=3", "p3b0.prev=2", "p3b0.next=1",
-        ]],
+        *[
+            Mqtt("hasp/mqtt_name/command", c)
+            for c in [
+                "p1b0.prev=3",
+                "p1b0.next=2",
+                "p2b0.prev=1",
+                "p2b0.next=3",
+                "p3b0.prev=2",
+                "p3b0.next=1",
+            ]
+        ],
         # first sync
         *[Mqtt("hasp/mqtt_name/command", c) for c in ["p1b2.text=12:00", "p3b10.text=12:00", "p3b10.mode=scroll"]],
     ]

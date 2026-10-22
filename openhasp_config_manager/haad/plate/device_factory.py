@@ -2,6 +2,7 @@
 Builds the `Device` of a plate without an openhasp-configs directory (README §4.1): connection settings from the
 controller's section in haad.yaml, everything else from the `PlateConfig`.
 """
+
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Optional
@@ -62,8 +63,12 @@ def build_device(name: str, settings: Mapping[str, Any], plate_config, default_b
             port=mqtt.get("port", default_broker.port),
             user=mqtt.get("user", default_broker.user),
             password=mqtt.get("password", default_broker.password),
-            topic=MqttTopicConfig(node="hasp/%hostname%/%topic%", group="hasp/plates/%topic%", broadcast="hasp/broadcast/%topic%",
-                                  hass="homeassistant/status"),
+            topic=MqttTopicConfig(
+                node="hasp/%hostname%/%topic%",
+                group="hasp/plates/%topic%",
+                broadcast="hasp/broadcast/%topic%",
+                hass="homeassistant/status",
+            ),
         ),
         http=HttpConfig(port=80, user=settings["http_user"], password=settings["http_password"]),
         gui=GuiConfig(idle1=gui.idle1, idle2=gui.idle2) if gui is not None else GuiConfig(),

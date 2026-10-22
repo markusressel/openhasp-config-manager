@@ -219,10 +219,10 @@ class ObjectController:
         for k, v in properties.items():
             if force or k not in self._last_properties or self._last_properties[k] != v:
                 changed_properties[k] = v
-                
+
         if not changed_properties:
             return
-            
+
         for k, v in changed_properties.items():
             self._last_properties[k] = v
 

@@ -1,4 +1,5 @@
 """Plates without an openhasp-configs directory (README §4.1)."""
+
 import pytest
 
 from openhasp_config_manager.haad.plate import GuiDefaults, PlateConfig, PlateController, Screen
@@ -23,9 +24,17 @@ def test_build_device():
     config = device.config
     assert device.name == "plate3"
     assert config.openhasp_config_manager.device.ip == "192.168.5.172"
-    assert (config.openhasp_config_manager.device.screen.width, config.openhasp_config_manager.device.screen.height) == (320, 480)
-    assert (config.mqtt.name, config.mqtt.host, config.mqtt.port, config.mqtt.user, config.mqtt.password) == \
-           ("mqtt_name", "broker", 1883, "haad", "secret")
+    assert (config.openhasp_config_manager.device.screen.width, config.openhasp_config_manager.device.screen.height) == (
+        320,
+        480,
+    )
+    assert (config.mqtt.name, config.mqtt.host, config.mqtt.port, config.mqtt.user, config.mqtt.password) == (
+        "mqtt_name",
+        "broker",
+        1883,
+        "haad",
+        "secret",
+    )
     assert (config.http.user, config.http.password) == ("admin", "pw")
     assert (config.gui.idle1, config.gui.idle2, config.gui.rotate) == (30, 120, None)
 
@@ -40,7 +49,9 @@ def test_build_device_with_own_broker_and_without_gui():
 
 
 def test_build_device_needs_settings_and_screen():
-    with pytest.raises(KeyError, match="Missing settings of plate 'plate3' in haad.yaml \\(controllers.plate3\\): http_user, http_password"):
+    with pytest.raises(
+        KeyError, match="Missing settings of plate 'plate3' in haad.yaml \\(controllers.plate3\\): http_user, http_password"
+    ):
         build_device("plate3", {"host": "h", "mqtt_name": "m"}, CONFIG, BROKER)
     with pytest.raises(ValueError, match="needs a screen=Screen"):
         build_device("plate3", SETTINGS, PlateConfig(), BROKER)

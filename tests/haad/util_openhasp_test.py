@@ -44,11 +44,14 @@ async def test_listen_state_parses_json_and_is_never_cancelled(page: PageControl
     assert events == [("hasp/mqtt_name/state/p1b2", {"event": "up"}), ("hasp/mqtt_name/state/p1b2", {"event": "down"})]
 
 
-@pytest.mark.parametrize("params, payload", [
-    ("idle 10", "idle 10"),
-    (["a", "b"], "a b"),
-    ({"idle1": 10}, '{"idle1": 10}'),
-])
+@pytest.mark.parametrize(
+    "params, payload",
+    [
+        ("idle 10", "idle 10"),
+        (["a", "b"], "a b"),
+        ({"idle1": 10}, '{"idle1": 10}'),
+    ],
+)
 async def test_config_publishes_through_home_assistant(simulator, page: PageController, params, payload):
     await util_openhasp.config(controller=page.controller, plate="plate1", submodule="gui", params=params)
 

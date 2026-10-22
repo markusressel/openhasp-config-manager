@@ -25,6 +25,7 @@ class OpenHaspImageProcessor:
             shutil.copy(in_image, tmp_file_container.path)
 
         try:
+
             def _process_image():
                 im = Image.open(tmp_file_container.file)
                 original_width, original_height = im.size
@@ -36,13 +37,13 @@ class OpenHaspImageProcessor:
                         if x is not None and x > 0:
                             valid_w.append(x)
                     w = min(valid_w) if valid_w else original_width
-                    
+
                     valid_h: list[int] = []
                     for x in (height, original_height):
                         if x is not None and x > 0:
                             valid_h.append(x)
                     h = min(valid_h) if valid_h else original_height
-                    
+
                     im.thumbnail((int(h), int(w)), Image.Resampling.LANCZOS)
                 else:
                     h_val = height if height is not None else original_height
@@ -64,6 +65,7 @@ class OpenHaspImageProcessor:
                 img.close()
 
             import asyncio
+
             await asyncio.to_thread(_process_image)
         finally:
             tmp_file_container.path.unlink()
@@ -76,7 +78,7 @@ class OpenHaspImageProcessor:
         filename = in_image.split("/")[-1]
         # remove url args, if any
         filename = filename.split("?")[0]
-        
+
         async with aiohttp.ClientSession() as session:
             async with session.get(in_image) as response:
                 response.raise_for_status()

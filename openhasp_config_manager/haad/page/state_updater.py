@@ -46,7 +46,9 @@ class StateUpdater:
             try:
                 await set_state_fun(new_target_state)
             except Exception as e:
-                self.controller.logger.error(f"StateUpdater: Error syncing {name}: Failed to set state '{new_target_state}': {e}")
+                self.controller.logger.error(
+                    f"StateUpdater: Error syncing {name}: Failed to set state '{new_target_state}': {e}"
+                )
 
     def register(
         self,

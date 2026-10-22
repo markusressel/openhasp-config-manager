@@ -1,4 +1,5 @@
 """Page claims: which page a plate shows, when it stays on, rotation, and touches (PageScheduler)."""
+
 from datetime import timedelta
 from typing import Awaitable, Callable
 
@@ -92,7 +93,9 @@ async def test_an_active_claim_shows_its_page_and_keeps_the_screen_on(simulator,
     assert plate.http == [DEFAULTS]
 
 
-async def test_claims_that_are_active_at_the_start_are_applied_after_the_pages_are_pushed(simulator, start_plate, plate: FakePlate):
+async def test_claims_that_are_active_at_the_start_are_applied_after_the_pages_are_pushed(
+    simulator, start_plate, plate: FakePlate
+):
     await simulator.ha.trigger_state_change("switch.a", "on")
 
     await start_plate(FocusPlate, pages=[page_at(1), page_at(2, claiming("switch.a", keep_awake=True))])
@@ -249,7 +252,11 @@ async def test_own_page_changes_are_not_touches_but_swipes_are(simulator, plate:
 
 
 async def test_only_touches_pin(simulator, plate: FakePlate, pages):
-    scheduler = (await pages(("switch.a", {}),)).scheduler
+    scheduler = (
+        await pages(
+            ("switch.a", {}),
+        )
+    ).scheduler
 
     await plate.send(f"state/p1b{PLACEHOLDER_ID}", {"event": "changed", "val": 1})
     await plate.send("state/idle", "short")
@@ -262,7 +269,11 @@ async def test_only_touches_pin(simulator, plate: FakePlate, pages):
 
 
 async def test_a_touch_that_wakes_the_screen_pins(simulator, plate: FakePlate, pages):
-    scheduler = (await pages(("switch.a", {}),)).scheduler
+    scheduler = (
+        await pages(
+            ("switch.a", {}),
+        )
+    ).scheduler
 
     await plate.send("state/idle", "off")
 

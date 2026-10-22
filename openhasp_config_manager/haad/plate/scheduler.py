@@ -11,6 +11,7 @@ digital signage playlist that a touch interrupts).
 - A touch pins the page the user is on: nothing switches the page, nor rotates, until `FocusConfig.pin` has passed since
   the last touch. Only a claim with `Priority.CRITICAL` breaks through a pin.
 """
+
 import asyncio
 import json
 import re

@@ -3,6 +3,7 @@ Geometry of code-defined layouts: lengths, rectangles, padding, and the function
 Everything here is pure; the layout containers (`Row`, `Column`, `Grid`) and the `Rect` helpers use the same functions, so
 both declaration styles place objects identically.
 """
+
 import re
 from dataclasses import dataclass
 from typing import List, Optional, Sequence, Tuple
@@ -29,6 +30,7 @@ def resolve_length(length: Length, total: int) -> int:
 @dataclass(frozen=True)
 class Weight:
     """A share of the space that is left after fixed sizes and gaps."""
+
     value: float = 1
 
     def __post_init__(self):
@@ -56,7 +58,9 @@ def split(length: int, sizes: Sequence[Size], gap: int = 0) -> List[Tuple[int, i
     weights = [size.value if isinstance(size, Weight) else 0 for size in sizes]
     remaining = length - sum(f for f in fixed if f is not None) - gap * (len(sizes) - 1)
     if remaining < 0:
-        raise ValueError(f"Fixed sizes {list(sizes)} and gaps of {gap} need {length - remaining} pixels, only {length} available")
+        raise ValueError(
+            f"Fixed sizes {list(sizes)} and gaps of {gap} need {length - remaining} pixels, only {length} available"
+        )
 
     total_weight = sum(weights)
     result = []
@@ -78,13 +82,23 @@ def split(length: int, sizes: Sequence[Size], gap: int = 0) -> List[Tuple[int, i
 @dataclass(frozen=True, init=False)
 class Padding:
     """Space inside a container, around its children."""
+
     top: int
     right: int
     bottom: int
     left: int
 
-    def __init__(self, all: int = 0, *, x: Optional[int] = None, y: Optional[int] = None, top: Optional[int] = None,
-                 right: Optional[int] = None, bottom: Optional[int] = None, left: Optional[int] = None):
+    def __init__(
+        self,
+        all: int = 0,
+        *,
+        x: Optional[int] = None,
+        y: Optional[int] = None,
+        top: Optional[int] = None,
+        right: Optional[int] = None,
+        bottom: Optional[int] = None,
+        left: Optional[int] = None,
+    ):
         """`Padding(8)`, `Padding(x=6)`, `Padding(bottom=48)`: specific sides win over `x`/`y`, which win over `all`."""
         horizontal = all if x is None else x
         vertical = all if y is None else y
@@ -111,6 +125,7 @@ class Rect:
     The helpers (`inset()`, `rows()`, `cols()`, `grid()`) need pixel values: call `resolve()` first for a Rect with
     percentages.
     """
+
     x: Length
     y: Length
     w: Length

@@ -110,5 +110,5 @@ async def config(
         data={
             "topic": f"hasp/{plate}/config/{submodule}",
             "payload": payload,
-        }
+        },
     )

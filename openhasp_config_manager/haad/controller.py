@@ -43,8 +43,12 @@ class OpenHaspController(HaadController):
                 name=self._name,
                 settings=self.controller_config(),
                 plate_config=plate_config,
-                default_broker=MqttBroker(host=mqtt.MQTT_BROKER.value, port=mqtt.MQTT_PORT.value, user=mqtt.MQTT_USERNAME.value,
-                                          password=mqtt.MQTT_PASSWORD.value),
+                default_broker=MqttBroker(
+                    host=mqtt.MQTT_BROKER.value,
+                    port=mqtt.MQTT_PORT.value,
+                    user=mqtt.MQTT_USERNAME.value,
+                    password=mqtt.MQTT_PASSWORD.value,
+                ),
             )
 
         self.state_updater = StateUpdater(controller=self)
@@ -165,10 +169,12 @@ class OpenHaspController(HaadController):
                 await self.plate_controller.scheduler.resync()
                 await self.schedule_sync()
 
-        self._lwt_task = asyncio.create_task(self.plate_controller.listen_openhasp_event(
-            path="LWT",
-            callback=_on_lwt_event,
-        ))
+        self._lwt_task = asyncio.create_task(
+            self.plate_controller.listen_openhasp_event(
+                path="LWT",
+                callback=_on_lwt_event,
+            )
+        )
         self.logger.info(f"Online state listener for {self._name} setup complete.")
 
     # async def _setup_auto_deploy_when_online(self):

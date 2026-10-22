@@ -55,6 +55,7 @@ async def test_switch_with_unknown_entity_fails_init(simulator, page: PageContro
 
 async def test_switch_with_get_state_never_shows_a_state(page: PageController, plate: FakePlate, caplog):
     """get_state returns a bool, which the StateUpdater passes to the str handler: the sync fails, nothing is sent."""
+
     async def get_state():
         return True
 

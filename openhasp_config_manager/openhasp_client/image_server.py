@@ -52,14 +52,14 @@ class ImageServer:
         """Registers a file to be served and returns its access URL."""
         if not self._is_running:
             raise RuntimeError("ImageServer is not running")
-        
+
         image_id = str(uuid.uuid4())
         self.images[image_id] = (file_path, delete_on_serve, future)
-        
+
         # Schedule cleanup to prevent leaks if the plate never fetches the image
         if delete_on_serve:
             asyncio.create_task(self._cleanup_abandoned(image_id, 30))
-            
+
         access_url = f"http://{self.access_host}:{self.access_port}/{image_id}"
         return access_url
 
@@ -79,27 +79,27 @@ class ImageServer:
             raise web.HTTPNotFound()
 
         path, delete_on_serve, future = self.images[image_id]
-        
+
         response = web.StreamResponse()
-        response.content_type = 'application/octet-stream'
+        response.content_type = "application/octet-stream"
         response.content_length = os.path.getsize(path)
         await response.prepare(request)
-        
-        with open(path, 'rb') as f:
+
+        with open(path, "rb") as f:
             while True:
                 chunk = f.read(8192)
                 if not chunk:
                     break
                 await response.write(chunk)
-                
+
         await response.write_eof()
-        
+
         if future and not future.done():
             future.set_result(True)
-            
+
         if delete_on_serve:
             del self.images[image_id]
             if os.path.exists(path):
                 os.remove(path)
-                
+
         return response

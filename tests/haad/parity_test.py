@@ -2,6 +2,7 @@
 Parity (README §8): the same page declared in all four combinations of §3 (tree or explicit calls, layout in code or on
 flash) has the same bindings, and the two code-layout variants push the same JSONL.
 """
+
 import pytest
 
 from openhasp_config_manager.haad.layout.components import Label, Page, Row, Switch
@@ -31,7 +32,9 @@ class OwnedTree(PageController):
 class OwnedCalls(PageController):
     async def register_objects(self):
         # the rects the tree computes for a 320x240 screen
-        await self.add_label(entity="sensor.co2", text=_co2_text, rect=Rect(8, 8, 197, 224), props={"border_width": CO2_BORDER})
+        await self.add_label(
+            entity="sensor.co2", text=_co2_text, rect=Rect(8, 8, 197, 224), props={"border_width": CO2_BORDER}
+        )
         await self.add_switch(entity="light.desk", rect=Rect(213, 8, 99, 224))
 
 
@@ -72,11 +75,20 @@ async def test_owned_and_external_variants_bind_the_same(simulator, start_plate,
     assert owned_jsonl and not external_jsonl
     assert [(i, t, b) for i, t, _, b in _bindings(owned)] == [(i, t, b) for i, t, _, b in _bindings(external)]
     assert owned_entries == external_entries
-    assert owned_commands == external_commands == [
-        "p1b1.text=1234ppm", "p1b1.text=1234ppm", "p1b1.border_width=3", "p1b2.val=1", "p1b2.enabled=True",
-        # first sync
-        "p1b1.text=1234ppm", "p1b1.border_width=3",
-    ]
+    assert (
+        owned_commands
+        == external_commands
+        == [
+            "p1b1.text=1234ppm",
+            "p1b1.text=1234ppm",
+            "p1b1.border_width=3",
+            "p1b2.val=1",
+            "p1b2.enabled=True",
+            # first sync
+            "p1b1.text=1234ppm",
+            "p1b1.border_width=3",
+        ]
+    )
 
 
 async def test_tree_and_calls_push_the_same_jsonl(simulator, start_plate, plate: FakePlate):

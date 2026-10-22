@@ -2,6 +2,7 @@
 Renders the owned objects of a page into openHASP JSONL objects (README §5.1), with the same processors and validator
 that JSONL files go through, so code and JSONL files produce identical objects.
 """
+
 from typing import Any, Dict, List
 
 import orjson
@@ -62,7 +63,9 @@ def render_page(page, theme: Theme, config: Config, screen_width: int, screen_he
     for line in result:
         size = len(orjson.dumps(line))
         if size > MAX_PAYLOAD_BYTES:
-            raise ValueError(f"p{line['page']}b{line['id']} is {size} bytes as JSONL, more than fits into one payload ({MAX_PAYLOAD_BYTES})")
+            raise ValueError(
+                f"p{line['page']}b{line['id']} is {size} bytes as JSONL, more than fits into one payload ({MAX_PAYLOAD_BYTES})"
+            )
     return result
 
 

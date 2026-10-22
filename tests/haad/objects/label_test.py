@@ -68,6 +68,7 @@ async def test_label_converter_gets_dash_for_unavailable(simulator, page: PageCo
 
 async def test_label_shows_none_from_get_state(page: PageController, plate: FakePlate):
     """add_label's default `text` is str(), so LabelObjectController's own default ("-" for None) never applies."""
+
     async def get_state():
         return None
 
@@ -83,8 +84,14 @@ async def test_label_object_default_converter_shows_dash_for_none(page: PageCont
     async def get_state():
         return None
 
-    label = LabelObjectController(controller=page.controller, client=page.client, state_updater=page.state_updater, page=1,
-                                  obj_id=10, get_state=get_state)
+    label = LabelObjectController(
+        controller=page.controller,
+        client=page.client,
+        state_updater=page.state_updater,
+        page=1,
+        obj_id=10,
+        get_state=get_state,
+    )
 
     await label.init()
 
@@ -104,8 +111,9 @@ async def test_label_custom_converter_gets_none(page: PageController, plate: Fak
 
 async def test_label_shows_attribute(simulator, page: PageController, plate: FakePlate):
     await simulator.ha.trigger_state_change("climate.bath", "heat", {"current_temperature": 21.5})
-    label = await page.add_label(obj_id=12, entity="climate.bath", attribute="current_temperature",
-                                 text=lambda x: f"{float(x)}°C")
+    label = await page.add_label(
+        obj_id=12, entity="climate.bath", attribute="current_temperature", text=lambda x: f"{float(x)}°C"
+    )
 
     await label.init()
     assert plate.commands == ["p1b12.text=21.5°C", "p1b12.text=21.5°C"]

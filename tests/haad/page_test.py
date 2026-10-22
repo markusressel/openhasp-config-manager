@@ -27,8 +27,13 @@ async def test_add_methods_create_object_controllers(page: PageController, plate
     ]
 
     assert [type(o) for o in added] == [
-        LabelObjectController, ButtonObjectController, SceneButtonObjectController, SwitchObjectController,
-        SliderObjectController, BarObjectController, ImageObjectController,
+        LabelObjectController,
+        ButtonObjectController,
+        SceneButtonObjectController,
+        SwitchObjectController,
+        SliderObjectController,
+        BarObjectController,
+        ImageObjectController,
     ]
     assert page.objects == {PLACEHOLDER_ID: page.objects[PLACEHOLDER_ID], **{o.obj_id: o for o in added}}
     assert all(o.page == 1 and o.client is page.client and o.state_updater is page.state_updater for o in added)

@@ -2,6 +2,7 @@
 Layout dumps (README §6.1): the rendered owned objects of every page, as a JSONL file in the openhasp-configs format, so
 a code-defined page can be previewed in the Qt editor, diffed between instances, or frozen into a JSONL file on flash.
 """
+
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -22,7 +23,9 @@ def dump_lines(objects: List[Dict[str, Any]], declarations: Dict[int, Optional[s
     return "\n".join(lines) + "\n"
 
 
-def write_dump(directory: Path, plate: str, page: int, objects: List[Dict[str, Any]], declarations: Dict[int, Optional[str]]) -> Path:
+def write_dump(
+    directory: Path, plate: str, page: int, objects: List[Dict[str, Any]], declarations: Dict[int, Optional[str]]
+) -> Path:
     """Writes `<directory>/<plate>/p<page>.jsonl` and returns its path."""
     path = directory / plate / f"p{page}.jsonl"
     path.parent.mkdir(parents=True, exist_ok=True)

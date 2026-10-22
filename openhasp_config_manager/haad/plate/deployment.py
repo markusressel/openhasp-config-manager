@@ -12,7 +12,13 @@ class DeploymentController:
     Controller for the deployment of the OpenHASP configuration.
     """
 
-    def __init__(self, controller: HaadController, name: str, config_dir: Path = Path("/conf/openhasp-configs"), output_dir: Path = Path("/conf/openhasp-configs.output")):
+    def __init__(
+        self,
+        controller: HaadController,
+        name: str,
+        config_dir: Path = Path("/conf/openhasp-configs"),
+        output_dir: Path = Path("/conf/openhasp-configs.output"),
+    ):
         self.controller = controller
         self._name = name
 

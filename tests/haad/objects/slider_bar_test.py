@@ -177,8 +177,14 @@ async def test_bar_property_setters(page: PageController, plate: FakePlate):
 
 async def test_slider_with_transform(page: PageController, plate: FakePlate):
     """add_slider() has no transform_value, only the object controller has."""
-    slider = SliderObjectController(controller=page.controller, client=page.client, state_updater=page.state_updater, page=1,
-                                    obj_id=40, transform_value=lambda x: len(x))
+    slider = SliderObjectController(
+        controller=page.controller,
+        client=page.client,
+        state_updater=page.state_updater,
+        page=1,
+        obj_id=40,
+        transform_value=lambda x: len(x),
+    )
 
     await slider.set_value("abc")
 

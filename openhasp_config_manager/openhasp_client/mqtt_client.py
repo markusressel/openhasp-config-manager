@@ -8,6 +8,7 @@ from aiomqtt import Client, Message
 
 _LOGGER = logging.getLogger(__name__)
 
+
 class MqttClient:
     def __init__(self, host: str, port: int, mqtt_user: str, mqtt_password: str):
         self._mqtt_client_id = "openhasp-config-manager"

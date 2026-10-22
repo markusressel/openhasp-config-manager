@@ -129,7 +129,9 @@ class SceneButtonObjectController(ButtonObjectController):
         async def __on_click():
             await _activate_scene(controller=self.controller, name=self.scene)
 
-        super().__init__(controller=controller, client=client, state_updater=state_updater, page=page, obj_id=obj_id, on_click=__on_click)
+        super().__init__(
+            controller=controller, client=client, state_updater=state_updater, page=page, obj_id=obj_id, on_click=__on_click
+        )
         self.scene = scene
 
         async def _activate_scene(controller: HaadController, name: str) -> Any:

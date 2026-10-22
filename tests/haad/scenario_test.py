@@ -2,6 +2,7 @@
 Golden-master scenarios: one page per page shape in haad-home (`controllers/openhasp/page/`), rebuilt here without its
 dependencies, with the complete traffic of a start and of the events that follow.
 """
+
 from datetime import timedelta
 from typing import Any
 
@@ -39,7 +40,7 @@ class RoomPage(HeaderPage):
         self.co2_text = await self.add_label(obj_id=12, entity="sensor.co2", text=lambda x: f"{int(float(x))}ppm")
         await self.controller.react_to(action=self._on_co2_changed, trigger="sensor.co2", immediately=True)
         await self.add_label(obj_id=13, entity="climate.room", attribute="current_temperature", text=lambda x: f"{float(x)}°C")
-        await self.add_label(obj_id=20, entity="light.desk", text=lambda x: "\uE6E8" if x == "on" else "\uE335")
+        await self.add_label(obj_id=20, entity="light.desk", text=lambda x: "\ue6e8" if x == "on" else "\ue335")
         await self.add_scene_button(obj_id=17, scene="sleeping")
         await self.add_switch(obj_id=22, entity="light.desk")
 
@@ -54,7 +55,9 @@ class RoomPage(HeaderPage):
 
 async def test_room_page(simulator, start_plate, plate: FakePlate):
     for entity_id, state, attributes in [
-        (TIME_ENTITY, "12:00", None), ("sensor.co2", "800", None), ("climate.room", "heat", {"current_temperature": 21}),
+        (TIME_ENTITY, "12:00", None),
+        ("sensor.co2", "800", None),
+        ("climate.room", "heat", {"current_temperature": 21}),
         ("light.desk", "on", None),
     ]:
         await simulator.ha.trigger_state_change(entity_id, state, attributes)
@@ -64,17 +67,28 @@ async def test_room_page(simulator, start_plate, plate: FakePlate):
     assert plate.traffic == [
         Http("GET", "list?dir=/"),
         GUI_DEFAULTS,
-        *[_cmd(c) for c in [
-            # register_objects()'s own reaction runs before the objects are initialized
-            "p1b12.border_width=0",
-            "p1b10.text=12:00", "p1b10.text=12:00",
-            "p1b12.text=800ppm", "p1b12.text=800ppm",
-            "p1b13.text=21.0°C", "p1b13.text=21.0°C",
-            "p1b20.text=\uE6E8", "p1b20.text=\uE6E8",
-            "p1b22.val=1", "p1b22.enabled=True",
-            # first sync, one second later (the switch's sync fails, see switch_test.py)
-            "p1b10.text=12:00", "p1b12.text=800ppm", "p1b13.text=21.0°C", "p1b20.text=\uE6E8",
-        ]],
+        *[
+            _cmd(c)
+            for c in [
+                # register_objects()'s own reaction runs before the objects are initialized
+                "p1b12.border_width=0",
+                "p1b10.text=12:00",
+                "p1b10.text=12:00",
+                "p1b12.text=800ppm",
+                "p1b12.text=800ppm",
+                "p1b13.text=21.0°C",
+                "p1b13.text=21.0°C",
+                "p1b20.text=\ue6e8",
+                "p1b20.text=\ue6e8",
+                "p1b22.val=1",
+                "p1b22.enabled=True",
+                # first sync, one second later (the switch's sync fails, see switch_test.py)
+                "p1b10.text=12:00",
+                "p1b12.text=800ppm",
+                "p1b13.text=21.0°C",
+                "p1b20.text=\ue6e8",
+            ]
+        ],
     ]
 
     plate.clear()
@@ -82,9 +96,13 @@ async def test_room_page(simulator, start_plate, plate: FakePlate):
     await simulator.ha.trigger_state_change("light.desk", "off")
     await plate.settle()
     assert plate.commands == [
-        "p1b12.border_width=3", "idle off", "p1b12.text=1200ppm",
+        "p1b12.border_width=3",
+        "idle off",
+        "p1b12.text=1200ppm",
         # the first sync cleared the caches and the switch's sync failed, so "enabled" is sent again
-        "p1b20.text=\uE335", "p1b22.val=0", "p1b22.enabled=True",
+        "p1b20.text=\ue335",
+        "p1b22.val=0",
+        "p1b22.enabled=True",
     ]
 
 
@@ -94,8 +112,9 @@ class PrinterPage(HeaderPage):
     async def register_objects(self):
         await self.register_header_clock()
         self.events = []
-        self.nozzle = await self.add_label(obj_id=12, entity="sensor.nozzle", get_state=self._nozzle,
-                                           text=lambda x: f"T: {int(float(x))}°C")
+        self.nozzle = await self.add_label(
+            obj_id=12, entity="sensor.nozzle", get_state=self._nozzle, text=lambda x: f"T: {int(float(x))}°C"
+        )
         await self.controller.react_to(action=self._on_nozzle_target_changed, trigger="number.nozzle_target", immediately=True)
         status = await self.add_label(obj_id=26, entity="sensor.stage", get_state=self._status)
         await status.set_mode("scroll")
@@ -136,8 +155,13 @@ class PrinterPage(HeaderPage):
 
 async def test_printer_page(simulator, start_plate, plate: FakePlate):
     for entity_id, state in [
-        (TIME_ENTITY, "12:00"), ("sensor.nozzle", "25.4"), ("number.nozzle_target", "0"), ("sensor.stage", "idle"),
-        ("sensor.start_time", "x"), ("sensor.time_second", "0"), ("sensor.progress", "0"),
+        (TIME_ENTITY, "12:00"),
+        ("sensor.nozzle", "25.4"),
+        ("number.nozzle_target", "0"),
+        ("sensor.stage", "idle"),
+        ("sensor.start_time", "x"),
+        ("sensor.time_second", "0"),
+        ("sensor.progress", "0"),
     ]:
         await simulator.ha.trigger_state_change(entity_id, state)
 
@@ -148,23 +172,39 @@ async def test_printer_page(simulator, start_plate, plate: FakePlate):
         Http("GET", "list?dir=/"),
         GUI_DEFAULTS,
         # page 1: register_objects(), initialize_objects()
-        _cmd("p1b10.text=12:00"), _cmd("p1b10.text=12:00"),
+        _cmd("p1b10.text=12:00"),
+        _cmd("p1b10.text=12:00"),
         # page 2: register_objects() with its own reactions; the stage is idle: drop the (not requested) behaviour and wake
         # up the plate
         *[_cmd(c) for c in ["p2b12.text_color=#FFFFFF", "p2b26.mode=scroll", "p2b45.hidden=0"]],
         Mqtt("hasp/mqtt_name/command/idle", "off"),
         # page 2: initialize_objects()
-        *[_cmd(c) for c in [
-            "p2b10.text=12:00", "p2b10.text=12:00",
-            "p2b12.text=T: 25°C", "p2b12.text=T: 25°C",
-            "p2b26.text=Stage: idle", "p2b26.text=Stage: idle",
-            "p2b29.text=Elapsed:", "p2b29.text=Elapsed:",
-            "p2b30.text=0s", "p2b30.text=0s",
-            "p2b28.enabled=True", "p2b28.val=0",
-            # first sync
-            "p1b10.text=12:00", "p2b10.text=12:00", "p2b12.text=T: 25°C", "p2b26.text=Stage: idle", "p2b29.text=Elapsed:",
-            "p2b30.text=0s", "p2b28.enabled=True", "p2b28.val=0",
-        ]],
+        *[
+            _cmd(c)
+            for c in [
+                "p2b10.text=12:00",
+                "p2b10.text=12:00",
+                "p2b12.text=T: 25°C",
+                "p2b12.text=T: 25°C",
+                "p2b26.text=Stage: idle",
+                "p2b26.text=Stage: idle",
+                "p2b29.text=Elapsed:",
+                "p2b29.text=Elapsed:",
+                "p2b30.text=0s",
+                "p2b30.text=0s",
+                "p2b28.enabled=True",
+                "p2b28.val=0",
+                # first sync
+                "p1b10.text=12:00",
+                "p2b10.text=12:00",
+                "p2b12.text=T: 25°C",
+                "p2b26.text=Stage: idle",
+                "p2b29.text=Elapsed:",
+                "p2b30.text=0s",
+                "p2b28.enabled=True",
+                "p2b28.val=0",
+            ]
+        ],
     ]
 
     plate.clear()
@@ -193,8 +233,9 @@ class MediaPage(HeaderPage):
         await self.add_label(obj_id=25, entity=players, attribute="all", get_state=self._artist)
         self.bar = await self.add_bar(obj_id=30)
         self.bar_label = await self.add_label(obj_id=31)
-        await self.controller.react_to(action=self._tick, trigger=Trigger.Time.every(interval=timedelta(seconds=1)),
-                                       immediately=True)
+        await self.controller.react_to(
+            action=self._tick, trigger=Trigger.Time.every(interval=timedelta(seconds=1)), immediately=True
+        )
         await self.claim(active=self._any_playing, trigger=Trigger.Entity(players, attribute="all"), keep_awake=True)
 
     async def _playing(self) -> list:
@@ -231,14 +272,23 @@ async def test_media_page(simulator, start_plate, plate: FakePlate):
     assert plate.traffic == [
         Http("GET", "list?dir=/"),
         GUI_DEFAULTS,
-        *[_cmd(c) for c in [
-            "p1b30.enabled=False", "p1b30.val=0", "p1b31.text=",
-            "p1b10.text=12:00", "p1b10.text=12:00",
-            "p1b25.text=-", "p1b25.text=-", "p1b25.text=-",
-            # the tick one second later, then the first sync
-            "p1b31.text=",
-            "p1b10.text=12:00", "p1b25.text=-",
-        ]],
+        *[
+            _cmd(c)
+            for c in [
+                "p1b30.enabled=False",
+                "p1b30.val=0",
+                "p1b31.text=",
+                "p1b10.text=12:00",
+                "p1b10.text=12:00",
+                "p1b25.text=-",
+                "p1b25.text=-",
+                "p1b25.text=-",
+                # the tick one second later, then the first sync
+                "p1b31.text=",
+                "p1b10.text=12:00",
+                "p1b25.text=-",
+            ]
+        ],
     ]
 
     plate.clear()
@@ -252,7 +302,9 @@ async def test_media_page(simulator, start_plate, plate: FakePlate):
         *ALWAYS_ON,
         Mqtt("hasp/mqtt_name/command/page", "1"),
         _cmd("p1b25.text=Artist"),
-        _cmd("p1b30.enabled=True"), _cmd("p1b30.val=40"), _cmd("p1b31.text=40%"),
+        _cmd("p1b30.enabled=True"),
+        _cmd("p1b30.val=40"),
+        _cmd("p1b31.text=40%"),
     ]
 
     plate.clear()

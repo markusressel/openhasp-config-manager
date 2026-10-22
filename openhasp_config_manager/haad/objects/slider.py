@@ -17,7 +17,6 @@ class SliderEvent(StrEnum):
 
 
 class SliderObjectController(ObjectController):
-
     OBJ_TYPE = "slider"
 
     def __init__(

@@ -34,7 +34,11 @@ async def test_deploy_returns_the_upload_result(page: PageController, monkeypatc
     """With an uploader that works (see test_deploy_fails), deploy() returns whether anything changed."""
     deployment = page.plate.deployment_controller
     uploads = []
-    monkeypatch.setattr(deployment._uploader, "upload", lambda device, purge, show_diff: uploads.append((device.name, purge, show_diff)) or True)
+    monkeypatch.setattr(
+        deployment._uploader,
+        "upload",
+        lambda device, purge, show_diff: uploads.append((device.name, purge, show_diff)) or True,
+    )
 
     assert await deployment.deploy(purge=True, show_diff=True) is True
     assert uploads == [("test_device", True, True)]
@@ -43,7 +47,9 @@ async def test_deploy_returns_the_upload_result(page: PageController, monkeypatc
 async def test_deploy_config(page: PageController, plate: FakePlate):
     await page.plate.deployment_controller.deploy_config()
 
-    assert plate.http == [Http("POST", "config", {"idle1": 60, "idle2": 120, "rotate": 1, "cursor": 0, "bckl": 32, "save": "gui"})]
+    assert plate.http == [
+        Http("POST", "config", {"idle1": 60, "idle2": 120, "rotate": 1, "cursor": 0, "bckl": 32, "save": "gui"})
+    ]
 
 
 async def test_set_gui_config(page: PageController, plate: FakePlate):
@@ -60,4 +66,6 @@ async def test_screen_controller(page: PageController, plate: FakePlate):
     await screen.init()
 
     assert plate.commands == ['backlight {"state": false, "brightness": 3}', "idle long"]
-    assert plate.http == [Http("POST", "config", {"idle1": 60, "idle2": 120, "rotate": 1, "cursor": 0, "bckl": 32, "save": "gui"})]
+    assert plate.http == [
+        Http("POST", "config", {"idle1": 60, "idle2": 120, "rotate": 1, "cursor": 0, "bckl": 32, "save": "gui"})
+    ]
