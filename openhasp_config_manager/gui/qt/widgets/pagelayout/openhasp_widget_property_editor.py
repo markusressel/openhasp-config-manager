@@ -61,7 +61,8 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         self._original_snapshot: Dict = {}
         self._edit_mode = False
         self._session: Optional[PlateSession] = None
-        self._pending_template_keys: Set[str] = set()
+        # property -> the text typed so far ("" if none), for those switched to a template that is not valid yet
+        self._pending_templates: Dict[str, str] = {}
         self._validator: Optional[PropertyValidator] = None
 
         self.outer_layout = QVBoxLayout(self)
@@ -110,8 +111,7 @@ class OpenHASPWidgetPropertyEditor(QWidget):
             self._original_snapshot = copy.deepcopy(self._session.source_of(self._editable_widgets[0].obj_data))
         else:
             self._original_snapshot = {}
-        # properties switched to a template that is not valid yet
-        self._pending_template_keys = set()
+        self._pending_templates = {}
 
         self.refresh()
         self.scroll_area.verticalScrollBar().setValue(0)
@@ -271,7 +271,7 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         if not self._editable_widgets:
             return
         self._restore(self._editable_widgets[0], key)
-        self._pending_template_keys.discard(key)
+        self._pending_templates.pop(key, None)
 
         # Refresh UI to update the 'changed' status of reset buttons
         self.refresh()
@@ -286,7 +286,7 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         for key in set(source) | set(self._original_snapshot):
             if source.get(key, _MISSING) != self._original_snapshot.get(key, _MISSING):
                 self._restore(widget, key)
-        self._pending_template_keys.clear()
+        self._pending_templates.clear()
         self.refresh()
 
     def _restore(self, widget: EditableWidget, key: str):
@@ -301,7 +301,7 @@ class OpenHASPWidgetPropertyEditor(QWidget):
 
     def _create_property_field(self, obj_data: Dict, key: str, widget: EditableWidget) -> QWidget:
         """The editor of a property: a literal value, or a template, switched by the button next to it."""
-        template_mode = key in self._pending_template_keys or self._session.is_template(obj_data, key)
+        template_mode = key in self._pending_templates or self._session.is_template(obj_data, key)
 
         container = QWidget()
         row = _plain_layout(QHBoxLayout(container))
@@ -326,9 +326,9 @@ class OpenHASPWidgetPropertyEditor(QWidget):
     def _set_template_mode(self, widget: EditableWidget, key: str, enabled: bool):
         if enabled:
             # the source changes once a valid template was entered
-            self._pending_template_keys.add(key)
+            self._pending_templates[key] = ""
         else:
-            self._pending_template_keys.discard(key)
+            self._pending_templates.pop(key, None)
             if self._session.is_template(widget.obj_data, key):
                 # keep the current value, as a literal
                 self._on_property_edited(key, widget.obj_data.get(key), widget)
@@ -339,7 +339,8 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         column = _plain_layout(QVBoxLayout(container))
 
         source_value = self._session.source_of(obj_data).get(key)
-        editor = UiComponents.create_edittext(text=source_value if self._session.is_template(obj_data, key) else "")
+        is_template = self._session.is_template(obj_data, key)
+        editor = UiComponents.create_edittext(text=source_value if is_template else self._pending_templates.get(key, ""))
         editor.setPlaceholderText("{{ variable }}")
         editor.setToolTip("A Jinja template, rendered like a deployment does. Type to see the available variables.")
         editor.setEnabled(key not in READ_ONLY_PROPERTIES)
@@ -363,12 +364,17 @@ class OpenHASPWidgetPropertyEditor(QWidget):
             error_label.setText(error or "")
             error_label.setVisible(error is not None)
             if error is None:
-                self._pending_template_keys.discard(key)
+                self._pending_templates.pop(key, None)
                 self._on_property_edited(key, text, widget)
+            else:
+                # the panel is rebuilt e.g. after the object was moved: keep what was typed
+                self._pending_templates[key] = text
             show_value()
 
         show_value()
         error_label.hide()
+        if editor.text() and not is_template:
+            apply(editor.text())
         editor.textChanged.connect(apply)
         return container
 

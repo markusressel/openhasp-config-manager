@@ -452,3 +452,29 @@ class TestLockedPosition(TestBase):
         # THEN
         assert unlocked is False
         assert offered() is True
+
+
+class TestPropertyEditor(TestBase):
+    def _template_field(self, editor):
+        from PyQt6.QtWidgets import QLineEdit
+
+        return next(
+            field for field in editor.property_editor.findChildren(QLineEdit) if field.placeholderText() == "{{ variable }}"
+        )
+
+    def test_a_template_that_is_not_valid_yet_survives_a_rebuild_of_the_panel(self, editor):
+        # GIVEN
+        editor.set_edit_mode(True)
+        editor.property_editor.set_session(editor.session)
+        obj = _object(editor, 1)
+        editor.page_preview_widget.select_object(obj)
+        widget = editor.property_editor._editable_widgets[0]
+        editor.property_editor._set_template_mode(widget, "text", True)
+        self._template_field(editor).setText("{{ nope")
+
+        # WHEN: e.g. the object was moved
+        editor.property_editor.refresh()
+
+        # THEN
+        assert self._template_field(editor).text() == "{{ nope"
+        assert editor.session.is_template(obj, "text") is False
