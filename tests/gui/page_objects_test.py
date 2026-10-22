@@ -4,16 +4,15 @@ import pytest
 
 from openhasp_config_manager.gui.domain.page_objects import (
     OpenHASPWidgetType,
-    add_object,
     count_objects,
     create_object,
-    duplicate_object,
     find_target_component,
     get_navigable_page_indices,
     get_page_objects,
+    is_hidden,
+    step_page,
     is_id_used,
     next_free_id,
-    remove_object,
 )
 from tests import TestBase
 
@@ -36,12 +35,12 @@ def _draft() -> OrderedDict:
 
 
 class TestPageObjects(TestBase):
-    def test_page_objects_include_global_objects_last(self):
+    def test_page_objects_include_hidden_and_global_objects_last(self):
         # WHEN
         result = get_page_objects(_draft(), index=1)
 
         # THEN
-        assert [(obj["page"], obj["id"]) for obj in result] == [(1, 1), (0, 1)]
+        assert [(obj["page"], obj["id"]) for obj in result] == [(1, 1), (1, 2), (0, 1)]
 
     def test_page_objects_without_global_objects(self):
         # WHEN
@@ -49,6 +48,25 @@ class TestPageObjects(TestBase):
 
         # THEN
         assert [(obj["page"], obj["id"]) for obj in result] == [(2, 1)]
+
+    def test_is_hidden(self):
+        assert is_hidden({"hidden": True}) is True
+        assert is_hidden({"hidden": 1}) is True
+        assert is_hidden({"hidden": "true"}) is True
+        assert is_hidden({"hidden": False}) is False
+        assert is_hidden({"hidden": 0}) is False
+        assert is_hidden({}) is False
+
+    def test_step_page_rolls_over(self):
+        assert step_page([1, 2, 5], current=5, step=1) == 1
+        assert step_page([1, 2, 5], current=1, step=-1) == 5
+        assert step_page([1, 2, 5], current=2, step=1) == 5
+
+    def test_step_page_from_a_page_without_objects_goes_to_the_first(self):
+        assert step_page([1, 2], current=42, step=1) == 1
+
+    def test_step_page_without_pages(self):
+        assert step_page([], current=1, step=1) is None
 
     def test_navigable_pages_skip_page_0(self):
         assert get_navigable_page_indices(_draft()) == [1, 2]
@@ -101,43 +119,3 @@ class TestPageObjects(TestBase):
 
     def test_target_component_without_components(self):
         assert find_target_component(OrderedDict(), page=1) is None
-
-    def test_add_object_after_another_one(self):
-        # GIVEN
-        draft = _draft()
-        first = draft["home.jsonl"][0]
-        new = {"page": 1, "id": 9}
-
-        # WHEN
-        add_object(draft, "home.jsonl", new, after=first)
-
-        # THEN
-        assert draft["home.jsonl"][1] is new
-
-    def test_remove_object_uses_identity_and_searches_all_components(self):
-        # GIVEN
-        draft = _draft()
-        draft["empty.jsonl"].append({"page": 0, "id": 1, "obj": "btn"})  # equal to the one in nav.jsonl
-        target = draft["empty.jsonl"][0]
-
-        # WHEN
-        removed = remove_object(draft, target)
-
-        # THEN
-        assert removed is True
-        assert draft["empty.jsonl"] == []
-        assert len(draft["nav.jsonl"]) == 1
-
-    def test_duplicate_object(self):
-        # GIVEN
-        draft = _draft()
-        original = draft["home.jsonl"][0]
-        original.update({"x": 10, "y": 20})
-
-        # WHEN
-        duplicate = duplicate_object(draft, original)
-
-        # THEN
-        assert duplicate is not original
-        assert (duplicate["id"], duplicate["x"], duplicate["y"]) == (3, 20, 30)
-        assert draft["home.jsonl"][1] is duplicate

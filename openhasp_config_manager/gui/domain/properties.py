@@ -1,5 +1,7 @@
 from typing import Callable, Dict, List, Tuple
 
+from openhasp_config_manager.processing.jsonl.jsonl import ObjectDimensionsProcessor
+
 READ_ONLY_PROPERTIES = {"page", "obj"}
 PIXEL_PROPERTIES = {
     "x",
@@ -67,6 +69,15 @@ def group_properties(obj: Dict) -> List[Tuple[str, List[str]]]:
         group = next((title for title, matches in _GROUPS if matches(key)), OTHER_GROUP)
         grouped[group].append(key)
     return [(title, keys) for title, keys in grouped.items() if keys]
+
+
+# properties that can be pixels or a percentage of the screen size (see ObjectDimensionsProcessor)
+DIMENSION_PROPERTIES = {"x", "y", "w", "h"}
+
+
+def is_dimension(value: str) -> bool:
+    """:return: whether the text is pixels (e.g. "120") or a percentage (e.g. "15%")"""
+    return value.strip().isdigit() or ObjectDimensionsProcessor.PERCENTAGE_REGEX_PATTERN.match(value) is not None
 
 
 def is_color_property(key: str) -> bool:

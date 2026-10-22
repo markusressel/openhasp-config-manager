@@ -1,4 +1,4 @@
-from openhasp_config_manager.gui.domain.properties import group_properties
+from openhasp_config_manager.gui.domain.properties import group_properties, is_dimension
 from tests import TestBase
 
 
@@ -37,3 +37,10 @@ class TestProperties(TestBase):
 
     def test_empty_groups_are_left_out(self):
         assert group_properties({"x": 1}) == [("Position", ["x"])]
+
+    def test_is_dimension(self):
+        assert is_dimension("120") is True
+        assert is_dimension("15%") is True
+        assert is_dimension("12.5%") is True
+        assert is_dimension("15 px") is False
+        assert is_dimension("{{ x }}") is False

@@ -1,9 +1,7 @@
 import asyncio
 import logging
-from collections import OrderedDict
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, List, Dict, Callable
+from typing import Optional, List, Dict, Callable, Tuple
 
 import qtawesome as qta
 
@@ -22,10 +20,16 @@ from PyQt6.QtWidgets import (
     QSplitter,
     QToolButton,
     QApplication,
+    QMessageBox,
 )
-from orjson import orjson
-
 from openhasp_config_manager.const import DEVICES_FOLDER_NAME
+from openhasp_config_manager.gui.domain.draft_files import (
+    LoadedDevice,
+    load_device,
+    plan_save,
+    write_save,
+    SaveConflictError,
+)
 from openhasp_config_manager.gui.dimensions import UiDimensions
 from openhasp_config_manager.gui.domain.connection import ConnectionStatus, Severity, LinkState
 from openhasp_config_manager.gui.domain.plate_session import PlateSession
@@ -40,56 +44,9 @@ from openhasp_config_manager.gui.qt.widgets.message_panel import MessagePanel
 from openhasp_config_manager.gui.qt.widgets.pagelayout import OpenHaspDevicePagesData
 from openhasp_config_manager.gui.qt.widgets.pagelayout.page_layout_editor import PageLayoutEditorWidget
 from openhasp_config_manager.manager import ConfigManager
-from openhasp_config_manager.openhasp_client.model.component import CmdComponent
 from openhasp_config_manager.openhasp_client.model.device import Device
 
 LOGGER = logging.getLogger(__name__)
-
-# the cmd component whose pages the editor shows
-BOOT_CMD = "boot.cmd"
-
-
-@dataclass
-class LoadedDevice:
-    devices: List[Device]
-    device: Device
-    pages_data: OpenHaspDevicePagesData
-    # the normalized objects of the jsonl components
-    raw_data: OrderedDict[str, List[Dict]]
-
-
-def load_device(config_manager: ConfigManager, name: str) -> LoadedDevice:
-    """
-    Analyze the config directory again (to reflect changes on disk) and load the pages of a device.
-    Runs in a worker thread: it renders templates and must not block the UI.
-    """
-    devices = config_manager.analyze()
-    device = next((d for d in devices if d.name == name), None)
-    if device is None:
-        raise RuntimeError(f"The device '{name}' no longer exists in {Path(config_manager.cfg_root, DEVICES_FOLDER_NAME)}.")
-
-    relevant_components = config_manager.find_relevant_components(device)
-    boot_cmd_component: Optional[CmdComponent] = next((c for c in relevant_components if c.name == BOOT_CMD), None)
-    if boot_cmd_component is None:
-        raise RuntimeError(f"{device.path} has no {BOOT_CMD}. The editor shows the pages that {BOOT_CMD} loads.")
-
-    jsonl_components = config_manager.determine_device_jsonl_component_order_for_cmd(
-        device=device,
-        cmd_component=boot_cmd_component,
-    )
-
-    device_processor = config_manager.create_device_processor(device)
-    raw_data = OrderedDict()
-    for jsonl_component in jsonl_components:
-        normalized_jsonl_component = device_processor.normalize(device, jsonl_component)
-        raw_data[jsonl_component.name] = list(map(orjson.loads, normalized_jsonl_component.splitlines()))
-
-    return LoadedDevice(
-        devices=devices,
-        device=device,
-        pages_data=OpenHaspDevicePagesData(device=device, name=boot_cmd_component.name, jsonl_components=jsonl_components),
-        raw_data=raw_data,
-    )
 
 
 class StatusBarController:
@@ -198,9 +155,14 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.config_manager = config_manager
         self.devices: List[Device] = []
-        self.sessions: Dict[Device, PlateSession] = {}
+        # one draft per (device name, cmd component): the Device objects are created anew on every reload
+        self.sessions: Dict[Tuple[str, str], PlateSession] = {}
         self.device: Optional[Device] = None
         self._selected_name: Optional[str] = None
+        # the (device name, cmd component) of the draft in the editor
+        self._session_key: Optional[Tuple[str, str]] = None
+        # the page to show after a draft was reloaded (saved or reverted), per session key
+        self._page_after_reload: Dict[Tuple[str, str], int] = {}
 
         self.status = OperationStatus(self)
 
@@ -219,6 +181,7 @@ class MainWindow(QMainWindow):
         self.page_layout_editor_widget = PageLayoutEditorWidget(status=self.status)
         self.page_layout_editor_widget.pageChanged.connect(lambda index, count: self.status_bar.set_page(index, count))
         self.page_layout_editor_widget.dirtyChanged.connect(lambda dirty: self.status_bar.set_dirty(dirty))
+        self.page_layout_editor_widget.dirtyChanged.connect(lambda _: self._update_draft_actions())
         self.addToolBar(self.page_layout_editor_widget.toolbar)
 
         # center: a placeholder (no device, loading, errors) or the editor
@@ -292,7 +255,27 @@ class MainWindow(QMainWindow):
         editor = self.page_layout_editor_widget
         create = UiComponents.create_action
 
+        self.action_save = create(
+            self,
+            "Save",
+            "content-save",
+            self.save_draft,
+            shortcut=QKeySequence.StandardKey.Save,
+            tooltip="Write the changes of the draft into the .jsonl files",
+        )
+        self.action_revert = create(
+            self, "Revert", "restore", self.revert_draft, tooltip="Discard the changes of the draft and load the files again"
+        )
+        toolbar = editor.toolbar
+        first = toolbar.actions()[0]
+        toolbar.insertAction(first, self.action_save)
+        toolbar.insertAction(first, self.action_revert)
+        toolbar.insertSeparator(first)
+
         file_menu = self.menuBar().addMenu("&File")
+        file_menu.addAction(self.action_save)
+        file_menu.addAction(self.action_revert)
+        file_menu.addSeparator()
         file_menu.addAction(create(self, "Reload devices", "refresh", self.load_plates, shortcut="Ctrl+R"))
         file_menu.addSeparator()
         file_menu.addAction(create(self, "Quit", "exit-to-app", self.close, shortcut=QKeySequence.StandardKey.Quit))
@@ -358,6 +341,18 @@ class MainWindow(QMainWindow):
             self.restoreState(state)
 
     def closeEvent(self, event):
+        dirty = [f"{device} ({cmd})" for (device, cmd), session in self.sessions.items() if session.is_dirty]
+        if dirty:
+            answer = QMessageBox.question(
+                self,
+                "Unsaved changes",
+                "These drafts have changes that are not saved:\n\n" + "\n".join(dirty) + "\n\nDiscard them and quit?",
+                QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel,
+                QMessageBox.StandardButton.Cancel,
+            )
+            if answer != QMessageBox.StandardButton.Discard:
+                event.ignore()
+                return
         self.connection.stop()
         settings = QSettings()
         settings.setValue("window/geometry", self.saveGeometry())
@@ -405,10 +400,6 @@ class MainWindow(QMainWindow):
 
     def _set_devices(self, devices: List[Device]):
         self.devices = devices
-        # Update or create sessions for each device
-        for device in self.devices:
-            if device not in self.sessions:
-                self.sessions[device] = PlateSession(device=device)
         self.device_list_widget.set_devices(self.devices, selected=self._selected_name)
 
     def _show_no_device_selected(self):
@@ -455,12 +446,94 @@ class MainWindow(QMainWindow):
 
         run_async(__load(), on_success=__on_success, on_error=__on_error)
 
+    # --- draft ---
+
+    @property
+    def session(self) -> Optional[PlateSession]:
+        return None if self.device is None else self.sessions.get(self._session_key)
+
+    def _update_draft_actions(self):
+        dirty = self.session is not None and self.session.is_dirty
+        self.action_save.setEnabled(dirty)
+        self.action_revert.setEnabled(dirty)
+
+    def save_draft(self):
+        """Write the changes of the draft into the source files, then load them again."""
+        session = self.session
+        if session is None or not session.is_dirty:
+            return
+        try:
+            changes = plan_save(session)
+        except (SaveConflictError, ValueError) as ex:
+            QMessageBox.critical(self, "Save failed", error_text(ex))
+            return
+
+        common = [change for change in changes if change.is_common]
+        if common:
+            paths = [change.path for change in common]
+            others = sorted(
+                device.name
+                for device in self.devices
+                if device.name != self.device.name and any(component.path in paths for component in device.jsonl)
+            )
+            answer = QMessageBox.question(
+                self,
+                "Save shared files",
+                "These files are in the common folder and shared with other devices:\n\n"
+                + "\n".join(str(path) for path in paths)
+                + (f"\n\nThe change also affects: {', '.join(others)}." if others else "")
+                + "\n\nSave them anyway?",
+                QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Cancel,
+                QMessageBox.StandardButton.Cancel,
+            )
+            if answer != QMessageBox.StandardButton.Save:
+                return
+
+        try:
+            write_save(changes)
+        except OSError as ex:
+            QMessageBox.critical(self, "Save failed", error_text(ex))
+            return
+        self.status.succeeded.emit(f"Saved {len(changes)} file{'' if len(changes) == 1 else 's'}")
+        self._reload_draft()
+
+    def revert_draft(self):
+        session = self.session
+        if session is None or not session.is_dirty:
+            return
+        answer = QMessageBox.question(
+            self,
+            "Revert",
+            f"Discard all changes of the draft of {self.device.name} and load its files again?",
+            QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Cancel,
+        )
+        if answer == QMessageBox.StandardButton.Discard:
+            self._reload_draft()
+
+    def _reload_draft(self):
+        """Drop the draft of the current device and load it from disk, on the same page."""
+        self.sessions.pop(self._session_key)
+        self._page_after_reload[self._session_key] = self.page_layout_editor_widget.current_index
+        self.on_device_selected(self.device.name)
+
     def select_device(self, loaded: LoadedDevice):
         self.device = loaded.device
-        session = self.sessions[loaded.device]
+        pages_data = OpenHaspDevicePagesData(
+            device=loaded.device, name=loaded.cmd_component.name, jsonl_components=loaded.jsonl_components
+        )
+        key = (loaded.device.name, pages_data.name)
+        session = self.sessions.setdefault(key, PlateSession(device=loaded.device))
+        session.device = loaded.device
+        if not session.is_loaded:
+            session.load(loaded.components, loaded.renderer)
+        self._session_key = key
         self.device_control_widget.set_device(self.device)
         self.connection.set_device(self.device)
-        self.page_layout_editor_widget.set_data(session=session, device_pages_data=loaded.pages_data, raw_data=loaded.raw_data)
+        self.page_layout_editor_widget.set_data(
+            session=session, device_pages_data=pages_data, page=self._page_after_reload.pop(key, None)
+        )
+        self._update_draft_actions()
         self.center_stack.setCurrentWidget(self.page_layout_editor_widget)
         self.page_layout_editor_widget.page_preview_widget.fit_to_view()
 

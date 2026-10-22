@@ -1,6 +1,6 @@
 import logging
 from enum import StrEnum
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Callable
 
 from PyQt6 import QtCore
 from PyQt6.QtCore import Qt, QRectF
@@ -59,6 +59,7 @@ class PagePreviewWidget(QGraphicsView):
         self.objects: List[dict] = []
         self._fit_to_view = True
         self._empty_hint: Optional[str] = None
+        self._is_movable: Callable[[Dict], bool] = lambda _obj: True
 
         # Make it scale smoothly
         self.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
@@ -101,10 +102,14 @@ class PagePreviewWidget(QGraphicsView):
             self.scene().clearSelection()
         for item in self.scene().items():
             if isinstance(item, EditableWidget):
-                item.movable = mode == PreviewMode.Edit
+                item.movable = mode == PreviewMode.Edit and self._is_movable(item.obj_data)
                 item.editable = mode == PreviewMode.Edit
         self.viewport().update()
         self.modeChanged.emit(mode)
+
+    def set_movable_predicate(self, is_movable: Callable[[Dict], bool]):
+        """Decides which objects can be dragged in edit mode (others can still be selected)."""
+        self._is_movable = is_movable
 
     def set_snap_enabled(self, enabled: bool):
         self.scene().snap_enabled = enabled
@@ -148,7 +153,7 @@ class PagePreviewWidget(QGraphicsView):
 
             if item is not None:
                 LOGGER.debug(f"Adding '{obj_type}' item to scene: {item}")
-                item.movable = self.mode == PreviewMode.Edit
+                item.movable = self.mode == PreviewMode.Edit and self._is_movable(item.obj_data)
                 item.editable = self.mode == PreviewMode.Edit
                 self.scene().addItem(item)
 

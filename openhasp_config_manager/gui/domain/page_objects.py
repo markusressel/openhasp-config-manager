@@ -77,7 +77,7 @@ def get_page_objects(
     :param component_objects: the objects of a draft, per jsonl component
     :param index: the index of the page
     :param include_global: whether to include global objects (page 0)
-    :return: the objects of the page, global objects last (they are drawn on top)
+    :return: the objects of the page (hidden ones too), global objects last (they are drawn on top)
     """
     result = [
         obj
@@ -86,12 +86,30 @@ def get_page_objects(
         if obj.get("page") == index or (include_global and obj.get("page") == 0)
     ]
 
-    # Filter hidden objects
-    result = [obj for obj in result if not obj.get("hidden", False)]
-
     # Draw objects on page 0 last (on top)
     result.sort(key=lambda obj: obj.get("page") == 0)
     return result
+
+
+def is_hidden(obj: Dict) -> bool:
+    """
+    :return: whether the object is hidden on the plate (openHASP accepts true/false, 1/0 and their string forms)
+    """
+    return str(obj.get("hidden", False)).lower() in ("true", "1")
+
+
+def step_page(pages: List[int], current: int, step: int) -> Optional[int]:
+    """
+    :param pages: the navigable page indices, sorted
+    :param current: the current page index, which may not be one of them (e.g. an empty page)
+    :param step: how many pages to go forward (negative: backward), rolling over at the ends
+    :return: the page to go to, or None if there is none
+    """
+    if not pages:
+        return None
+    if current not in pages:
+        return pages[0]
+    return pages[(pages.index(current) + step) % len(pages)]
 
 
 def get_navigable_page_indices(component_objects: OrderedDict[str, List[Dict]]) -> List[int]:
@@ -158,45 +176,3 @@ def find_target_component(component_objects: OrderedDict[str, List[Dict]], page:
     if counts[best] > 0:
         return best
     return next(reversed(component_objects))
-
-
-def add_object(component_objects: OrderedDict[str, List[Dict]], component_name: str, obj: Dict, after: Dict = None):
-    """
-    Add an object to a component of the draft, directly after `after` if given (keeps the z-order next to it).
-    """
-    objects = component_objects[component_name]
-    if after is None:
-        objects.append(obj)
-        return
-    position = next(i for i, other in enumerate(objects) if other is after)
-    objects.insert(position + 1, obj)
-
-
-def find_component_of(component_objects: OrderedDict[str, List[Dict]], obj: Dict) -> str:
-    return next(name for name, objects in component_objects.items() if any(other is obj for other in objects))
-
-
-def remove_object(component_objects: OrderedDict[str, List[Dict]], obj: Dict) -> bool:
-    """
-    Remove the given object (by identity, not equality) from whichever component of the draft holds it.
-    :return: whether it was found
-    """
-    for objects in component_objects.values():
-        for i, other in enumerate(objects):
-            if other is obj:
-                del objects[i]
-                return True
-    return False
-
-
-def duplicate_object(component_objects: OrderedDict[str, List[Dict]], obj: Dict, offset: int = 10) -> Dict:
-    """
-    Duplicate an object into the same component, with the next free id on its page and moved by `offset`.
-    :return: the new object
-    """
-    duplicate = copy.deepcopy(obj)
-    duplicate["id"] = next_free_id(component_objects, obj.get("page", 0))
-    duplicate["x"] = obj.get("x", 0) + offset
-    duplicate["y"] = obj.get("y", 0) + offset
-    add_object(component_objects, find_component_of(component_objects, obj), duplicate, after=obj)
-    return duplicate

@@ -3,7 +3,11 @@ from typing import Dict
 from PyQt6 import QtGui, QtCore, QtWidgets
 from PyQt6.QtWidgets import QGraphicsObject, QGraphicsItem
 
+from openhasp_config_manager.gui.domain.page_objects import is_hidden
 from openhasp_config_manager.gui.qt.theme import current_colors
+
+# the opacity of objects that are hidden on the plate
+HIDDEN_OPACITY = 0.3
 
 
 class EditableWidget(QGraphicsObject):
@@ -40,17 +44,22 @@ class EditableWidget(QGraphicsObject):
 
         # Initial sync: Move the item to the position defined in the JSON data
         self.setPos(float(self.obj_x), float(self.obj_y))
+        self._update_hidden()
 
-    def set_property(self, key: str, value):
+    def refresh(self):
         """
-        Change a property of the object and redraw it from its data.
+        Redraw the object after its data changed (the data belongs to the draft, see PlateSession).
         """
         # the bounding rect depends on w and h
         self.prepareGeometryChange()
-        self.obj_data[key] = value
         self.setPos(float(self.obj_x), float(self.obj_y))
+        self._update_hidden()
         self._on_data_changed()
         self.update()
+
+    def _update_hidden(self):
+        # hidden objects stay selectable and editable, but are dimmed
+        self.setOpacity(HIDDEN_OPACITY if is_hidden(self.obj_data) else 1.0)
 
     def _on_data_changed(self):
         """

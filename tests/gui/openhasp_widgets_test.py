@@ -12,7 +12,8 @@ class TestOpenHaspWidgets(TestBase):
         button = HaspButtonItem(obj_data={"obj": "btn", "x": 0, "y": 0, "w": 100, "h": 40, "text": "Work"})
 
         # WHEN
-        button.set_property("text", "Sleep")
+        button.obj_data["text"] = "Sleep"
+        button.refresh()
 
         # THEN
         assert button.text_item.toPlainText() == "Sleep"
@@ -24,7 +25,8 @@ class TestOpenHaspWidgets(TestBase):
         label = HaspLabelItem(obj_data={"obj": "label", "x": 0, "y": 0, "w": 100, "h": 40, "text": "Desk"})
 
         # WHEN
-        label.set_property("text", "")
+        label.obj_data["text"] = ""
+        label.refresh()
 
         # THEN
         assert label.text_item.toPlainText() == ""
@@ -36,9 +38,20 @@ class TestOpenHaspWidgets(TestBase):
         switch = HaspSwitchItem(obj_data={"obj": "switch", "x": 0, "y": 0, "w": 80, "h": 40, "val": 0})
 
         # WHEN
-        switch.set_property("val", 1)
-        switch.set_property("x", 25)
+        switch.obj_data.update(val=1, x=25)
+        switch.refresh()
 
         # THEN
         assert switch._val == 1
         assert switch.pos().x() == 25
+
+
+@pytest.mark.usefixtures("qapp")
+class TestTemplateCompleter(TestBase):
+    def test_suggestion_html_highlights_matched_characters_and_escapes(self):
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.template_completer import suggestion_html
+
+        result = suggestion_html("{{ a<b }}", [3, 5], "'x'", match_color="#ff0000", value_color="#888")
+
+        assert result.startswith('{{ <b style="color: #ff0000;">a</b>&lt;<b style="color: #ff0000;">b</b> }}')
+        assert result.endswith('<span style="color: #888;">= &#x27;x&#x27;</span>')

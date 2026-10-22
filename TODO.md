@@ -18,16 +18,20 @@ Findings from a review of `openhasp_config_manager/gui` (PyQt6 page layout edito
 
 ## 2. Session and editing bugs
 
-- [ ] `PlateSession.is_dirty`, `commit_to_snapshot()` and `reset_to_disk()` are never used: edits cannot be saved. Add "Save" (write the draft
-  back to the `.jsonl` files of its components), "Revert" and a dirty indicator.
-- [ ] `MainWindow.load_plates()` runs `analyze()` on every device click and builds new `Device` objects, while `sessions` is keyed by `Device`.
+- [x] `PlateSession.is_dirty`, `commit_to_snapshot()` and `reset_to_disk()` are never used: edits cannot be saved. Add "Save" (write the draft
+  back to the `.jsonl` files of its components), "Revert" and a dirty indicator. (The draft keeps each object's source with its templates;
+  Save patches only the changed properties into the files, see `processing/jsonl/source_editor.py`, and asks before changing `common/` files.)
+- [x] Templates in the editor: every property can be switched to a Jinja template, with the variables of a deployment as suggestions
+  (`DeviceProcessor.jsonl_template_variables`) and the rendered value shown below it.
+- [ ] Insert template variables inside longer texts (the suggestions replace the whole value today).
+- [x] `MainWindow.load_plates()` runs `analyze()` on every device click and builds new `Device` objects, while `sessions` is keyed by `Device`.
   Key the sessions by `device.name` (check `Device.__eq__`/`__hash__`), so a draft survives re-selecting a device.
-- [ ] `PageLayoutEditorWidget.set_data` loads from disk only when `working_objects` is empty: selecting another cmd component reuses the stale
+- [x] `PageLayoutEditorWidget.set_data` loads from disk only when `working_objects` is empty: selecting another cmd component reuses the stale
   draft. Keep one draft per (device, cmd component), or reload on change.
 - [x] Removing an object only searches `jsonl_components[0]`. Search all components of the draft.
-- [ ] `get_page_objects` drops objects with `hidden: true`, so they cannot be selected or edited. Show them dimmed instead.
+- [x] `get_page_objects` drops objects with `hidden: true`, so they cannot be selected or edited. Show them dimmed instead.
 - [x] Deploy sends one object every 100 ms with no progress and no error feedback. Report progress and failures in the UI.
-- [ ] Tests for the Qt-free parts: `PlateSession`, `get_page_objects`, page index navigation (extract them from the widget into a plain class).
+- [x] Tests for the Qt-free parts: `PlateSession`, `get_page_objects`, page index navigation (extract them from the widget into a plain class).
 
 ## 3. Live editing on the real device, built on the composition system
 
@@ -94,7 +98,7 @@ Plan:
 - [x] A consistent theme: replace the per-widget `setStyleSheet` padding strings with one application stylesheet and the `UiDimensions` scale.
   Support a dark theme.
 - [x] Confirm dialogs for Clear Page, removing objects and rebooting the device.
-- [ ] Confirm dialogs for Revert and "unsaved changes" on device switch and close: need Save/Revert (section 2) first.
+- [x] Confirm dialogs for Revert and "unsaved changes" on close. (Drafts survive a device switch, so it doesn't ask there.)
 - [x] Keyboard shortcuts: delete (Del), duplicate (Ctrl+D), arrow keys to nudge (Shift: 10 px), page left/right (Alt+Left/Right, PgUp/PgDn),
   edit mode (Ctrl+E), snap (Ctrl+G), zoom (Ctrl++/-/0), reload (Ctrl+R). Undo/redo is the item below.
 - [ ] Undo/redo, which comes with the edit model of section 3.
@@ -103,3 +107,20 @@ Plan:
   inline errors.
 - [x] Widget picker: icons and a short description per widget.
 - [x] A scroll wrapper and sensible minimum sizes, so a small window does not clip the controls.
+
+## 5. Packaging and installation
+
+The GUI dependencies (PyQt6, QtAwesome, qt-themes, pfzy) are in the optional Poetry group `ui` because the GUI is still a work in
+progress. They should stay optional, but a Poetry group only exists in the development checkout: `pip install openhasp-config-manager`
+never installs it, so the published package can't run `openhasp-config-manager gui` today.
+
+- [ ] Decide how users choose what to install, e.g.:
+  - extras of one package: `openhasp-config-manager` (CLI and API client), `openhasp-config-manager[gui]`, `openhasp-config-manager[tui]`;
+  - or separate packages: a small API client (`openhasp_client`, used by haad and AppDaemon), the CLI, and the GUI on top of it.
+- [ ] Keep the API client free of CLI and GUI dependencies (click, PyQt6, …), so haad and AppDaemon projects only pull what they use.
+  (`OpenHaspClient` still imports the console helpers from `openhasp_config_manager.console`.)
+- [ ] The `gui` command (and a future TUI) explains which extra to install when its dependencies are missing, instead of an ImportError.
+- [ ] Move the dependencies to `[project.optional-dependencies]` (or Poetry extras) accordingly, and clean up the `[project]` table of
+  `pyproject.toml`, which only has a name and a version next to the Poetry configuration.
+- [ ] Update the Dockerfile, the README installation instructions, `venv-install` in the Makefile and the CI (which installs without `ui`,
+  so the GUI tests are skipped there).

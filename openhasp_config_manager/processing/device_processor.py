@@ -70,35 +70,49 @@ class DeviceProcessor:
         else:
             raise AssertionError(f"Received unexpected input: {component}")
 
-    def _normalize_jsonl(self, config: Config, component: JsonlComponent, template_vars: Dict[str, any]) -> str:
-        normalized_objects: List[str] = []
+    def parse_jsonl_objects(self, component: JsonlComponent) -> List[Dict[str, Any]]:
+        """
+        Parses the objects of a jsonl component as they are written in the file: comments removed, templates not rendered.
+        :param component: the component
+        :return: the source objects, in the order of the file
+        """
+        return [
+            orjson.loads(self._jsonl_preprocessor.cleanup_object_for_json_parsing(ob))
+            for ob in self._jsonl_preprocessor.split_jsonl_objects(component.content)
+        ]
 
-        objects = self._jsonl_preprocessor.split_jsonl_objects(component.content)
-        for ob in objects:
-            preprocessed = self._jsonl_preprocessor.cleanup_object_for_json_parsing(ob)
-            p = self._normalize_jsonl_object(config, component, preprocessed, template_vars)
-            normalized_objects.append(p)
+    def jsonl_template_variables(self, component: JsonlComponent) -> Dict[str, Any]:
+        """
+        :param component: the component, which must have been added to this processor
+        :return: the variables the templates of the component's objects are rendered with
+        """
+        return self._compute_jsonl_template_variables(self._device, component)
 
-        return "\n".join(normalized_objects)
-
-    def _normalize_jsonl_object(
-        self, config: Config, component: JsonlComponent, ob: str, template_vars: Dict[str, any]
-    ) -> str:
-        parsed = orjson.loads(ob)
-
+    def render_jsonl_object(self, source_object: Dict[str, Any], template_vars: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Renders one source object like a deployment does: its templates, then the object processors
+        (percentages, value types, theme defaults).
+        :param source_object: the object as written in the file (see parse_jsonl_objects), it is not modified
+        :param template_vars: the variables of its component (see jsonl_template_variables)
+        :return: the rendered object
+        """
         normalized_object = {}
-        for key, value in parsed.items():
+        for key, value in source_object.items():
             if isinstance(value, str):
-                rendered_value = _render_template(value, template_vars)
-                normalized_object[key] = rendered_value
+                normalized_object[key] = _render_template(value, template_vars)
             else:
                 normalized_object[key] = value
 
         processed = normalized_object
         for processor in self._jsonl_object_processors:
-            processed = processor.process(processed, config, template_vars)
+            processed = processor.process(processed, self._device.config, template_vars)
+        return processed
 
-        return json.dumps(processed, indent=None)
+    def _normalize_jsonl(self, config: Config, component: JsonlComponent, template_vars: Dict[str, any]) -> str:
+        return "\n".join(
+            json.dumps(self.render_jsonl_object(source_object, template_vars), indent=None)
+            for source_object in self.parse_jsonl_objects(component)
+        )
 
     def _normalize_cmd(self, _device_config, component: CmdComponent, template_vars: Dict[str, any]) -> str:
         return _render_template(component.content, template_vars)

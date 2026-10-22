@@ -17,9 +17,7 @@ from openhasp_config_manager.gui.domain.page_objects import (
     is_id_used,
     create_object,
     find_target_component,
-    add_object,
-    remove_object,
-    duplicate_object,
+    step_page,
 )
 from openhasp_config_manager.gui.domain.plate_session import PlateSession
 from openhasp_config_manager.gui.qt.components import UiComponents
@@ -107,6 +105,7 @@ class PageLayoutEditorWidget(QWidget):
         column.addWidget(self.error_banner)
 
         self.page_preview_widget = PagePreviewWidget()
+        self.page_preview_widget.set_movable_predicate(lambda obj: self.session is None or self._is_movable(obj))
         self.page_preview_widget.buttonClicked.connect(self.__on_preview_layout_button_clicked)
         self.page_preview_widget.modeChanged.connect(self._on_editor_mode_changed)
         self.page_preview_widget.selectionChanged.connect(self._on_openhasp_widget_selection_changed)
@@ -279,27 +278,23 @@ class PageLayoutEditorWidget(QWidget):
         self.error_banner.hide()
         self._update_actions()
 
-    def set_data(
-        self,
-        session: PlateSession,
-        device_pages_data: OpenHaspDevicePagesData,
-        raw_data: OrderedDict[str, List[Dict]],
-    ):
+    def set_data(self, session: PlateSession, device_pages_data: OpenHaspDevicePagesData, page: Optional[int] = None):
         """
-        :param raw_data: the normalized objects of the jsonl components, loaded into the session if it has no draft yet
+        :param session: the draft, loaded
+        :param page: the page to show, defaults to the first one
         """
         self.session = session
         self.device_pages_data = device_pages_data
         self.error_banner.hide()
-
-        if not self.session.working_objects:
-            self.session.load_from_disk(raw_data)
+        self.property_editor.set_session(session)
 
         screen = device_pages_data.device.config.openhasp_config_manager.device.screen
         self.page_preview_widget.set_screen_size(screen.width, screen.height)
 
         pages = get_navigable_page_indices(self.working_objects)
-        self.set_page_index(pages[0] if pages else 1)
+        if page is None:
+            page = pages[0] if pages else 1
+        self.set_page_index(page)
         self.dirtyChanged.emit(self.session.is_dirty)
 
     def set_page_index(self, index: int):
@@ -337,8 +332,8 @@ class PageLayoutEditorWidget(QWidget):
             self.page_preview_widget.set_empty_hint(None)
 
     def _mark_dirty(self):
-        self.session.is_dirty = True
-        self.dirtyChanged.emit(True)
+        """Report a change of the draft (the session marks itself dirty)."""
+        self.dirtyChanged.emit(self.session.is_dirty)
 
     def _reload_page(self, select: List[Dict] = ()):
         """Rebuilds the preview from the draft after objects were added or removed, and selects the given objects."""
@@ -357,14 +352,9 @@ class PageLayoutEditorWidget(QWidget):
             self._sync_device_page(index)
 
     def _step_page(self, step: int):
-        pages = get_navigable_page_indices(self.working_objects)
-        if not pages:
-            return
-        if self.current_index in pages:
-            new_index = pages[(pages.index(self.current_index) + step) % len(pages)]
-        else:
-            new_index = pages[0]
-        self._go_to_page(new_index)
+        new_index = step_page(get_navigable_page_indices(self.working_objects), self.current_index, step)
+        if new_index is not None:
+            self._go_to_page(new_index)
 
     @qBridge()
     def _on_previous_page_clicked(self):
@@ -422,21 +412,34 @@ class PageLayoutEditorWidget(QWidget):
             return f"Id {value} is already used on page {obj.get('page')}."
         return None
 
+    def _is_movable(self, obj: Dict) -> bool:
+        """Objects whose position is a template or a percentage can't be dragged: it would replace them with pixels."""
+        return not any(self.session.is_template(obj, key) or self.session.is_percentage(obj, key) for key in ("x", "y"))
+
     def _on_items_moved(self, items: List[EditableWidget]):
         for item in items:
-            item.obj_data["x"] = item.live_x
-            item.obj_data["y"] = item.live_y
+            self._move(item, item.live_x, item.live_y)
         self._after_geometry_edit()
 
     def nudge_selected_objects(self, dx: int, dy: int):
         items = self.page_preview_widget.selected_items()
         if not self.edit_mode or not items:
             return
+        locked = [item for item in items if not self._is_movable(item.obj_data)]
+        if locked:
+            names = ", ".join(f"p{item.obj_data.get('page')}b{item.obj_id}" for item in locked)
+            self.status.failed.emit(
+                f"Moving {names}", "the position is a template or a percentage, change x and y to pixels to move it"
+            )
         for item in items:
-            item.obj_data["x"] = item.obj_x + dx
-            item.obj_data["y"] = item.obj_y + dy
-            item.setPos(float(item.obj_x), float(item.obj_y))
+            if item not in locked:
+                self._move(item, item.obj_x + dx, item.obj_y + dy)
         self._after_geometry_edit()
+
+    def _move(self, item: EditableWidget, x: int, y: int):
+        self.session.set_source_value(item.obj_data, "x", x)
+        self.session.set_source_value(item.obj_data, "y", y)
+        item.refresh()
 
     def _after_geometry_edit(self):
         self._mark_dirty()
@@ -458,7 +461,7 @@ class PageLayoutEditorWidget(QWidget):
             screen_width=screen.width,
             screen_height=screen.height,
         )
-        add_object(self.working_objects, component, obj)
+        obj = self.session.add_object(component, obj)
         self._mark_dirty()
         self._reload_page(select=[obj])
 
@@ -466,7 +469,7 @@ class PageLayoutEditorWidget(QWidget):
         items = self.page_preview_widget.selected_items()
         if not self.edit_mode or not items:
             return
-        duplicates = [duplicate_object(self.working_objects, item.obj_data) for item in items]
+        duplicates = [self.session.duplicate_object(item.obj_data) for item in items]
         self._mark_dirty()
         self._reload_page(select=duplicates)
 
@@ -486,7 +489,7 @@ class PageLayoutEditorWidget(QWidget):
             return
 
         for item in items:
-            remove_object(self.working_objects, item.obj_data)
+            self.session.remove_object(item.obj_data)
         self._mark_dirty()
         self._reload_page()
 

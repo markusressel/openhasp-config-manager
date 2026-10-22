@@ -1,5 +1,5 @@
 import copy
-from typing import List, Any, Dict, Callable, Optional
+from typing import List, Any, Dict, Callable, Optional, Set
 
 from PyQt6 import QtCore
 from PyQt6.QtGui import QColor
@@ -15,6 +15,7 @@ from PyQt6.QtWidgets import (
     QToolButton,
     QLineEdit,
     QLabel,
+    QHBoxLayout,
 )
 
 from openhasp_config_manager.gui.dimensions import UiDimensions
@@ -23,11 +24,18 @@ from openhasp_config_manager.gui.domain.properties import (
     is_color_property,
     READ_ONLY_PROPERTIES,
     PIXEL_PROPERTIES,
+    DIMENSION_PROPERTIES,
+    is_dimension,
 )
+from openhasp_config_manager.gui.domain.plate_session import PlateSession
 from openhasp_config_manager.gui.qt.components import UiComponents, ThemedIcons
 from openhasp_config_manager.gui.qt.layouts import clear_layout
 from openhasp_config_manager.gui.qt.widgets.pagelayout.icon_picker import IconPickerDialog
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
+from openhasp_config_manager.gui.qt.widgets.pagelayout.template_completer import TemplateCompleter
+
+# marks a property that an object does not have
+_MISSING = object()
 
 # Checks a new value of a property: (object, key, value) -> error message, or None if it is valid
 type PropertyValidator = Callable[[Dict, str, Any], Optional[str]]
@@ -50,6 +58,8 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         self._editable_widgets: List[EditableWidget] = []
         self._original_snapshot: Dict = {}
         self._edit_mode = False
+        self._session: Optional[PlateSession] = None
+        self._pending_template_keys: Set[str] = set()
         self._validator: Optional[PropertyValidator] = None
 
         self.outer_layout = QVBoxLayout(self)
@@ -79,6 +89,10 @@ class OpenHASPWidgetPropertyEditor(QWidget):
     def set_validator(self, validator: PropertyValidator):
         self._validator = validator
 
+    def set_session(self, session: PlateSession):
+        """The draft the edited objects belong to: edits change their source (literal values or templates)."""
+        self._session = session
+
     def set_edit_mode(self, edit_mode: bool):
         """The hint without a selection depends on whether objects can be selected at all."""
         self._edit_mode = edit_mode
@@ -89,11 +103,13 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         """Updates the editor with new widget data."""
         self._editable_widgets = editable_widgets
 
-        # Take a snapshot of the data the moment the widget is selected
+        # Take a snapshot of the source the moment the widget is selected
         if self._editable_widgets and len(self._editable_widgets) == 1:
-            self._original_snapshot = copy.deepcopy(self._editable_widgets[0].obj_data)
+            self._original_snapshot = copy.deepcopy(self._session.source_of(self._editable_widgets[0].obj_data))
         else:
             self._original_snapshot = {}
+        # properties switched to a template that is not valid yet
+        self._pending_template_keys = set()
 
         self.refresh()
         self.scroll_area.verticalScrollBar().setValue(0)
@@ -134,7 +150,7 @@ class OpenHASPWidgetPropertyEditor(QWidget):
             for key in keys:
                 form_layout.addRow(
                     self._create_property_label(key, obj_data),
-                    self._create_editor_for_prop(obj_data, key, obj_data[key], editable_widget),
+                    self._create_property_field(obj_data, key, editable_widget),
                 )
             self.main_layout.addWidget(group)
 
@@ -152,11 +168,15 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         label_layout = UiComponents.create_row(label_container, alignment=QtCore.Qt.AlignmentFlag.AlignRight)
         label_layout.setSpacing(UiDimensions.half)
 
-        has_changed = str(obj_data[key]) != str(self._original_snapshot.get(key))
+        source = self._session.source_of(obj_data)
+        has_changed = source.get(key, _MISSING) != self._original_snapshot.get(key, _MISSING)
+        original = self._original_snapshot.get(key, _MISSING)
         mini_reset = UiComponents.create_button(
             title="",
             icon="undo",
-            tooltip=f"Reset {key} to {self._original_snapshot.get(key)!r}" if has_changed else None,
+            tooltip=(f"Reset {key} to {original!r}" if original is not _MISSING else f"Reset {key} to the theme default")
+            if has_changed
+            else None,
             variant="flat",
             on_click=lambda k=key: self._reset_single_property(k),
         )
@@ -168,7 +188,11 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         mini_reset.setVisible(has_changed)
 
         label_layout.addWidget(mini_reset)
-        label_layout.addWidget(UiComponents.create_label(f"{key}:"))
+        label = UiComponents.create_label(f"{key}:")
+        if key not in source:
+            label.setProperty("role", "hint")
+            label.setToolTip("Not in the file: a default of the theme or computed. Changing it writes it to the file.")
+        label_layout.addWidget(label)
         return label_container
 
     def _add_reset_all_button(self, editable_widget, obj_data):
@@ -179,9 +203,7 @@ class OpenHASPWidgetPropertyEditor(QWidget):
             on_click=self._reset_all_to_snapshot,
         )
 
-        # Enable if any property differs from the snapshot OR if it has moved from original obj_x/y
-        any_changes = obj_data != self._original_snapshot
-        reset_btn.setEnabled(any_changes or editable_widget.delta_x != 0 or editable_widget.delta_y != 0)
+        reset_btn.setEnabled(self._session.source_of(obj_data) != self._original_snapshot)
         self.main_layout.addWidget(reset_btn)
 
     def _add_duplicate_button(self):
@@ -206,15 +228,11 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         )
 
     def _reset_single_property(self, key):
-        """Restore one specific property from the snapshot."""
-        if not self._editable_widgets or key not in self._original_snapshot:
+        """Restore one specific property from the snapshot (a theme default is restored by removing it again)."""
+        if not self._editable_widgets:
             return
-
-        widget = self._editable_widgets[0]
-        original_value = self._original_snapshot[key]
-
-        # Apply change
-        self._on_property_edited(key, original_value, widget)
+        self._restore(self._editable_widgets[0], key)
+        self._pending_template_keys.discard(key)
 
         # Refresh UI to update the 'changed' status of reset buttons
         self.refresh()
@@ -225,19 +243,96 @@ class OpenHASPWidgetPropertyEditor(QWidget):
             return
 
         widget = self._editable_widgets[0]
-        for key, value in copy.deepcopy(self._original_snapshot).items():
-            if widget.obj_data.get(key) != value:
-                self._on_property_edited(key, value, widget)
-
-        # Sync physical position
-        widget.setPos(float(widget.obj_x), float(widget.obj_y))
-
+        source = self._session.source_of(widget.obj_data)
+        for key in set(source) | set(self._original_snapshot):
+            if source.get(key, _MISSING) != self._original_snapshot.get(key, _MISSING):
+                self._restore(widget, key)
+        self._pending_template_keys.clear()
         self.refresh()
+
+    def _restore(self, widget: EditableWidget, key: str):
+        if key in self._original_snapshot:
+            self._session.set_source_value(widget.obj_data, key, copy.deepcopy(self._original_snapshot[key]))
+        else:
+            self._session.remove_source_value(widget.obj_data, key)
+        widget.refresh()
+        self.propertyChanged.emit(widget, key, widget.obj_data.get(key))
+
+    def _create_property_field(self, obj_data: Dict, key: str, widget: EditableWidget) -> QWidget:
+        """The editor of a property: a literal value, or a template, switched by the button next to it."""
+        template_mode = key in self._pending_template_keys or self._session.is_template(obj_data, key)
+
+        container = QWidget()
+        row = _plain_layout(QHBoxLayout(container))
+        if template_mode:
+            row.addWidget(self._create_template_editor(obj_data, key, widget), 1)
+        else:
+            # edit the value as written in the file (e.g. "15%"), theme defaults as rendered
+            value = self._session.source_of(obj_data).get(key, obj_data[key])
+            row.addWidget(self._create_editor_for_prop(obj_data, key, value, widget), 1)
+
+        toggle = QToolButton()
+        toggle.setCheckable(True)
+        toggle.setChecked(template_mode)
+        toggle.setAutoRaise(True)
+        ThemedIcons.apply(toggle, "code-braces")
+        toggle.setToolTip("Use a template (Jinja, with the variables of a deployment) instead of a value")
+        toggle.toggled.connect(lambda checked: self._set_template_mode(widget, key, checked))
+        toggle.setEnabled(key not in READ_ONLY_PROPERTIES)
+        row.addWidget(toggle, 0, QtCore.Qt.AlignmentFlag.AlignTop)
+        return container
+
+    def _set_template_mode(self, widget: EditableWidget, key: str, enabled: bool):
+        if enabled:
+            # the source changes once a valid template was entered
+            self._pending_template_keys.add(key)
+        else:
+            self._pending_template_keys.discard(key)
+            if self._session.is_template(widget.obj_data, key):
+                # keep the current value, as a literal
+                self._on_property_edited(key, widget.obj_data.get(key), widget)
+        self.refresh()
+
+    def _create_template_editor(self, obj_data: Dict, key: str, widget: EditableWidget) -> QWidget:
+        container = QWidget()
+        column = _plain_layout(QVBoxLayout(container))
+
+        source_value = self._session.source_of(obj_data).get(key)
+        editor = UiComponents.create_edittext(text=source_value if self._session.is_template(obj_data, key) else "")
+        editor.setPlaceholderText("{{ variable }}")
+        editor.setToolTip("A Jinja template, rendered like a deployment does. Type to see the available variables.")
+        editor.setEnabled(key not in READ_ONLY_PROPERTIES)
+        TemplateCompleter(editor, self._session.template_suggestions(obj_data))
+        column.addWidget(editor)
+
+        value_label = UiComponents.create_label("", role="hint", word_wrap=True)
+        error_label = UiComponents.create_label("", role="error", word_wrap=True)
+        column.addWidget(value_label)
+        column.addWidget(error_label)
+
+        def show_value():
+            value_label.setText(f"= {obj_data.get(key)!r}")
+            value_label.setVisible(self._session.is_template(obj_data, key))
+
+        def apply(text: str):
+            error = (
+                "Enter a template, e.g. {{ variable }}." if "{{" not in text else self._session.check_template(obj_data, text)
+            )
+            error_label.setText(error or "")
+            error_label.setVisible(error is not None)
+            if error is None:
+                self._pending_template_keys.discard(key)
+                self._on_property_edited(key, text, widget)
+            show_value()
+
+        show_value()
+        error_label.hide()
+        editor.textChanged.connect(apply)
+        return container
 
     def _create_editor_for_prop(self, obj_data: Dict, key: str, value: Any, widget: EditableWidget) -> QWidget:
         container = QWidget()
-        column = UiComponents.create_column(container)
-        column.setSpacing(UiDimensions.half)
+        column = _plain_layout(QVBoxLayout(container))
         row = UiComponents.create_row(alignment=QtCore.Qt.AlignmentFlag.AlignVCenter)
         column.addLayout(row)
 
@@ -269,7 +364,7 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         if key in READ_ONLY_PROPERTIES:
             editor.setEnabled(False)
 
-        if key in PIXEL_PROPERTIES:
+        if key in PIXEL_PROPERTIES and isinstance(value, int):
             row.addWidget(UiComponents.create_label("px", role="hint"))
 
         column.addWidget(error_label)
@@ -324,6 +419,8 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         return button
 
     def _apply_value(self, widget: EditableWidget, key: str, value: Any, error_label: QLabel):
+        if key in DIMENSION_PROPERTIES and isinstance(value, str) and value.strip().isdigit():
+            value = int(value)
         error = self._validate(widget.obj_data, key, value)
         error_label.setText(error or "")
         error_label.setVisible(error is not None)
@@ -333,13 +430,29 @@ class OpenHASPWidgetPropertyEditor(QWidget):
     def _validate(self, obj_data: Dict, key: str, value: Any) -> Optional[str]:
         if is_color_property(key) and isinstance(value, str) and not QColor.isValidColorName(value):
             return "Not a color: use #RRGGBB or a color name."
-        if key in ("w", "h") and value < 1:
+        if key in DIMENSION_PROPERTIES and isinstance(value, str) and not is_dimension(value):
+            return "Use pixels (e.g. 120) or a percentage of the screen (e.g. 15%)."
+        if key in ("w", "h") and isinstance(value, int) and value < 1:
             return "Must be at least 1 px."
         if self._validator is not None:
             return self._validator(obj_data, key, value)
         return None
 
     def _on_property_edited(self, key, value, widget):
-        """Updates the object and redraws it. 'value' can be str (from LineEdit) or int (from SpinBox)."""
-        widget.set_property(key, value)
+        """
+        Sets the property in the source of the object (a value or a template) and redraws it.
+        'value' can be str (from LineEdit) or int (from SpinBox).
+        """
+        self._session.set_source_value(widget.obj_data, key, value)
+        widget.refresh()
         self.propertyChanged.emit(widget, key, value)
+
+
+def _plain_layout[L: QHBoxLayout | QVBoxLayout](layout: L) -> L:
+    """
+    A layout without margins and without an alignment of its own: an alignment keeps word-wrapped labels in it
+    (e.g. errors) from growing in height.
+    """
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.setSpacing(UiDimensions.half)
+    return layout
