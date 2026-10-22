@@ -423,7 +423,9 @@ class MainWindow(QMainWindow):
         """Reload the devices (to reflect any changes on disk) and load the pages of the selected one in the background."""
         self._selected_name = name
         if self.device is None or self.device.name != name:
+            # another device: start without a connection and in interaction mode, not editing its objects by accident
             self.connection.set_device(None)
+            self.page_layout_editor_widget.set_edit_mode(False)
         self.device = None
         self.device_control_widget.set_device(None)
         self.page_layout_editor_widget.clear()

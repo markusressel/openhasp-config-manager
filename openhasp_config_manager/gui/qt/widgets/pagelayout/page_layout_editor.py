@@ -394,6 +394,9 @@ class PageLayoutEditorWidget(QWidget):
 
     # --- editing ---
 
+    def set_edit_mode(self, enabled: bool):
+        self.action_edit_mode.setChecked(enabled)
+
     def _on_edit_mode_toggled(self, enabled: bool):
         self.page_preview_widget.set_mode(PreviewMode.Edit if enabled else PreviewMode.Interact)
 
