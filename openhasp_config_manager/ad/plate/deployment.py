@@ -61,8 +61,8 @@ class DeploymentController:
         self.app.log(f"DEPLOY: {self.device.name} Done! Changed: {changed}")
         return changed
 
-    def deploy_config(self):
-        self.client.set_gui_config(
+    async def deploy_config(self):
+        await self.client.set_gui_config(
             config=self.device.config.gui,
         )
         # await self.set_gui_config(
