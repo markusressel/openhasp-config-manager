@@ -13,8 +13,6 @@ from PyQt6.QtWidgets import (
     QMainWindow,
     QStackedWidget,
     QDockWidget,
-    QScrollArea,
-    QFrame,
     QProgressBar,
     QLabel,
     QSplitter,
@@ -40,7 +38,6 @@ from openhasp_config_manager.gui.qt.operations import OperationStatus, error_tex
 from openhasp_config_manager.gui.qt.ui_session_store import UiSessionStore
 from openhasp_config_manager.gui.qt.theme import ThemeMode, apply_theme, current_mode, current_colors
 from openhasp_config_manager.gui.qt.async_bridge import run_async
-from openhasp_config_manager.gui.qt.widgets.device_controls import DeviceControlsWidget
 from openhasp_config_manager.gui.qt.widgets.device_list import DeviceListWidget
 from openhasp_config_manager.gui.qt.widgets.file_tree import FileTreeWidget
 from openhasp_config_manager.gui.qt.widgets.message_panel import MessagePanel
@@ -51,6 +48,9 @@ from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.processing.variables import VariableManager
 
 LOGGER = logging.getLogger(__name__)
+
+# the version of the saved arrangement of the docks: a state of another version is not restored
+DOCK_STATE_VERSION = 2
 
 
 class StatusBarController:
@@ -183,8 +183,11 @@ class MainWindow(QMainWindow):
         self._create_menus()
         self._update_draft_actions()
         # the arrangement of the docks as built above, before the saved one is restored
-        self._default_dock_state = self.saveState()
+        self._default_dock_state = self.saveState(DOCK_STATE_VERSION)
         self._restore_window_state()
+        # the editor starts in interact mode, which has nothing to show in the properties
+        self.properties_dock.hide()
+        self.page_layout_editor_widget.action_edit_mode.toggled.connect(self._on_edit_mode_toggled)
         self.load_plates()
 
     # --- layout ---
@@ -196,18 +199,21 @@ class MainWindow(QMainWindow):
         self.page_layout_editor_widget.dirtyChanged.connect(lambda _: self._update_draft_actions())
         self.addToolBar(self.page_layout_editor_widget.toolbar)
 
-        # center: a placeholder (no device, loading, errors) or the editor
+        # all panels are docks, so each can be moved: the central widget is only there for Qt
+        central = QWidget()
+        central.hide()
+        self.setCentralWidget(central)
+
+        # a placeholder (no device, loading, errors) or the editor with the render preview
         self.message_panel = MessagePanel()
         self.center_stack = QStackedWidget()
         self.center_stack.addWidget(self.message_panel)
         self.center_stack.addWidget(self.page_layout_editor_widget)
-        self.setCentralWidget(self.center_stack)
 
-        # left: devices and the controls of the selected device
+        # left: devices and their files
         self.device_list_widget = DeviceListWidget()
         self.device_list_widget.deviceSelected.connect(self.on_device_selected)
         self.device_list_widget.reloadClicked.connect(self.load_plates)
-        self.device_control_widget = DeviceControlsWidget(status=self.status)
 
         # the files of the selected device, and which of them new objects go into
         editor = self.page_layout_editor_widget
@@ -220,25 +226,26 @@ class MainWindow(QMainWindow):
         self.sidebar = QSplitter(Qt.Orientation.Vertical)
         self.sidebar.addWidget(self.device_list_widget)
         self.sidebar.addWidget(self.file_tree_widget)
-        self.sidebar.addWidget(self._scrollable(self.device_control_widget))
         # the file tree grows with the window
         self.sidebar.setStretchFactor(1, 1)
         self.sidebar.setChildrenCollapsible(False)
         self.sidebar.setMinimumWidth(260)
-        self.devices_dock = self._add_dock("Devices", "devices_dock", self.sidebar, Qt.DockWidgetArea.LeftDockWidgetArea)
+        self.devices_dock = self._add_dock("Devices", "devices_dock", self.sidebar)
+        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.devices_dock)
+
+        # center: the render preview. It can't be closed: there is nothing to do without it
+        self.preview_dock = self._add_dock("Preview", "preview_dock", self.center_stack, closable=False)
+        self.splitDockWidget(self.devices_dock, self.preview_dock, Qt.Orientation.Horizontal)
 
         # right: the properties of the selected object
         self.properties_dock = self._add_dock(
-            "Properties",
-            "properties_dock",
-            self.page_layout_editor_widget.property_editor,
-            Qt.DockWidgetArea.RightDockWidgetArea,
+            "Properties", "properties_dock", self.page_layout_editor_widget.property_editor
         )
+        self.splitDockWidget(self.preview_dock, self.properties_dock, Qt.Orientation.Horizontal)
 
-        # bottom: the JSONL of the page, collapsible
-        self.jsonl_dock = self._add_dock(
-            "JSONL", "jsonl_dock", self.page_layout_editor_widget.jsonl_preview, Qt.DockWidgetArea.BottomDockWidgetArea
-        )
+        # below the preview: the JSONL of the page
+        self.jsonl_dock = self._add_dock("JSONL", "jsonl_dock", self.page_layout_editor_widget.jsonl_preview)
+        self.splitDockWidget(self.preview_dock, self.jsonl_dock, Qt.Orientation.Vertical)
         self._size_docks()
 
         self.status_bar = StatusBarController(self, self.status, on_resync=self.page_layout_editor_widget.resync_page)
@@ -250,32 +257,26 @@ class MainWindow(QMainWindow):
         self.page_layout_editor_widget.pageOutOfSync.connect(self.connection.page_out_of_sync)
         self.page_layout_editor_widget.pageDeployed.connect(self.connection.page_deployed)
         self.page_layout_editor_widget.plateRestored.connect(self.connection.plate_restored)
-        for busy in [self.page_layout_editor_widget.busy, self.device_control_widget.busy]:
+        for busy in [self.page_layout_editor_widget.busy, self.page_layout_editor_widget.device_controls.busy]:
             busy.changed.connect(lambda _: self._update_sending())
             busy.changed.connect(lambda _: self._update_draft_actions())
 
+    def _on_edit_mode_toggled(self, enabled: bool):
+        if enabled:
+            self.properties_dock.show()
+
     def _size_docks(self):
-        self.resizeDocks([self.jsonl_dock], [200], Qt.Orientation.Vertical)
-        self.resizeDocks([self.devices_dock, self.properties_dock], [280, 360], Qt.Orientation.Horizontal)
+        self.resizeDocks([self.preview_dock, self.jsonl_dock], [600, 200], Qt.Orientation.Vertical)
+        self.resizeDocks([self.devices_dock, self.preview_dock, self.properties_dock], [280, 700, 360], Qt.Orientation.Horizontal)
 
-    def _scrollable(self, widget: QWidget) -> QScrollArea:
-        scroll = QScrollArea()
-        scroll.setWidget(widget)
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        return scroll
-
-    def _add_dock(self, title: str, name: str, widget: QWidget, area: Qt.DockWidgetArea) -> QDockWidget:
+    def _add_dock(self, title: str, name: str, widget: QWidget, closable: bool = True) -> QDockWidget:
         dock = QDockWidget(title, self)
         dock.setObjectName(name)
         dock.setWidget(widget)
-        dock.setFeatures(
-            QDockWidget.DockWidgetFeature.DockWidgetClosable
-            | QDockWidget.DockWidgetFeature.DockWidgetMovable
-            | QDockWidget.DockWidgetFeature.DockWidgetFloatable
-        )
-        self.addDockWidget(area, dock)
+        features = QDockWidget.DockWidgetFeature.DockWidgetMovable | QDockWidget.DockWidgetFeature.DockWidgetFloatable
+        if closable:
+            features |= QDockWidget.DockWidgetFeature.DockWidgetClosable
+        dock.setFeatures(features)
         return dock
 
     def _create_menus(self):
@@ -301,11 +302,10 @@ class MainWindow(QMainWindow):
             tooltip="Upload the saved files to the plate, like the deploy command of the CLI. "
             "The plate restarts if anything changed.\nUnsaved changes of the draft are not deployed.",
         )
-        toolbar = editor.toolbar
-        toolbar.addAction(self.action_deploy)
-        first = toolbar.actions()[0]
-        toolbar.insertAction(first, self.action_save)
-        toolbar.insertAction(first, self.action_revert)
+        # next to the files they act on
+        self.file_tree_widget.set_actions(
+            [(self.action_save, "content-save"), (self.action_revert, "restore"), (self.action_deploy, "upload")]
+        )
 
         file_menu = self.menuBar().addMenu("&File")
         file_menu.addAction(self.action_save)
@@ -380,7 +380,9 @@ class MainWindow(QMainWindow):
             self.file_tree_widget.update_state(*self.page_layout_editor_widget.file_state())
 
     def _update_sending(self):
-        self.connection.set_sending(self.page_layout_editor_widget.busy.busy or self.device_control_widget.busy.busy)
+        self.connection.set_sending(
+            self.page_layout_editor_widget.busy.busy or self.page_layout_editor_widget.device_controls.busy.busy
+        )
 
     def set_theme(self, mode: ThemeMode):
         apply_theme(mode)
@@ -388,6 +390,7 @@ class MainWindow(QMainWindow):
         self.status_bar.refresh_theme()
         self.file_tree_widget.refresh_theme()
         self.page_layout_editor_widget.jsonl_preview.refresh_theme()
+        self.page_layout_editor_widget.problems_panel.refresh_theme()
         self.page_layout_editor_widget.page_preview_widget.viewport().update()
 
     # --- window state ---
@@ -401,24 +404,23 @@ class MainWindow(QMainWindow):
             self.resize(1440, 900)
         state = settings.value("window/state")
         if state is not None:
-            self.restoreState(state)
+            self.restoreState(state, DOCK_STATE_VERSION)
         sidebar = settings.value("window/sidebar")
         if sidebar is None or not self.sidebar.restoreState(sidebar):
-            # once the window has its size: the device list compact, the device controls as tall as they need
+            # once the window has its size: the device list compact, the file tree takes the rest
             QtCore.QTimer.singleShot(0, self._size_sidebar)
 
     def restore_default_layout(self):
-        for dock in [self.devices_dock, self.properties_dock, self.jsonl_dock]:
+        for dock in [self.devices_dock, self.preview_dock, self.properties_dock, self.jsonl_dock]:
             dock.setFloating(False)
-        self.restoreState(self._default_dock_state)
+        self.restoreState(self._default_dock_state, DOCK_STATE_VERSION)
         self._size_docks()
         self._size_sidebar()
 
     def _size_sidebar(self):
         total = sum(self.sidebar.sizes())
         devices = 130
-        controls = self.device_control_widget.sizeHint().height()
-        self.sidebar.setSizes([devices, max(120, total - devices - controls), controls])
+        self.sidebar.setSizes([devices, max(120, total - devices)])
 
     def quit_discarding_drafts(self):
         """Close without asking about unsaved drafts, e.g. on SIGTERM: the drafts are lost."""
@@ -447,7 +449,7 @@ class MainWindow(QMainWindow):
         self.connection.stop()
         settings = QSettings()
         settings.setValue("window/geometry", self.saveGeometry())
-        settings.setValue("window/state", self.saveState())
+        settings.setValue("window/state", self.saveState(DOCK_STATE_VERSION))
         settings.setValue("window/sidebar", self.sidebar.saveState())
         super().closeEvent(event)
 
@@ -520,7 +522,7 @@ class MainWindow(QMainWindow):
             self.page_layout_editor_widget.set_edit_mode(False)
             self.page_layout_editor_widget.stop_live_preview()
         self.device = None
-        self.device_control_widget.set_device(None)
+        self.page_layout_editor_widget.device_controls.set_device(None)
         self.page_layout_editor_widget.clear()
         self.file_tree_widget.clear()
         self._update_draft_actions()
@@ -699,7 +701,7 @@ class MainWindow(QMainWindow):
             used_variables=loaded.used_variable_files,
             common_path=Path(self.config_manager.cfg_root, COMMON_FOLDER_NAME),
         )
-        self.device_control_widget.set_device(self.device)
+        self.page_layout_editor_widget.device_controls.set_device(self.device)
         self.connection.set_device(self.device)
         self.page_layout_editor_widget.set_data(
             session=session, device_pages_data=pages_data, page=self._page_after_reload.pop(key, None)

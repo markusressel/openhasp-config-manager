@@ -1,7 +1,9 @@
+import math
 import shutil
 import threading
 from pathlib import Path
 
+import orjson
 import pytest
 
 from openhasp_config_manager.cli.common import _create_config_manager
@@ -478,3 +480,154 @@ class TestPropertyEditor(TestBase):
         # THEN
         assert self._template_field(editor).text() == "{{ nope"
         assert editor.session.is_template(obj, "text") is False
+
+
+class TestHighlightComponent(TestBase):
+    def _dimmed_ids(self, editor):
+        return [
+            orjson.loads(selection.cursor.block().text())["id"] for selection in editor.jsonl_preview.extraSelections()
+        ]
+
+    def test_the_jsonl_dims_the_objects_of_other_files(self, editor):
+        # GIVEN: the objects of page 9 are all in editor.jsonl
+        ids = {obj["id"] for obj in editor.page_objects}
+
+        # WHEN
+        editor.highlight_component(_key(editor, "page.jsonl"))
+        other_file = set(self._dimmed_ids(editor))
+        editor.highlight_component(_key(editor, "editor.jsonl"))
+        same_file = set(self._dimmed_ids(editor))
+        editor.highlight_component(None)
+
+        # THEN
+        assert other_file == ids
+        assert same_file == set()
+        assert editor.jsonl_preview.extraSelections() == []
+
+
+class TestScreenBrightness(TestBase):
+    def _lightness(self, editor) -> int:
+        from PyQt6.QtWidgets import QApplication
+
+        QApplication.processEvents()
+        image = editor.page_preview_widget.viewport().grab().toImage()
+        # the middle of the view is on the plate
+        return image.pixelColor(image.width() // 2, image.height() // 2).lightness()
+
+    def test_the_slider_darkens_the_preview_and_off_darkens_it_most(self, editor):
+        # GIVEN: a white object over the whole plate
+        editor.resize(900, 700)
+        editor.show()
+        component = editor.session.components[0].key
+        editor.session.add_object(
+            component, {"page": 9, "id": 99, "obj": "btn", "x": 0, "y": 0, "w": 2000, "h": 2000, "bg_color": "#FFFFFF"}
+        )
+        editor.set_page_index(9)
+        editor.page_preview_widget.fit_to_view()
+        controls = editor.device_controls
+
+        # WHEN
+        full = self._lightness(editor)
+        controls._brightness_slider.setValue(20)
+        dim = self._lightness(editor)
+        controls.screenChanged.emit(20, False)
+        off = self._lightness(editor)
+        controls.screenChanged.emit(100, True)
+        back = self._lightness(editor)
+
+        # THEN
+        assert full > dim > off
+        assert back == full
+
+
+class TestOutsideTheScreen(TestBase):
+    def _pixel(self, editor, scene_x: float, scene_y: float):
+        from PyQt6.QtCore import QPointF
+        from PyQt6.QtWidgets import QApplication
+
+        QApplication.processEvents()
+        view = editor.page_preview_widget
+        point = view.mapFromScene(QPointF(scene_x, scene_y))
+        return view.viewport().grab().toImage().pixelColor(point.x(), point.y())
+
+    def test_the_part_of_an_object_outside_the_screen_is_striped_red(self, editor):
+        # GIVEN: an object that sticks out of the right edge of the plate
+        editor.resize(900, 700)
+        editor.show()
+        plate = editor.page_preview_widget.scene().sceneRect()
+        component = editor.session.components[0].key
+        editor.session.add_object(
+            component,
+            {"page": 9, "id": 99, "obj": "btn", "x": int(plate.width()) - 50, "y": 0, "w": 100, "h": 100, "bg_color": "#FFFFFF"},
+        )
+        editor.set_page_index(9)
+        editor.page_preview_widget.fit_to_view()
+
+        # WHEN
+        outside = self._pixel(editor, plate.width() + 8, 50)
+        inside = self._pixel(editor, plate.width() - 8, 50)
+
+        # THEN: the stripes are red-ish, where the object is on the screen it is plain white
+        assert outside.red() > outside.blue() + 20
+        assert (inside.red(), inside.green(), inside.blue()) == (255, 255, 255)
+
+
+class TestProblemsPanel(TestBase):
+    def test_it_lists_what_is_outside_of_the_screen_and_selects_it_on_click(self, editor):
+        # GIVEN
+        editor.set_edit_mode(True)
+        editor.show()
+        assert editor.problems_panel.isHidden()
+        obj = _object(editor, 1)
+
+        # WHEN
+        editor.session.set_source_value(obj, "x", -20)
+        editor.set_page_index(9)
+
+        # THEN
+        panel = editor.problems_panel
+        assert not panel.isHidden()
+        assert panel._header.text() == "1 warning"
+        panel._header.setChecked(True)
+        panel._list.setCurrentRow(0)
+        assert [item.obj_data for item in editor.page_preview_widget.selected_items()] == [obj]
+
+        # and it goes away when the object is back
+        editor.session.set_source_value(obj, "x", 0)
+        editor.set_page_index(9)
+        assert panel.isHidden()
+
+
+def test_the_jsonl_shows_objects_that_share_an_id_when_only_one_has_a_position(qapp):
+    from openhasp_config_manager.gui.qt.widgets.pagelayout.jsonl_preview import PageJsonlPreviewWidget
+
+    preview = PageJsonlPreviewWidget()
+
+    preview.set_objects([{"page": 1, "id": 2, "y": 5}, {"page": 1, "id": 2}])
+
+    assert len(preview.toPlainText().splitlines()) == 2
+
+
+class TestZoomSlider(TestBase):
+    def test_the_slider_zooms_the_preview_and_follows_other_zoom_changes(self, editor):
+        # GIVEN
+        editor.resize(900, 700)
+        editor.show()
+        preview = editor.page_preview_widget
+        slider = editor.zoom_slider
+
+        # WHEN
+        slider.setValue(100)
+        maximum = preview.zoom()
+        slider.setValue(0)
+        minimum = preview.zoom()
+        preview.zoom_in()
+        stepped = slider.value()
+        preview.fit_to_view()
+
+        # THEN
+        assert maximum == pytest.approx(8.0)
+        assert minimum == pytest.approx(0.25)
+        assert stepped > 0
+        assert 0 < slider.value() < 100
+        assert slider.value() == round(100 * math.log(preview.zoom() / 0.25) / math.log(32))

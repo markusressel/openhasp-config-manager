@@ -1,10 +1,10 @@
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Set
+from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 import qtawesome as qta
 from PyQt6 import QtCore
 from PyQt6.QtCore import Qt, QSettings
-from PyQt6.QtGui import QBrush, QColor, QFont, QPalette
+from PyQt6.QtGui import QAction, QBrush, QColor, QFont, QPalette
 from PyQt6.QtWidgets import QApplication, QHeaderView, QMenu, QTreeWidget, QTreeWidgetItem, QWidget
 
 from openhasp_config_manager.gui.domain.file_tree import FileKind, FileNode, format_pages
@@ -83,6 +83,10 @@ class FileTreeWidget(QWidget):
         self._tree.customContextMenuRequested.connect(self._show_context_menu)
         layout.addWidget(self._tree, 1)
 
+        layout.addWidget(UiComponents.create_label("Changes", role="section"))
+        self._actions_row = UiComponents.create_row()
+        layout.addLayout(self._actions_row)
+
         # resolved path -> component key, for the .jsonl files of the draft
         self._keys: Dict[Path, str] = {}
         # resolved path -> the startup script that runs it, for the .cmd and .jsonl files the plate uses
@@ -97,6 +101,16 @@ class FileTreeWidget(QWidget):
         self._state: Optional[tuple] = None
         self.clear()
         self.set_show_all(QSettings().value(_SHOW_ALL_SETTINGS_KEY, False, type=bool))
+
+    def set_actions(self, actions: List[Tuple[QAction, str]]):
+        """Show buttons for actions on the files (e.g. save and deploy) below the tree, as (action, mdi6 icon name)."""
+        for action, icon in actions:
+            button = UiComponents.create_button(
+                title=action.text(), icon=icon, tooltip=action.toolTip(), on_click=action.trigger
+            )
+            button.setEnabled(action.isEnabled())
+            action.changed.connect(lambda action=action, button=button: button.setEnabled(action.isEnabled()))
+            self._actions_row.addWidget(button, 1)
 
     @property
     def tree(self) -> QTreeWidget:

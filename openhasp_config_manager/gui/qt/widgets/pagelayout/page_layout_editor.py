@@ -1,6 +1,7 @@
 import asyncio
 import copy
 import logging
+import math
 from collections import OrderedDict
 from typing import List, Dict, Optional, Any, Callable, Set, Tuple
 
@@ -8,8 +9,9 @@ from PyQt6 import QtCore
 from jinja2 import TemplateError
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QAction, QKeySequence
-from PyQt6.QtWidgets import QApplication, QWidget, QToolBar, QComboBox, QMessageBox, QToolButton, QFrame, QHBoxLayout
+from PyQt6.QtWidgets import QApplication, QSlider, QWidget, QToolBar, QComboBox, QMessageBox, QToolButton, QFrame, QHBoxLayout
 
+from openhasp_config_manager.gui.domain.problems import find_problems
 from openhasp_config_manager.gui.domain.page_objects import (
     OpenHASPWidgetType,
     get_page_objects,
@@ -30,14 +32,18 @@ from openhasp_config_manager.gui.qt.operations import BusyState, OperationStatus
 from openhasp_config_manager.gui.qt.async_bridge import qBridge, run_async
 from openhasp_config_manager.gui.qt.throttle import LatestValueThrottle
 from openhasp_config_manager.gui.qt.ui_session_store import UiSessionStore
+from openhasp_config_manager.gui.qt.widgets.device_controls import DeviceControlsWidget
 from openhasp_config_manager.gui.qt.widgets.message_panel import ErrorBanner
 from openhasp_config_manager.gui.qt.widgets.pagelayout import OpenHaspDevicePagesData
 from openhasp_config_manager.gui.qt.widgets.pagelayout.jsonl_preview import PageJsonlPreviewWidget
+from openhasp_config_manager.gui.qt.widgets.pagelayout.problems_panel import ProblemsPanel
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widget_picker import OpenHASPWidgetPicker
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widget_property_editor import OpenHASPWidgetPropertyEditor
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
 from openhasp_config_manager.gui.dimensions import UiDimensions
 from openhasp_config_manager.gui.qt.widgets.pagelayout.page_preview_layout import (
+    MAX_ZOOM,
+    MIN_ZOOM,
     OverlayAnchor,
     PagePreviewWidget,
     PreviewMode,
@@ -58,6 +64,10 @@ RESTORE_PLATE_HINT = "Values sent by haad or Home Assistant appear again with th
 
 NUDGE_STEP = 1
 NUDGE_STEP_LARGE = 10
+
+
+# the positions of the zoom slider
+ZOOM_SLIDER_STEPS = 100
 
 
 class PageLayoutEditorWidget(QWidget):
@@ -105,6 +115,11 @@ class PageLayoutEditorWidget(QWidget):
         # keeps what is sent to the plate in order: a page that is sent in full, then the changes after it
         self._send_lock = asyncio.Lock()
 
+        # remote control of the selected plate; the preview shows its brightness
+        self.device_controls = DeviceControlsWidget(status=status)
+        # what is wrong with the objects of the page
+        self.problems_panel = ProblemsPanel()
+
         self.property_editor = OpenHASPWidgetPropertyEditor()
         self.property_editor.removeObjectClicked.connect(self.remove_selected_objects)
         self.property_editor.duplicateObjectClicked.connect(self.duplicate_selected_objects)
@@ -118,6 +133,9 @@ class PageLayoutEditorWidget(QWidget):
         self._create_actions()
         self._create_toolbar()
 
+        self.device_controls.screenChanged.connect(self.page_preview_widget.set_screen_brightness)
+        self.problems_panel.layoutChanged.connect(self.page_preview_widget.update_overlays)
+        self.problems_panel.problemClicked.connect(self.page_preview_widget.select_object)
         self.page_preview_widget.set_mode(PreviewMode.Interact)
         self._update_actions()
 
@@ -212,9 +230,18 @@ class PageLayoutEditorWidget(QWidget):
         self.action_zoom_out = create(
             self, "Zoom out", "magnify-minus-outline", self.page_preview_widget.zoom_out, shortcut="Ctrl+-"
         )
+        # on while the zoom follows the size of the window: zooming turns it off
         self.action_zoom_fit = create(
-            self, "Fit to window", "fit-to-screen-outline", self.page_preview_widget.fit_to_view, shortcut="Ctrl+0"
+            self,
+            "Fit to window",
+            "fit-to-screen-outline",
+            shortcut="Ctrl+0",
+            tooltip="Keep the whole plate in view as the window changes its size",
+            checkable=True,
         )
+        self.action_zoom_fit.setChecked(self.page_preview_widget.fits_to_view)
+        self.action_zoom_fit.toggled.connect(self.page_preview_widget.set_fit)
+        self.page_preview_widget.fitChanged.connect(self._on_fit_changed)
 
         self.action_live_preview = create(
             self,
@@ -281,6 +308,8 @@ class PageLayoutEditorWidget(QWidget):
         self.toolbar.addAction(self.action_restore_plate)
 
         preview = self.page_preview_widget
+        preview.add_overlay(self._floating_bar([self.device_controls]), OverlayAnchor.TOP_LEFT)
+        preview.add_overlay(self.problems_panel, OverlayAnchor.BOTTOM_LEFT)
         preview.add_overlay(
             self._floating_bar(
                 [self.action_edit_mode, self.action_snap, None, self.action_duplicate, self.action_delete],
@@ -293,9 +322,38 @@ class PageLayoutEditorWidget(QWidget):
             OverlayAnchor.BOTTOM_CENTER,
         )
         preview.add_overlay(
-            self._floating_bar([self.action_zoom_out, self.action_zoom_fit, self.action_zoom_in]),
+            self._floating_bar([self.action_zoom_out, self._create_zoom_slider(), self.action_zoom_in, self.action_zoom_fit]),
             OverlayAnchor.BOTTOM_RIGHT,
         )
+
+    def _on_fit_changed(self, fit: bool):
+        self.action_zoom_fit.blockSignals(True)
+        self.action_zoom_fit.setChecked(fit)
+        self.action_zoom_fit.blockSignals(False)
+
+    def _create_zoom_slider(self) -> QSlider:
+        """A slider for the zoom of the preview, on a logarithmic scale: every step zooms by the same factor."""
+        slider = QSlider(Qt.Orientation.Horizontal)
+        slider.setRange(0, ZOOM_SLIDER_STEPS)
+        slider.setFixedWidth(UiDimensions.five * 4)
+        slider.setToolTip("Zoom of the preview")
+        # keep the keyboard focus on the plate, for its shortcuts
+        slider.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        preview = self.page_preview_widget
+
+        def on_moved(position: int):
+            preview.set_zoom(MIN_ZOOM * (MAX_ZOOM / MIN_ZOOM) ** (position / ZOOM_SLIDER_STEPS))
+
+        def on_zoom_changed(zoom: float):
+            # the zoom changed by other means: only move the handle
+            slider.blockSignals(True)
+            slider.setValue(round(ZOOM_SLIDER_STEPS * math.log(zoom / MIN_ZOOM) / math.log(MAX_ZOOM / MIN_ZOOM)))
+            slider.blockSignals(False)
+
+        slider.valueChanged.connect(on_moved)
+        preview.zoomChanged.connect(on_zoom_changed)
+        self.zoom_slider = slider
+        return slider
 
     @staticmethod
     def _floating_bar(items: List[Optional[QAction | QWidget]], with_text: List[QAction] = ()) -> QFrame:
@@ -345,6 +403,7 @@ class PageLayoutEditorWidget(QWidget):
             self.action_live_preview,
         ]:
             action.setEnabled(has_data)
+        self.zoom_slider.setEnabled(has_data)
         self.page_combo.setEnabled(has_data and self.page_combo.count() > 1)
         self.action_previous_page.setEnabled(can_navigate)
         self.action_next_page.setEnabled(can_navigate)
@@ -366,6 +425,7 @@ class PageLayoutEditorWidget(QWidget):
         self.page_objects = []
         self.page_preview_widget.set_objects([])
         self.jsonl_preview.set_objects([])
+        self.problems_panel.set_problems([])
         self.error_banner.hide()
         self._update_actions()
 
@@ -396,7 +456,7 @@ class PageLayoutEditorWidget(QWidget):
         self.current_index = index
         self.page_objects = get_page_objects(self.working_objects, index=index)
         self.page_preview_widget.set_objects(self.page_objects)
-        self.jsonl_preview.set_objects(self.page_objects)
+        self._update_page_views()
         self.property_editor.set_editable_widgets([])
 
         pages = get_navigable_page_indices(self.working_objects)
@@ -508,10 +568,16 @@ class PageLayoutEditorWidget(QWidget):
         else:
             self.selectedObjectComponentChanged.emit(None)
 
+    def _update_page_views(self):
+        """Update what is derived from the objects of the page: the JSONL and the problems."""
+        self.jsonl_preview.set_objects(self.page_objects)
+        screen = self.device_pages_data.device.config.openhasp_config_manager.device.screen
+        self.problems_panel.set_problems(find_problems(self.page_objects, self.page_preview_widget.drawn_rects(), screen.width, screen.height))
+
     def _on_property_changed(self, _widget: EditableWidget, _key: str, _value: Any):
         self.page_preview_widget.refresh_items()
         self._mark_dirty()
-        self.jsonl_preview.set_objects(self.page_objects)
+        self._update_page_views()
 
     def _validate_property(self, obj: Dict, key: str, value: Any) -> Optional[str]:
         if key == "id" and is_id_used(self.working_objects, obj.get("page"), value, ignore=obj):
@@ -566,7 +632,7 @@ class PageLayoutEditorWidget(QWidget):
     def _after_geometry_edit(self):
         self.page_preview_widget.refresh_items()
         self._mark_dirty()
-        self.jsonl_preview.set_objects(self.page_objects)
+        self._update_page_views()
         self.property_editor.refresh()
 
     # --- files ---
@@ -601,9 +667,11 @@ class PageLayoutEditorWidget(QWidget):
         """Dim all objects that are not in the given component, or none (None)."""
         self._highlighted_component = key
         if key is None:
-            self.page_preview_widget.set_dimmed_predicate(lambda _obj: False)
+            is_dimmed = lambda _obj: False
         else:
-            self.page_preview_widget.set_dimmed_predicate(lambda obj: self.session.component_of(obj).key != key)
+            is_dimmed = lambda obj: self.session.component_of(obj).key != key
+        self.page_preview_widget.set_dimmed_predicate(is_dimmed)
+        self.jsonl_preview.set_dimmed_predicate(is_dimmed)
 
     def add_object(self, widget_type: OpenHASPWidgetType):
         component = self.target_component

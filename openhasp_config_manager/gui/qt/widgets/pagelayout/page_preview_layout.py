@@ -5,7 +5,7 @@ from typing import List, Optional, Dict, Callable, Tuple
 
 from PyQt6 import QtCore
 from PyQt6.QtCore import Qt, QRectF
-from PyQt6.QtGui import QCursor, QPainter, QColor, QPen, QFont
+from PyQt6.QtGui import QBrush, QCursor, QPainter, QPainterPath, QColor, QPen, QFont
 from PyQt6.QtWidgets import QApplication, QGraphicsView, QWidget
 
 from openhasp_config_manager.gui.dimensions import UiDimensions
@@ -41,10 +41,19 @@ class PreviewMode(StrEnum):
     Edit = "edit"
 
 
+# the stripes over the parts of objects that are outside of the screen
+OUTSIDE_COLOR = "#E53935"
+
+# the opacity of black over the plate at the lowest brightness (and while the screen is off), 0..255
+MAX_DARKNESS = 215
+
+
 class OverlayAnchor(Enum):
     """Where a floating bar sits on the preview (see `PagePreviewWidget.add_overlay`)."""
 
+    TOP_LEFT = "top_left"
     TOP_RIGHT = "top_right"
+    BOTTOM_LEFT = "bottom_left"
     BOTTOM_CENTER = "bottom_center"
     BOTTOM_RIGHT = "bottom_right"
 
@@ -56,6 +65,10 @@ class PagePreviewWidget(QGraphicsView):
     """
 
     modeChanged = QtCore.pyqtSignal(PreviewMode)
+    # the scale of the plate changed (zoom buttons, wheel, fitting to the view)
+    zoomChanged = QtCore.pyqtSignal(float)
+    # whether the plate is fitted to the view (it is scaled again when the view changes its size)
+    fitChanged = QtCore.pyqtSignal(bool)
     buttonClicked = QtCore.pyqtSignal(dict)
 
     # Emitted when the selection changes in edit mode, with the selected EditableWidgets
@@ -74,6 +87,8 @@ class PagePreviewWidget(QGraphicsView):
         self.mode = PreviewMode.Interact
         self.objects: List[dict] = []
         self._fit_to_view = True
+        # how much of the plate is darkened to simulate a lower backlight, 0..255
+        self._darkness = 0
         self._empty_hint: Optional[str] = None
         self._is_movable: Callable[[Dict], bool] = lambda _obj: True
         self._is_dimmed: Callable[[Dict], bool] = lambda _obj: False
@@ -123,6 +138,14 @@ class PagePreviewWidget(QGraphicsView):
 
     def scene(self) -> PlateScene:
         return super().scene()
+
+    def set_screen_brightness(self, brightness: int, on: bool = True):
+        """
+        Darken the plate like the backlight does, to see how the page looks at that brightness.
+        :param brightness: 1..100
+        """
+        self._darkness = round(MAX_DARKNESS * (100 - brightness) / 100) if on else MAX_DARKNESS
+        self.viewport().update()
 
     def set_screen_size(self, width: int, height: int):
         self.scene().setSceneRect(0, 0, width, height)
@@ -243,6 +266,35 @@ class PagePreviewWidget(QGraphicsView):
 
     # --- zoom ---
 
+    def _set_fit(self, fit: bool):
+        if fit != self._fit_to_view:
+            self._fit_to_view = fit
+            self.fitChanged.emit(fit)
+
+    def set_fit(self, fit: bool):
+        """Fit the plate to the view and keep it fitted, or keep the current zoom."""
+        if fit:
+            self.fit_to_view()
+        else:
+            self._set_fit(False)
+
+    @property
+    def fits_to_view(self) -> bool:
+        return self._fit_to_view
+
+    def zoom(self) -> float:
+        """:return: the scale of the plate (1.0: one pixel of the plate per pixel on the screen)"""
+        return self.transform().m11()
+
+    def set_zoom(self, zoom: float):
+        """Zoom to a scale, around the center of the view."""
+        self._set_fit(False)
+        zoom = max(MIN_ZOOM, min(MAX_ZOOM, zoom))
+        self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorViewCenter)
+        self.scale(zoom / self.zoom(), zoom / self.zoom())
+        self._position_add_object_button()
+        self.zoomChanged.emit(self.zoom())
+
     def zoom_in(self):
         self._zoom_by(ZOOM_STEP)
 
@@ -259,9 +311,23 @@ class PagePreviewWidget(QGraphicsView):
         self.setMinimumWidth(widest + 2 * UiDimensions.one + 2 * self.frameWidth())
         self._position_overlays()
 
+    def drawn_rects(self) -> Dict[int, Tuple[float, float, float, float]]:
+        """:return: id(object) -> x, y, width and height as drawn, for the objects of the page"""
+        result = {}
+        for item in self.editable_items():
+            rect = item.mapRectToScene(item.obj_rect)
+            result[id(item.obj_data)] = (rect.x(), rect.y(), rect.width(), rect.height())
+        return result
+
+    def update_overlays(self):
+        """Place the floating bars again after one changed its size or visibility."""
+        if self._fit_to_view:
+            self.fit_to_view()
+        self._position_overlays()
+
     def fit_to_view(self):
         """Scale the plate to fill the view, with the rows of the floating bars above and below it kept free."""
-        self._fit_to_view = True
+        self._set_fit(True)
         plate = self._padded_scene_rect()
         top, bottom = self._overlay_margins()
         viewport = self.viewport().rect()
@@ -271,6 +337,7 @@ class PagePreviewWidget(QGraphicsView):
         self.setSceneRect(plate.adjusted(0, -top / scale, 0, bottom / scale))
         self.fitInView(self.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
         self._position_add_object_button()
+        self.zoomChanged.emit(self.zoom())
 
     def _overlay_margins(self) -> Tuple[int, int]:
         """:return: the height to keep free above and below the plate for the floating bars"""
@@ -284,7 +351,7 @@ class PagePreviewWidget(QGraphicsView):
 
     def _overlay_layout(self) -> Tuple[Dict[QWidget, QtCore.QPoint], int, int]:
         """
-        Where the floating bars go: the top right one in its corner, the bottom right one in its corner, and the bottom
+        Where the floating bars go: the top left and top right ones in their corners (the left one below the right one if they don't fit next to each other), the bottom right one in its corner, and the bottom
         center one centered next to it, or in a row above it if they don't fit next to each other.
         :return: the position of each bar, and the height of the rows above and below the plate
         """
@@ -295,6 +362,7 @@ class PagePreviewWidget(QGraphicsView):
         top_row_bottom = 0
         bottom_row_top = height
         right_edge = width - margin
+        top_right_x = width
         visible = [(widget, anchor) for widget, anchor in self._overlays if not widget.isHidden()]
         for widget, anchor in visible:
             widget.adjustSize()
@@ -302,17 +370,34 @@ class PagePreviewWidget(QGraphicsView):
             if anchor == OverlayAnchor.TOP_RIGHT:
                 positions[widget] = QtCore.QPoint(x, margin)
                 top_row_bottom = max(top_row_bottom, margin + widget.height())
+                top_right_x = x
             elif anchor == OverlayAnchor.BOTTOM_RIGHT:
                 y = height - widget.height() - margin
                 positions[widget] = QtCore.QPoint(x, y)
                 right_edge = min(right_edge, x - margin)
+                bottom_row_top = min(bottom_row_top, y)
+        for widget, anchor in visible:
+            if anchor == OverlayAnchor.TOP_LEFT:
+                if margin + widget.width() + margin <= top_right_x:
+                    y = margin
+                else:
+                    # no room next to the bar on the right: below it
+                    y = top_row_bottom + margin if top_row_bottom else margin
+                positions[widget] = QtCore.QPoint(margin, y)
+                top_row_bottom = max(top_row_bottom, y + widget.height())
+        left_edge = margin
+        for widget, anchor in visible:
+            if anchor == OverlayAnchor.BOTTOM_LEFT:
+                y = height - widget.height() - margin
+                positions[widget] = QtCore.QPoint(margin, y)
+                left_edge = max(left_edge, margin + widget.width() + margin)
                 bottom_row_top = min(bottom_row_top, y)
         last_row_top = bottom_row_top
         for widget, anchor in visible:
             if anchor == OverlayAnchor.BOTTOM_CENTER:
                 x = min((width - widget.width()) // 2, right_edge - widget.width())
                 y = height - widget.height() - margin
-                if x < margin:
+                if x < left_edge:
                     # no room next to the bar on the right: above it
                     x = max(margin, (width - widget.width()) // 2)
                     y = last_row_top - margin - widget.height()
@@ -325,10 +410,11 @@ class PagePreviewWidget(QGraphicsView):
     def _zoom_by(self, factor: float):
         current = self.transform().m11()
         factor = max(MIN_ZOOM, min(MAX_ZOOM, current * factor)) / current
-        self._fit_to_view = False
+        self._set_fit(False)
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.scale(factor, factor)
         self._position_add_object_button()
+        self.zoomChanged.emit(self.zoom())
 
     def _padded_scene_rect(self) -> QRectF:
         margin = UiDimensions.two
@@ -448,10 +534,33 @@ class PagePreviewWidget(QGraphicsView):
                 y += grid
             x += grid
 
-    def drawForeground(self, painter: QPainter, rect: QRectF):
-        self._draw_ripples(painter)
+    def _draw_outside_plate(self, painter: QPainter, plate: QRectF):
+        """Mark the parts of the objects that are outside of the screen with red stripes: the plate doesn't show them."""
+        screen = QPainterPath()
+        screen.addRect(plate)
+        outside = QPainterPath()
+        for item in self.editable_items():
+            outside.addRect(item.mapRectToScene(item.obj_rect))
+        outside = outside.subtracted(screen)
+        if outside.isEmpty():
+            return
+        red = QColor(OUTSIDE_COLOR)
+        painter.save()
+        painter.setPen(Qt.PenStyle.NoPen)
+        red.setAlpha(70)
+        painter.setBrush(red)
+        painter.drawPath(outside)
+        painter.setBrush(QBrush(QColor(OUTSIDE_COLOR), Qt.BrushStyle.BDiagPattern))
+        painter.drawPath(outside)
+        painter.restore()
 
+    def drawForeground(self, painter: QPainter, rect: QRectF):
         plate = self.scene().sceneRect()
+        if self._darkness:
+            painter.fillRect(plate, QColor(0, 0, 0, self._darkness))
+
+        self._draw_ripples(painter)
+        self._draw_outside_plate(painter, plate)
 
         guides_x, guides_y = self.scene().guides_x, self.scene().guides_y
         if guides_x or guides_y:

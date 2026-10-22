@@ -1,8 +1,10 @@
 from typing import Optional, Awaitable
 
-from PyQt6.QtWidgets import QWidget, QGroupBox, QMessageBox
+from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtWidgets import QFrame, QMessageBox, QSlider, QToolButton, QWidget
 
-from openhasp_config_manager.gui.qt.components import UiComponents
+from openhasp_config_manager.gui.dimensions import UiDimensions
+from openhasp_config_manager.gui.qt.components import ThemedIcons, UiComponents
 from openhasp_config_manager.gui.qt.operations import BusyState, OperationStatus, run_busy, error_text
 from openhasp_config_manager.gui.qt.async_bridge import run_async, qBridge
 from openhasp_config_manager.gui.qt.throttle import LatestValueThrottle
@@ -12,11 +14,14 @@ from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 
 class DeviceControlsWidget(QWidget):
     """
-    Contains controls for a single device, such as buttons to
+    A compact bar with controls for a single device (it floats on the preview), such as buttons to
       - turn the screen on/off
       - reboot the device
       - switch pages
     """
+
+    # the brightness (1..100) and whether the screen is on, to show it in the preview
+    screenChanged = pyqtSignal(int, bool)
 
     def __init__(self, status: OperationStatus, parent=None):
         super().__init__(parent)
@@ -42,30 +47,40 @@ class DeviceControlsWidget(QWidget):
         self._content.setEnabled(self.device is not None and not self.busy.busy)
 
     def _create_layout(self):
-        outer = UiComponents.create_column(parent=self)
+        outer = UiComponents.create_row(parent=self)
         self._content = QWidget()
         outer.addWidget(self._content)
-        layout = UiComponents.create_column(parent=self._content)
+        layout = UiComponents.create_row(parent=self._content)
 
-        screen_group = QGroupBox("Screen")
-        screen_layout = UiComponents.create_column(parent=screen_group)
-        screen_on_off_row = UiComponents.create_row()
-        screen_on_off_row.addWidget(
-            UiComponents.create_button(title="On", icon="lightbulb-on", on_click=self.on_turn_on_clicked), 1
-        )
-        screen_on_off_row.addWidget(
-            UiComponents.create_button(title="Off", icon="lightbulb-outline", on_click=self.on_turn_off_clicked), 1
-        )
-        screen_layout.addLayout(screen_on_off_row)
-        screen_layout.addWidget(
-            UiComponents.create_slider(
-                title="Brightness",
-                initial_value=100,
-                min_value=1,
-                on_change=self.__on_brightness_changed,
-            )
-        )
-        layout.addWidget(screen_group)
+        def button(icon: str, tooltip: str, on_click) -> QToolButton:
+            result = QToolButton()
+            ThemedIcons.apply(result, icon)
+            result.setToolTip(tooltip)
+            result.setAutoRaise(True)
+            result.clicked.connect(lambda _checked=False: on_click())
+            # keep the keyboard focus on the plate, for its shortcuts
+            result.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            return result
+
+        layout.addWidget(button("lightbulb-on", "Turn the screen on", self.on_turn_on_clicked))
+        layout.addWidget(button("lightbulb-outline", "Turn the screen off", self.on_turn_off_clicked))
+        brightness = QSlider(Qt.Orientation.Horizontal)
+        brightness.setRange(1, 100)
+        brightness.setValue(100)
+        brightness.setFixedWidth(UiDimensions.five * 4)
+        brightness.setToolTip("Brightness of the screen. The preview is darkened the same way.")
+        brightness.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        brightness.valueChanged.connect(self.__on_brightness_changed)
+        self._brightness_slider = brightness
+        layout.addWidget(brightness)
+
+        layout.addWidget(self._separator())
+        layout.addWidget(button("arrow-left", "Previous page on the device", self.on_prev_page_clicked))
+        layout.addWidget(button("home", "Home page on the device", self.on_home_page_clicked))
+        layout.addWidget(button("arrow-right", "Next page on the device", self.on_next_page_clicked))
+
+        layout.addWidget(self._separator())
+        layout.addWidget(button("restart", "Reboot the device", self.on_reboot_clicked))
 
         # TODO: listening to brightness changes from the device
         #     this is harder than anticipated because
@@ -73,33 +88,19 @@ class DeviceControlsWidget(QWidget):
         #     2. the listener needs to be changed when the device is changed
         #     3. the listener can only be started after a device has been set
 
-        page_group = QGroupBox("Pages on the device")
-        page_row = UiComponents.create_row(parent=page_group)
-        page_row.addWidget(
-            UiComponents.create_button(
-                title="", icon="arrow-left", tooltip="Previous page", on_click=self.on_prev_page_clicked
-            ),
-            1,
-        )
-        page_row.addWidget(
-            UiComponents.create_button(title="", icon="home", tooltip="Home page", on_click=self.on_home_page_clicked), 1
-        )
-        page_row.addWidget(
-            UiComponents.create_button(title="", icon="arrow-right", tooltip="Next page", on_click=self.on_next_page_clicked),
-            1,
-        )
-        layout.addWidget(page_group)
-
-        device_group = QGroupBox("Device")
-        device_row = UiComponents.create_row(parent=device_group)
-        device_row.addWidget(UiComponents.create_button(title="Reboot", icon="restart", on_click=self.on_reboot_clicked), 1)
-        layout.addWidget(device_group)
+    @staticmethod
+    def _separator() -> QFrame:
+        separator = QFrame()
+        separator.setFrameShape(QFrame.Shape.VLine)
+        separator.setFrameShadow(QFrame.Shadow.Sunken)
+        return separator
 
     def _run(self, coro: Awaitable, description: str):
         run_busy(coro, busy=self.busy, status=self.status, description=f"{description} ({self.device.name})")
 
     @qBridge(int)
     def __on_brightness_changed(self, value: int):
+        self.screenChanged.emit(value, True)
         if self.device is None:
             return
         self._brightness.push(value)
@@ -114,10 +115,12 @@ class DeviceControlsWidget(QWidget):
 
     @qBridge()
     def on_turn_on_clicked(self):
+        self.screenChanged.emit(self._brightness_slider.value(), True)
         self._run(self.client.set_backlight(state=True), "Turning the screen on")
 
     @qBridge()
     def on_turn_off_clicked(self):
+        self.screenChanged.emit(self._brightness_slider.value(), False)
         self._run(self.client.set_backlight(state=False), "Turning the screen off")
 
     @qBridge()
