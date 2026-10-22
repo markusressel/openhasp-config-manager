@@ -313,7 +313,15 @@ class MainWindow(QMainWindow):
         file_menu.addAction(create(self, "Quit", "exit-to-app", self.close, shortcut=QKeySequence.StandardKey.Quit))
 
         edit_menu = self.menuBar().addMenu("&Edit")
-        for action in [editor.action_edit_mode, editor.action_snap, None, editor.action_duplicate, editor.action_delete]:
+        for action in [
+            editor.action_edit_mode,
+            editor.action_snap,
+            None,
+            editor.action_copy,
+            editor.action_paste,
+            editor.action_duplicate,
+            editor.action_delete,
+        ]:
             if action is None:
                 edit_menu.addSeparator()
             else:

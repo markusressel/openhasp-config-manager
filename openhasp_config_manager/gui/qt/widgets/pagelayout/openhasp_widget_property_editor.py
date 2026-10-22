@@ -53,6 +53,7 @@ class OpenHASPWidgetPropertyEditor(QWidget):
 
     removeObjectClicked = QtCore.pyqtSignal()
     duplicateObjectClicked = QtCore.pyqtSignal()
+    usePixelPositionClicked = QtCore.pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -142,6 +143,7 @@ class OpenHASPWidgetPropertyEditor(QWidget):
 
         if len(self._editable_widgets) > 1:
             self._add_hint(f"{len(self._editable_widgets)} objects selected. Select a single object to edit its properties.")
+            self._add_locked_position_hint()
             self._add_remove_button()
             return
 
@@ -154,6 +156,7 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         )
         self.main_layout.addWidget(header)
         self.main_layout.addWidget(self._create_file_label(obj_data))
+        self._add_locked_position_hint()
 
         for title, keys in group_properties(obj_data):
             group = QGroupBox(title)
@@ -208,6 +211,29 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         label_layout.addWidget(label)
         return label_container
 
+    def _add_locked_position_hint(self):
+        """Explains why objects can't be dragged, with a button to use pixels for their position instead."""
+        locked = [widget for widget in self._editable_widgets if self._session.has_computed_position(widget.obj_data)]
+        if not locked:
+            return
+        if len(self._editable_widgets) == 1:
+            text = "x or y is a template or a percentage, so the object can't be dragged."
+        else:
+            text = (
+                f"{len(locked)} of {len(self._editable_widgets)} objects have a template or a percentage in x or y, "
+                "so they can't be dragged."
+            )
+        self.main_layout.addWidget(UiComponents.create_label(text, role="hint", word_wrap=True))
+        self.main_layout.addWidget(
+            UiComponents.create_button(
+                title="Use pixels for x/y",
+                icon="lock-open-variant-outline",
+                tooltip="Replace the templates and percentages in x and y with the pixels they show now, "
+                "so the object can be moved.\nOther objects that use the same variables don't follow it anymore.",
+                on_click=self.usePixelPositionClicked.emit,
+            )
+        )
+
     def _add_reset_all_button(self, editable_widget, obj_data):
         reset_btn = UiComponents.create_button(
             title="Reset All Changes",
@@ -223,7 +249,7 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         self.main_layout.addWidget(
             UiComponents.create_button(
                 title="Duplicate Object",
-                icon="content-copy",
+                icon="content-duplicate",
                 tooltip="Duplicate the object (Ctrl+D)",
                 on_click=self.duplicateObjectClicked.emit,
             )

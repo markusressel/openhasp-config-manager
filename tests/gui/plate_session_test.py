@@ -121,6 +121,70 @@ class TestPlateSession(TestBase):
         assert label["bg_color"] == "#THEME"
         assert session.changes() == []
 
+    def test_use_pixel_position_replaces_a_computed_position_with_its_pixels(self):
+        # GIVEN
+        session = _session()
+        button, label = session.working_objects["a.jsonl"]
+
+        # WHEN
+        session.use_pixel_position(button)
+
+        # THEN
+        assert session.source_of(button)["x"] == 10
+        assert session.has_computed_position(button) is False
+        assert session.has_computed_position(label) is True
+        assert session.is_dirty
+
+    def test_paste_gives_new_ids_and_keeps_the_layout_and_templates(self):
+        # GIVEN
+        session = _session()
+        sources = [
+            {"page": 7, "id": 1, "obj": "obj", "x": 100, "y": 50, "w": 50, "h": 20, "text": "{{ name }}"},
+            {"page": 7, "id": 2, "obj": "btn", "x": 5, "y": 5, "parentid": 1},
+            {"page": 7, "id": 3, "obj": "label", "x": 120, "y": 80, "w": 10, "h": 10, "parentid": 99},
+        ]
+
+        # WHEN
+        pasted = session.paste_objects("b.jsonl", sources, page=1, screen=(480, 320), position=(20, 30), offset=10)
+
+        # THEN
+        # ids 1 and 2 are used on page 1
+        assert [(obj["page"], obj["id"]) for obj in pasted] == [(1, 3), (1, 4), (1, 5)]
+        assert (pasted[0]["x"], pasted[0]["y"]) == (30, 40)
+        # inside of its pasted parent: unchanged, relative to it
+        assert (pasted[1]["parentid"], pasted[1]["x"]) == (3, 5)
+        # its parent isn't pasted
+        assert "parentid" not in pasted[2]
+        assert (pasted[2]["x"], pasted[2]["y"]) == (50, 70)
+        assert session.source_of(pasted[0])["text"] == "{{ name }}"
+        assert pasted == session.working_objects["b.jsonl"]
+        assert sources[0]["id"] == 1
+
+    def test_paste_without_a_position_moves_from_the_originals_and_stays_on_the_screen(self):
+        # GIVEN
+        session = _session()
+        source = {"page": 1, "id": 1, "obj": "btn", "x": 400, "y": 10, "w": 60, "h": 20}
+
+        # WHEN
+        pasted = session.paste_objects("b.jsonl", [source], page=1, screen=(480, 320), offset=30)
+
+        # THEN
+        assert (pasted[0]["x"], pasted[0]["y"]) == (420, 40)
+
+    def test_paste_adds_nothing_if_an_object_cant_be_rendered(self):
+        # GIVEN
+        session = _session()
+
+        # WHEN
+        with pytest.raises(TemplateSyntaxError):
+            session.paste_objects(
+                "b.jsonl", [{"obj": "btn"}, {"obj": "label", "text": "{{ unknown }}"}], page=1, screen=(480, 320)
+            )
+
+        # THEN
+        assert session.working_objects["b.jsonl"] == []
+        assert session.is_dirty is False
+
     def test_add_duplicate_and_remove(self):
         # GIVEN
         session = _session()

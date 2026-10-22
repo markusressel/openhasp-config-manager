@@ -5,9 +5,10 @@ from collections import OrderedDict
 from typing import List, Dict, Optional, Any, Callable, Set, Tuple
 
 from PyQt6 import QtCore
+from jinja2 import TemplateError
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QAction
-from PyQt6.QtWidgets import QWidget, QToolBar, QComboBox, QMessageBox, QToolButton, QFrame, QHBoxLayout
+from PyQt6.QtGui import QAction, QKeySequence
+from PyQt6.QtWidgets import QApplication, QWidget, QToolBar, QComboBox, QMessageBox, QToolButton, QFrame, QHBoxLayout
 
 from openhasp_config_manager.gui.domain.page_objects import (
     OpenHASPWidgetType,
@@ -19,6 +20,7 @@ from openhasp_config_manager.gui.domain.page_objects import (
     create_object,
     step_page,
 )
+from openhasp_config_manager.gui.domain.clipboard import PasteCascade, objects_from_text, objects_to_text, with_descendants
 from openhasp_config_manager.gui.domain.file_tree import default_target_component
 from openhasp_config_manager.gui.domain.live_preview import LivePage
 from openhasp_config_manager.gui.domain.plate_session import PlateSession
@@ -46,6 +48,8 @@ LOGGER = logging.getLogger(__name__)
 SEND_DELAY_SECONDS = 0.1
 # Live preview sends the changes of the draft at most this often, e.g. while dragging an object
 LIVE_PREVIEW_INTERVAL_MS = 50
+
+LOCKED_POSITION_HINT = "the position is a template or a percentage: use pixels for x/y in the properties to move it"
 
 RESTORE_PLATE_HINT = "Values sent by haad or Home Assistant appear again with their next update."
 
@@ -87,6 +91,7 @@ class PageLayoutEditorWidget(QWidget):
         self._chosen_targets: Dict[str, str] = {}
         # the component whose objects are highlighted (the others are dimmed)
         self._highlighted_component: Optional[str] = None
+        self._paste_cascade = PasteCascade()
 
         # Live preview: what the plate shows of the current page, and the changes of the draft that wait to be sent
         self._live_page = LivePage()
@@ -100,6 +105,7 @@ class PageLayoutEditorWidget(QWidget):
         self.property_editor = OpenHASPWidgetPropertyEditor()
         self.property_editor.removeObjectClicked.connect(self.remove_selected_objects)
         self.property_editor.duplicateObjectClicked.connect(self.duplicate_selected_objects)
+        self.property_editor.usePixelPositionClicked.connect(self.use_pixel_positions)
         self.property_editor.propertyChanged.connect(self._on_property_changed)
         self.property_editor.set_validator(self._validate_property)
 
@@ -141,6 +147,7 @@ class PageLayoutEditorWidget(QWidget):
         self.page_preview_widget.modeChanged.connect(self._on_editor_mode_changed)
         self.page_preview_widget.selectionChanged.connect(self._on_openhasp_widget_selection_changed)
         self.page_preview_widget.itemsMoved.connect(self._on_items_moved)
+        self.page_preview_widget.lockedDragAttempted.connect(self._report_locked)
         self.page_preview_widget.addObjectRequested.connect(lambda: self.add_object(OpenHASPWidgetType.LABEL))
         column.addWidget(self.page_preview_widget, 1)
 
@@ -180,9 +187,21 @@ class PageLayoutEditorWidget(QWidget):
         self.action_snap.toggled.connect(self.page_preview_widget.set_snap_enabled)
 
         self.action_duplicate = create(
-            self, "Duplicate", "content-copy", self.duplicate_selected_objects, shortcut="Ctrl+D", context=canvas
+            self, "Duplicate", "content-duplicate", self.duplicate_selected_objects, shortcut="Ctrl+D", context=canvas
         )
         self.action_delete = create(self, "Remove", "delete", self.remove_selected_objects, shortcut="Del", context=canvas)
+        self.action_copy = create(
+            self, "Copy", "content-copy", self.copy_selected_objects, shortcut=QKeySequence.StandardKey.Copy, context=canvas
+        )
+        self.action_paste = create(
+            self,
+            "Paste",
+            "content-paste",
+            self.paste_objects,
+            shortcut=QKeySequence.StandardKey.Paste,
+            tooltip="Paste the copied objects where the mouse is, or next to the originals",
+            context=canvas,
+        )
 
         self.action_zoom_in = create(
             self, "Zoom in", "magnify-plus-outline", self.page_preview_widget.zoom_in, shortcut="Ctrl++"
@@ -222,6 +241,8 @@ class PageLayoutEditorWidget(QWidget):
         canvas_actions = [
             self.action_delete,
             self.action_duplicate,
+            self.action_copy,
+            self.action_paste,
             create(self, "Previous page", "chevron-left", self._on_previous_page_clicked, shortcut="PgUp", context=canvas),
             create(self, "Next page", "chevron-right", self._on_next_page_clicked, shortcut="PgDown", context=canvas),
         ]
@@ -326,6 +347,8 @@ class PageLayoutEditorWidget(QWidget):
         self.action_next_page.setEnabled(can_navigate)
         self.action_duplicate.setEnabled(self.edit_mode and has_selection)
         self.action_delete.setEnabled(self.edit_mode and has_selection)
+        self.action_copy.setEnabled(self.edit_mode and has_selection)
+        self.action_paste.setEnabled(has_data)
         # while Live preview is on, the page on the plate follows the draft
         self.action_clear.setEnabled(has_data and not busy and not self.live_preview)
         self.action_restore_plate.setEnabled(has_data and not busy)
@@ -493,7 +516,21 @@ class PageLayoutEditorWidget(QWidget):
 
     def _is_movable(self, obj: Dict) -> bool:
         """Objects whose position is a template or a percentage can't be dragged: it would replace them with pixels."""
-        return not any(self.session.is_template(obj, key) or self.session.is_percentage(obj, key) for key in ("x", "y"))
+        return not self.session.has_computed_position(obj)
+
+    def _report_locked(self, items: List[EditableWidget]):
+        names = ", ".join(f"p{item.obj_data.get('page')}b{item.obj_id}" for item in items)
+        self.status.failed.emit(f"Moving {names}", LOCKED_POSITION_HINT)
+
+    def use_pixel_positions(self):
+        """Replace the templates and percentages in x and y of the selected objects with pixels, so they can be moved."""
+        items = self.page_preview_widget.selected_items()
+        if not self.edit_mode or not items:
+            return
+        for item in items:
+            self.session.use_pixel_position(item.obj_data)
+        self.page_preview_widget.refresh_movable()
+        self._after_geometry_edit()
 
     def _on_items_moved(self, items: List[EditableWidget]):
         for item in items:
@@ -506,10 +543,7 @@ class PageLayoutEditorWidget(QWidget):
             return
         locked = [item for item in items if not self._is_movable(item.obj_data)]
         if locked:
-            names = ", ".join(f"p{item.obj_data.get('page')}b{item.obj_id}" for item in locked)
-            self.status.failed.emit(
-                f"Moving {names}", "the position is a template or a percentage, change x and y to pixels to move it"
-            )
+            self._report_locked(locked)
         for item in items:
             if item not in locked:
                 self._move(item, item.obj_x + dx, item.obj_y + dy)
@@ -593,6 +627,48 @@ class PageLayoutEditorWidget(QWidget):
                 break
         self._mark_dirty()
         self._reload_page(select=duplicates)
+
+    def copy_selected_objects(self):
+        """Copy the selected objects (with the objects inside of them) to the clipboard, as JSONL with their templates."""
+        items = self.page_preview_widget.selected_items()
+        if not self.edit_mode or not items:
+            return
+        objects = with_descendants(self.page_objects, [item.obj_data for item in items])
+        QApplication.clipboard().setText(objects_to_text([self.session.source_of(obj) for obj in objects]))
+        self._paste_cascade.reset()
+
+    def paste_objects(self):
+        """
+        Paste the objects of the clipboard into the file for new objects: where the mouse is, if it is over the plate,
+        otherwise next to the originals. Pasting again to the same spot moves the copies a bit further each time.
+        """
+        component = self.target_component
+        if component is None:
+            return
+        text = QApplication.clipboard().text()
+        sources = objects_from_text(text)
+        if not sources:
+            self.status.failed.emit("Pasting", "the clipboard holds no openHASP objects (JSONL)")
+            return
+        if not self.edit_mode:
+            self.action_edit_mode.setChecked(True)
+
+        screen = self.device_pages_data.device.config.openhasp_config_manager.device.screen
+        position = self.page_preview_widget.cursor_plate_position()
+        try:
+            pasted = self.session.paste_objects(
+                component,
+                sources,
+                page=self.current_index,
+                screen=(screen.width, screen.height),
+                position=position,
+                offset=self._paste_cascade.next_offset(text, position),
+            )
+        except (ValueError, TemplateError) as ex:
+            self.status.failed.emit("Pasting", error_text(ex))
+            return
+        self._mark_dirty()
+        self._reload_page(select=pasted)
 
     def remove_selected_objects(self):
         items = self.page_preview_widget.selected_items()

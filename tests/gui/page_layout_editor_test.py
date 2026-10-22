@@ -256,3 +256,148 @@ class TestFiles(TestBase):
         # THEN
         assert revealed == [_key(editor, "page.jsonl")]
         assert all(item.opacity() == 1.0 for item in editor.page_preview_widget.editable_items() if item.obj_id in (1, 50))
+
+
+class TestCopyPaste(TestBase):
+    def _copy(self, editor, obj_id: int):
+        editor.set_edit_mode(True)
+        editor.page_preview_widget.select_object(_object(editor, obj_id))
+        editor.action_copy.trigger()
+
+    def test_copy_puts_the_sources_on_the_clipboard(self, editor):
+        from PyQt6.QtWidgets import QApplication
+
+        # WHEN
+        self._copy(editor, 1)
+
+        # THEN
+        assert QApplication.clipboard().text() == '{"page": 9, "id": 1, "obj": "label", "text": "A", "x": 10}\n'
+
+    def test_repeated_pastes_next_to_the_original_cascade(self, editor, monkeypatch):
+        # GIVEN
+        monkeypatch.setattr(editor.page_preview_widget, "cursor_plate_position", lambda: None)
+        self._copy(editor, 1)
+
+        # WHEN
+        editor.action_paste.trigger()
+        editor.action_paste.trigger()
+
+        # THEN
+        pasted = [obj for obj in editor.page_objects if obj.get("id") in (3, 4)]
+        assert [(obj["x"], obj["text"]) for obj in pasted] == [(20, "A"), (30, "A")]
+        assert [item.obj_id for item in editor.page_preview_widget.selected_items()] == [4]
+        assert editor.session.is_dirty
+
+    def test_paste_goes_where_the_mouse_is(self, editor, monkeypatch):
+        # GIVEN
+        monkeypatch.setattr(editor.page_preview_widget, "cursor_plate_position", lambda: (200, 100))
+        self._copy(editor, 1)
+
+        # WHEN
+        editor.set_page_index(1)
+        editor.action_paste.trigger()
+
+        # THEN
+        pasted = editor.working_objects[editor.target_component][-1]
+        assert (pasted["page"], pasted["x"], pasted["y"]) == (1, 200, 100)
+
+    def test_paste_of_other_text_reports_it(self, editor):
+        from PyQt6.QtWidgets import QApplication
+
+        # GIVEN
+        failures = []
+        editor.status.failed.connect(lambda *args: failures.append(args))
+        QApplication.clipboard().setText("hello")
+
+        # WHEN
+        editor.action_paste.trigger()
+
+        # THEN
+        assert failures == [("Pasting", "the clipboard holds no openHASP objects (JSONL)")]
+        assert editor.session.is_dirty is False
+
+
+class TestLockedPosition(TestBase):
+    def _lock(self, editor, obj_id: int):
+        editor.set_edit_mode(True)
+        obj = _object(editor, obj_id)
+        editor.session.set_source_value(obj, "x", "10%")
+        editor.page_preview_widget.refresh_movable()
+        self._item(editor, obj).refresh()
+        return obj
+
+    def _item(self, editor, obj):
+        return next(item for item in editor.page_preview_widget.editable_items() if item.obj_data is obj)
+
+    def test_dragging_a_locked_object_reports_it_once_and_shows_it_is_not_allowed(self, editor):
+        from PyQt6 import QtCore
+        from PyQt6.QtCore import QPointF, Qt
+        from PyQt6.QtGui import QMouseEvent
+        from PyQt6.QtTest import QTest
+        from PyQt6.QtWidgets import QApplication
+
+        # GIVEN
+        obj = self._lock(editor, 2)
+        failures = []
+        editor.status.failed.connect(lambda *args: failures.append(args))
+        preview = editor.page_preview_widget
+        viewport = preview.viewport()
+        start = preview.mapFromScene(QPointF(obj["x"] + 5, obj.get("y", 0) + 5))
+
+        # WHEN
+        QTest.mousePress(viewport, Qt.MouseButton.LeftButton, pos=start)
+        for step in range(1, 4):
+            point = QPointF(start + QtCore.QPoint(20 * step, 0))
+            QApplication.sendEvent(
+                viewport,
+                QMouseEvent(
+                    QtCore.QEvent.Type.MouseMove,
+                    point,
+                    QPointF(viewport.mapToGlobal(point)),
+                    Qt.MouseButton.NoButton,
+                    Qt.MouseButton.LeftButton,
+                    Qt.KeyboardModifier.NoModifier,
+                ),
+            )
+        cursor = viewport.cursor().shape()
+        QTest.mouseRelease(viewport, Qt.MouseButton.LeftButton, pos=start + QtCore.QPoint(60, 0))
+
+        # THEN
+        assert len(failures) == 1
+        assert failures[0][0] == "Moving p9b2"
+        assert cursor == Qt.CursorShape.ForbiddenCursor
+        assert viewport.cursor().shape() != Qt.CursorShape.ForbiddenCursor
+        assert editor.session.source_of(obj)["x"] == "10%"
+
+    def test_use_pixel_positions_makes_the_selected_objects_movable(self, editor):
+        # GIVEN
+        obj = self._lock(editor, 2)
+        x = obj["x"]
+        editor.page_preview_widget.select_object(obj)
+        assert self._item(editor, obj).movable is False
+
+        # WHEN
+        editor.property_editor.usePixelPositionClicked.emit()
+
+        # THEN
+        assert editor.session.source_of(obj)["x"] == x
+        assert self._item(editor, obj).movable is True
+
+    def test_the_properties_offer_to_use_pixels_only_for_a_locked_position(self, editor):
+        from PyQt6.QtWidgets import QPushButton
+
+        def offered() -> bool:
+            return any(button.text() == "Use pixels for x/y" for button in editor.property_editor.findChildren(QPushButton))
+
+        # GIVEN
+        editor.property_editor.set_session(editor.session)
+        obj = self._lock(editor, 2)
+
+        # WHEN
+        editor.page_preview_widget.select_object(_object(editor, 1))
+        unlocked = offered()
+        editor.page_preview_widget.select_object(obj)
+
+        # THEN
+        assert unlocked is False
+        assert offered() is True

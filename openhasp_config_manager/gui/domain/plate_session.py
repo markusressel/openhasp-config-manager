@@ -135,6 +135,10 @@ class PlateSession:
         value = self.source_of(obj).get(key)
         return isinstance(value, str) and ObjectDimensionsProcessor.PERCENTAGE_REGEX_PATTERN.match(value) is not None
 
+    def has_computed_position(self, obj: Dict) -> bool:
+        """Whether x or y is a template or a percentage: moving the object would replace them with pixels."""
+        return any(self.is_template(obj, key) or self.is_percentage(obj, key) for key in ("x", "y"))
+
     def check_template(self, obj: Dict, template: str) -> Optional[str]:
         return self._renderer.check_template(self._entry(obj).component, template)
 
@@ -166,6 +170,12 @@ class PlateSession:
         self._entry(obj).source[key] = value
         self._apply(obj, rendered)
 
+    def use_pixel_position(self, obj: Dict):
+        """Replace a template or a percentage in x and y with the pixels it renders to, so the object can be moved."""
+        for key in ("x", "y"):
+            if self.is_template(obj, key) or self.is_percentage(obj, key):
+                self.set_source_value(obj, key, obj.get(key, 0))
+
     def remove_source_value(self, obj: Dict, key: str):
         """
         Remove a property the draft added to the source (e.g. resetting a theme default that was changed),
@@ -196,6 +206,55 @@ class PlateSession:
         source["x"] = obj.get("x", 0) + offset
         source["y"] = obj.get("y", 0) + offset
         return self.add_object(entry.component, source)
+
+    def paste_objects(
+        self,
+        component: str,
+        sources: List[Dict[str, Any]],
+        page: int,
+        screen: Tuple[int, int],
+        position: Optional[Tuple[int, int]] = None,
+        offset: int = 0,
+    ) -> List[Dict]:
+        """
+        Add copies of objects (as written in a source file) to a page of a component, with the next free ids.
+        They keep their layout: their top left corner goes to `position` (or stays where the originals were), moved by
+        `offset` and kept on the screen. Objects inside of another (parentid) stay there if it is pasted too.
+        Templates are kept, except for the moved positions. Nothing is added if one of them can't be rendered.
+        :param screen: the width and height of the screen
+        :return: the rendered objects
+        """
+        taken = [obj for objects in self._working_objects.values() for obj in objects]
+        new_ids: Dict[Any, int] = {}
+        prepared = []
+        for source in sources:
+            source = copy.deepcopy(source)
+            new_ids[source.get("id")] = next_free_id(OrderedDict(taken=taken), page)
+            source["page"] = page
+            source["id"] = new_ids[source.get("id")]
+            taken.append(source)
+            prepared.append(source)
+        for source in prepared:
+            if "parentid" in source and source["parentid"] in new_ids:
+                source["parentid"] = new_ids[source["parentid"]]
+            else:
+                source.pop("parentid", None)
+
+        rendered = [self._renderer.render_object(component, source) for source in prepared]
+        top_level = [(source, obj) for source, obj in zip(prepared, rendered) if "parentid" not in source]
+        if top_level:
+            left = min(obj.get("x", 0) for _, obj in top_level)
+            top = min(obj.get("y", 0) for _, obj in top_level)
+            width = max(obj.get("x", 0) + obj.get("w", 0) for _, obj in top_level) - left
+            height = max(obj.get("y", 0) + obj.get("h", 0) for _, obj in top_level) - top
+            x, y = position if position is not None else (left, top)
+            x = max(0, min(x + offset, screen[0] - width))
+            y = max(0, min(y + offset, screen[1] - height))
+            for source, obj in top_level:
+                source["x"] = obj.get("x", 0) + x - left
+                source["y"] = obj.get("y", 0) + y - top
+
+        return [self.add_object(component, source) for source in prepared]
 
     def remove_object(self, obj: Dict):
         entry = self._entry(obj)

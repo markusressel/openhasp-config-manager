@@ -135,3 +135,29 @@ class TestPagePreviewWidget(TestBase):
         for bar in bars:
             assert preview.viewport().rect().contains(bar.geometry())
             assert not bar.geometry().intersects(plate)
+
+    def test_cursor_plate_position_is_on_the_grid_and_only_over_the_plate(self):
+        # GIVEN
+        from PyQt6 import QtCore
+        from PyQt6.QtGui import QCursor
+
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.page_preview_layout import PagePreviewWidget
+
+        preview = PagePreviewWidget()
+        preview.set_screen_size(480, 320)
+        preview.resize(600, 400)
+        preview.show()
+        preview.fit_to_view()
+
+        def at(scene_x: float, scene_y: float):
+            QCursor.setPos(preview.viewport().mapToGlobal(preview.mapFromScene(QtCore.QPointF(scene_x, scene_y))))
+            return preview.cursor_plate_position()
+
+        # WHEN / THEN
+        grid = preview.scene().grid_size
+        assert at(3 * grid + 1, 2 * grid - 1) == (3 * grid, 2 * grid)
+        assert at(-20, 10) is None
+        preview.set_snap_enabled(False)
+        x, y = at(101, 53)
+        # off the grid, up to the rounding of the zoomed view
+        assert abs(x - 101) <= 1 and abs(y - 53) <= 1

@@ -5,8 +5,8 @@ from typing import List, Optional, Dict, Callable, Tuple
 
 from PyQt6 import QtCore
 from PyQt6.QtCore import Qt, QRectF
-from PyQt6.QtGui import QPainter, QColor, QPen, QFont
-from PyQt6.QtWidgets import QGraphicsView, QWidget
+from PyQt6.QtGui import QCursor, QPainter, QColor, QPen, QFont
+from PyQt6.QtWidgets import QApplication, QGraphicsView, QWidget
 
 from openhasp_config_manager.gui.dimensions import UiDimensions
 from openhasp_config_manager.gui.domain.ripple import Ripple, active_ripples
@@ -63,6 +63,9 @@ class PagePreviewWidget(QGraphicsView):
 
     addObjectRequested = QtCore.pyqtSignal()
 
+    # Emitted once per drag when the user tries to drag an object that can't be moved (see set_movable_predicate)
+    lockedDragAttempted = QtCore.pyqtSignal(list)
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.mode = PreviewMode.Interact
@@ -71,6 +74,8 @@ class PagePreviewWidget(QGraphicsView):
         self._empty_hint: Optional[str] = None
         self._is_movable: Callable[[Dict], bool] = lambda _obj: True
         self._is_dimmed: Callable[[Dict], bool] = lambda _obj: False
+        # where the mouse pressed on an object that can't be moved, until it is released
+        self._locked_press: Optional[Tuple[QtCore.QPoint, EditableWidget]] = None
 
         # click feedback in interact mode, painted in drawForeground (not as scene items: reloading a page clears the scene)
         self._ripples: List[Ripple] = []
@@ -130,6 +135,11 @@ class PagePreviewWidget(QGraphicsView):
     def set_movable_predicate(self, is_movable: Callable[[Dict], bool]):
         """Decides which objects can be dragged in edit mode (others can still be selected)."""
         self._is_movable = is_movable
+
+    def refresh_movable(self):
+        """Ask the movable predicate again, e.g. after the position of an object changed from a template to pixels."""
+        for item in self.editable_items():
+            item.movable = self.mode == PreviewMode.Edit and self._is_movable(item.obj_data)
 
     def set_snap_enabled(self, enabled: bool):
         self.scene().snap_enabled = enabled
@@ -195,6 +205,21 @@ class PagePreviewWidget(QGraphicsView):
         for item in self.editable_items():
             if item.obj_data is obj_data:
                 item.setSelected(True)
+
+    def cursor_plate_position(self) -> Optional[Tuple[int, int]]:
+        """
+        :return: the point of the plate under the mouse (on the grid while snapping is on), or None if the mouse isn't
+            over the plate (or over one of the floating bars)
+        """
+        if QApplication.widgetAt(QCursor.pos()) is not self.viewport():
+            return None
+        point = self.mapToScene(self.viewport().mapFromGlobal(QCursor.pos()))
+        if not self.scene().sceneRect().contains(point):
+            return None
+        if self.scene().snap_enabled:
+            grid = self.scene().grid_size
+            return round(point.x() / grid) * grid, round(point.y() / grid) * grid
+        return int(point.x()), int(point.y())
 
     # --- zoom ---
 
@@ -305,7 +330,29 @@ class PagePreviewWidget(QGraphicsView):
 
     def mousePressEvent(self, event):
         self._add_ripple(event)
+        self._locked_press = None
+        if self.mode == PreviewMode.Edit and event.button() == Qt.MouseButton.LeftButton:
+            item = self._editable_item_at(event.position().toPoint())
+            if item is not None and not item.movable:
+                self._locked_press = (event.position().toPoint(), item)
         super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        super().mouseMoveEvent(event)
+        if self._locked_press is None:
+            return
+        start, item = self._locked_press
+        if (event.position().toPoint() - start).manhattanLength() >= QApplication.startDragDistance():
+            self._locked_press = None
+            self.viewport().setCursor(Qt.CursorShape.ForbiddenCursor)
+            self.lockedDragAttempted.emit([item])
+
+    def _editable_item_at(self, point: QtCore.QPoint) -> Optional[EditableWidget]:
+        """:return: the object under a point of the viewport (also when a child item of it, e.g. its text, is there)"""
+        item = self.itemAt(point)
+        while item is not None and not isinstance(item, EditableWidget):
+            item = item.parentItem()
+        return item
 
     def mouseDoubleClickEvent(self, event):
         # the second press of a fast double click arrives here instead of in mousePressEvent
@@ -327,10 +374,12 @@ class PagePreviewWidget(QGraphicsView):
 
     def mouseReleaseEvent(self, event):
         super().mouseReleaseEvent(event)
+        self._locked_press = None
+        self.viewport().unsetCursor()
         self.scene().clear_guides()
         if self.mode != PreviewMode.Edit:
             return
-        moved = [item for item in self.selected_items() if item.delta_x != 0 or item.delta_y != 0]
+        moved = [item for item in self.selected_items() if item.movable and (item.delta_x != 0 or item.delta_y != 0)]
         if moved:
             self.itemsMoved.emit(moved)
 
