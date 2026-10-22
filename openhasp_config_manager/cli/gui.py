@@ -1,9 +1,11 @@
 import asyncio
+import signal
 import sys
 import threading
 from pathlib import Path
 
-from PyQt6.QtWidgets import QApplication
+from PyQt6.QtCore import QTimer
+from PyQt6.QtWidgets import QApplication, QWidget
 
 from openhasp_config_manager.gui.qt.util import setup_global_async_loop, get_global_async_loop
 
@@ -34,6 +36,26 @@ def c_gui(config_dir: Path, output_dir: Path):
     config_manager = _create_config_manager(config_dir, output_dir)
     window = MainWindow(config_manager)
     window.show()
+    _quit_on_signals(app, window)
 
     # 3. Standard Qt Execution (No qasync!)
     sys.exit(app.exec())
+
+
+def _quit_on_signals(app: QApplication, window: QWidget):
+    """
+    Close the window (which saves its state and stops the plate connection) and quit on SIGINT (Ctrl+C) and SIGTERM.
+    """
+
+    def _handle(_signum, _frame):
+        window.close()
+        app.quit()
+
+    signal.signal(signal.SIGINT, _handle)
+    signal.signal(signal.SIGTERM, _handle)
+
+    # Python runs signal handlers only between Python bytecodes, but Qt's event loop runs in C++: without Python code
+    # running, a signal waits until the next event that happens to call into Python. This timer wakes it up regularly.
+    timer = QTimer(app)
+    timer.timeout.connect(lambda: None)
+    timer.start(200)
