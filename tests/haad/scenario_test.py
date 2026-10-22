@@ -7,7 +7,6 @@ from typing import Any
 
 from haad.triggers import Trigger
 from openhasp_config_manager.haad.page import PageController
-from openhasp_config_manager.haad.plate import PlateBehavior
 from tests.haad.conftest import page_at
 from tests.haad.fakes import FakePlate, Http, Mqtt
 
@@ -106,6 +105,7 @@ class PrinterPage(HeaderPage):
         await self.add_button(obj_id=20, on_click=self._on_pause)
         image = await self.add_image(obj_id=45)
         await image.set_hidden(False)
+        await self.claim(active=self._printing, trigger="sensor.stage", keep_awake=True)
         await self.controller.react_to(action=self._on_stage_changed, trigger="sensor.stage", immediately=True)
 
     async def _nozzle(self) -> Any:
@@ -123,12 +123,11 @@ class PrinterPage(HeaderPage):
         else:
             await self.nozzle.set_color("#FFFFFF")
 
+    async def _printing(self) -> bool:
+        return await self.controller.ha.get_state("sensor.stage") == "printing"
+
     async def _on_stage_changed(self, event):
-        if event.new == "printing":
-            await self.request_plate_behavior(PlateBehavior.ALWAYS_ON_DISPLAY)
-            await self.go_to_this_page()
-        else:
-            await self.drop_plate_behavior(PlateBehavior.ALWAYS_ON_DISPLAY)
+        if event.new != "printing":
             await self.client.wakeup()
 
     async def _on_pause(self):
@@ -196,8 +195,7 @@ class MediaPage(HeaderPage):
         self.bar_label = await self.add_label(obj_id=31)
         await self.controller.react_to(action=self._tick, trigger=Trigger.Time.every(interval=timedelta(seconds=1)),
                                        immediately=True)
-        await self.controller.react_to(action=self._players_changed, trigger=Trigger.Entity(players, attribute="all"),
-                                       immediately=True)
+        await self.claim(active=self._any_playing, trigger=Trigger.Entity(players, attribute="all"), keep_awake=True)
 
     async def _playing(self) -> list:
         return [p for p in ["media_player.a", "media_player.b"] if await self.controller.ha.get_state(p) == "playing"]
@@ -219,12 +217,8 @@ class MediaPage(HeaderPage):
             await self.bar.set_progress(position)
             await self.bar_label.set_text(f"{position}%")
 
-    async def _players_changed(self):
-        if await self._playing():
-            await self.request_plate_behavior(PlateBehavior.ALWAYS_ON_DISPLAY)
-            await self.go_to_this_page()
-        else:
-            await self.drop_plate_behavior(PlateBehavior.ALWAYS_ON_DISPLAY)
+    async def _any_playing(self) -> bool:
+        return bool(await self._playing())
 
 
 async def test_media_page(simulator, start_plate, plate: FakePlate):

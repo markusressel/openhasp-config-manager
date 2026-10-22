@@ -1,9 +1,7 @@
-import copy
 from asyncio import Task
 from dataclasses import dataclass
-from enum import StrEnum
 from pathlib import Path
-from typing import Dict, Callable, Set, Optional, Awaitable, Any, List
+from typing import Dict, Callable, Optional, Awaitable, Any, List
 
 from haad.controller import HaadController
 from openhasp_config_manager.haad import util_openhasp
@@ -14,6 +12,7 @@ from openhasp_config_manager.haad.page import PageController
 from openhasp_config_manager.haad.page.state_updater import StateUpdater
 from openhasp_config_manager.haad.plate import device_factory
 from openhasp_config_manager.haad.plate.deployment import DeploymentController
+from openhasp_config_manager.haad.plate.scheduler import FocusConfig, PageScheduler
 from openhasp_config_manager.haad.plate.screen import ScreenController
 from openhasp_config_manager.openhasp_client.model.configuration.gui_config import GuiConfig
 from openhasp_config_manager.openhasp_client.model.device import Device
@@ -43,7 +42,7 @@ class Screen:
 
 @dataclass(frozen=True)
 class GuiDefaults:
-    """The plate's idle timeouts, restored when no page requests a plate behaviour."""
+    """The plate's idle timeouts, restored when no page claims the screen to stay on."""
     idle1: int  # seconds until "short" idle
     idle2: int  # seconds until "long" idle
 
@@ -62,6 +61,7 @@ class PlateConfig:
         theme: Theme = Theme(),
         gui: Optional[GuiDefaults] = None,
         wrap_navigation: bool = True,
+        focus: FocusConfig = FocusConfig(),
     ):
         """
         :param screen: the screen size for code-defined layouts; default: from the device's config (config_dir)
@@ -69,6 +69,7 @@ class PlateConfig:
         :param gui: the idle timeouts; default: from the device's config (config_dir)
         :param wrap_navigation: when the plate has code-defined pages, it sets `prev` of the first page and `next` of the
             last page, so swiping cycles through the pages
+        :param focus: when the plate switches pages by itself, see PageScheduler
         """
         self.screen_brightness_default = screen_brightness_default
         self.screen_brightness_short_idle = screen_brightness_short_idle
@@ -77,15 +78,7 @@ class PlateConfig:
         self.theme = theme
         self.gui = gui
         self.wrap_navigation = wrap_navigation
-
-
-class PlateBehavior(StrEnum):
-    """
-    Behaviors for OpenHASP plates.
-    """
-
-    # Keeps the screen always on
-    ALWAYS_ON_DISPLAY = "always_on"
+        self.focus = focus
 
 
 class PlateController:
@@ -142,58 +135,12 @@ class PlateController:
             device=self.device,
         )
 
-        # keeps track of active PlateBehaviors by mapping to the page ids that
-        # currently have them added/active
-        self.current_behavior_requests: Dict[PlateBehavior, Set[int]] = {}
+        self.scheduler = PageScheduler(controller=self.controller, plate=self, config=self._config.focus)
 
-    async def request_behavior(self, page: PageController, behavior: PlateBehavior):
-        """
-        Adds a behavior request to the plate
-        :param page: the page adding the behavior
-        :param behavior: the behavior to add
-        """
-        if behavior not in self.current_behavior_requests:
-            self.current_behavior_requests[behavior] = set()
-        if self.has_behavior_request(behavior=behavior, page=page, store=self.current_behavior_requests):
-            return
-        self.controller.logger.info(f"Adding behavior '{behavior}' to plate {self._name}")
-        previous_behaviors = copy.deepcopy(self.current_behavior_requests)
-        self.current_behavior_requests[behavior].add(page.index)
-        await self.update_plate_behavior(previous_behaviors)
-
-    async def drop_behavior_request(self, page: PageController, behavior: PlateBehavior):
-        """
-        Removes a behavior from the plate
-        :param page: the page removing the behavior
-        :param behavior: the behavior to remove
-        """
-        previous_behaviors = copy.deepcopy(self.current_behavior_requests)
-        if self.has_behavior_request(behavior=behavior, page=page, store=self.current_behavior_requests):
-            self.controller.logger.info(f"Removing behavior '{behavior}' from plate {self._name}")
-            self.current_behavior_requests[behavior].remove(page.index)
-            await self.update_plate_behavior(previous_behaviors)
-
-    def has_behavior_request(
-        self, behavior: PlateBehavior, page: Optional[PageController] = None, store: Dict[PlateBehavior, Set[int]] = None
-    ) -> bool:
-        """
-        Checks if the plate has the given behavior active by any page
-        :param behavior: the behavior to check
-        :param page: (optional) the page to check for, if given only checks if that page has the behavior
-        :param store: (optional) the store to check, defaults to active_behaviors
-        :return: true if the behavior is active on any page, false otherwise
-        """
-        if store is None:
-            store = self.current_behavior_requests
-
-        pages_with_behavior = store.get(behavior, set())
-        if page is not None:
-            return page.index in pages_with_behavior
-        return len(pages_with_behavior) > 0
-
-    async def update_plate_behavior(self, previous_requests: Dict[PlateBehavior, Set[int]]):
-        self.controller.logger.info(f"Updating behaviors for plate {self._name}: {list(self.current_behavior_requests.keys())}")
-        if self.has_behavior_request(PlateBehavior.ALWAYS_ON_DISPLAY):
+    async def set_keep_awake(self, keep_awake: bool):
+        """Keeps the screen on (no idle dimming), or restores the idle timeouts. The PageScheduler calls this."""
+        self.controller.logger.info(f"{'Keeping' if keep_awake else 'No longer keeping'} the screen of plate {self._name} on")
+        if keep_awake:
             await self.set_gui_config2(idle1=15, idle2=0)
             await self.screen_controller.set_idle(state="short")
         else:
@@ -255,6 +202,7 @@ class PlateController:
             await page.initialize_objects()
 
         await self.set_navigation()
+        await self.scheduler.start()
 
     async def _declare_objects(self, page: PageController):
         """build_layout() and its mount, then register_objects()."""

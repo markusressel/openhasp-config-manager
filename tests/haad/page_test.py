@@ -8,7 +8,6 @@ from openhasp_config_manager.haad.objects.progress import BarObjectController
 from openhasp_config_manager.haad.objects.slider import SliderObjectController
 from openhasp_config_manager.haad.objects.switch import SwitchObjectController
 from openhasp_config_manager.haad.page import PageController
-from openhasp_config_manager.haad.plate import PlateBehavior
 from tests.haad.conftest import PLACEHOLDER_ID
 from tests.haad.fakes import FakePlate
 
@@ -63,16 +62,6 @@ async def test_go_to_this_page(page: PageController, plate: FakePlate):
     await page.go_to_this_page()
 
     assert plate.commands == ["page 1"]
-
-
-async def test_plate_behaviors(page: PageController, plate: FakePlate):
-    assert not await page.has_plate_behavior(PlateBehavior.ALWAYS_ON_DISPLAY)
-
-    await page.request_plate_behavior(PlateBehavior.ALWAYS_ON_DISPLAY)
-    assert await page.has_plate_behavior(PlateBehavior.ALWAYS_ON_DISPLAY)
-
-    await page.drop_plate_behavior(PlateBehavior.ALWAYS_ON_DISPLAY)
-    assert not await page.has_plate_behavior(PlateBehavior.ALWAYS_ON_DISPLAY)
 
 
 async def test_entity_accepts_ha_entities_ids_and_lists(simulator, page: PageController, plate: FakePlate):

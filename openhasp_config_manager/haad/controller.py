@@ -77,6 +77,7 @@ class OpenHaspController(HaadController):
 
     async def teardown_plate_setup(self):
         self.state_updater.clear()
+        await self.plate_controller.scheduler.stop()
         if self._plate_setup_scheduled_task is not None:
             await self._plate_setup_scheduled_task.cancel()
         if self._plate_sync_timer_task is not None:
@@ -161,6 +162,7 @@ class OpenHaspController(HaadController):
                 # from flash on code-defined pages, and an update can't change an object's type: clear them
                 await self.plate_controller.push_layout()
                 await self.plate_controller.set_navigation()
+                await self.plate_controller.scheduler.resync()
                 await self.schedule_sync()
 
         self._lwt_task = asyncio.create_task(self.plate_controller.listen_openhasp_event(

@@ -19,10 +19,10 @@ from openhasp_config_manager.haad.objects.switch import SwitchObjectController
 if TYPE_CHECKING:
     from openhasp_config_manager.haad.layout.components import Page
     from openhasp_config_manager.haad.page.state_updater import StateUpdater
-    from openhasp_config_manager.haad.plate import PlateBehavior, PlateController
+    from openhasp_config_manager.haad.plate import PlateController
+    from openhasp_config_manager.haad.plate.scheduler import Claim, Priority
 else:
     StateUpdater = Any
-    PlateBehavior = Any
 
 type EntityRef = HAEntity | str
 """An entity: its `HAEntity` wrapper or its entity id."""
@@ -92,14 +92,25 @@ class PageController:
         """Whether haad owns this page's layout (its objects are owned), and pushes it to the plate."""
         return any(o.owned for o in self.objects.values())
 
-    async def request_plate_behavior(self, behavior: "PlateBehavior"):
-        await self.plate.request_behavior(self, behavior)
+    async def claim(
+        self,
+        active: Callable[[], Awaitable[bool]],
+        trigger: TriggerInput,
+        priority: "Priority" = None,
+        keep_awake: bool = False,
+        wake: bool = False,
+    ) -> "Claim":
+        """
+        Claims the plate while `active()` is true, evaluated now and whenever `trigger` fires: the plate shows this page
+        (see PageScheduler for how claims are arbitrated) and, with `keep_awake`, stays on. Call it in register_objects().
 
-    async def drop_plate_behavior(self, behavior: "PlateBehavior"):
-        await self.plate.drop_behavior_request(self, behavior)
-
-    async def has_plate_behavior(self, behavior: "PlateBehavior") -> bool:
-        return self.plate.has_behavior_request(behavior)
+        :param priority: default: Priority.NORMAL
+        :param wake: wakes the screen when the claim shows this page
+        """
+        from openhasp_config_manager.haad.plate.scheduler import Priority
+        return await self.plate.scheduler.register(
+            page=self, active=active, trigger=trigger, priority=priority or Priority.NORMAL, keep_awake=keep_awake, wake=wake
+        )
 
     async def add_label(
         self,

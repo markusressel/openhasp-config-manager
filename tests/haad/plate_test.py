@@ -4,12 +4,9 @@ import logging
 import pytest
 
 from openhasp_config_manager.haad.page import PageController
-from openhasp_config_manager.haad.plate import PlateBehavior, PlateConfig, PlateController, ScreenState
+from openhasp_config_manager.haad.plate import PlateConfig, PlateController, ScreenState
 from tests.haad.conftest import PlateUnderTest, page_at
 from tests.haad.fakes import FakePlate, Http
-
-ALWAYS_ON = PlateBehavior.ALWAYS_ON_DISPLAY
-
 
 @pytest.fixture
 def plate_controller(page: PageController) -> PlateController:
@@ -20,52 +17,22 @@ def _gui_config_publishes(simulator) -> list:
     return [call["data"] for call in simulator.ha.called_services if call["action"] == "mqtt/publish"]
 
 
-async def test_always_on_display_while_any_page_requests_it(simulator, page: PageController, plate_controller, plate: FakePlate):
-    other = page_at(2)(page.controller)
-    always_on = [Http("POST", "config", {"idle1": 15, "idle2": 0, "save": "gui"}), "idle short"]
-    default = [Http("POST", "config", {"idle1": 60, "idle2": 120, "save": "gui"}), "idle off"]
+async def test_keep_awake_applies_the_always_on_config_or_the_gui_defaults(simulator, plate_controller, plate: FakePlate):
+    plate.clear()
 
-    def traffic():
-        result = [m if isinstance(m, Http) else f"{m.topic.rsplit('/', 1)[1]} {m.payload}" for m in plate.traffic]
-        plate.clear()
-        return result
-
-    await plate_controller.request_behavior(page, ALWAYS_ON)
-    assert traffic() == always_on
-    assert plate_controller.has_behavior_request(ALWAYS_ON)
-    assert plate_controller.has_behavior_request(ALWAYS_ON, page=page)
-    assert not plate_controller.has_behavior_request(ALWAYS_ON, page=other)
-
-    # the same page again: nothing changes
-    await plate_controller.request_behavior(page, ALWAYS_ON)
-    assert traffic() == []
-
-    # a second page: the behaviour is applied again
-    await plate_controller.request_behavior(other, ALWAYS_ON)
-    assert traffic() == always_on
-
-    # one of two pages drops it: still always on, applied again
-    await plate_controller.drop_behavior_request(page, ALWAYS_ON)
-    assert traffic() == always_on
+    await plate_controller.set_keep_awake(True)
+    assert [m if isinstance(m, Http) else f"{m.topic.rsplit('/', 1)[1]} {m.payload}" for m in plate.traffic] == [
+        Http("POST", "config", {"idle1": 15, "idle2": 0, "save": "gui"}), "idle short",
+    ]
     assert _gui_config_publishes(simulator) == []
+    plate.clear()
 
-    # the last page drops it: back to the device's gui defaults, over MQTT (through Home Assistant, to the plate's
-    # *controller* name) and HTTP
-    await plate_controller.drop_behavior_request(other, ALWAYS_ON)
-    assert traffic() == default
+    # back to the device's gui defaults, over MQTT (through Home Assistant, to the plate's *controller* name) and HTTP
+    await plate_controller.set_keep_awake(False)
+    assert [m if isinstance(m, Http) else f"{m.topic.rsplit('/', 1)[1]} {m.payload}" for m in plate.traffic] == [
+        Http("POST", "config", {"idle1": 60, "idle2": 120, "save": "gui"}), "idle off",
+    ]
     assert _gui_config_publishes(simulator) == [{"topic": "hasp/test_device/config/gui", "payload": '{"idle1": 60, "idle2": 120}'}]
-    assert not plate_controller.has_behavior_request(ALWAYS_ON)
-
-    # dropping a behaviour that isn't requested: nothing
-    await plate_controller.drop_behavior_request(page, ALWAYS_ON)
-    assert traffic() == []
-
-
-async def test_has_behavior_request_in_store(plate_controller, page: PageController):
-    store = {ALWAYS_ON: {page.index}}
-
-    assert plate_controller.has_behavior_request(ALWAYS_ON, page=page, store=store)
-    assert not plate_controller.has_behavior_request(ALWAYS_ON, page=page)
 
 
 async def test_pages(plate_controller, page: PageController):

@@ -8,7 +8,7 @@ from openhasp_config_manager.haad.layout.components import Column, Label, Page, 
 from openhasp_config_manager.haad.layout.geometry import Rect
 from openhasp_config_manager.haad.layout.theme import Theme
 from openhasp_config_manager.haad.page import PageController
-from openhasp_config_manager.haad.plate import GuiDefaults, PlateBehavior, PlateConfig, Screen
+from openhasp_config_manager.haad.plate import GuiDefaults, PlateConfig, Screen
 from tests.haad.conftest import PlateUnderTest, page_at
 from tests.haad.fakes import FakePlate, Http, Mqtt
 
@@ -156,13 +156,12 @@ async def test_mixed_page_fails_the_setup(simulator, load_plate, plate: FakePlat
 async def test_plate_config_overrides_the_device_config(simulator, start_plate, plate: FakePlate):
     controller = await start_plate(OwnedPlate, pages=[page_at(1, ExplicitPage)])
     plate_controller = controller.plate_controller
-    page = plate_controller.pages[1]
     assert plate_controller.screen == Screen(width=320, height=240)
     assert plate_controller.gui_defaults == GuiDefaults(idle1=30, idle2=90)
     plate.clear()
 
-    await page.request_plate_behavior(PlateBehavior.ALWAYS_ON_DISPLAY)
-    await page.drop_plate_behavior(PlateBehavior.ALWAYS_ON_DISPLAY)
+    await plate_controller.set_keep_awake(True)
+    await plate_controller.set_keep_awake(False)
 
     assert Http("POST", "config", {"idle1": 30, "idle2": 90, "save": "gui"}) in plate.http
 

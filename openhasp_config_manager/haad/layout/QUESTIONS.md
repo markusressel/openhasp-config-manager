@@ -129,3 +129,29 @@ Each one is pinned by a test in `tests/haad/` (named in brackets).
 40. **haad-home's `markus.py` uses `co2_sensor.carbon_dioxide.entity_id`**, but `carbon_dioxide` is a method of `Co2Sensor`
     (`carbon_dioxide_sensor` is the entity). The page isn't deployed; it would fail at setup. The alerts page uses
     `carbon_dioxide_sensor`.
+
+## Page claims (`plate/scheduler.py`)
+
+`PlateBehavior`, `request_plate_behavior()` and friends are gone: a page declares `claim(active=, trigger=, priority=, keep_awake=,
+wake=)` and the plate's `PageScheduler` decides the page and whether the screen stays on.
+
+41. **Equal priority takes the page**: a newly active claim shows its page when it is among the highest-priority claims, even
+    if another claim of the same priority is shown (as `go_to_this_page()` did before). Only a higher priority was meant to
+    "preempt" in the proposal; the newest-wins rule keeps the old media/printer behaviour. Confirm.
+42. **Lower priorities starve**: only the claims of the highest active priority are shown or rotated. A NORMAL media page is
+    never shown while a HIGH claim is active. Rotating across tiers (weighted) was not done.
+43. **Touch detection is limited to what the plate reports**: object events (`down`, `up`, `short`, `long`, ...), page changes
+    haad didn't ask for (swipes), and `state/idle off` (a touch wakes a dimmed screen; the docs say `idle off` acts "as if a touch
+    event occurred", and the state is published on changes). Not detected: a tap on the empty background while the screen is
+    awake, unless the page area (`pXb0`) publishes events, which the docs don't say; to find out, subscribe to `hasp/<name>/state/#`
+    on the plate and tap an empty area. haad's own `idle off` (wakeups, end of keep-awake) echoes as a touch too: a spurious pin of
+    `pin` seconds.
+44. **Defaults are guesses**: dwell 15 s, pin 60 s, `home_page=None` (stay on the last page when the last claim ends, as before).
+    The alerts page claims `Priority.CRITICAL` with `keep_awake` and `wake` for critical alerts only; "wake" turns the screen on
+    but doesn't dim it again by itself (see the TODO in `PlateController.wakeup()`).
+45. **A reconnect resets the pin** (`resync()` after LWT online): the plate has restarted, so the page and screen config are
+    applied again from the active claims.
+46. **The printer page**: it still wakes the plate when the stage leaves the active states (to show the finished status),
+    next to its claim. Could become a claim with a `wake` on end, but a claim only acts on activation.
+47. **`PlateBehavior.ALWAYS_ON_DISPLAY` is now only `keep_awake`**; there is no other behaviour. The plate's idle config
+    (15 s / never) while awake is hard coded in `PlateController.set_keep_awake()`.

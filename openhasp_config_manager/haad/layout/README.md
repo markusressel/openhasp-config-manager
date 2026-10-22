@@ -154,7 +154,7 @@ class PlateConfig:
 | `None` (new)   | `controller_config()` + `PlateConfig`. A small factory builds an in-memory `Device` |
 
 The factory builds the `Device`/`Config` dataclasses that `OpenHaspClient` already expects, so the client does not change. `DeploymentController`
-is only created when `config_dir` is set; `PlateController.update_plate_behavior()` and `ScreenController` read the gui defaults through one
+is only created when `config_dir` is set; `PlateController.set_keep_awake()` and `ScreenController` read the gui defaults through one
 accessor (`PlateController.gui_defaults`) instead of `deployment_controller.device.config.gui`.
 
 ### 4.2 Pages: `build_layout()` and `register_objects()`
@@ -183,8 +183,8 @@ Instead, the plate raises when a page declares no objects at all, so a forgotten
 a tree typically splits like this:
 
 - `build_layout()`: everything visible, with its bindings (`entity=`, `text=`, `on_click=`, bound properties).
-- `register_objects()`: behaviour that is not about one object: plate behaviours (`request_plate_behavior`, `go_to_this_page`,
-  `plate.wakeup()`), images pushed from URLs, values computed and set in code.
+- `register_objects()`: behaviour that is not about one object: claims on the plate (`claim()`, see `plate/scheduler.py`:
+  which page is shown, rotation, touch pinning, keeping the screen on), `go_to_this_page`, `plate.wakeup()`, images pushed from URLs, values computed and set in code.
 
 `build_layout()` may await (e.g. an overridable `async def get_media_player_app()`), but the tree is built once per haad process. Entity
 *state* does not change the tree: state goes into bindings (`text=`, `entity=`, `Bound`) or property changes (`.obj.set_hidden(...)`).
