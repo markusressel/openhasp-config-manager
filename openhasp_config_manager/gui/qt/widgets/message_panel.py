@@ -126,6 +126,7 @@ class DiskChangesBanner(QFrame):
     """
 
     reloadRequested = QtCore.pyqtSignal()
+    visibilityChanged = QtCore.pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -160,6 +161,11 @@ class DiskChangesBanner(QFrame):
         # lets long paths wrap at their separators
         self._text.setText(f"Changed on disk since this draft was loaded: {shown}".replace("/", "/​"))
         self.show()
+
+    def setVisible(self, visible: bool):
+        # also while the window is not shown (show() and hide() end up here)
+        super().setVisible(visible)
+        self.visibilityChanged.emit()
 
     def _on_reload(self):
         self.hide()

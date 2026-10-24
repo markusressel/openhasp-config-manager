@@ -134,3 +134,70 @@ class TestChangesOnDisk(TestBase):
 
         # THEN
         _wait_until(lambda: _x_of_label(window) == 5)
+
+
+def _state(cfg_root: Path) -> dict:
+    import json
+
+    try:
+        return json.loads((cfg_root / ".openhasp-config-manager" / "gui-state.json").read_text())
+    except FileNotFoundError:
+        return {}
+
+
+class TestGuiStateFile(TestBase):
+    def test_the_state_describes_what_is_open(self, window, cfg_root):
+        # GIVEN
+        window.page_layout_editor_widget.set_page_index(9)
+        window.page_layout_editor_widget.set_edit_mode(True)
+        label = window.session.working_objects[window.session.components[0].key][0]
+        window.page_layout_editor_widget.page_preview_widget.select_object(label)
+
+        # THEN
+        _wait_until(lambda: (_state(cfg_root).get("device") or {}).get("selection"))
+        state = _state(cfg_root)
+        assert state["running"] is True
+        assert state["devices"] == ["test_device"]
+        device = state["device"]
+        assert device["name"] == "test_device"
+        assert device["page"] == 9
+        assert device["pages"] == [9]
+        assert device["edit_mode"] is True
+        assert device["selection"][0]["name"] == "p9b1"
+        assert device["selection"][0]["line"] == 1
+        assert device["draft"] == {"modified": False, "files": []}
+        assert state["load_error"] is None
+
+    def test_the_state_reports_the_draft_and_changes_on_disk(self, window, cfg_root):
+        # WHEN
+        [component] = window.session.components
+        window.session.set_source_value(window.session.working_objects[component.key][0], "x", 20)
+        window.page_layout_editor_widget.dirtyChanged.emit(True)
+        (cfg_root / "devices" / "test_device" / "editor.jsonl").write_text(EDITOR_JSONL.replace('"x": 10', '"x": 77'))
+
+        # THEN
+        _wait_until(lambda: _state(cfg_root).get("files_changed_on_disk"))
+        state = _state(cfg_root)
+        assert state["files_changed_on_disk"] == ["devices/test_device/editor.jsonl"]
+        assert state["device"]["draft"]["modified"] is True
+        assert state["device"]["draft"]["files"][0]["changed"] == ["p9b1"]
+
+    def test_the_state_reports_why_a_file_can_not_be_loaded(self, window, cfg_root):
+        # WHEN
+        (cfg_root / "devices" / "test_device" / "editor.jsonl").write_text('{"page": 9, "id": }')
+
+        # THEN
+        _wait_until(lambda: _state(cfg_root).get("load_error"))
+        state = _state(cfg_root)
+        assert "editor.jsonl" in state["load_error"]["message"]
+        assert state["last_operation"]["ok"] is False
+
+    def test_the_state_says_when_the_gui_is_closed(self, window, cfg_root):
+        # WHEN
+        window.quit_discarding_drafts()
+
+        # THEN
+        state = _state(cfg_root)
+        assert state["running"] is False
+        _qwait(500)
+        assert _state(cfg_root)["running"] is False

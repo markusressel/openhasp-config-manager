@@ -411,6 +411,22 @@ To deploy your configurations to the already connected openHASP devices, simply 
 > to be able to deploy files to the device. To enable the webservice
 > try: `openhasp-config-manager cmd -d plate35 -C service -p "start http"`
 
+## Working with an LLM next to the GUI
+
+The config files are plain text, so an LLM (or any tool) can edit them while the GUI is open: the GUI reloads when files change. A
+draft with unsaved changes is never replaced, the GUI asks first.
+
+For context the files don't have, the GUI keeps `.openhasp-config-manager/gui-state.json` in the config directory up to date: the
+device and page that are open, the selected objects (with file and line), the unsaved changes, the warnings and errors the GUI shows,
+files it can't load (e.g. invalid JSON) and the connection to the plate. The folder is ignored by git and has a `README.md` that
+describes the format. A tool should check that `running` is `true` and the `pid` exists. Everything still works without the file.
+Tell your LLM about it, e.g. in the `AGENTS.md` or `CLAUDE.md` of your config repository:
+
+```markdown
+While the openhasp-config-manager GUI runs, `.openhasp-config-manager/gui-state.json` tells what the user has open and which
+problems the GUI shows (see the README in that folder). Edit only the config files.
+```
+
 ## Run commands
 
 While openhasp-config-manager is first and foremost a config management system,

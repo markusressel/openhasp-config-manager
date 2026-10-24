@@ -11,7 +11,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QAction, QKeySequence
 from PyQt6.QtWidgets import QApplication, QSlider, QWidget, QToolBar, QComboBox, QMessageBox, QToolButton, QFrame, QHBoxLayout
 
-from openhasp_config_manager.gui.domain.problems import find_problems
+from openhasp_config_manager.gui.domain.problems import Problem, find_problems
 from openhasp_config_manager.gui.domain.page_objects import (
     OpenHASPWidgetType,
     get_page_objects,
@@ -89,6 +89,8 @@ class PageLayoutEditorWidget(QWidget):
     fileStateChanged = QtCore.pyqtSignal()
     # the key of the component of the selected object, None if not exactly one object is selected
     selectedObjectComponentChanged = QtCore.pyqtSignal(object)
+    # something the GUI state file reports changed (selection, mode, problems, ...)
+    stateChanged = QtCore.pyqtSignal()
 
     def __init__(self, status: OperationStatus, ui_session: Optional[UiSessionStore] = None):
         """:param ui_session: where the choices of the user are remembered for the next start (in memory if None)"""
@@ -104,6 +106,8 @@ class PageLayoutEditorWidget(QWidget):
         self._ui_session = ui_session or UiSessionStore.in_memory()
         # the component whose objects are highlighted (the others are dimmed)
         self._highlighted_component: Optional[str] = None
+        # what is wrong with the objects on the page
+        self.problems: List[Problem] = []
         self._paste_cascade = PasteCascade()
 
         # Live preview: what the plate shows of the current page, and the changes of the draft that wait to be sent
@@ -428,7 +432,9 @@ class PageLayoutEditorWidget(QWidget):
         self.jsonl_preview.set_objects([])
         self.problems_panel.set_problems([])
         self.error_banner.hide()
+        self.problems = []
         self._update_actions()
+        self.stateChanged.emit()
 
     def set_data(self, session: PlateSession, device_pages_data: OpenHaspDevicePagesData, page: Optional[int] = None):
         """
@@ -555,11 +561,13 @@ class PageLayoutEditorWidget(QWidget):
         self.widget_picker.setVisible(edit)
         self.property_editor.set_edit_mode(edit)
         self._update_actions()
+        self.stateChanged.emit()
 
     @qBridge(list)
     def _on_openhasp_widget_selection_changed(self, editable_widgets: List[EditableWidget]):
         self.property_editor.set_editable_widgets(editable_widgets)
         self._update_actions()
+        self.stateChanged.emit()
         if len(editable_widgets) == 1:
             key = self.session.component_of(editable_widgets[0].obj_data).key
             if self._highlighted_component not in (None, key):
@@ -573,7 +581,9 @@ class PageLayoutEditorWidget(QWidget):
         """Update what is derived from the objects of the page: the JSONL and the problems."""
         self.jsonl_preview.set_objects(self.page_objects)
         screen = self.device_pages_data.device.config.openhasp_config_manager.device.screen
-        self.problems_panel.set_problems(find_problems(self.page_objects, self.page_preview_widget.drawn_rects(), screen.width, screen.height))
+        self.problems = find_problems(self.page_objects, self.page_preview_widget.drawn_rects(), screen.width, screen.height)
+        self.problems_panel.set_problems(self.problems)
+        self.stateChanged.emit()
 
     def _on_property_changed(self, _widget: EditableWidget, _key: str, _value: Any):
         self.page_preview_widget.refresh_items()
@@ -791,6 +801,7 @@ class PageLayoutEditorWidget(QWidget):
     @qBridge(bool)
     def _on_live_preview_toggled(self, enabled: bool):
         self._update_actions()
+        self.stateChanged.emit()
         if self.session is None:
             return
         if enabled:

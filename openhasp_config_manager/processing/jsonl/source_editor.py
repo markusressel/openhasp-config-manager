@@ -40,6 +40,10 @@ class JsonlSourceEditor:
     def object_count(self) -> int:
         return len(self._objects)
 
+    def line_of(self, index: int) -> int:
+        """:return: the line (starting at 1) on which the object with this index starts"""
+        return self._content.count("\n", 0, self._objects[index].start) + 1
+
     def apply(
         self,
         changes: Dict[int, Dict[str, Any]],

@@ -2,8 +2,11 @@ import hashlib
 from pathlib import Path
 from typing import Dict, Iterable, Optional, Set
 
+from openhasp_config_manager.gui.domain.gui_state import STATE_DIR_NAME
+
 # folders that tools create next to the config files
-_IGNORED_FOLDERS = {".git", ".idea", ".vscode", ".venv", "__pycache__", "node_modules"}
+# (and the folder with the state file of the GUI, which the GUI writes itself)
+_IGNORED_FOLDERS = {".git", ".idea", ".vscode", ".venv", "__pycache__", "node_modules", STATE_DIR_NAME}
 # temporary files of editors and tools (vim: `4913` to test write access, `.swp`; emacs: `.#name`, `#name#`)
 _IGNORED_SUFFIXES = ("~", ".swp", ".swx", ".tmp", ".bak", ".orig", ".pyc")
 _IGNORED_NAMES = {"4913", ".DS_Store"}

@@ -75,6 +75,11 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
   watchdog, debounced) reports changed paths to `MainWindow._on_config_changed`. A draft without changes reloads quietly (same page and
   zoom; a failing reload keeps what is shown and reports it in the status bar). A draft with changes is never replaced: a banner offers
   *Reload from disk* or *Keep my changes*. Writes of the app itself (Save) are recognized by content (`OwnWrites`), so they don't count.
+- **State file**: the GUI writes `<config dir>/.openhasp-config-manager/gui-state.json` for tools that edit the config files next to it
+  (what is open, selection, draft, problems, load errors, connection). The format is documented in `README` in `gui/domain/gui_state.py`
+  (written into that folder). `MainWindow._collect_gui_state` builds it, `GuiStatePublisher` writes it debounced. When you add state
+  worth knowing for such tools, add it there, bump `SCHEMA_VERSION` only for breaking changes, and keep that README current. Never put
+  credentials or plate configuration in it.
 - **Plate actions** (names and tooltips agreed with the user): *Live preview* sends the draft to the plate while editing (nothing is stored
   on it), *Restore plate* rebuilds the pages from the files on the plate like a restart, *Deploy* uploads the saved files. *Revert*
   discards the draft; *Undo* is reserved for undo/redo.
