@@ -32,3 +32,22 @@ jobs:
         with:
           user: __token__
 #          password: ${{ secrets.PYPI_PASSWORD }}
+
+  # creates the GitHub release for the tag, with the notes from .github/release-notes/<tag>.md
+  release:
+    needs: deploy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          notes=".github/release-notes/${GITHUB_REF_NAME}.md"
+          if [ -f "$notes" ]; then
+            gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file "$notes" --verify-tag
+          else
+            gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes --verify-tag
+          fi
