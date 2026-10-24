@@ -4,6 +4,7 @@ from PyQt6 import QtGui, QtCore, QtWidgets
 from PyQt6.QtWidgets import QGraphicsObject, QGraphicsItem
 
 from openhasp_config_manager.gui.domain.page_objects import is_hidden
+from openhasp_config_manager.gui.domain.problems import DEFAULT_OBJECT_HEIGHT, DEFAULT_OBJECT_WIDTH
 from openhasp_config_manager.gui.qt.theme import current_colors
 
 # the opacity of objects that are hidden on the plate
@@ -31,11 +32,11 @@ class EditableWidget(QGraphicsObject):
 
     @property
     def obj_w(self) -> int:
-        return self.obj_data.get("w", 80)
+        return self.obj_data.get("w", DEFAULT_OBJECT_WIDTH)
 
     @property
     def obj_h(self) -> int:
-        return self.obj_data.get("h", 40)
+        return self.obj_data.get("h", DEFAULT_OBJECT_HEIGHT)
 
     def __init__(self, object_data: Dict, *args, **kwargs):
         self._object_data = object_data

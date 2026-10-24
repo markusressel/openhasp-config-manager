@@ -31,6 +31,7 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
 | Single test                  | `cd tests && ../.venv/bin/pytest manager_analyze_test.py -k <name>` |
 | haad integration tests       | `make test-haad` (runs in `../haad`'s uv environment, 100 % coverage required) |
 | Lint (CI runs `ruff check .`) | `make lint`                                                |
+| Check a config directory     | `.venv/bin/openhasp-config-manager check -c <dir> [--json]` (`check.py`) |
 | Format                       | `make format`                                               |
 | Docker image                 | `make docker-latest`                                        |
 

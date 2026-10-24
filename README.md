@@ -40,6 +40,7 @@ Options:
   -h, --help  Show this message and exit.
 
 Commands:
+  check       Checks the config directory for errors and warnings,...
   cmd         Sends a command request to a device.
   deploy      Combines the generation and upload of a configuration.
   generate    Generates the output files for all devices in the given...
@@ -419,7 +420,8 @@ draft with unsaved changes is never replaced, the GUI asks first.
 For context the files don't have, the GUI keeps `.openhasp-config-manager/gui-state.json` in the config directory up to date: the
 device and page that are open, the selected objects (with file and line), the unsaved changes, the warnings and errors the GUI shows,
 files it can't load (e.g. invalid JSON) and the connection to the plate. The folder is ignored by git and has a `README.md` that
-describes the format. A tool should check that `running` is `true` and the `pid` exists. Everything still works without the file.
+describes the format. A tool should check that `running` is `true` and the `pid` exists. Everything still works without the file. Without the GUI, `openhasp-config-manager check -c <config dir>` prints the same problems
+(and what a deployment would fail on) for all devices, as text or `--json`, and exits with 1 on errors.
 Tell your LLM about it, e.g. in the `AGENTS.md` or `CLAUDE.md` of your config repository:
 
 ```markdown

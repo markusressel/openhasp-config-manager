@@ -167,7 +167,11 @@ def load_device(config_manager: ConfigManager, name: str) -> LoadedDevice:
     device = next((d for d in devices if d.name == name), None)
     if device is None:
         raise RuntimeError(f"The device '{name}' no longer exists in {Path(config_manager.cfg_root, DEVICES_FOLDER_NAME)}.")
+    return load_analyzed_device(config_manager, devices, device)
 
+
+def load_analyzed_device(config_manager: ConfigManager, devices: List[Device], device: Device) -> LoadedDevice:
+    """Load the pages of a device of the devices that `config_manager.analyze()` returned."""
     relevant_components = config_manager.find_relevant_components(device)
     boot_cmd_component: Optional[CmdComponent] = next((c for c in relevant_components if c.name == BOOT_CMD), None)
     if boot_cmd_component is None:

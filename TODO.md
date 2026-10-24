@@ -14,8 +14,6 @@ None known.
 - [ ] **One edit model.** Make the editor emit small edit operations (`add(obj)`, `remove(id)`, `set(id, property, value)`,
   `move/resize(id, rect)`) on the `PlateSession` draft. The preview, the JSONL view, the dirty state and Live preview all subscribe to
   the same operations.
-- [ ] A `check` command that prints the problems of all devices and pages (same checks as the GUI, no Qt), for tools when the GUI is
-  not running. `find_problems` needs the drawn size of objects without `w`/`h`: move the default sizes out of the widgets first.
 - [ ] Undo/redo, built on the edit model.
 - [ ] Changes on disk (LLM edits): merge them into a draft with changes (the draft keeps only its changed properties, so objects and
   properties that changed on only one side can combine), instead of the "Reload or Keep" banner. Show which objects changed after a reload.

@@ -581,7 +581,7 @@ class PageLayoutEditorWidget(QWidget):
         """Update what is derived from the objects of the page: the JSONL and the problems."""
         self.jsonl_preview.set_objects(self.page_objects)
         screen = self.device_pages_data.device.config.openhasp_config_manager.device.screen
-        self.problems = find_problems(self.page_objects, self.page_preview_widget.drawn_rects(), screen.width, screen.height)
+        self.problems = find_problems(self.page_objects, screen.width, screen.height)
         self.problems_panel.set_problems(self.problems)
         self.stateChanged.emit()
 

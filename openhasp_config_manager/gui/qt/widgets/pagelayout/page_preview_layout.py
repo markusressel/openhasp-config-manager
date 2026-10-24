@@ -311,14 +311,6 @@ class PagePreviewWidget(QGraphicsView):
         self.setMinimumWidth(widest + 2 * UiDimensions.one + 2 * self.frameWidth())
         self._position_overlays()
 
-    def drawn_rects(self) -> Dict[int, Tuple[float, float, float, float]]:
-        """:return: id(object) -> x, y, width and height as drawn, for the objects of the page"""
-        result = {}
-        for item in self.editable_items():
-            rect = item.mapRectToScene(item.obj_rect)
-            result[id(item.obj_data)] = (rect.x(), rect.y(), rect.width(), rect.height())
-        return result
-
     def update_overlays(self):
         """Place the floating bars again after one changed its size or visibility."""
         if self._fit_to_view:

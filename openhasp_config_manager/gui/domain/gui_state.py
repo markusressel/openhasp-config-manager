@@ -33,6 +33,8 @@ Read the file before and after you edit, and trust it only while it is current:
 
 - `running` is `true` while the GUI runs. After a crash it stays `true`: check that the process `pid` exists, and that `updated` is
   recent (it changes whenever anything else does).
+- Without the GUI, `openhasp-config-manager check -c <config dir> [--json]` reports the same problems for all devices and pages, and
+  what a deployment would fail on (exit code 1 on errors). Run it after your edits too.
 - All paths are relative to the config directory (the parent of this folder). Lines start at 1.
 
 ## Format (`schema` 1)
