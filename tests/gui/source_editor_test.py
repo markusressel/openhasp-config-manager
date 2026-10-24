@@ -385,3 +385,79 @@ class TestCodeView(TestBase):
         widget.current_editor.zoom(3)
         view._reset_zoom()
         assert widget.current_editor.font().pointSize() == 10
+
+
+class TestEditorFeatures(TestBase):
+    def test_rename_id_asks_for_the_new_id(self, widget, folder):
+        widget.open_file(folder / "a.jsonl", line=1)
+        asked = []
+        widget.ask_new_id = lambda current: asked.append(current) or 5
+
+        widget.current_editor.renameRequested.emit()
+
+        assert asked == [1]
+        assert widget.current_editor.toPlainText().startswith('{"page": 1, "id": 5}')
+        assert widget.buffer_of(folder / "a.jsonl").is_dirty
+
+    def test_rename_cancelled_or_not_possible(self, widget, folder):
+        widget.open_file(folder / "a.jsonl", line=1)
+        widget.ask_new_id = lambda current: None
+        widget.current_editor.renameRequested.emit()
+        assert not widget.dirty_files()
+
+        widget.ask_new_id = lambda current: 2
+        widget.current_editor.renameRequested.emit()
+        assert "already used" in widget._status.text()
+        assert not widget.dirty_files()
+
+        widget.open_file(folder / "vars.yaml")
+        widget.current_editor.renameRequested.emit()
+        assert "plain number" in widget._status.text()
+
+    def test_the_input_dialog(self, widget, monkeypatch):
+        from PyQt6.QtWidgets import QInputDialog
+
+        monkeypatch.setattr(QInputDialog, "getInt", lambda *args: (7, True))
+        assert widget._ask_new_id(3) == 7
+        monkeypatch.setattr(QInputDialog, "getInt", lambda *args: (7, False))
+        assert widget._ask_new_id(3) is None
+
+    def test_ctrl_click_opens_the_referenced_file(self, widget, folder):
+        (folder / "devices").mkdir()
+        (folder / "devices" / "boot.cmd").write_text("run L:/b.jsonl\nrun L:/nope.jsonl\n")
+        widget.open_file(folder / "devices" / "boot.cmd")
+
+        widget.current_editor.linkRequested.emit("b.jsonl")
+        assert widget.current_file == (folder / "b.jsonl").resolve()
+
+        widget.open_file(folder / "devices" / "boot.cmd")
+        widget.current_editor.linkRequested.emit("nope.jsonl")
+        assert "L:/nope.jsonl" in widget._status.text()
+        assert widget.current_file == (folder / "devices" / "boot.cmd").resolve()
+
+    def test_hidden_folders_are_not_searched_for_links(self, widget, folder):
+        (folder / ".hidden").mkdir()
+        (folder / ".hidden" / "x.jsonl").write_text("{}\n")
+        widget.open_file(folder / "a.jsonl")
+        widget.current_editor.linkRequested.emit("x.jsonl")
+        assert widget.current_file == (folder / "a.jsonl").resolve()
+
+    def test_the_object_at_the_cursor_is_reported_when_the_user_moves(self, widget, folder):
+        widget.open_file(folder / "a.jsonl")
+        found = []
+        widget.objectAtCursorChanged.connect(lambda path, index: found.append((path.name, index)))
+        editor = widget.current_editor
+
+        # moved by the app: no signal
+        editor.clearFocus()
+        editor.go_to(2, 0)
+        assert found == []
+
+        # moved by the user
+        widget.activateWindow()
+        editor.setFocus()
+        QTest.qWait(50)
+        if not editor.hasFocus():  # offscreen windows may not take the focus
+            pytest.skip("no focus in this environment")
+        editor.go_to(1, 0)
+        assert found == [("a.jsonl", 0)]

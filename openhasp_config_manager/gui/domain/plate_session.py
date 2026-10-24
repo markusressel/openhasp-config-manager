@@ -139,6 +139,13 @@ class PlateSession:
         """:return: the index of the object in its source file, None for an object added in the draft"""
         return self._entry(obj).index
 
+    def object_of_source(self, component: str, index: int) -> Optional[Dict]:
+        """:return: the rendered object that was written as the n-th object of a component's file, None if it was deleted"""
+        return next(
+            (obj for obj in self._working_objects.get(component, []) if self._entry(obj).index == index),
+            None,
+        )
+
     def is_template(self, obj: Dict, key: str) -> bool:
         value = self.source_of(obj).get(key)
         return isinstance(value, str) and "{{" in value

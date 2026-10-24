@@ -1,9 +1,12 @@
+import html
+import re
 from dataclasses import dataclass
-from typing import Callable, List, Optional
+from typing import Callable, List, Optional, Set, Tuple
 
 from PyQt6 import QtCore
 from PyQt6.QtCore import QRect, QRegularExpression, QSettings, QSize, QStringListModel, Qt
 from PyQt6.QtGui import (
+    QAction,
     QColor,
     QFontDatabase,
     QKeyEvent,
@@ -15,13 +18,18 @@ from PyQt6.QtGui import (
     QTextFormat,
     QTextOption,
 )
-from PyQt6.QtWidgets import QCompleter, QPlainTextEdit, QTextEdit, QToolTip, QWidget
+from PyQt6.QtWidgets import QCompleter, QMenu, QPlainTextEdit, QTextEdit, QToolTip, QWidget
 
 from openhasp_config_manager.gui.domain.problems import Severity
 from openhasp_config_manager.gui.domain.source_completion import OBJECT_PROPERTIES, complete, completion_context
+from openhasp_config_manager.gui.domain.source_docs import describe_property
 from openhasp_config_manager.gui.domain.source_edit import INDENT, indent_for_new_line, matching_bracket, toggle_comment
+from openhasp_config_manager.gui.domain.source_format import format_text
 from openhasp_config_manager.gui.domain.source_issues import find_source_issues
-from openhasp_config_manager.gui.domain.source_syntax import Language
+from openhasp_config_manager.gui.domain.source_links import Link, link_at
+from openhasp_config_manager.gui.domain.source_objects import SourceObject, foldable, object_at_line, scan_objects
+from openhasp_config_manager.gui.domain.source_rename import id_at_line, rename_object_id
+from openhasp_config_manager.gui.domain.source_syntax import Language, TokenKind, tokenize_line
 from openhasp_config_manager.gui.qt.source_highlighter import SourceHighlighter
 from openhasp_config_manager.gui.qt.theme import current_colors
 
@@ -30,6 +38,8 @@ _DEFAULT_FONT_SIZE = 10
 _ISSUE_DELAY_MS = 300
 _MAX_SEARCH_MATCHES = 1000
 _PAIRS = {"{": "}", "[": "]", '"': '"'}
+_FOLD_WIDTH = 14
+_CODE = re.compile(r"`([^`]+)`")
 
 
 @dataclass(frozen=True)
@@ -59,6 +69,9 @@ class _Gutter(QWidget):
     def paintEvent(self, event):
         self._editor.paint_gutter(event)
 
+    def mousePressEvent(self, event):
+        self._editor.gutter_clicked(round(event.position().y()))
+
 
 class CodeEditor(QPlainTextEdit):
     """
@@ -74,6 +87,12 @@ class CodeEditor(QPlainTextEdit):
     findRequested = QtCore.pyqtSignal()
     # the problems of the text itself changed
     issuesChanged = QtCore.pyqtSignal()
+    # the cursor moved into another object (its index in the file) or out of all objects (-1)
+    cursorObjectChanged = QtCore.pyqtSignal(int)
+    # Shift+F6, or "Rename id" of the context menu
+    renameRequested = QtCore.pyqtSignal()
+    # Ctrl+click on a reference to another file: its name on the plate (`pages.jsonl` for `L:/pages.jsonl`)
+    linkRequested = QtCore.pyqtSignal(str)
 
     def __init__(self, language: Language, parent=None):
         super().__init__(parent)
@@ -85,10 +104,18 @@ class CodeEditor(QPlainTextEdit):
         self._search_flags = QTextDocument.FindFlag(0)
         self._variables: Callable[[], List[str]] = lambda: []
         self._completion_start = 0
+        # the first lines of the folded objects
+        self._folded: Set[int] = set()
+        self._objects: List[SourceObject] = []
+        self._objects_revision = -1
+        self._object_index = -1
+        # the reference under the mouse while Ctrl is pressed: (block number, link)
+        self._hover_link: Optional[Tuple[int, Link]] = None
 
         self.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
         self.setTabStopDistance(self.fontMetrics().horizontalAdvance(" ") * len(INDENT))
         self.setMouseTracking(True)
+        self.viewport().setMouseTracking(True)
         self._set_font_size(QSettings().value(_FONT_SIZE_KEY, _DEFAULT_FONT_SIZE, type=int))
 
         self.highlighter = SourceHighlighter(self.document(), language)
@@ -106,6 +133,7 @@ class CodeEditor(QPlainTextEdit):
         self._issue_timer.timeout.connect(self.update_issues)
 
         self.blockCountChanged.connect(self._update_gutter_width)
+        self.blockCountChanged.connect(lambda _count: self.unfold_all())
         self.updateRequest.connect(self._update_gutter)
         self.cursorPositionChanged.connect(self._update_selections)
         self.textChanged.connect(self._on_text_changed)
@@ -145,7 +173,6 @@ class CodeEditor(QPlainTextEdit):
         if self.cursorRect().right() < self.viewport().width() // 2:
             # centering also scrolls sideways: a line that starts at the left shows from its start
             self.horizontalScrollBar().setValue(0)
-        self.setFocus()
 
     @property
     def cursor_line_column(self) -> tuple:
@@ -233,7 +260,7 @@ class CodeEditor(QPlainTextEdit):
 
     def gutter_width(self) -> int:
         digits = len(str(max(1, self.blockCount())))
-        return 20 + self.fontMetrics().horizontalAdvance("9") * max(digits, 2)
+        return 20 + _FOLD_WIDTH + self.fontMetrics().horizontalAdvance("9") * max(digits, 2)
 
     def _update_gutter_width(self):
         self.setViewportMargins(self.gutter_width(), 0, 0, 0)
@@ -260,6 +287,7 @@ class CodeEditor(QPlainTextEdit):
         number = block.blockNumber()
         top = round(self.blockBoundingGeometry(block).translated(self.contentOffset()).top())
         height = self.fontMetrics().height()
+        fold_starts = {start for start, _ in self.fold_ranges()}
         while block.isValid() and top <= event.rect().bottom():
             bottom = top + round(self.blockBoundingRect(block).height())
             if block.isVisible() and bottom >= event.rect().top():
@@ -276,7 +304,18 @@ class CodeEditor(QPlainTextEdit):
                 painter.setPen(
                     palette.color(QPalette.ColorRole.WindowText if number == current else QPalette.ColorRole.PlaceholderText)
                 )
-                painter.drawText(0, top, self._gutter.width() - 6, height, Qt.AlignmentFlag.AlignRight, str(number + 1))
+                painter.drawText(
+                    0, top, self._gutter.width() - 6 - _FOLD_WIDTH, height, Qt.AlignmentFlag.AlignRight, str(number + 1)
+                )
+                if number + 1 in fold_starts:
+                    painter.drawText(
+                        self._gutter.width() - _FOLD_WIDTH - 2,
+                        top,
+                        _FOLD_WIDTH,
+                        height,
+                        Qt.AlignmentFlag.AlignCenter,
+                        "▸" if number + 1 in self._folded else "▾",
+                    )
             block = block.next()
             top = bottom
             number += 1
@@ -298,7 +337,10 @@ class CodeEditor(QPlainTextEdit):
         selections += self._bracket_selections()
         selections += self._marker_selections()
         selections += self._search_selections()
+        selections += self._link_selections()
         self.setExtraSelections(selections)
+        self._reveal_cursor()
+        self._notify_object()
 
     def _bracket_selections(self) -> List[QTextEdit.ExtraSelection]:
         text = self.toPlainText()
@@ -346,12 +388,251 @@ class CodeEditor(QPlainTextEdit):
         if event.type() == QtCore.QEvent.Type.ToolTip:
             cursor = self.cursorForPosition(event.pos())
             markers = self._markers_at(cursor.blockNumber() + 1)
+            documentation = self._documentation_at(event.pos())
             if markers:
                 QToolTip.showText(event.globalPos(), "\n".join(marker.message for marker in markers), self)
+            elif documentation is not None:
+                QToolTip.showText(event.globalPos(), documentation, self)
             else:
                 QToolTip.hideText()
             return True
         return super().event(event)
+
+    # --- objects, folding ---
+
+    def objects(self) -> List[SourceObject]:
+        """:return: the objects of the text (.jsonl files only)"""
+        revision = self.document().revision()
+        if revision != self._objects_revision:
+            self._objects = scan_objects(self.toPlainText()) if self.language == Language.JSONL else []
+            self._objects_revision = revision
+        return self._objects
+
+    def object_at_cursor(self) -> Optional[SourceObject]:
+        return object_at_line(self.objects(), self.textCursor().blockNumber() + 1)
+
+    def _notify_object(self):
+        if self._loading:
+            return
+        found = self.object_at_cursor()
+        index = -1 if found is None else found.index
+        if index != self._object_index:
+            self._object_index = index
+            self.cursorObjectChanged.emit(index)
+
+    def fold_ranges(self) -> List[Tuple[int, int]]:
+        """:return: (first line, last line) of the objects that can be folded; the lines in between are hidden when folded"""
+        return foldable(self.objects())
+
+    def is_folded(self, line: int) -> bool:
+        return line in self._folded
+
+    def fold(self, line: int) -> bool:
+        """Hide the lines of the object that starts at a line (starts at 1). :return: whether there is such an object"""
+        return self._set_folded(line, True)
+
+    def unfold(self, line: int) -> bool:
+        return self._set_folded(line, False)
+
+    def toggle_fold(self, line: int) -> bool:
+        return self._set_folded(line, line not in self._folded)
+
+    def fold_at_cursor(self):
+        """Fold the object of the cursor."""
+        found = self.object_at_cursor()
+        if found is not None:
+            self.fold(found.start_line)
+            if self.textCursor().blockNumber() + 1 > found.start_line:
+                self._move_cursor_to_line(found.start_line)
+
+    def unfold_at_cursor(self):
+        found = self.object_at_cursor()
+        if found is not None:
+            self.unfold(found.start_line)
+
+    def fold_all(self):
+        for start, _ in self.fold_ranges():
+            self.fold(start)
+        found = self.object_at_cursor()
+        if found is not None:
+            self._move_cursor_to_line(found.start_line)
+
+    def unfold_all(self):
+        for start in sorted(self._folded):
+            self._set_folded(start, False)
+
+    def _set_folded(self, line: int, folded: bool) -> bool:
+        end = next((end for start, end in self.fold_ranges() if start == line), None)
+        if end is None:
+            return False
+        if folded:
+            self._folded.add(line)
+        else:
+            self._folded.discard(line)
+        # the lines between the brackets: the first and the last stay visible
+        for number in range(line + 1, end):
+            block = self.document().findBlockByNumber(number - 1)
+            if block.isValid():
+                block.setVisible(not folded)
+        first = self.document().findBlockByNumber(line - 1)
+        self.document().markContentsDirty(first.position(), self.document().characterCount() - first.position())
+        self.viewport().update()
+        self._gutter.update()
+        return True
+
+    def _reveal_cursor(self):
+        """Unfold what hides the cursor (it was moved into a folded object by a search, a jump to an error, ...)."""
+        if not self._folded or self.textCursor().block().isVisible():
+            return
+        line = self.textCursor().blockNumber() + 1
+        for start, end in self.fold_ranges():
+            if start in self._folded and start < line < end:
+                self.unfold(start)
+
+    def _move_cursor_to_line(self, line: int):
+        block = self.document().findBlockByNumber(line - 1)
+        cursor = QTextCursor(block)
+        cursor.setPosition(block.position() + min(self.textCursor().positionInBlock(), max(block.length() - 1, 0)))
+        self.setTextCursor(cursor)
+
+    def gutter_clicked(self, y: int):
+        """A click in the gutter folds or unfolds the object that starts in that line."""
+        block = self.firstVisibleBlock()
+        top = round(self.blockBoundingGeometry(block).translated(self.contentOffset()).top())
+        while block.isValid():
+            bottom = top + round(self.blockBoundingRect(block).height())
+            if block.isVisible() and top <= y < bottom:
+                self.toggle_fold(block.blockNumber() + 1)
+                return
+            if top > y:
+                return
+            block = block.next()
+            top = bottom
+
+    # --- format, rename ---
+
+    def format_document(self) -> bool:
+        """Indent the lines by their depth and clean the line ends. :return: whether the text changed."""
+        formatted = format_text(self.toPlainText(), self.language)
+        if formatted == self.toPlainText():
+            return False
+        self._replace_text(formatted)
+        return True
+
+    @property
+    def object_id(self) -> Optional[int]:
+        """:return: the id of the object at the cursor, None if there is none or it is not a plain number"""
+        return id_at_line(self.toPlainText(), self.textCursor().blockNumber() + 1)
+
+    def rename_id(self, new_id: int) -> Optional[str]:
+        """
+        Change the id of the object at the cursor, and the `parentid` of its children.
+        :return: why that is not possible, None if it was done
+        """
+        try:
+            renamed = rename_object_id(self.toPlainText(), self.textCursor().blockNumber() + 1, new_id)
+        except ValueError as ex:
+            return str(ex)
+        if renamed.text != self.toPlainText():
+            self._replace_text(renamed.text)
+        return None
+
+    def _replace_text(self, text: str):
+        """Replace the text as one edit that can be undone; the cursor and the view stay where they were."""
+        cursor = self.textCursor()
+        line, column = cursor.blockNumber(), cursor.positionInBlock()
+        scroll = self.verticalScrollBar().value()
+        self.unfold_all()
+        edit = QTextCursor(self.document())
+        edit.beginEditBlock()
+        edit.select(QTextCursor.SelectionType.Document)
+        edit.insertText(text)
+        edit.endEditBlock()
+        block = self.document().findBlockByNumber(min(line, self.document().blockCount() - 1))
+        cursor = QTextCursor(block)
+        cursor.setPosition(block.position() + min(column, max(block.length() - 1, 0)))
+        self.setTextCursor(cursor)
+        self.verticalScrollBar().setValue(scroll)
+
+    # --- links, documentation, menu ---
+
+    def _link_at(self, position) -> Optional[Tuple[int, Link]]:
+        cursor = self.cursorForPosition(position)
+        link = link_at(cursor.block().text(), cursor.positionInBlock(), self.language)
+        return None if link is None else (cursor.blockNumber(), link)
+
+    def _set_hover_link(self, found: Optional[Tuple[int, Link]]):
+        if found == self._hover_link:
+            return
+        self._hover_link = found
+        self.viewport().setCursor(Qt.CursorShape.IBeamCursor if found is None else Qt.CursorShape.PointingHandCursor)
+        self._update_selections()
+
+    def _link_selections(self) -> List[QTextEdit.ExtraSelection]:
+        if self._hover_link is None:
+            return []
+        number, link = self._hover_link
+        block = self.document().findBlockByNumber(number)
+        selection = QTextEdit.ExtraSelection()
+        selection.format.setUnderlineStyle(QTextCharFormat.UnderlineStyle.SingleUnderline)
+        selection.format.setForeground(self.palette().color(QPalette.ColorRole.Link))
+        selection.cursor = QTextCursor(self.document())
+        selection.cursor.setPosition(block.position() + link.start)
+        selection.cursor.setPosition(block.position() + link.end, QTextCursor.MoveMode.KeepAnchor)
+        return [selection]
+
+    def mouseMoveEvent(self, event):
+        control = bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier)
+        self._set_hover_link(self._link_at(event.position().toPoint()) if control else None)
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        found = self._link_at(event.position().toPoint())
+        if (
+            found is not None
+            and event.button() == Qt.MouseButton.LeftButton
+            and event.modifiers() & Qt.KeyboardModifier.ControlModifier
+        ):
+            self.linkRequested.emit(found[1].target)
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
+
+    def keyReleaseEvent(self, event):
+        if event.key() == Qt.Key.Key_Control:
+            self._set_hover_link(None)
+        super().keyReleaseEvent(event)
+
+    def _documentation_at(self, position) -> Optional[str]:
+        """:return: the explanation of the property under the mouse, as rich text"""
+        cursor = self.cursorForPosition(position)
+        line, column = cursor.block().text(), cursor.positionInBlock()
+        for token in tokenize_line(line, self.language):
+            if token.kind == TokenKind.KEY and token.start <= column <= token.end and self.language == Language.JSONL:
+                name = token.text(line).strip('"')
+                text = describe_property(name)
+                if text is not None:
+                    return f"<b>{html.escape(name)}</b><br>" + _CODE.sub(r"<code>\1</code>", html.escape(text)).replace(
+                        "\n", "<br>"
+                    )
+        return None
+
+    def contextMenuEvent(self, event):
+        menu: QMenu = self.createStandardContextMenu()
+        menu.addSeparator()
+        for text, handler in (
+            ("Format document\tCtrl+Alt+L", self.format_document),
+            ("Rename id…\tShift+F6", self.renameRequested.emit),
+            ("Fold\tCtrl+-", self.fold_at_cursor),
+            ("Unfold\tCtrl+=", self.unfold_at_cursor),
+            ("Fold all", self.fold_all),
+            ("Unfold all", self.unfold_all),
+        ):
+            action = QAction(text, menu)
+            action.triggered.connect(lambda _checked=False, handler=handler: handler())
+            action.setEnabled(self.language != Language.TEXT)
+            menu.addAction(action)
+        menu.exec(event.globalPos())
 
     # --- search ---
 
@@ -462,6 +743,8 @@ class CodeEditor(QPlainTextEdit):
         key = event.key()
         modifiers = event.modifiers()
         control = bool(modifiers & Qt.KeyboardModifier.ControlModifier)
+        alt = bool(modifiers & Qt.KeyboardModifier.AltModifier)
+        shift = bool(modifiers & Qt.KeyboardModifier.ShiftModifier)
 
         if popup.isVisible() and key in (
             Qt.Key.Key_Return,
@@ -472,7 +755,17 @@ class CodeEditor(QPlainTextEdit):
         ):
             event.ignore()
             return
-        if control and key == Qt.Key.Key_S:
+        if control and alt and key == Qt.Key.Key_L:
+            self.format_document()
+        elif key == Qt.Key.Key_F6 and shift:
+            self.renameRequested.emit()
+        elif control and key == Qt.Key.Key_Minus:
+            self.fold_at_cursor()
+        elif control and key == Qt.Key.Key_Underscore:
+            self.fold_all()
+        elif control and key in (Qt.Key.Key_Plus, Qt.Key.Key_Equal):
+            self.unfold_all() if alt else self.unfold_at_cursor()
+        elif control and key == Qt.Key.Key_S:
             self.saveRequested.emit()
         elif control and key == Qt.Key.Key_F:
             self.findRequested.emit()

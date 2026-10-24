@@ -417,7 +417,8 @@ To deploy your configurations to the already connected openHASP devices, simply 
 The **Code** panel below the preview shows the files in three ways, like the code/design views of an IDE: **Source** (the text
 editor), **Rendered** (the JSONL of the page the way the plate gets it) and **Split** (both side by side or above each other, with a
 splitter). Double-click a file in the Files tree to open it (JSONL, `.cmd` and variable files), or select an object in the preview
-while the source is shown: the editor jumps to the line of the object.
+while the source is shown: the editor jumps to the line of the object. It works the other way too: moving the cursor into an
+object (typing, clicking, arrow keys) selects that object in the preview, on its page.
 
 The editor knows the JSONL dialect of this project: comments, trailing commas, objects over several lines and `{{ templates }}`
 (also nested ones) are highlighted. It marks what is wrong while you type (an object that is not closed, invalid JSON, an invalid
@@ -426,6 +427,19 @@ Other features: line numbers, matching brackets, auto-closing of brackets and qu
 `Ctrl+D` to duplicate lines, `Ctrl+Space` completion (object properties, and the template variables a file can use), search and
 replace (`Ctrl+F`, with match case, whole words and regular expressions), `Ctrl+wheel` to zoom, word wrap and whitespace display
 (menu of the Code panel). `Ctrl+S` saves the file, then the pages follow it.
+
+More features for the objects of a `.jsonl` file:
+
+- **Folding**: click the arrow in the gutter, or `Ctrl+-` / `Ctrl+=` for the object at the cursor, `Ctrl+Shift+-` / `Ctrl+Alt+=`
+  for all objects. A fold opens by itself when the cursor moves into it (e.g. by a search).
+- **Hover**: rest the mouse on a property name to see what it does (also `bg_color02`, the variants for other parts).
+- **Format document** (`Ctrl+Alt+L`): indents the lines by the depth of the brackets and removes spaces at the end of lines. Comments,
+  blank lines and the order of properties stay as they are.
+- **Rename id** (`Shift+F6`): changes the `id` of the object at the cursor and the `parentid` of the objects on the same page that
+  have it as their parent. It refuses an id the page already uses. References in other files or in strings (`p1b2`) are not changed.
+- **Ctrl+click** on `run L:/pages.jsonl` in a `.cmd` file opens the file that has that name on the plate.
+
+All of these are also in the context menu.
 
 Every file is edited on its own, separate from the unsaved changes of the visual editor. If a file changes on disk (an LLM, another
 editor) while its tab has no changes, the tab follows quietly. If it has changes, the tab offers to reload from disk or to keep

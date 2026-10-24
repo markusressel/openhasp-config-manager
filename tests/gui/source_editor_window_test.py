@@ -222,3 +222,68 @@ class TestSessionAndState(TestBase):
 
         assert not event.isAccepted()
         assert "editor.jsonl (text editor)" in questions[0]
+
+
+class TestCursorSelectsObject(TestBase):
+    def test_the_object_of_the_cursor_is_selected_in_the_preview(self, window, editor_file):
+        # GIVEN
+        [component] = window.session.components
+        label, button = window.session.working_objects[component.key]
+
+        window.source_editor.open_file(editor_file, focus=False)
+
+        # WHEN
+        window.source_editor.objectAtCursorChanged.emit(editor_file, 1)
+
+        # THEN
+        selected = window.page_layout_editor_widget.page_preview_widget.selected_items()
+        assert [item.obj_data for item in selected] == [button]
+
+        # WHEN
+        window.source_editor.objectAtCursorChanged.emit(editor_file, 0)
+        selected = window.page_layout_editor_widget.page_preview_widget.selected_items()
+        assert [item.obj_data for item in selected] == [label]
+
+    def test_it_does_not_jump_back_to_the_first_line_of_the_object(self, window, editor_file):
+        # GIVEN
+        window.code_view.set_mode(window.code_view.mode.__class__.SPLIT)
+        window.file_tree_widget.openRequested.emit(editor_file)
+        editor = window.source_editor.current_editor
+        editor.set_text('{"page": 9, "id": 1, "obj": "label", "text": "A", "x": 10}\n')
+        editor.go_to(1, 20)
+        [component] = window.session.components
+        buffer = window.source_editor.buffer_of(editor_file)
+        assert buffer.text == component.content
+
+        # WHEN: the preview selects the object of the cursor
+        window.page_layout_editor_widget.page_preview_widget.select_object(window.session.working_objects[component.key][0])
+
+        # THEN
+        assert editor.cursor_line_column == (1, 21)
+
+    def test_nothing_happens_for_text_that_differs_from_the_draft_or_without_object(self, window, editor_file):
+        [component] = window.session.components
+        window.file_tree_widget.openRequested.emit(editor_file)
+        window.source_editor.current_editor.set_text(EDITOR_JSONL + "{}\n")
+        window.source_editor.current_editor.textEdited.emit()
+        window.source_editor.objectAtCursorChanged.emit(editor_file, 1)
+        assert window.page_layout_editor_widget.page_preview_widget.selected_items() == []
+
+        window.source_editor.keep_mine(editor_file)
+        window.source_editor.objectAtCursorChanged.emit(editor_file, -1)
+        window.source_editor.objectAtCursorChanged.emit(window.source_editor.current_file.parent / "nope.jsonl", 0)
+        assert window.page_layout_editor_widget.page_preview_widget.selected_items() == []
+        assert component is not None
+
+    def test_an_object_on_another_page_switches_the_page(self, window, editor_file):
+        editor_file.write_text(EDITOR_JSONL + '{"page": 8, "id": 1, "obj": "btn", "text": "C"}\n')
+        _wait_until(lambda: len(window.session.working_objects[window.session.components[0].key]) == 3)
+        [component] = window.session.components
+
+        window.source_editor.open_file(editor_file, focus=False)
+        window.source_editor.objectAtCursorChanged.emit(editor_file, 2)
+
+        assert window.page_layout_editor_widget.current_index == 8
+        selected = window.page_layout_editor_widget.page_preview_widget.selected_items()
+        assert [item.obj_data["text"] for item in selected] == ["C"]
+        assert component is not None

@@ -305,6 +305,7 @@ class MainWindow(QMainWindow):
         # below the preview: the files as text (source), and the JSONL of the page (rendered)
         self.source_editor = SourceEditorWidget(self._cfg_root)
         self.source_editor.saved.connect(self._on_source_saved)
+        self.source_editor.objectAtCursorChanged.connect(self._select_object_of_cursor)
         self.source_editor.stateChanged.connect(self._state_publisher.request)
         self.source_editor.stateChanged.connect(self._remember_open_files)
         self.source_editor.openFailed.connect(
@@ -720,8 +721,34 @@ class MainWindow(QMainWindow):
         if len(selected) != 1 or not self.code_view.shows_source or session is None or session.is_dirty:
             return
         location = describe_object(session, selected[0].obj_data, self._cfg_root)
-        if location["line"] is not None:
+        if location["line"] is not None and not self._cursor_is_in_object(session, selected[0].obj_data):
             self.source_editor.open_file(self._cfg_root / location["file"], location["line"], focus=False, preview=True)
+
+    def _cursor_is_in_object(self, session: PlateSession, obj: Dict) -> bool:
+        """Whether the cursor of the text editor is already in the lines of an object (so it doesn't jump to its first line)."""
+        path = session.component_of(obj).path.resolve()
+        editor = self.source_editor.editor_of(path)
+        current = None if editor is None else editor.object_at_cursor()
+        return current is not None and current.index == session.source_index(obj)
+
+    def _select_object_of_cursor(self, path: Path, index: int):
+        """The cursor of the text editor is in an object: select it in the preview, on its page."""
+        session = self.session
+        if index < 0 or session is None or not session.is_loaded or self.page_layout_editor_widget.session is not session:
+            return
+        component = next((c for c in session.components if c.path.resolve() == path.resolve()), None)
+        buffer = self.source_editor.buffer_of(path)
+        # the text must be the one the objects of the draft come from, or the indices are not the same
+        if component is None or buffer is None or buffer.text != component.content:
+            return
+        obj = session.object_of_source(component.key, index)
+        if obj is None:
+            return
+        editor = self.page_layout_editor_widget
+        page = obj.get("page")
+        if isinstance(page, int) and page > 0 and page != editor.current_index:
+            editor.set_page_index(page)
+        editor.page_preview_widget.select_object(obj)
 
     def _update_source_markers(self):
         """The problems of the open page are shown in the editors of their files."""

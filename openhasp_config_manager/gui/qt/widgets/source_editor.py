@@ -4,10 +4,11 @@ from typing import Callable, Dict, List, Optional, Set
 
 from PyQt6 import QtCore
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QFrame, QMessageBox, QStackedLayout, QTabWidget, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QFrame, QInputDialog, QMessageBox, QStackedLayout, QTabWidget, QVBoxLayout, QWidget
 
 from openhasp_config_manager.gui.dimensions import UiDimensions
 from openhasp_config_manager.gui.domain.source_buffers import DiskChange, SourceBuffer, SourceBuffers, read_text
+from openhasp_config_manager.gui.domain.source_links import resolve_link
 from openhasp_config_manager.gui.domain.source_syntax import language_of
 from openhasp_config_manager.gui.qt.components import UiComponents
 from openhasp_config_manager.gui.qt.widgets.code_editor import CodeEditor, Marker
@@ -83,6 +84,8 @@ class SourceEditorWidget(QWidget):
     # the open files, the current tab or the dirty state changed
     stateChanged = QtCore.pyqtSignal()
     openFailed = QtCore.pyqtSignal(object, str)
+    # the user moved the cursor into another object of a file: the path and the index of the object (-1: none)
+    objectAtCursorChanged = QtCore.pyqtSignal(object, int)
 
     def __init__(self, config_dir: Path, parent=None):
         super().__init__(parent)
@@ -97,6 +100,8 @@ class SourceEditorWidget(QWidget):
         self._show_whitespace = False
         # asks whether to overwrite a file that changed on disk; replaced in tests
         self.confirm_overwrite: Callable[[Path], bool] = self._ask_overwrite
+        # asks for the new id of an object (None: cancelled); replaced in tests
+        self.ask_new_id: Callable[[int], Optional[int]] = self._ask_new_id
 
         self._tabs = QTabWidget()
         self._tabs.setTabsClosable(True)
@@ -198,6 +203,9 @@ class SourceEditorWidget(QWidget):
         editor.saveRequested.connect(lambda path=path: self.save(path))
         editor.findRequested.connect(self.find_bar.open_bar)
         editor.issuesChanged.connect(self._update_status)
+        editor.renameRequested.connect(lambda path=path: self._rename_id(path))
+        editor.linkRequested.connect(lambda target, path=path: self._open_link(path, target))
+        editor.cursorObjectChanged.connect(lambda index, path=path: self._on_object_at_cursor(path, index))
         editor.cursorPositionChanged.connect(self._update_status)
         page.banner.reloadRequested.connect(lambda path=path: self.reload(path))
         page.banner.keepRequested.connect(lambda path=path: self.keep_mine(path))
@@ -225,6 +233,8 @@ class SourceEditorWidget(QWidget):
         page = self._pages.pop(path, None)
         if page is not None:
             self._tabs.removeTab(self._tabs.indexOf(page))
+            # the editor lives until the event loop deletes it, but its tab is gone
+            page.editor.blockSignals(True)
             page.deleteLater()
         self._buffers.close(path)
         if self._preview_tab == path:
@@ -340,6 +350,48 @@ class SourceEditorWidget(QWidget):
         self._show_whitespace = show
         for page in self._pages.values():
             page.editor.set_show_whitespace(show)
+
+    def show_message(self, text: str):
+        """Say something in the status line (until the cursor moves)."""
+        self._status.setText(text)
+
+    def _rename_id(self, path: Path):
+        editor = self._pages[path].editor
+        current = editor.object_id
+        if current is None:
+            self.show_message("Put the cursor in an object with a plain number as id to rename it.")
+            return
+        new_id = self.ask_new_id(current)
+        if new_id is None or new_id == current:
+            return
+        error = editor.rename_id(new_id)
+        self.show_message(error or f"Renamed id {current} to {new_id}")
+
+    def _ask_new_id(self, current: int) -> Optional[int]:
+        value, accepted = QInputDialog.getInt(
+            self, "Rename id", "New id of the object (and the parentid of its children):", current, 0, 254
+        )
+        return value if accepted else None
+
+    def _open_link(self, path: Path, target: str):
+        """Ctrl+click on `L:/pages.jsonl`: open the file with that name on the plate."""
+        config_dir = self._config_dir.resolve()
+        files = [
+            file
+            for suffix in ("*.jsonl", "*.cmd")
+            for file in config_dir.rglob(suffix)
+            if not any(part.startswith(".") for part in file.relative_to(config_dir).parts)
+        ]
+        found = resolve_link(target, files, config_dir, path)
+        if found is None:
+            self.show_message(f"No file in the config directory is L:/{target} on the plate")
+            return
+        self.open_file(found)
+
+    def _on_object_at_cursor(self, path: Path, index: int):
+        # only when the user moved the cursor, not when the app showed a line
+        if path == self.current_file and self._pages[path].editor.hasFocus():
+            self.objectAtCursorChanged.emit(path, index)
 
     # --- internals ---
 

@@ -81,7 +81,8 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
 - **Text editor** (the *Code* dock: `CodeView` with Source / Split / Rendered): every open file is a `SourceBuffer`
   (`gui/domain/source_buffers.py`, Qt-free) in a tab of `SourceEditorWidget`, independent of the object draft. The syntax (highlighting,
   templates) is `gui/domain/source_syntax.py`, issues while typing `source_issues.py`, edits `source_edit.py`, completion
-  `source_completion.py`; `CodeEditor` (`gui/qt/widgets/code_editor.py`) only wires them to Qt. Keep that split: logic goes into the
+  `source_completion.py`, objects of a text (folding, the object at the cursor) `source_objects.py`, `source_rename.py`,
+  `source_format.py`, hover texts `source_docs.py`, references between files `source_links.py`; `CodeEditor` (`gui/qt/widgets/code_editor.py`) only wires them to Qt. Keep that split: logic goes into the
   domain modules with tests, the widget stays thin. Tabs follow disk changes through `MainWindow._on_config_changed`
   (`external_changes`: clean tabs reload, tabs with changes show a banner). Saving a tab goes through `_on_source_saved`, which treats
   it like an external change for the draft (reload, or the *Reload from disk* banner if the draft has changes). Open tabs are remembered

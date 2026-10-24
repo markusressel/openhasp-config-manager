@@ -1,0 +1,47 @@
+from pathlib import Path
+
+from openhasp_config_manager.gui.domain.source_docs import describe_property
+from openhasp_config_manager.gui.domain.source_links import find_links, link_at, plate_names, resolve_link
+from openhasp_config_manager.gui.domain.source_syntax import Language
+from tests import TestBase
+
+
+class TestDocs(TestBase):
+    def test_known_and_unknown(self):
+        assert "pixels" in describe_property("x")
+        assert describe_property("nope") is None
+
+    def test_variant_of_a_property(self):
+        text = describe_property("text_color02")
+        assert text.startswith(describe_property("text_color")) and "`02`" in text
+        assert describe_property("nope02") is None
+
+
+class TestLinks(TestBase):
+    def test_find_links(self):
+        line = "run L:/devices_plate1_pages.jsonl; page 1"
+        links = find_links("  run L:/a_b.jsonl", Language.CMD)
+        assert [(link.start, link.end, link.target) for link in links] == [(6, 18, "a_b.jsonl")]
+        assert find_links('run L:/x.cmd "L:/y.cmd"', Language.CMD)[1].target == "y.cmd"
+        assert find_links(line, Language.JSONL) == []
+        assert find_links("run L:/image.png", Language.CMD) == []
+
+    def test_link_at(self):
+        assert link_at("run L:/a.jsonl", 8, Language.CMD).target == "a.jsonl"
+        assert link_at("run L:/a.jsonl", 2, Language.CMD) is None
+        assert link_at("run L:/a.jsonl", 14, Language.CMD) is None
+
+    def test_plate_names(self):
+        root = Path("/cfg")
+        assert plate_names(root / "common" / "nav" / "bar.jsonl", root) == {
+            "common_nav_bar.jsonl",
+            "nav_bar.jsonl",
+            "bar.jsonl",
+        }
+
+    def test_resolve_prefers_the_closest_file(self):
+        root = Path("/cfg")
+        files = [root / "devices" / "a" / "pages.jsonl", root / "devices" / "b" / "pages.jsonl", root / "common" / "x.jsonl"]
+        assert resolve_link("pages.jsonl", files, root, root / "devices" / "b" / "boot.cmd") == files[1]
+        assert resolve_link("devices_a_pages.jsonl", files, root, root / "devices" / "b" / "boot.cmd") == files[0]
+        assert resolve_link("nope.jsonl", files, root, root / "boot.cmd") is None
