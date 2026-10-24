@@ -7,15 +7,21 @@ class JsonlPreProcessor:
         pass
 
     def split_jsonl_objects(self, original_content: str) -> List[str]:
+        """
+        :return: the text of every object, without the text around the objects
+        :raises ValueError: if an object is not closed
+        """
         pattern_to_find_beginning_of_objects = re.compile(r"^(?!\n)\s*(?=\{)", re.RegexFlag.MULTILINE)
         parts = pattern_to_find_beginning_of_objects.split(original_content)
 
         result = []
-        for part in parts:
+        for index, part in enumerate(parts):
             part = part.strip()
 
-            # edge case for first match
             if "}" not in part:
+                # the first part is the text before the first object, every other part starts with an object
+                if index > 0:
+                    raise ValueError(f"The object is not closed: {part[:60]}{'…' if len(part) > 60 else ''}")
                 continue
 
             # ignore everything after the last closing bracket

@@ -121,6 +121,14 @@ class TestChangesOnDisk(TestBase):
         assert window.device is not None
         assert _x_of_label(window) == 10
 
+        # WHEN: an object is not closed yet (written halfway)
+        failures.clear()
+        (cfg_root / "devices" / "test_device" / "editor.jsonl").write_text(EDITOR_JSONL + '{"page": 9, "id": 3,')
+
+        # THEN
+        _wait_until(lambda: failures)
+        assert _x_of_label(window) == 10
+
         # WHEN: the file is fixed
         (cfg_root / "devices" / "test_device" / "editor.jsonl").write_text(EDITOR_JSONL.replace('"x": 10', '"x": 5'))
 

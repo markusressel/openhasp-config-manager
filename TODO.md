@@ -4,8 +4,7 @@ Open work and known issues. Done items are removed; the git history has them.
 
 ## 1. Bugs
 
-- [ ] A `.jsonl` file with an object that is not closed (e.g. while an LLM is still writing it) loads without that object and without an
-  error: `split_jsonl_objects` drops it. The editor shows the page without it; it should report the file instead.
+None known.
 
 ## 2. Editor
 

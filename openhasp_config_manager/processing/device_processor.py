@@ -77,10 +77,13 @@ class DeviceProcessor:
         :param component: the component
         :return: the source objects, in the order of the file
         """
-        return [
-            orjson.loads(self._jsonl_preprocessor.cleanup_object_for_json_parsing(ob))
-            for ob in self._jsonl_preprocessor.split_jsonl_objects(component.content)
-        ]
+        try:
+            return [
+                orjson.loads(self._jsonl_preprocessor.cleanup_object_for_json_parsing(ob))
+                for ob in self._jsonl_preprocessor.split_jsonl_objects(component.content)
+            ]
+        except ValueError as ex:
+            raise ValueError(f"Invalid JSONL in {component.path}: {ex}") from ex
 
     def jsonl_template_variables(
         self, component: JsonlComponent, draft_objects: Optional[Dict[Path, List[Dict[str, Any]]]] = None
