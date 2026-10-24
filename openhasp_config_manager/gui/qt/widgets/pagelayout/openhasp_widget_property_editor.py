@@ -1,5 +1,5 @@
 import copy
-from typing import List, Any, Dict, Callable, Optional, Set
+from typing import List, Any, Dict, Callable, Optional
 
 from PyQt6 import QtCore
 from PyQt6.QtGui import QColor

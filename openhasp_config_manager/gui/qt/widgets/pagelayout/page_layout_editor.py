@@ -667,10 +667,10 @@ class PageLayoutEditorWidget(QWidget):
     def highlight_component(self, key: Optional[str]):
         """Dim all objects that are not in the given component, or none (None)."""
         self._highlighted_component = key
-        if key is None:
-            is_dimmed = lambda _obj: False
-        else:
-            is_dimmed = lambda obj: self.session.component_of(obj).key != key
+
+        def is_dimmed(obj) -> bool:
+            return key is not None and self.session.component_of(obj).key != key
+
         self.page_preview_widget.set_dimmed_predicate(is_dimmed)
         self.jsonl_preview.set_dimmed_predicate(is_dimmed)
 
