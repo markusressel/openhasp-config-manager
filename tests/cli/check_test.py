@@ -68,7 +68,7 @@ class TestCheck:
         # THEN
         [issue] = issues
         assert issue.severity == Severity.WARNING
-        assert issue.message == "p9b1: text: unknown variable in the template, it stays as '{{ no_such_variable }}'"
+        assert issue.message == "p9b1: text: Unknown variable: 'no_such_variable' is undefined"
         assert issue.line == 1
 
     def test_nested_templates_are_not_unknown_variables(self, cfg_root):

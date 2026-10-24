@@ -111,3 +111,18 @@ class TestVariableManager(TestBase):
             "key_vars2": "value_vars2",
             "key_also_present_in_device_vars": "test_device_value",
         }
+
+    def test_variables_may_be_named_like_the_methods_of_a_dict(self, tmp_path):
+        # GIVEN
+        (tmp_path / "vars.yaml").write_text("menu:\n  items: [a, b]\n  values: 3\n")
+        variable_manager = VariableManager(tmp_path)
+        variable_manager.read()
+
+        # WHEN
+        result = variable_manager.get_vars(tmp_path)
+
+        # THEN
+        from openhasp_config_manager.processing.template_rendering import render_template
+
+        assert result == {"menu": {"items": ["a", "b"], "values": 3}}
+        assert render_template("{{ menu.items[1] }}{{ menu.values }}", result) == "b3"
