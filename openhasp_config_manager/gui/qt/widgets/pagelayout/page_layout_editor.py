@@ -433,7 +433,7 @@ class PageLayoutEditorWidget(QWidget):
     def set_data(self, session: PlateSession, device_pages_data: OpenHaspDevicePagesData, page: Optional[int] = None):
         """
         :param session: the draft, loaded
-        :param page: the page to show, defaults to the first one
+        :param page: the page to show, defaults to the first one (also if the draft has no such page anymore)
         """
         self.session = session
         self.device_pages_data = device_pages_data
@@ -445,7 +445,7 @@ class PageLayoutEditorWidget(QWidget):
         self.page_preview_widget.set_screen_size(screen.width, screen.height)
 
         pages = get_navigable_page_indices(self.working_objects)
-        if page is None:
+        if page is None or (pages and page not in pages):
             page = pages[0] if pages else 1
         self.set_page_index(page)
         self.dirtyChanged.emit(self.session.is_dirty)

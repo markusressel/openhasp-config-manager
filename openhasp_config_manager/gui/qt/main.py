@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from pathlib import Path
-from typing import Optional, List, Dict, Callable, Tuple
+from typing import Optional, List, Dict, Callable, Set, Tuple
 
 import qtawesome as qta
 
@@ -19,6 +19,7 @@ from PyQt6.QtWidgets import (
     QToolButton,
     QApplication,
     QMessageBox,
+    QVBoxLayout,
 )
 from openhasp_config_manager.const import DEVICES_FOLDER_NAME, COMMON_FOLDER_NAME
 from openhasp_config_manager.deployment import deploy_device
@@ -30,9 +31,11 @@ from openhasp_config_manager.gui.domain.draft_files import (
     SaveConflictError,
 )
 from openhasp_config_manager.gui.dimensions import UiDimensions
+from openhasp_config_manager.gui.domain.config_changes import OwnWrites
 from openhasp_config_manager.gui.domain.connection import ConnectionStatus, Severity, LinkState
 from openhasp_config_manager.gui.domain.plate_session import PlateSession
 from openhasp_config_manager.gui.qt.components import UiComponents, ThemedIcons
+from openhasp_config_manager.gui.qt.config_watcher import ConfigWatcher
 from openhasp_config_manager.gui.qt.connection import ConnectionController
 from openhasp_config_manager.gui.qt.operations import OperationStatus, error_text, run_busy
 from openhasp_config_manager.gui.qt.ui_session_store import UiSessionStore
@@ -40,7 +43,7 @@ from openhasp_config_manager.gui.qt.theme import ThemeMode, apply_theme, current
 from openhasp_config_manager.gui.qt.async_bridge import run_async
 from openhasp_config_manager.gui.qt.widgets.device_list import DeviceListWidget
 from openhasp_config_manager.gui.qt.widgets.file_tree import FileTreeWidget
-from openhasp_config_manager.gui.qt.widgets.message_panel import MessagePanel
+from openhasp_config_manager.gui.qt.widgets.message_panel import MessagePanel, DiskChangesBanner
 from openhasp_config_manager.gui.qt.widgets.pagelayout import OpenHaspDevicePagesData
 from openhasp_config_manager.gui.qt.widgets.pagelayout.page_layout_editor import PageLayoutEditorWidget
 from openhasp_config_manager.manager import ConfigManager
@@ -168,6 +171,11 @@ class MainWindow(QMainWindow):
         # the page to show after a draft was reloaded (saved or reverted), per session key
         self._page_after_reload: Dict[Tuple[str, str], int] = {}
         self._discard_drafts_on_close = False
+        # what the app wrote itself (Save), to tell its own file changes from those of others
+        self._own_writes = OwnWrites()
+        # a reload after files changed on disk is running, and more changed meanwhile
+        self._reloading_changes: Optional[Set[Path]] = None
+        self._changes_during_reload: Set[Path] = set()
         # select the device of the last session once the devices are loaded the first time
         self._restore_selection = True
         # what is restored on the next start: the selected device, the file for new objects, ...
@@ -189,6 +197,7 @@ class MainWindow(QMainWindow):
         self.properties_dock.hide()
         self.page_layout_editor_widget.action_edit_mode.toggled.connect(self._on_edit_mode_toggled)
         self.load_plates()
+        self._start_watching_config_dir()
 
     # --- layout ---
 
@@ -209,6 +218,15 @@ class MainWindow(QMainWindow):
         self.center_stack = QStackedWidget()
         self.center_stack.addWidget(self.message_panel)
         self.center_stack.addWidget(self.page_layout_editor_widget)
+        # files changed on disk while the draft has changes of its own
+        self.disk_changes_banner = DiskChangesBanner()
+        self.disk_changes_banner.reloadRequested.connect(self._reload_draft)
+        center = QWidget()
+        center_layout = QVBoxLayout(center)
+        center_layout.setContentsMargins(0, 0, 0, 0)
+        center_layout.setSpacing(0)
+        center_layout.addWidget(self.disk_changes_banner)
+        center_layout.addWidget(self.center_stack, 1)
 
         # left: devices and their files
         self.device_list_widget = DeviceListWidget()
@@ -234,7 +252,7 @@ class MainWindow(QMainWindow):
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.devices_dock)
 
         # center: the render preview. It can't be closed: there is nothing to do without it
-        self.preview_dock = self._add_dock("Preview", "preview_dock", self.center_stack, closable=False)
+        self.preview_dock = self._add_dock("Preview", "preview_dock", center, closable=False)
         self.splitDockWidget(self.devices_dock, self.preview_dock, Qt.Orientation.Horizontal)
 
         # right: the properties of the selected object
@@ -447,6 +465,7 @@ class MainWindow(QMainWindow):
                 event.ignore()
                 return
         self.connection.stop()
+        self._watcher.stop()
         settings = QSettings()
         settings.setValue("window/geometry", self.saveGeometry())
         settings.setValue("window/state", self.saveState(DOCK_STATE_VERSION))
@@ -552,6 +571,88 @@ class MainWindow(QMainWindow):
 
         run_async(__load(), on_success=__on_success, on_error=__on_error)
 
+    # --- changes on disk ---
+
+    def _start_watching_config_dir(self):
+        """Reload when files in the config directory change, e.g. because an LLM or a text editor edits them."""
+        self._cfg_root = Path(self.config_manager.cfg_root).resolve()
+        output_root = Path(self.config_manager.output_root).resolve()
+        self._watcher = ConfigWatcher(self._cfg_root, ignored_roots=[output_root], parent=self)
+        self._watcher.changed.connect(self._on_config_changed)
+        self._watcher.start()
+
+    def _on_config_changed(self, paths: Set[Path]):
+        """
+        Files changed in the config directory. A draft without changes follows them. A draft with changes is never
+        replaced: the user chooses in a banner (Save detects the same conflict too, but only when it is too late).
+        """
+        paths = self._own_writes.foreign(paths)
+        if not paths:
+            return
+        LOGGER.info(f"Changed on disk: {', '.join(sorted(str(path) for path in paths))}")
+        if self._reloading_changes is not None:
+            self._changes_during_reload |= paths
+            return
+        session = self.session
+        if session is not None and session.is_dirty:
+            self._show_disk_changes(paths)
+        elif self._selected_name is None:
+            self.load_plates()
+        elif self.device is None:
+            # still loading the device (or it failed): load again
+            self.on_device_selected(self._selected_name)
+        else:
+            self._reload_changed_files(paths)
+
+    def _show_disk_changes(self, paths: Set[Path]):
+        """Offer to reload, if the changes can affect the device of the draft."""
+        devices_dir = self._cfg_root / DEVICES_FOLDER_NAME
+        affecting = sorted(
+            path for path in paths if path.is_relative_to(self.device.path.resolve()) or not path.is_relative_to(devices_dir)
+        )
+        if affecting:
+            self.disk_changes_banner.show_changes([str(path.relative_to(self._cfg_root)) for path in affecting])
+
+    def _reload_changed_files(self, paths: Set[Path]):
+        """Load the device again, in the background and without leaving the editor: the page and zoom stay."""
+        name = self._selected_name
+        self._reloading_changes = paths
+        self._changes_during_reload = set()
+        self._page_after_reload[self._session_key] = self.page_layout_editor_widget.current_index
+        key = self._session_key
+
+        def __finish():
+            more, self._reloading_changes, self._changes_during_reload = self._changes_during_reload, None, set()
+            if more:
+                self._on_config_changed(more)
+
+        async def __load():
+            return await asyncio.to_thread(load_device, self.config_manager, name)
+
+        def __on_success(loaded: LoadedDevice):
+            changes = self._reloading_changes
+            __finish()
+            if name != self._selected_name or self.device is None:
+                self._page_after_reload.pop(key, None)
+                return  # another device was selected in the meantime
+            if self.session.is_dirty:
+                # edited while loading: keep the draft
+                self._page_after_reload.pop(key, None)
+                self._show_disk_changes(changes)
+                return
+            self._set_devices(loaded.devices)
+            self.select_device(loaded, keep_view=True)
+            names = sorted(str(path.relative_to(self._cfg_root)) for path in changes)
+            self.status.succeeded.emit(f"Reloaded {name}, changed on disk: {', '.join(names[:3])}")
+
+        def __on_error(ex: Exception):
+            # e.g. a file that is half written: stay with what is shown, the next change loads again
+            self._page_after_reload.pop(key, None)
+            __finish()
+            self.status.failed.emit(f"Reloading {name} after a change on disk", error_text(ex))
+
+        run_async(__load(), on_success=__on_success, on_error=__on_error)
+
     # --- draft ---
 
     @property
@@ -604,6 +705,8 @@ class MainWindow(QMainWindow):
         except OSError as ex:
             QMessageBox.critical(self, "Save failed", error_text(ex))
             return False
+        for change in changes:
+            self._own_writes.written(change.path.resolve(), change.content)
         self.status.succeeded.emit(f"Saved {len(changes)} file{'' if len(changes) == 1 else 's'}")
         self._reload_draft()
         return True
@@ -678,11 +781,15 @@ class MainWindow(QMainWindow):
 
     def _reload_draft(self):
         """Drop the draft of the current device and load it from disk, on the same page."""
+        self.disk_changes_banner.hide()
         self.sessions.pop(self._session_key)
         self._page_after_reload[self._session_key] = self.page_layout_editor_widget.current_index
         self.on_device_selected(self.device.name)
 
-    def select_device(self, loaded: LoadedDevice):
+    def select_device(self, loaded: LoadedDevice, keep_view: bool = False):
+        """
+        :param keep_view: the same device is loaded again: don't change the zoom
+        """
         self.device = loaded.device
         pages_data = OpenHaspDevicePagesData(
             device=loaded.device, name=loaded.cmd_component.name, jsonl_components=loaded.jsonl_components
@@ -708,7 +815,8 @@ class MainWindow(QMainWindow):
         )
         self._update_draft_actions()
         self.center_stack.setCurrentWidget(self.page_layout_editor_widget)
-        self.page_layout_editor_widget.page_preview_widget.fit_to_view()
+        if not keep_view:
+            self.page_layout_editor_widget.page_preview_widget.fit_to_view()
 
 
 def create_application_settings():

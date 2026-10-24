@@ -71,6 +71,10 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
 - **Files**: new objects go into the target file chosen in the Files tree (`gui/domain/file_tree.py` follows the folder structure of
   `README.md`), by default the device's own file, never a shared `common/` file unless the device has none: saving a shared file changes
   every device that loads it.
+- **Changes on disk** (an LLM or editor edits the config directory while the GUI runs): `ConfigWatcher` (`gui/qt/config_watcher.py`,
+  watchdog, debounced) reports changed paths to `MainWindow._on_config_changed`. A draft without changes reloads quietly (same page and
+  zoom; a failing reload keeps what is shown and reports it in the status bar). A draft with changes is never replaced: a banner offers
+  *Reload from disk* or *Keep my changes*. Writes of the app itself (Save) are recognized by content (`OwnWrites`), so they don't count.
 - **Plate actions** (names and tooltips agreed with the user): *Live preview* sends the draft to the plate while editing (nothing is stored
   on it), *Restore plate* rebuilds the pages from the files on the plate like a restart, *Deploy* uploads the saved files. *Revert*
   discards the draft; *Undo* is reserved for undo/redo.

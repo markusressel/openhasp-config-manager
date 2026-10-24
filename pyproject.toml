@@ -37,7 +37,7 @@ dependencies = [
 # the editor: `openhasp-config-manager gui`
 # (openhasp_config_manager.ad runs inside AppDaemon and openhasp_config_manager.haad inside haad: install them yourself, they pin
 # versions of aiohttp and others that must not apply to everybody)
-gui = ["PyQt6>=6.11.0", "QtAwesome>=1.4.2", "qt-themes>=0.4.0", "pfzy>=0.3.4"]
+gui = ["PyQt6>=6.11.0", "QtAwesome>=1.4.2", "qt-themes>=0.4.0", "pfzy>=0.3.4", "watchdog>=6.0.0"]
 
 [project.scripts]
 openhasp-config-manager = "openhasp_config_manager.cli:cli"

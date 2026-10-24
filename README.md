@@ -20,7 +20,7 @@ a logic-aware config engine with a robust API client and deployment automation.
 * 🛡️ **Early Error Detection:** Automatically catch syntax mistakes in .jsonl and .cmd files before they hit your hardware.
 * 🔄 **Delta Deployments:** Save time and flash wear—only upload what changed.
 * 🔍 **Visual Diffs:** Review exactly what will change with a git-style +/- line-by-line output.
-* 📺 **GUI Preview (WIP):** Inspect and prototype your screens in a digital previewer before deploying.
+* 📺 **GUI Preview (WIP):** Inspect and prototype your screens in a digital previewer before deploying. It follows changes to the config files on disk, so you can edit them with a text editor or an LLM at the same time.
 
 🔌 API & Interaction
 
