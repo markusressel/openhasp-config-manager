@@ -44,17 +44,9 @@ into JSONL objects.
 
 ## 5. Packaging and installation
 
-The GUI dependencies (PyQt6, QtAwesome, qt-themes, pfzy) are in the optional Poetry group `ui` because the GUI is still a work in
-progress. They should stay optional, but a Poetry group only exists in the development checkout: `pip install openhasp-config-manager`
-never installs it, so the published package can't run `openhasp-config-manager gui` today.
+The `gui` extra is done (`pip install 'openhasp-config-manager[gui]'`); AppDaemon and haad are installed by their own environments.
 
-- [ ] Decide how users choose what to install, e.g.:
-  - extras of one package: `openhasp-config-manager` (CLI and API client), `openhasp-config-manager[gui]`, `openhasp-config-manager[tui]`;
-  - or separate packages: a small API client (`openhasp_client`, used by haad and AppDaemon), the CLI, and the GUI on top of it.
 - [ ] Keep the API client free of CLI and GUI dependencies (click, PyQt6, …), so haad and AppDaemon projects only pull what they use.
-  (`OpenHaspClient` still imports the console helpers from `openhasp_config_manager.console`.)
-- [ ] The `gui` command (and a future TUI) explains which extra to install when its dependencies are missing, instead of an ImportError.
-- [ ] Move the dependencies to `[project.optional-dependencies]` (or Poetry extras) accordingly, and clean up the `[project]` table of
-  `pyproject.toml`, which only has a name and a version next to the Poetry configuration.
-- [ ] Update the Dockerfile, the README installation instructions, `venv-install` in the Makefile and the CI (which installs without `ui`,
-  so the GUI tests are skipped there).
+  (`OpenHaspClient` still imports the console helpers from `openhasp_config_manager.console`.) If that is not enough, split the API
+  client into its own package.
+- [ ] A future TUI becomes a `tui` extra the same way.

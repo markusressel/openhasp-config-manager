@@ -6,7 +6,6 @@ import click
 from openhasp_config_manager.cli.cmd import c_cmd
 from openhasp_config_manager.cli.deploy import c_deploy
 from openhasp_config_manager.cli.generate import c_generate
-from openhasp_config_manager.cli.gui import c_gui
 from openhasp_config_manager.cli.listen import c_listen
 from openhasp_config_manager.cli.logs import c_logs
 from openhasp_config_manager.cli.screenshot import c_screenshot
@@ -138,6 +137,15 @@ def gui(config_dir: Path, output_dir: Path):
     """
     Launches the GUI of openhasp-config-manager.
     """
+    try:
+        import PyQt6  # noqa: F401
+    except ImportError as e:
+        raise click.ClickException(
+            "The GUI needs the optional dependencies: pip install 'openhasp-config-manager[gui]' (PyQt6 is missing)"
+        ) from e
+
+    from openhasp_config_manager.cli.gui import c_gui
+
     c_gui(config_dir, output_dir)
 
 

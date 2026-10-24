@@ -1,16 +1,74 @@
 name: Python package
 
-on: [ push ]
+on:
+  push:
+    branches: [ main ]
+  pull_request:
 
 jobs:
-  build:
-
+  # the core package without any optional dependencies: tests/gui, tests/ad and tests/haad are skipped
+  core:
     runs-on: ubuntu-latest
     strategy:
       max-parallel: 4
       matrix:
-        # latest AppDaemon runs on Python 3.10
-        python-version: [ '3.10', '3.11', '3.12', '3.13' ]
+        python-version: [ '3.12', '3.13', '3.14' ]
+
+    env:
+      POETRY_VIRTUALENVS_CREATE: false
+
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip poetry
+          poetry install
+      - name: Lint and Format with Ruff
+        run: |
+          pip install ruff
+          # check for errors (linting)
+          ruff check .
+      - name: Test with pytest
+        run: |
+          cd tests
+          pytest
+
+  # the editor: pip install 'openhasp-config-manager[gui]'
+  gui:
+    runs-on: ubuntu-latest
+    env:
+      POETRY_VIRTUALENVS_CREATE: false
+      QT_QPA_PLATFORM: offscreen
+
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - name: Install Qt system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libdbus-1-3 libfontconfig1
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip poetry
+          poetry install --extras gui
+      - name: Test with pytest
+        run: |
+          cd tests
+          pytest gui
+
+  # openhasp_config_manager.ad runs inside AppDaemon, which pins older versions of some dependencies and doesn't support Python 3.14
+  ad:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [ '3.12', '3.13' ]
 
     steps:
       - uses: actions/checkout@v7
@@ -21,14 +79,8 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install poetry
-          poetry install
-      - name: Lint and Format with Ruff
-        run: |
-          pip install ruff
-          # check for errors (linting)
-          ruff check .
+          pip install . appdaemon pytest pytest-asyncio
       - name: Test with pytest
         run: |
           cd tests
-          poetry run pytest
+          pytest ad

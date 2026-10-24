@@ -20,7 +20,7 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
 ## Setup
 
 - Python: 3.13 for this repository (`.python-version`), `>=3.12,<3.15` supported. The haad integration needs Python 3.14 (see Testing).
-- Dependencies: `poetry install` (add `--with ui` for the GUI). A `.venv` in the repository root is used by the commands below.
+- Dependencies: `poetry install --extras gui` (the `gui` extra is optional; AppDaemon and haad are not extras, see Testing). A `.venv` in the repository root is used by the commands below.
 - Run the CLI: `.venv/bin/openhasp-config-manager --help`, e.g. `gui -c ./openhasp-configs`.
 
 ## Commands
@@ -83,7 +83,8 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
 ## Testing
 
 - Add or adjust tests with every behavioural change. `pytest-asyncio` runs in auto mode (`tests/pytest.ini`).
-- `tests/haad` and `tests/ad` are skipped unless haad or AppDaemon are installed (`tests/conftest.py`). `tests/haad/README.md`
+- `tests/haad` and `tests/ad` are skipped unless haad or AppDaemon are installed (`tests/conftest.py`), `tests/gui` unless the `gui`
+  extra is. CI runs the core, `gui` and `ad` tests as separate jobs (`.github/workflows/pythonpackage.yml`); AppDaemon needs Python <3.14. `tests/haad/README.md`
   explains the haad test setup (golden masters, `FakePlate`).
 - The GUI can be checked headless with `QT_QPA_PLATFORM=offscreen` and `QWidget.grab()` to render screenshots.
 - GUI tests: `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest tests/gui`. Fixtures in `tests/gui/conftest.py`: `qapp`,

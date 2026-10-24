@@ -102,6 +102,12 @@ source ~/venvs/openhasp-config-manager/bin/activate
 pip3 install openhasp-config-manager
 ```
 
+The graphical editor (`openhasp-config-manager gui`) has additional dependencies (PyQt6) and is optional:
+
+```bash
+pip3 install 'openhasp-config-manager[gui]'
+```
+
 And to use it:
 
 ```shell
@@ -422,7 +428,8 @@ documentation: https://openhasp.haswitchplate.com/latest/commands/
 ## AppDaemon Integration Utilities
 
 If you want to integrate your openHASP devices with [AppDaemon](https://github.com/AppDaemon/appdaemon), openhasp-config-manager contains
-some utilities to make this process easier.
+some utilities to make this process easier. They run inside AppDaemon, so AppDaemon itself is not a dependency of this package: use
+the `openhasp-config-manager` package from your AppDaemon environment (AppDaemon pins older versions of some libraries).
 
 ### Plate Controller
 

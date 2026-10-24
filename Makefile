@@ -26,7 +26,7 @@ install-release:
 	rm -rf /tmp/venv-install
 	git clone https://github.com/markusressel/venv-install /tmp/venv-install
 	cd /tmp/venv-install && ./install.sh
-	venv-install openhasp-config-manager openhasp-config-manager
+	venv-install 'openhasp-config-manager[gui]' openhasp-config-manager
 	openhasp-config-manager -h
 
 uninstall-release:
