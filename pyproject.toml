@@ -59,6 +59,7 @@ packages = [
 ruff = "*"
 pytest = "*"
 pytest_asyncio = "*"
+pytest-cov = "^7.1.0"
 
 [tool.ruff]
 # Same as Black.

@@ -11,6 +11,7 @@ from openhasp_config_manager.gui.domain.plate_session import PlateSession
 from openhasp_config_manager.gui.domain.problems import Severity, find_problems
 from openhasp_config_manager.manager import ConfigManager
 from openhasp_config_manager.openhasp_client.model.device import Device
+from openhasp_config_manager.processing.template_rendering import has_unresolved_variables
 
 
 @dataclass(frozen=True)
@@ -120,7 +121,7 @@ def _check_pages(config_manager: ConfigManager, config_dir: Path, devices: List[
         for obj in objects:
             # a deployment writes unknown variables as they are: the plate would show "{{ name }}"
             for key, value in session.source_of(obj).items():
-                if isinstance(value, str) and "{{" in value and "{{" in str(obj.get(key)):
+                if isinstance(value, str) and "{{" in value and has_unresolved_variables(obj.get(key)):
                     location = describe_object(session, obj, config_dir)
                     issues.append(
                         Issue(

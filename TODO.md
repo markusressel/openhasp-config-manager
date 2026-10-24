@@ -4,7 +4,19 @@ Open work and known issues. Done items are removed; the git history has them.
 
 ## 1. Bugs
 
-None known.
+Template rendering (`processing/template_rendering.py`, pinned by `tests/processing/template_rendering_test.py`):
+
+- [ ] Nested templates (`{{ p{{ page }}b1.x }}`) only render if the text is that one template: `x {{ p{{ n }}b1.x }}`, `{{ a }} {{ p{{ n }}b1.x }}`
+  and two nested templates in one text fail with a `TemplateSyntaxError`. `render_template` finds the inner templates in
+  `content[2:-2]` with a greedy regex; it should find the innermost `{{ }}` pairs instead.
+- [ ] Templates run unsandboxed: `{{ cycler.__init__.__globals__ }}` works, so a config from an untrusted source (or an LLM) can execute code.
+  Use `jinja2.sandbox.SandboxedEnvironment` and check that the configs still render.
+- [ ] Variable names that are dict methods render the method (`{{ cfg.values }}` -> `<built-in method values ...>`). Only `items` is rejected
+  (`variables.py`). Look keys up as items (`cfg['values']`), or reject all of them.
+- [ ] `render_dict_recursive` drops entries it can't resolve, including ones with a syntax error, and only prints "No progression ..." to stdout.
+  A broken template should be an error naming the key. A nested dict is rendered once, so its entries can't use entries that come later.
+- [ ] A rendered value can't contain `{{` (`{{ '{{' }}`): it counts as an unresolved variable. There is no way to write literal braces.
+- [ ] An unknown key of a dict renders as `{{ no such element: dict object['nope'] }}` (the `DebugUndefined` hint), not as written.
 
 ## 2. Editor
 

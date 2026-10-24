@@ -4,8 +4,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from jinja2 import Environment, StrictUndefined, TemplateError, TemplateSyntaxError, UndefinedError
-
 from openhasp_config_manager.const import DEVICES_FOLDER_NAME, COMMON_FOLDER_NAME
 from openhasp_config_manager.gui.domain.file_tree import FileNode, scan_file_tree, used_files, used_variable_files
 from openhasp_config_manager.gui.domain.plate_session import PlateSession, ComponentSource
@@ -14,8 +12,7 @@ from openhasp_config_manager.openhasp_client.model.component import CmdComponent
 from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.processing.device_processor import DeviceProcessor
 from openhasp_config_manager.processing.jsonl.source_editor import JsonlSourceEditor, verify_jsonl_source
-
-_STRICT_JINJA = Environment(undefined=StrictUndefined)
+from openhasp_config_manager.processing.template_rendering import check_template
 
 # how deep nested variables are offered as suggestions
 _MAX_SUGGESTION_DEPTH = 6
@@ -56,18 +53,7 @@ class ProcessorDraftRenderer:
         return self._processor.render_jsonl_object(source, self._vars_of(component))
 
     def check_template(self, component: str, template: str) -> Optional[str]:
-        # a deployment renders unknown variables as they are written (DebugUndefined): check them strictly instead
-        try:
-            parsed = _STRICT_JINJA.from_string(template)
-        except TemplateSyntaxError as ex:
-            return f"Invalid template: {ex.message}"
-        try:
-            parsed.render(self._vars_of(component))
-        except UndefinedError as ex:
-            return f"Unknown variable: {ex.message}"
-        except TemplateError as ex:
-            return f"Can't render: {ex.message}"
-        return None
+        return check_template(template, self._vars_of(component))
 
     def template_suggestions(self, component: str) -> List[Tuple[str, Any]]:
         if component not in self._suggestions:

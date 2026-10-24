@@ -276,7 +276,7 @@ class TestUsedFiles(TestBase):
 
 class TestUsedVariableFiles(TestBase):
     def test_referenced_variables(self):
-        from openhasp_config_manager.gui.domain.file_tree import referenced_variables
+        from openhasp_config_manager.processing.template_rendering import referenced_variables
 
         assert referenced_variables('{"text": "{{ about.title }}", "x": "{{ p1b1.x + offset }}"}') == {
             "about",

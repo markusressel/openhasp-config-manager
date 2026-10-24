@@ -1,15 +1,14 @@
-import re
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Set
 
 import yaml
-from jinja2 import Environment, TemplateSyntaxError, meta
 
 from openhasp_config_manager.const import COMMON_FOLDER_NAME
 from openhasp_config_manager.gui.domain.plate_session import ComponentSource
 from openhasp_config_manager.openhasp_client.model.component import CmdComponent, JsonlComponent
+from openhasp_config_manager.processing.template_rendering import referenced_variables
 
 
 class FileKind(Enum):
@@ -102,25 +101,6 @@ def used_files(cmd_components: List[CmdComponent], jsonl_components: List[JsonlC
         if script in cmds:
             visit(cmds[script], script)
     return result
-
-
-_JINJA = Environment()
-# the expressions of a file that can't be parsed as a whole, to parse them one by one
-_EXPRESSION = re.compile(r"\{\{.*?\}\}|\{%.*?%\}", re.DOTALL)
-
-
-def referenced_variables(text: str) -> Set[str]:
-    """:return: the top-level names the Jinja templates in a text use, e.g. {"about"} for "{{ about.title }}" """
-    try:
-        return meta.find_undeclared_variables(_JINJA.parse(text))
-    except TemplateSyntaxError:
-        result = set()
-        for expression in _EXPRESSION.findall(text):
-            try:
-                result |= meta.find_undeclared_variables(_JINJA.parse(expression))
-            except TemplateSyntaxError:
-                continue
-        return result
 
 
 def used_variable_files(roots: List[FileNode], used: Iterable[Path], device_path: Path) -> Dict[Path, List[str]]:

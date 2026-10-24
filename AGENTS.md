@@ -27,7 +27,7 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
 
 | Task                         | Command                                                     |
 |------------------------------|-------------------------------------------------------------|
-| Tests                        | `make test` (= `cd tests && poetry run pytest`)             |
+| Tests                        | `make test` (= `cd tests && poetry run pytest`, 100 % coverage of `processing/template_rendering.py` required) |
 | Single test                  | `cd tests && ../.venv/bin/pytest manager_analyze_test.py -k <name>` |
 | haad integration tests       | `make test-haad` (runs in `../haad`'s uv environment, 100 % coverage required) |
 | Lint (CI runs `ruff check .`) | `make lint`                                                |
@@ -59,6 +59,8 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
 - Fail fast: no defensive fallbacks that hide configuration or programming errors.
 - GUI: keep logic that does not need Qt in `gui/domain/` so it can be tested without a display. Long-running work (config analysis,
   device communication) runs through `run_async` (`gui/qt/async_bridge.py`) so the window stays responsive; never block the Qt main thread.
+- Templates: everything that renders or inspects a Jinja2 template goes through `processing/template_rendering.py` (nested templates,
+  unknown variables staying as written, ...). Don't use `jinja2` directly elsewhere; add a test there for every new case (100 % coverage).
 - `OpenHaspClient` is async: every call must be awaited. A missing `await` fails silently (the coroutine never runs), which once broke
   deploy, upload and screenshots.
 
