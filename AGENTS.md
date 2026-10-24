@@ -27,10 +27,11 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
 
 | Task                         | Command                                                     |
 |------------------------------|-------------------------------------------------------------|
-| Tests                        | `make test` (= `cd tests && poetry run pytest`)             |
+| Tests                        | `make test` (= `cd tests && poetry run pytest`, 100 % coverage of `processing/template_rendering.py` required) |
 | Single test                  | `cd tests && ../.venv/bin/pytest manager_analyze_test.py -k <name>` |
 | haad integration tests       | `make test-haad` (runs in `../haad`'s uv environment, 100 % coverage required) |
 | Lint (CI runs `ruff check .`) | `make lint`                                                |
+| Check a config directory     | `.venv/bin/openhasp-config-manager check -c <dir> [--json]` (`check.py`) |
 | Format                       | `make format`                                               |
 | Docker image                 | `make docker-latest`                                        |
 
@@ -58,6 +59,8 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
 - Fail fast: no defensive fallbacks that hide configuration or programming errors.
 - GUI: keep logic that does not need Qt in `gui/domain/` so it can be tested without a display. Long-running work (config analysis,
   device communication) runs through `run_async` (`gui/qt/async_bridge.py`) so the window stays responsive; never block the Qt main thread.
+- Templates: everything that renders or inspects a Jinja2 template goes through `processing/template_rendering.py` (nested templates,
+  unknown variables staying as written, ...). Don't use `jinja2` directly elsewhere; add a test there for every new case (100 % coverage).
 - `OpenHaspClient` is async: every call must be awaited. A missing `await` fails silently (the coroutine never runs), which once broke
   deploy, upload and screenshots.
 
@@ -71,6 +74,15 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
 - **Files**: new objects go into the target file chosen in the Files tree (`gui/domain/file_tree.py` follows the folder structure of
   `README.md`), by default the device's own file, never a shared `common/` file unless the device has none: saving a shared file changes
   every device that loads it.
+- **Changes on disk** (an LLM or editor edits the config directory while the GUI runs): `ConfigWatcher` (`gui/qt/config_watcher.py`,
+  watchdog, debounced) reports changed paths to `MainWindow._on_config_changed`. A draft without changes reloads quietly (same page and
+  zoom; a failing reload keeps what is shown and reports it in the status bar). A draft with changes is never replaced: a banner offers
+  *Reload from disk* or *Keep my changes*. Writes of the app itself (Save) are recognized by content (`OwnWrites`), so they don't count.
+- **State file**: the GUI writes `<config dir>/.openhasp-config-manager/gui-state.json` for tools that edit the config files next to it
+  (what is open, selection, draft, problems, load errors, connection). The format is documented in `README` in `gui/domain/gui_state.py`
+  (written into that folder). `MainWindow._collect_gui_state` builds it, `GuiStatePublisher` writes it debounced. When you add state
+  worth knowing for such tools, add it there, bump `SCHEMA_VERSION` only for breaking changes, and keep that README current. Never put
+  credentials or plate configuration in it.
 - **Plate actions** (names and tooltips agreed with the user): *Live preview* sends the draft to the plate while editing (nothing is stored
   on it), *Restore plate* rebuilds the pages from the files on the plate like a restart, *Deploy* uploads the saved files. *Revert*
   discards the draft; *Undo* is reserved for undo/redo.

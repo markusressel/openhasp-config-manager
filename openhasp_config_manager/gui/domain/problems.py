@@ -24,11 +24,24 @@ def object_name(obj: Dict) -> str:
 # x, y, width and height of an object as drawn
 Rect = Tuple[float, float, float, float]
 
+# the size an object is drawn with if it has no w or h
+DEFAULT_OBJECT_WIDTH = 80
+DEFAULT_OBJECT_HEIGHT = 40
 
-def find_problems(objects: List[Dict], rects: Dict[int, Rect], screen_width: int, screen_height: int) -> List[Problem]:
+
+def object_rect(obj: Dict) -> Rect:
+    """:return: where an object is drawn"""
+    return (
+        obj.get("x", 0),
+        obj.get("y", 0),
+        obj.get("w", DEFAULT_OBJECT_WIDTH),
+        obj.get("h", DEFAULT_OBJECT_HEIGHT),
+    )
+
+
+def find_problems(objects: List[Dict], screen_width: int, screen_height: int) -> List[Problem]:
     """
     :param objects: the rendered objects of one page
-    :param rects: id(object) -> where it is drawn (objects have a default size if they have no w and h)
     :return: what is wrong with them, errors first
     """
     result = []
@@ -40,7 +53,7 @@ def find_problems(objects: List[Dict], rects: Dict[int, Rect], screen_width: int
             reported_ids.add(obj.get("id"))
             result.append(Problem(Severity.ERROR, obj, f"{object_name(obj)}: the id is used by {ids[obj.get('id')]} objects"))
 
-        sides = _sides_outside(rects[id(obj)], screen_width, screen_height) if id(obj) in rects else ""
+        sides = _sides_outside(object_rect(obj), screen_width, screen_height)
         if sides:
             result.append(Problem(Severity.WARNING, obj, f"{object_name(obj)} is outside of the screen: {sides}"))
     return sorted(result, key=lambda problem: problem.severity != Severity.ERROR)

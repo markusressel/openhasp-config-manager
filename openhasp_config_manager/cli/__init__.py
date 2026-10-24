@@ -3,6 +3,7 @@ from pathlib import Path
 
 import click
 
+from openhasp_config_manager.cli.check import c_check
 from openhasp_config_manager.cli.cmd import c_cmd
 from openhasp_config_manager.cli.deploy import c_deploy
 from openhasp_config_manager.cli.generate import c_generate
@@ -147,6 +148,27 @@ def gui(config_dir: Path, output_dir: Path):
     from openhasp_config_manager.cli.gui import c_gui
 
     c_gui(config_dir, output_dir)
+
+
+@cli.command(name="check")
+@click.option(
+    *get_option_names(PARAM_CFG_DIR),
+    required=False,
+    default=DEFAULT_CONFIG_PATH,
+    type=click.Path(exists=True, path_type=Path),
+    help=get_option_help(PARAM_CFG_DIR),
+)
+@click.option(*get_option_names(PARAM_DEVICE), required=False, default=None, help=get_option_help(PARAM_DEVICE))
+@click.option("--json", "as_json", is_flag=True, help="Print the result as JSON.")
+def check(config_dir: Path, device: str, as_json: bool):
+    """
+    Checks the config directory for errors and warnings, without writing or sending anything.
+
+    Prints what a deployment would fail on, and what the GUI shows as problems (duplicate ids, objects outside of the
+    screen, unknown template variables). Exits with 1 if there are errors.
+    """
+    if not c_check(config_dir, device, as_json):
+        raise SystemExit(1)
 
 
 @cli.command(name="generate")

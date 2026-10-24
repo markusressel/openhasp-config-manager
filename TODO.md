@@ -15,6 +15,8 @@ None known.
   `move/resize(id, rect)`) on the `PlateSession` draft. The preview, the JSONL view, the dirty state and Live preview all subscribe to
   the same operations.
 - [ ] Undo/redo, built on the edit model.
+- [ ] Changes on disk (LLM edits): merge them into a draft with changes (the draft keeps only its changed properties, so objects and
+  properties that changed on only one side can combine), instead of the "Reload or Keep" banner. Show which objects changed after a reload.
 - [ ] **Ordering and ids.** Z-order follows creation order on the plate, so reordering objects needs a delete and re-add of the objects
   above them. Live preview has the same issue: an object whose id changed is deleted and added again, so it ends up on top.
 

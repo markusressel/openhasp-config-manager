@@ -4,7 +4,7 @@ from typing import Dict, Any
 import yaml
 from yaml import Loader
 
-from openhasp_config_manager.util import contains_nested_dict_key, merge_dict_recursive
+from openhasp_config_manager.util import merge_dict_recursive
 
 
 class VariableManager:
@@ -110,16 +110,6 @@ class VariableManager:
 
                 if p.name.startswith("."):
                     continue
-
-                path_vars = self._create_vars_dict_for_path(p)
-
-                if contains_nested_dict_key(path_vars, "items"):
-                    # TODO: to avoid this, variables could be accessed by only exposing them
-                    #  to jinja2 templates via a custom function like f.ex. "vars('my.key.items.a')".
-                    #  This may be cumbersome to use though...
-                    raise AssertionError(
-                        "Variables contain key 'items' which conflicts with the built-in function of jinja2. Please choose a different name."
-                    )
 
                 path_str = str(p)
                 if path_str not in result:

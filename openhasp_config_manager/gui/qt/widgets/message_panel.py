@@ -117,3 +117,56 @@ class ErrorBanner(QFrame):
         self.hide()
         if self._retry is not None:
             self._retry()
+
+
+class DiskChangesBanner(QFrame):
+    """
+    Tells that files of the draft changed on disk (e.g. edited by an LLM or in a text editor) while the draft has
+    unsaved changes of its own, and lets the user choose which side to keep.
+    """
+
+    reloadRequested = QtCore.pyqtSignal()
+    visibilityChanged = QtCore.pyqtSignal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setProperty("role", "banner")
+
+        row = UiComponents.create_row(parent=self, alignment=QtCore.Qt.AlignmentFlag.AlignVCenter)
+        row.setContentsMargins(UiDimensions.one, UiDimensions.half, UiDimensions.one, UiDimensions.half)
+        row.addWidget(UiComponents.create_icon_label("file-alert-outline"))
+        self._text = UiComponents.create_label("", word_wrap=True)
+        self._text.setTextInteractionFlags(QtCore.Qt.TextInteractionFlag.TextSelectableByMouse)
+        row.addWidget(self._text, 1)
+        row.addWidget(
+            UiComponents.create_button(
+                title="Reload from disk",
+                icon="refresh",
+                tooltip="Discard the changes of the draft and load the files as they are on disk now",
+                on_click=self._on_reload,
+            )
+        )
+        row.addWidget(
+            UiComponents.create_button(
+                title="Keep my changes",
+                icon="close",
+                tooltip="Keep the draft. Save fails for files that changed on disk, until the draft is reverted.",
+                on_click=self.hide,
+            )
+        )
+        self.hide()
+
+    def show_changes(self, files: List[str]):
+        shown = ", ".join(files[:3]) + (f" and {len(files) - 3} more" if len(files) > 3 else "")
+        # lets long paths wrap at their separators
+        self._text.setText(f"Changed on disk since this draft was loaded: {shown}".replace("/", "/​"))
+        self.show()
+
+    def setVisible(self, visible: bool):
+        # also while the window is not shown (show() and hide() end up here)
+        super().setVisible(visible)
+        self.visibilityChanged.emit()
+
+    def _on_reload(self):
+        self.hide()
+        self.reloadRequested.emit()

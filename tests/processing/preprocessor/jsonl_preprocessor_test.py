@@ -1,5 +1,7 @@
 import textwrap
 
+import pytest
+
 from openhasp_config_manager.processing.preprocessor.jsonl_preprocessor import JsonlPreProcessor
 from tests import TestBase
 
@@ -232,3 +234,21 @@ class TestJsonlPreProcessor(TestBase):
         { "x": 0, "url": "https://upload.wikimedia.org/wikipedia/commons/b/bf/Test_card.png" }
         """).strip()
         )
+
+    def test_split_objects_unclosed_object_raises(self):
+        # GIVEN
+        underTest = JsonlPreProcessor()
+
+        content = '{ "x": 0 }\n{ "y": 1,\n'
+
+        # WHEN / THEN
+        with pytest.raises(ValueError, match="not closed"):
+            underTest.split_jsonl_objects(content)
+
+    def test_split_objects_unclosed_only_object_raises(self):
+        # GIVEN
+        underTest = JsonlPreProcessor()
+
+        # WHEN / THEN
+        with pytest.raises(ValueError, match="not closed"):
+            underTest.split_jsonl_objects('{ "x": 0')

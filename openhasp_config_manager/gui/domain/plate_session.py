@@ -135,6 +135,10 @@ class PlateSession:
     def component_of(self, obj: Dict) -> ComponentSource:
         return self._components[self._entry(obj).component]
 
+    def source_index(self, obj: Dict) -> Optional[int]:
+        """:return: the index of the object in its source file, None for an object added in the draft"""
+        return self._entry(obj).index
+
     def is_template(self, obj: Dict, key: str) -> bool:
         value = self.source_of(obj).get(key)
         return isinstance(value, str) and "{{" in value

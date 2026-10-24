@@ -15,7 +15,7 @@ from openhasp_config_manager.openhasp_client.model.configuration.config import C
 from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.processing.jsonl import JsonlObjectProcessor
 from openhasp_config_manager.processing.preprocessor.jsonl_preprocessor import JsonlPreProcessor
-from openhasp_config_manager.processing.template_rendering import render_dict_recursive, _render_template
+from openhasp_config_manager.processing.template_rendering import render_dict_recursive, render_template
 from openhasp_config_manager.processing.variables import VariableManager
 from openhasp_config_manager.util import merge_dict_recursive
 
@@ -77,10 +77,13 @@ class DeviceProcessor:
         :param component: the component
         :return: the source objects, in the order of the file
         """
-        return [
-            orjson.loads(self._jsonl_preprocessor.cleanup_object_for_json_parsing(ob))
-            for ob in self._jsonl_preprocessor.split_jsonl_objects(component.content)
-        ]
+        try:
+            return [
+                orjson.loads(self._jsonl_preprocessor.cleanup_object_for_json_parsing(ob))
+                for ob in self._jsonl_preprocessor.split_jsonl_objects(component.content)
+            ]
+        except ValueError as ex:
+            raise ValueError(f"Invalid JSONL in {component.path}: {ex}") from ex
 
     def jsonl_template_variables(
         self, component: JsonlComponent, draft_objects: Optional[Dict[Path, List[Dict[str, Any]]]] = None
@@ -104,7 +107,7 @@ class DeviceProcessor:
         normalized_object = {}
         for key, value in source_object.items():
             if isinstance(value, str):
-                normalized_object[key] = _render_template(value, template_vars)
+                normalized_object[key] = render_template(value, template_vars)
             else:
                 normalized_object[key] = value
 
@@ -120,7 +123,7 @@ class DeviceProcessor:
         )
 
     def _normalize_cmd(self, _device_config, component: CmdComponent, template_vars: Dict[str, any]) -> str:
-        return _render_template(component.content, template_vars)
+        return render_template(component.content, template_vars)
 
     def _compute_jsonl_template_variables(
         self, device: Device, component: Component, draft_objects: Optional[Dict[Path, List[Dict[str, Any]]]] = None
