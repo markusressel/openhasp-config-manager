@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import shlex
 from importlib import metadata
 from pathlib import Path
 from typing import Any, Optional, List, Dict, Callable, Set, Tuple
@@ -726,7 +727,7 @@ class MainWindow(QMainWindow):
                 else relative(next(c.path for c in session.components if c.key == editor.target_component), root),
                 "draft": describe_draft(session, root),
             }
-            problems = describe_problems(session, editor.problems, root)
+            problems = describe_problems(session, editor.problems, root, self.devices)
         return {
             "schema": SCHEMA_VERSION,
             "app": "openhasp-config-manager",
@@ -735,6 +736,7 @@ class MainWindow(QMainWindow):
             "pid": os.getpid(),
             "updated": now(),
             "config_dir": str(root),
+            "check_command": f"openhasp-config-manager check -c {shlex.quote(str(root))} --json",
             "devices": [device.name for device in self.devices],
             "device": device,
             "problems": problems,

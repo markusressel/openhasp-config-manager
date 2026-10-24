@@ -165,6 +165,9 @@ class TestGuiStateFile(TestBase):
         assert device["edit_mode"] is True
         assert device["selection"][0]["name"] == "p9b1"
         assert device["selection"][0]["line"] == 1
+        assert device["selection"][0]["rendered"]["x"] == 10
+        assert device["selection"][0]["source"]["x"] == 10
+        assert state["check_command"] == f"openhasp-config-manager check -c {cfg_root} --json"
         assert device["draft"] == {"modified": False, "files": []}
         assert state["load_error"] is None
 

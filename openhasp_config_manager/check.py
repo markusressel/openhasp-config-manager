@@ -104,7 +104,7 @@ def _check_pages(config_manager: ConfigManager, config_dir: Path, devices: List[
     pages = sorted({obj["page"] for objects in session.working_objects.values() for obj in objects if "page" in obj})
     for page in pages:
         problems = find_problems(get_page_objects(session.working_objects, index=page), screen.width, screen.height)
-        for problem in describe_problems(session, problems, config_dir):
+        for problem in describe_problems(session, problems, config_dir, devices):
             issues.append(
                 Issue(
                     Severity(problem["severity"]),
