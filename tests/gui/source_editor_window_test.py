@@ -1,0 +1,224 @@
+import json
+import shutil
+from pathlib import Path
+
+import pytest
+
+from tests import TestBase
+from tests.gui.disk_changes_test import EDITOR_JSONL, _state, _x_of_label  # noqa: F401
+from tests.gui.main_window_test import _wait_until, create_window  # noqa: F401 (a fixture)
+
+
+@pytest.fixture
+def cfg_root(tmp_path) -> Path:
+    pytest.importorskip("watchdog")
+    root = tmp_path / "cfg"
+    shutil.copytree(Path(__file__).parent.parent / "_test_cfg_root", root)
+    device = root / "devices" / "test_device"
+    (device / "editor.jsonl").write_text(EDITOR_JSONL)
+    (device / "boot.cmd").write_text("run L:/editor.jsonl\n")
+    return root
+
+
+@pytest.fixture
+def window(create_window):  # noqa: F811
+    window = create_window()
+    _wait_until(lambda: window.devices)
+    window.on_device_selected("test_device")
+    _wait_until(lambda: window.session is not None and window.session.is_loaded)
+    window.page_layout_editor_widget.set_page_index(9)
+    window.page_layout_editor_widget.set_edit_mode(True)
+    return window
+
+
+@pytest.fixture
+def editor_file(cfg_root) -> Path:
+    return (cfg_root / "devices" / "test_device" / "editor.jsonl").resolve()
+
+
+class TestOpening(TestBase):
+    def test_double_click_in_the_tree_opens_the_file_next_to_the_rendered_view(self, window, editor_file):
+        # WHEN
+        window.file_tree_widget.openRequested.emit(editor_file)
+
+        # THEN
+        assert window.source_editor.current_file == editor_file
+        assert window.code_view.mode.value == "split"
+        assert window.source_editor.current_editor.toPlainText() == EDITOR_JSONL
+
+    def test_selecting_an_object_shows_its_line(self, window, editor_file):
+        # GIVEN
+        window.code_view.set_mode(window.code_view.mode.__class__.SPLIT)
+        [component] = window.session.components
+        button = window.session.working_objects[component.key][1]
+
+        # WHEN
+        window.page_layout_editor_widget.page_preview_widget.select_object(button)
+
+        # THEN
+        assert window.source_editor.current_file == editor_file
+        assert window.source_editor.current_editor.cursor_line_column[0] == 2
+
+    def test_nothing_opens_while_the_source_is_hidden_or_the_draft_has_changes(self, window):
+        # GIVEN
+        [component] = window.session.components
+        label, button = window.session.working_objects[component.key]
+
+        # WHEN: rendered only
+        window.page_layout_editor_widget.page_preview_widget.select_object(label)
+        # THEN
+        assert window.source_editor.open_files == []
+
+        # WHEN: a draft with changes
+        window.code_view.set_mode(window.code_view.mode.__class__.SPLIT)
+        window.session.set_source_value(label, "x", 20)
+        window.page_layout_editor_widget.page_preview_widget.select_object(button)
+        # THEN
+        assert window.source_editor.open_files == []
+
+    def test_files_that_cannot_be_opened_are_reported(self, window, cfg_root):
+        failures = []
+        window.status.failed.connect(lambda description, error: failures.append(description))
+        (cfg_root / "bad.jsonl").write_bytes(b"\xff\xfe")
+        window.file_tree_widget.openRequested.emit(cfg_root / "bad.jsonl")
+        assert failures == ["Opening bad.jsonl"]
+
+
+class TestSaving(TestBase):
+    def test_saving_a_file_updates_the_pages(self, window, editor_file):
+        # GIVEN
+        window.file_tree_widget.openRequested.emit(editor_file)
+        editor = window.source_editor.current_editor
+        editor.set_text(EDITOR_JSONL.replace('"x": 10', '"x": 55'))
+        editor.textEdited.emit()
+        messages = []
+        window.status.succeeded.connect(messages.append)
+
+        # WHEN
+        assert window.source_editor.save()
+
+        # THEN
+        _wait_until(lambda: _x_of_label(window) == 55)
+        assert "Saved editor.jsonl" in messages
+        assert window.source_editor.dirty_files() == []
+        assert editor_file.read_text().count('"x": 55') == 1
+
+    def test_the_own_save_is_no_change_on_disk(self, window, editor_file):
+        window.file_tree_widget.openRequested.emit(editor_file)
+        window.source_editor.current_editor.set_text("{}\n")
+        window.source_editor.current_editor.textEdited.emit()
+        window.source_editor.save()
+        _wait_until(lambda: window.session is not None and window.session.is_loaded)
+        from PyQt6.QtTest import QTest
+
+        QTest.qWait(800)
+        assert window.source_editor.dirty_files() == []
+        assert not window.source_editor._pages[editor_file].banner.isVisible()
+
+    def test_saving_with_a_changed_draft_offers_the_reload_banner(self, window, editor_file):
+        # GIVEN
+        [component] = window.session.components
+        window.session.set_source_value(window.session.working_objects[component.key][0], "x", 20)
+        window.file_tree_widget.openRequested.emit(editor_file)
+        window.source_editor.current_editor.set_text(EDITOR_JSONL.replace('"x": 10', '"x": 55'))
+        window.source_editor.current_editor.textEdited.emit()
+
+        # WHEN
+        window.source_editor.save()
+
+        # THEN
+        assert not window.disk_changes_banner.isHidden()
+        assert _x_of_label(window) == 20
+
+
+class TestChangesOnDisk(TestBase):
+    def test_an_open_file_follows_changes_made_elsewhere(self, window, editor_file):
+        window.file_tree_widget.openRequested.emit(editor_file)
+
+        editor_file.write_text(EDITOR_JSONL.replace('"x": 10', '"x": 77'))
+
+        _wait_until(lambda: '"x": 77' in window.source_editor.current_editor.toPlainText())
+        _wait_until(lambda: _x_of_label(window) == 77)
+
+    def test_changes_made_elsewhere_to_a_file_with_text_changes_conflict(self, window, editor_file):
+        window.file_tree_widget.openRequested.emit(editor_file)
+        window.source_editor.current_editor.set_text("mine")
+        window.source_editor.current_editor.textEdited.emit()
+
+        editor_file.write_text(EDITOR_JSONL.replace('"x": 10', '"x": 77'))
+
+        _wait_until(lambda: window.source_editor.buffer_of(editor_file).conflict)
+        _wait_until(lambda: (_state(window._cfg_root).get("editor") or {}).get("files", [{}])[0].get("conflict"))
+        assert window.source_editor.current_editor.toPlainText() == "mine"
+
+
+class TestMarkersAndCompletion(TestBase):
+    def test_problems_of_the_page_are_marked_in_the_source(self, window, editor_file):
+        # GIVEN
+        editor_file.write_text(EDITOR_JSONL + '{"page": 9, "id": 3, "obj": "btn", "x": 470, "y": 0, "w": 100, "h": 20}\n')
+        window.file_tree_widget.openRequested.emit(editor_file)
+
+        # THEN
+        _wait_until(lambda: window.source_editor.current_editor._app_markers)
+        [marker] = window.source_editor.current_editor._app_markers
+        assert marker.line == 3
+        assert "outside of the screen" in marker.message
+
+    def test_variables_of_the_files_of_the_device_are_offered(self, window, editor_file):
+        names = window._variables_of_file(editor_file)
+        assert names
+        assert all(not name.startswith("{{") for name in names)
+        assert window._variables_of_file(editor_file.parent / "other.jsonl") == []
+        assert window._variables_of_file(editor_file.parent.parent.parent / "nothing.yaml") == []
+
+
+class TestSessionAndState(TestBase):
+    def test_open_files_are_remembered(self, window, editor_file):
+        window.file_tree_widget.openRequested.emit(editor_file)
+        assert window.ui_session.session.open_files == ["devices/test_device/editor.jsonl"]
+        assert window.ui_session.session.current_file == "devices/test_device/editor.jsonl"
+
+        window.source_editor.close_all(ask=False)
+        assert window.ui_session.session.open_files == []
+
+        window.ui_session.session.open_files = ["devices/test_device/editor.jsonl", "gone.jsonl"]
+        window.ui_session.session.current_file = "devices/test_device/editor.jsonl"
+        window._restore_open_files()
+        assert window.source_editor.open_files == [editor_file]
+        assert window.source_editor.current_file == editor_file
+
+    def test_the_state_describes_the_text_editor(self, window, editor_file):
+        window.file_tree_widget.openRequested.emit(editor_file)
+        window.source_editor.current_editor.set_text("{")
+        window.source_editor.current_editor.textEdited.emit()
+        window.source_editor.current_editor.go_to(1, 1)
+
+        _wait_until(lambda: (_state(window._cfg_root).get("editor") or {}).get("files", [{}])[0].get("dirty"))
+
+        state = _state(window._cfg_root)
+        assert state["editor"]["mode"] == "split"
+        assert state["editor"]["current"] == "devices/test_device/editor.jsonl"
+        [tab] = state["editor"]["files"]
+        assert tab["file"] == "devices/test_device/editor.jsonl"
+        assert tab["dirty"] is True and tab["conflict"] is False
+        json.dumps(state)
+
+    def test_closing_the_window_asks_about_unsaved_text(self, window, editor_file, monkeypatch):
+        from PyQt6.QtGui import QCloseEvent
+        from PyQt6.QtWidgets import QMessageBox
+
+        window.file_tree_widget.openRequested.emit(editor_file)
+        window.source_editor.current_editor.set_text("changed")
+        window.source_editor.current_editor.textEdited.emit()
+        questions = []
+
+        def answer(parent, title, text, *args):
+            questions.append(text)
+            return QMessageBox.StandardButton.Cancel
+
+        monkeypatch.setattr(QMessageBox, "question", answer)
+        event = QCloseEvent()
+        window.closeEvent(event)
+
+        assert not event.isAccepted()
+        assert "editor.jsonl (text editor)" in questions[0]

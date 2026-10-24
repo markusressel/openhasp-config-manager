@@ -36,13 +36,16 @@ class FileTreeWidget(QWidget):
     the current page, and which file new objects are added to.
 
     - Selecting a file of the draft highlights its objects in the preview (`highlightRequested`).
-    - Double-clicking one, or "Add new objects here" in its context menu, makes it the target (`targetRequested`).
+    - Double-clicking a file opens it in the text editor (`openRequested`). "Add new objects here" in the context menu of a
+      .jsonl file of the draft makes it the target (`targetRequested`).
     - Files the plate never uses (see `used_files` and `used_variable_files`) are hidden, unless "Show all files" is on.
     """
 
     # the key of the component whose objects to highlight, or None
     highlightRequested = QtCore.pyqtSignal(object)
     targetRequested = QtCore.pyqtSignal(str)
+    # the path of a file to edit as text
+    openRequested = QtCore.pyqtSignal(object)
 
     def __init__(self):
         super().__init__()
@@ -68,7 +71,7 @@ class FileTreeWidget(QWidget):
         self._tree.setMinimumHeight(120)
         self._tree.setToolTip(
             "The files of the device and the shared common folder.\n"
-            "Select a file to highlight its objects, double-click it to add new objects to it."
+            "Select a file to highlight its objects, double-click it to edit it as text."
         )
         self._tree.setUniformRowHeights(True)
         header = self._tree.header()
@@ -323,9 +326,9 @@ class FileTreeWidget(QWidget):
         self.highlightRequested.emit(key)
 
     def _on_item_double_clicked(self, item: QTreeWidgetItem, _column: int):
-        key = item.data(0, _KEY_ROLE)
-        if key is not None:
-            self.targetRequested.emit(key)
+        path = Path(item.data(0, _PATH_ROLE))
+        if path.is_file():
+            self.openRequested.emit(path)
 
     def _show_context_menu(self, position: QtCore.QPoint):
         item = self._tree.itemAt(position)
@@ -333,6 +336,10 @@ class FileTreeWidget(QWidget):
             return
         menu = QMenu(self)
         key = item.data(0, _KEY_ROLE)
+        path = Path(item.data(0, _PATH_ROLE))
+        if path.is_file():
+            edit = menu.addAction(ThemedIcons.icon("file-edit-outline"), "Edit as text")
+            edit.triggered.connect(lambda: self.openRequested.emit(path))
         if key is not None:
             target = menu.addAction(ThemedIcons.icon(_TARGET_ICON), "Add new objects here")
             target.setCheckable(True)

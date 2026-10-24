@@ -212,18 +212,18 @@ class TestFileTreeWidget(TestBase):
         # THEN
         assert highlighted == ["content", None]
 
-    def test_double_click_chooses_the_target(self, tmp_path):
+    def test_double_click_opens_the_file_as_text(self, tmp_path):
         # GIVEN
         widget = self._widget(tmp_path)
-        targets = []
-        widget.targetRequested.connect(targets.append)
+        opened = []
+        widget.openRequested.connect(opened.append)
 
         # WHEN
         widget.tree.itemDoubleClicked.emit(widget._items_by_key["header"], 0)
         widget.tree.itemDoubleClicked.emit(widget.tree.topLevelItem(0), 0)
 
-        # THEN
-        assert targets == ["header"]
+        # THEN: the folder is not a file
+        assert [path.name for path in opened] == ["header.jsonl"]
 
     def test_reveal_selects_the_file_without_highlighting_it(self, tmp_path):
         # GIVEN

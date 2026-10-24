@@ -25,7 +25,7 @@ class _Extended:
 class TestUiSession(TestBase):
     def test_a_session_survives_the_round_trip(self):
         # GIVEN
-        session = UiSession(selected_device="plate")
+        session = UiSession(selected_device="plate", open_files=["a/b.jsonl", "c.yaml"], current_file="c.yaml")
         session.device("plate").target_file = "devices/plate/page.jsonl"
         session.device("other")
 

@@ -40,7 +40,9 @@ from openhasp_config_manager.gui.domain.gui_state import (
     SCHEMA_VERSION,
     GuiStateFile,
     describe_connection,
+    EditorTab,
     describe_draft,
+    describe_editor,
     describe_files,
     describe_object,
     describe_problems,
@@ -49,6 +51,7 @@ from openhasp_config_manager.gui.domain.gui_state import (
 )
 from openhasp_config_manager.gui.domain.page_objects import get_navigable_page_indices
 from openhasp_config_manager.gui.domain.plate_session import PlateSession
+from openhasp_config_manager.gui.domain.problems import Severity as ProblemSeverity
 from openhasp_config_manager.gui.qt.components import UiComponents, ThemedIcons
 from openhasp_config_manager.gui.qt.config_watcher import ConfigWatcher
 from openhasp_config_manager.gui.qt.gui_state_publisher import GuiStatePublisher
@@ -57,11 +60,14 @@ from openhasp_config_manager.gui.qt.operations import OperationStatus, error_tex
 from openhasp_config_manager.gui.qt.ui_session_store import UiSessionStore
 from openhasp_config_manager.gui.qt.theme import ThemeMode, apply_theme, current_mode, current_colors
 from openhasp_config_manager.gui.qt.async_bridge import run_async
+from openhasp_config_manager.gui.qt.widgets.code_editor import Marker
+from openhasp_config_manager.gui.qt.widgets.code_view import CodeView
 from openhasp_config_manager.gui.qt.widgets.device_list import DeviceListWidget
 from openhasp_config_manager.gui.qt.widgets.file_tree import FileTreeWidget
 from openhasp_config_manager.gui.qt.widgets.message_panel import MessagePanel, DiskChangesBanner
 from openhasp_config_manager.gui.qt.widgets.pagelayout import OpenHaspDevicePagesData
 from openhasp_config_manager.gui.qt.widgets.pagelayout.page_layout_editor import PageLayoutEditorWidget
+from openhasp_config_manager.gui.qt.widgets.source_editor import SourceEditorWidget
 from openhasp_config_manager.manager import ConfigManager
 from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.processing.variables import VariableManager
@@ -199,6 +205,7 @@ class MainWindow(QMainWindow):
         self._disk_changes: List[str] = []
         # select the device of the last session once the devices are loaded the first time
         self._restore_selection = True
+        self._restoring_open_files = False
         # what is restored on the next start: the selected device, the file for new objects, ...
         self.ui_session = UiSessionStore(Path(config_manager.cfg_root), QSettings())
 
@@ -223,6 +230,7 @@ class MainWindow(QMainWindow):
         self.page_layout_editor_widget.action_edit_mode.toggled.connect(self._on_edit_mode_toggled)
         self.load_plates()
         self._start_watching_config_dir()
+        self._restore_open_files()
         self._state_publisher.request()
 
     # --- layout ---
@@ -233,6 +241,8 @@ class MainWindow(QMainWindow):
         self.page_layout_editor_widget.dirtyChanged.connect(lambda dirty: self.status_bar.set_dirty(dirty))
         self.page_layout_editor_widget.dirtyChanged.connect(lambda _: self._update_draft_actions())
         self.page_layout_editor_widget.stateChanged.connect(self._state_publisher.request)
+        self.page_layout_editor_widget.stateChanged.connect(self._update_source_markers)
+        self.page_layout_editor_widget.page_preview_widget.selectionChanged.connect(self._reveal_selection_in_source)
         self.page_layout_editor_widget.dirtyChanged.connect(lambda _: self._state_publisher.request())
         self.page_layout_editor_widget.pageChanged.connect(lambda *_: self._state_publisher.request())
         self.addToolBar(self.page_layout_editor_widget.toolbar)
@@ -268,6 +278,7 @@ class MainWindow(QMainWindow):
         self.file_tree_widget = FileTreeWidget()
         self.file_tree_widget.highlightRequested.connect(editor.highlight_component)
         self.file_tree_widget.targetRequested.connect(editor.set_target_component)
+        self.file_tree_widget.openRequested.connect(self._open_in_editor)
         editor.selectedObjectComponentChanged.connect(self.file_tree_widget.reveal)
         editor.fileStateChanged.connect(self._update_file_tree_state)
 
@@ -291,8 +302,18 @@ class MainWindow(QMainWindow):
         )
         self.splitDockWidget(self.preview_dock, self.properties_dock, Qt.Orientation.Horizontal)
 
-        # below the preview: the JSONL of the page
-        self.jsonl_dock = self._add_dock("JSONL", "jsonl_dock", self.page_layout_editor_widget.jsonl_preview)
+        # below the preview: the files as text (source), and the JSONL of the page (rendered)
+        self.source_editor = SourceEditorWidget(self._cfg_root)
+        self.source_editor.saved.connect(self._on_source_saved)
+        self.source_editor.stateChanged.connect(self._state_publisher.request)
+        self.source_editor.stateChanged.connect(self._remember_open_files)
+        self.source_editor.openFailed.connect(
+            lambda path, message: self.status.failed.emit(f"Opening {path.name}", message)
+        )
+        self.source_editor.set_variables(self._variables_of_file)
+        self.code_view = CodeView(self.source_editor, self.page_layout_editor_widget.jsonl_preview)
+        self.code_view.modeChanged.connect(lambda _mode: self._state_publisher.request())
+        self.jsonl_dock = self._add_dock("Code", "jsonl_dock", self.code_view)
         self.splitDockWidget(self.preview_dock, self.jsonl_dock, Qt.Orientation.Vertical)
         self._size_docks()
 
@@ -315,7 +336,7 @@ class MainWindow(QMainWindow):
             self.properties_dock.show()
 
     def _size_docks(self):
-        self.resizeDocks([self.preview_dock, self.jsonl_dock], [600, 200], Qt.Orientation.Vertical)
+        self.resizeDocks([self.preview_dock, self.jsonl_dock], [520, 280], Qt.Orientation.Vertical)
         self.resizeDocks([self.devices_dock, self.preview_dock, self.properties_dock], [280, 700, 360], Qt.Orientation.Horizontal)
 
     def _add_dock(self, title: str, name: str, widget: QWidget, closable: bool = True) -> QDockWidget:
@@ -439,6 +460,7 @@ class MainWindow(QMainWindow):
         self.status_bar.refresh_theme()
         self.file_tree_widget.refresh_theme()
         self.page_layout_editor_widget.jsonl_preview.refresh_theme()
+        self.source_editor.refresh_theme()
         self.page_layout_editor_widget.problems_panel.refresh_theme()
         self.page_layout_editor_widget.page_preview_widget.viewport().update()
 
@@ -483,7 +505,9 @@ class MainWindow(QMainWindow):
         return [f"{device} ({cmd})" for (device, cmd), session in self.sessions.items() if session.is_dirty]
 
     def closeEvent(self, event):
-        dirty = self._dirty_draft_names()
+        dirty = self._dirty_draft_names() + [
+            f"{path.name} (text editor)" for path in self.source_editor.dirty_files()
+        ]
         if dirty and not self._discard_drafts_on_close:
             answer = QMessageBox.question(
                 self,
@@ -498,6 +522,7 @@ class MainWindow(QMainWindow):
         self.connection.stop()
         self._watcher.stop()
         self._state_publisher.stop()
+        self.code_view.save_state()
         settings = QSettings()
         settings.setValue("window/geometry", self.saveGeometry())
         settings.setValue("window/state", self.saveState(DOCK_STATE_VERSION))
@@ -625,6 +650,11 @@ class MainWindow(QMainWindow):
         if not paths:
             return
         LOGGER.info(f"Changed on disk: {', '.join(sorted(str(path) for path in paths))}")
+        self.source_editor.external_changes(paths)
+        self._apply_changes_to_draft(paths)
+
+    def _apply_changes_to_draft(self, paths: Set[Path]):
+        """Files changed that the pages are made of: reload them, or offer to if the draft has changes of its own."""
         if self._reloading_changes is not None:
             self._changes_during_reload |= paths
             return
@@ -638,6 +668,72 @@ class MainWindow(QMainWindow):
             self.on_device_selected(self._selected_name)
         else:
             self._reload_changed_files(paths)
+
+    # --- text editor ---
+
+    def _remember_open_files(self):
+        if self._restoring_open_files:
+            return
+        current = self.source_editor.current_file
+        session = self.ui_session.session
+        session.open_files = [relative(path, self._cfg_root) for path in self.source_editor.open_files]
+        session.current_file = None if current is None else relative(current, self._cfg_root)
+        self.ui_session.save()
+
+    def _restore_open_files(self):
+        """Open the files of the last session that still exist."""
+        session = self.ui_session.session
+        self._restoring_open_files = True
+        try:
+            for name in session.open_files:
+                path = self._cfg_root / name
+                if path.is_file():
+                    self.source_editor.open_file(path, focus=False)
+            current = None if session.current_file is None else self._cfg_root / session.current_file
+            if current is not None and current.is_file():
+                self.source_editor.open_file(current, focus=False)
+        finally:
+            self._restoring_open_files = False
+        self._remember_open_files()
+
+    def _open_in_editor(self, path: Path):
+        self.code_view.show_source()
+        self.source_editor.open_file(path)
+
+    def _on_source_saved(self, path: Path, text: str):
+        """A file was saved in the text editor: the pages follow it, like after a change on disk by someone else."""
+        self._own_writes.written(path.resolve(), text)
+        self.status.succeeded.emit(f"Saved {path.name}")
+        if self.device is not None:
+            self._apply_changes_to_draft({path.resolve()})
+
+    def _variables_of_file(self, path: Path) -> List[str]:
+        session = self.session
+        if session is None or not session.is_loaded:
+            return []
+        component = next((c for c in session.components if c.path.resolve() == path.resolve()), None)
+        return [] if component is None else session.variable_names(component.key)
+
+    def _reveal_selection_in_source(self, selected: list):
+        """Selecting an object in the preview shows where it is written, if the source is visible."""
+        session = self.session
+        if len(selected) != 1 or not self.code_view.shows_source or session is None or session.is_dirty:
+            return
+        location = describe_object(session, selected[0].obj_data, self._cfg_root)
+        if location["line"] is not None:
+            self.source_editor.open_file(self._cfg_root / location["file"], location["line"], focus=False, preview=True)
+
+    def _update_source_markers(self):
+        """The problems of the open page are shown in the editors of their files."""
+        session = self.session
+        markers: Dict[Path, List[Marker]] = {}
+        if session is not None and session.is_loaded and self.page_layout_editor_widget.session is session:
+            for problem in describe_problems(session, self.page_layout_editor_widget.problems, self._cfg_root):
+                if problem["line"] is not None:
+                    markers.setdefault((self._cfg_root / problem["file"]).resolve(), []).append(
+                        Marker(problem["line"], 0, 1, ProblemSeverity(problem["severity"]), problem["message"])
+                    )
+        self.source_editor.set_markers(markers)
 
     def _show_disk_changes(self, paths: Set[Path]):
         """Offer to reload, if the changes can affect the device of the draft."""
@@ -739,12 +835,23 @@ class MainWindow(QMainWindow):
             "check_command": f"openhasp-config-manager check -c {shlex.quote(str(root))} --json",
             "devices": [device.name for device in self.devices],
             "device": device,
+            "editor": describe_editor(
+                self.code_view.mode.value, self._editor_tabs(), self.source_editor.current_file, root
+            ),
             "problems": problems,
             "load_error": self._load_error,
             "files_changed_on_disk": [] if self.disk_changes_banner.isHidden() else self._disk_changes,
             "connection": describe_connection(self.connection.status),
             "last_operation": self._last_operation,
         }
+
+    def _editor_tabs(self) -> List[EditorTab]:
+        tabs = []
+        for path in self.source_editor.open_files:
+            buffer = self.source_editor.buffer_of(path)
+            line, column = self.source_editor.editor_of(path).cursor_line_column
+            tabs.append(EditorTab(path, buffer.is_dirty, buffer.conflict, line, column))
+        return tabs
 
     # --- draft ---
 

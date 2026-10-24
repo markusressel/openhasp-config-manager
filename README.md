@@ -412,6 +412,25 @@ To deploy your configurations to the already connected openHASP devices, simply 
 > to be able to deploy files to the device. To enable the webservice
 > try: `openhasp-config-manager cmd -d plate35 -C service -p "start http"`
 
+## Editing the files as text in the GUI
+
+The **Code** panel below the preview shows the files in three ways, like the code/design views of an IDE: **Source** (the text
+editor), **Rendered** (the JSONL of the page the way the plate gets it) and **Split** (both side by side or above each other, with a
+splitter). Double-click a file in the Files tree to open it (JSONL, `.cmd` and variable files), or select an object in the preview
+while the source is shown: the editor jumps to the line of the object.
+
+The editor knows the JSONL dialect of this project: comments, trailing commas, objects over several lines and `{{ templates }}`
+(also nested ones) are highlighted. It marks what is wrong while you type (an object that is not closed, invalid JSON, an invalid
+template, invalid YAML), and the problems the preview shows (e.g. an object outside of the screen) at the line of their object.
+Other features: line numbers, matching brackets, auto-closing of brackets and quotes, smart indentation, `Ctrl+/` to comment lines,
+`Ctrl+D` to duplicate lines, `Ctrl+Space` completion (object properties, and the template variables a file can use), search and
+replace (`Ctrl+F`, with match case, whole words and regular expressions), `Ctrl+wheel` to zoom, word wrap and whitespace display
+(menu of the Code panel). `Ctrl+S` saves the file, then the pages follow it.
+
+Every file is edited on its own, separate from the unsaved changes of the visual editor. If a file changes on disk (an LLM, another
+editor) while its tab has no changes, the tab follows quietly. If it has changes, the tab offers to reload from disk or to keep
+your version.
+
 ## Working with an LLM next to the GUI
 
 The config files are plain text, so an LLM (or any tool) can edit them while the GUI is open: the GUI reloads when files change. A

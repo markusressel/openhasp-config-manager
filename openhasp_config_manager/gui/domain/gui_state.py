@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import tempfile
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
@@ -55,6 +56,10 @@ Read the file before and after you edit, and trust it only while it is current:
   - `new_objects_file`: the file new objects of the user go into.
   - `draft`: `modified` is `true` if the user has unsaved changes in the GUI. They are not in the files yet, and a file the user
     changed on disk meanwhile can't be saved over. `files` lists, per file, the `changed`, `added` and `deleted` objects.
+- `editor`: the text editor of the GUI, where files are edited as text. `mode` (`source`, `split`, `rendered`: which of the text editor and the
+  rendered JSONL are shown), `current` (the file of the tab that is shown, or `null`), and `files`, the open tabs:
+  `file`, `dirty` (the text has changes that are not saved: the file on disk is the older version), `conflict` (the file changed on
+  disk while it has unsaved changes, the user chooses which to keep), `line` and `column` of the cursor.
 - `problems`: warnings and errors of the objects on the open page (same as the GUI shows): `severity`, `message`, `object`, `file`,
   `line`, `rendered` and `source`, `devices`. Only the open page is checked.
   - `rendered`: the `x`, `y`, `w`, `h` the object has after rendering (what the plate gets); only those it has.
@@ -152,6 +157,35 @@ def describe_files(components: List[ComponentSource], working_objects: Dict[str,
         }
         for component in components
     ]
+
+
+@dataclass(frozen=True)
+class EditorTab:
+    path: Path
+    dirty: bool
+    # the file changed on disk while the tab has changes
+    conflict: bool
+    # the cursor, both starting at 1
+    line: int
+    column: int
+
+
+def describe_editor(mode: str, tabs: List[EditorTab], current: Optional[Path], config_dir: Path) -> Dict[str, Any]:
+    """:return: what the text editor shows: which files are open, which have unsaved text, and where the cursor is"""
+    return {
+        "mode": mode,
+        "current": None if current is None else relative(current, config_dir),
+        "files": [
+            {
+                "file": relative(tab.path, config_dir),
+                "dirty": tab.dirty,
+                "conflict": tab.conflict,
+                "line": tab.line,
+                "column": tab.column,
+            }
+            for tab in tabs
+        ],
+    }
 
 
 def describe_connection(status: ConnectionStatus) -> Dict[str, Any]:

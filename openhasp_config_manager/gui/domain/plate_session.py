@@ -158,6 +158,10 @@ class PlateSession:
     def template_suggestions(self, obj: Dict) -> List[Tuple[str, Any]]:
         return self._renderer.template_suggestions(self._entry(obj).component)
 
+    def variable_names(self, component: str) -> List[str]:
+        """:return: the names of the template variables a file can use, e.g. "theme.navbar.height" """
+        return [template[3:-3] for template, _value in self._renderer.template_suggestions(component)]
+
     # --- editing ---
 
     def check_value(self, obj: Dict, key: str, value: Any) -> Optional[str]:
