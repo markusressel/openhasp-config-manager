@@ -135,3 +135,26 @@ class TestPreviewItems(TestBase):
         assert parse_points("{{ points }}") == [] and parse_points([[1], "x", [1, "2"]]) == []
         assert painted(render(line)) > 0
         assert render({**line, "y_invert": True}) != render(line)
+
+    def test_qrcode_is_a_square_and_follows_its_text(self):
+        from openhasp_config_manager.gui.domain.qr_placeholder import MODULES, placeholder_modules
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.qrcode import HaspQrCodeItem
+
+        code = {
+            "page": 1,
+            "id": 1,
+            "obj": "qrcode",
+            "x": 10,
+            "y": 10,
+            "size": 100,
+            "w": 3,
+            "h": 4,
+            "text": "https://openhasp.com",
+        }
+        item = HaspQrCodeItem(code)
+        assert (item.obj_w, item.obj_h) == (100, 100)
+        assert placeholder_modules("a") == placeholder_modules("a") != placeholder_modules("b")
+        assert len(placeholder_modules("a")) == MODULES
+        # the finder square in the top left corner
+        assert all(placeholder_modules("a")[0][:7]) and not placeholder_modules("a")[1][1]
+        assert render({**code, "text": "other"}) != render(code)

@@ -17,6 +17,7 @@ class OpenHASPWidgetType(StrEnum):
     IMAGE = "img"
     BAR = "bar"
     SLIDER = "slider"
+    QRCODE = "qrcode"
     LINE = "line"
     GAUGE = "gauge"
     LINEMETER = "linemeter"
@@ -126,6 +127,12 @@ WIDGET_TYPES: Dict[OpenHASPWidgetType, WidgetTypeInfo] = {
         description="Line through points",
         icon="vector-polyline",
         defaults={"w": 100, "h": 25, "points": [[0, 25], [50, 0], [100, 25]]},
+    ),
+    OpenHASPWidgetType.QRCODE: WidgetTypeInfo(
+        title="QR code",
+        description="Square code for a text",
+        icon="qrcode",
+        defaults={"w": 140, "h": 140, "size": 140, "text": "https://www.openhasp.com"},
     ),
 }
 
