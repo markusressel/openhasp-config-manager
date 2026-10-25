@@ -17,6 +17,7 @@ class OpenHASPWidgetType(StrEnum):
     IMAGE = "img"
     BAR = "bar"
     SLIDER = "slider"
+    COLOR_PICKER = "cpicker"
     MESSAGE_BOX = "msgbox"
     BUTTON_MATRIX = "btnmatrix"
     TAB = "tab"
@@ -168,6 +169,12 @@ WIDGET_TYPES: Dict[OpenHASPWidgetType, WidgetTypeInfo] = {
         description="Pop-up with buttons",
         icon="message-text",
         defaults={"w": 300, "h": 140, "text": "Message", "options": ["OK"]},
+    ),
+    OpenHASPWidgetType.COLOR_PICKER: WidgetTypeInfo(
+        title="Color picker",
+        description="Pick a color",
+        icon="palette",
+        defaults={"w": 150, "h": 150, "color": "#FF0000"},
     ),
 }
 

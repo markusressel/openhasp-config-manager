@@ -215,3 +215,17 @@ class TestPreviewItems(TestBase):
         assert HaspMessageBoxItem({**box, "options": ["Yes", "No"]}).buttons() == ["Yes", "No"]
         assert painted(render(box)) > 0
         assert render({**box, "options": ["Yes", "No"]}) != render(box)
+
+    def test_color_picker_gradient_follows_its_mode_and_shows_its_color(self):
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.cpicker import HaspColorPickerItem
+
+        picker = {"page": 1, "id": 1, "obj": "cpicker", "x": 10, "y": 10, "w": 150, "h": 150, "color": "#00ff00"}
+        item = HaspColorPickerItem(picker)
+        assert item.gradient_stops()[0][1].name() == "#ff0000"
+        item.obj_data["mode"] = "saturation"
+        assert item.gradient_stops()[0][1].name() == "#ffffff"
+        item.obj_data["mode"] = "value"
+        assert item.gradient_stops()[0][1].name() == "#000000"
+        assert HaspColorPickerItem({"color": "{{ c }}"}).color.name() == "#ff0000"
+        assert render({**picker, "color": "#0000ff"}) != render(picker)
+        assert painted(render({**picker, "w": 200, "h": 40})) > 0
