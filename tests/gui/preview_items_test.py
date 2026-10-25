@@ -191,3 +191,18 @@ class TestPreviewItems(TestBase):
         tab = {"page": 1, "id": 3, "obj": "tab", "parentid": 2, "text": "Lights"}
         assert painted(render(tab)) == 0
         assert render(tabview, tab) != render(tabview)
+
+    def test_button_matrix_splits_options_into_rows(self):
+        from openhasp_config_manager.gui.domain.button_matrix import MatrixButton, matrix_rows
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.btnmatrix import HaspButtonMatrixItem
+
+        options = ["#FF0000 Red text#", "Cyan", "\n", "One", 5]
+        assert matrix_rows(options) == [[MatrixButton("Red text", "#FF0000"), MatrixButton("Cyan")], [MatrixButton("One")]]
+        assert matrix_rows('["a", "\\n", "b"]') == [[MatrixButton("a")], [MatrixButton("b")]]
+        assert matrix_rows("{{ options }}") == [] and matrix_rows(None) == []
+
+        matrix = {"page": 1, "id": 1, "obj": "btnmatrix", "x": 10, "y": 10, "w": 220, "h": 150, "options": options}
+        rects = HaspButtonMatrixItem(matrix).button_rects()
+        assert len(rects) == 3
+        assert rects[0][0].width() == rects[1][0].width() < rects[2][0].width() == 220
+        assert render({**matrix, "toggle": True, "val": 1}) != render(matrix)

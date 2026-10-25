@@ -9,8 +9,8 @@ None known.
 ## 2. Editor
 
 - [ ] Insert template variables inside longer texts (the suggestions replace the whole value today).
-- [ ] Object types: the editor can add and draw 19 of the 22 openHASP objects. Missing:
-  `cpicker`, `btnmatrix`, `msgbox`. Objects of these types are not drawn in the preview today. Each needs a widget in the preview
+- [ ] Object types: the editor can add and draw 20 of the 22 openHASP objects. Missing:
+  `cpicker`, `msgbox`. Objects of these types are not drawn in the preview today. Each needs a widget in the preview
   (`openhasp_widgets/`, registered in `registry.py`) and an entry in `page_objects.WIDGET_TYPES` (the picker).
 - [ ] Files tree: "New .jsonl file here" on a folder (adds the `run L:/<flattened name>` line to the right .cmd and checks the 30
   character limit of file names on the plate), and "Move to file" for an object.

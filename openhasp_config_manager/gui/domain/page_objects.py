@@ -17,6 +17,7 @@ class OpenHASPWidgetType(StrEnum):
     IMAGE = "img"
     BAR = "bar"
     SLIDER = "slider"
+    BUTTON_MATRIX = "btnmatrix"
     TAB = "tab"
     TABVIEW = "tabview"
     BASE_OBJECT = "obj"
@@ -154,6 +155,12 @@ WIDGET_TYPES: Dict[OpenHASPWidgetType, WidgetTypeInfo] = {
         description="A page of a tabview",
         icon="tab",
         defaults={"text": "Tab"},
+    ),
+    OpenHASPWidgetType.BUTTON_MATRIX: WidgetTypeInfo(
+        title="Button matrix",
+        description="Grid of buttons",
+        icon="dialpad",
+        defaults={"w": 220, "h": 150, "options": ["1", "2", "3", "\n", "4", "5", "6"], "toggle": False},
     ),
 }
 

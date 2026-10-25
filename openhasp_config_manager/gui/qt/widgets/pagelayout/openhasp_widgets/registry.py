@@ -16,6 +16,7 @@ from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.qrcode i
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.base_object import HaspBaseObjectItem
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.tabview import HaspTabviewItem
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.tab import HaspTabItem
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.btnmatrix import HaspButtonMatrixItem
 
 ITEM_CLASSES: Dict[str, Type[EditableWidget]] = {
     "checkbox": HaspCheckboxItem,
@@ -31,4 +32,5 @@ ITEM_CLASSES: Dict[str, Type[EditableWidget]] = {
     "obj": HaspBaseObjectItem,
     "tabview": HaspTabviewItem,
     "tab": HaspTabItem,
+    "btnmatrix": HaspButtonMatrixItem,
 }
