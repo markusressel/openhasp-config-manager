@@ -594,7 +594,9 @@ class PagePreviewWidget(QGraphicsView):
             return
         # Find the object data for this button
         if obj_data:
-            self.buttonClicked.emit(obj_data)
+            # after the mouse event: a click can change the page, which clears the scene and deletes the button that is still
+            # handling the event (a crash)
+            QtCore.QTimer.singleShot(0, lambda: self.buttonClicked.emit(obj_data))
 
     @qBridge()
     def _on_selection_changed(self):

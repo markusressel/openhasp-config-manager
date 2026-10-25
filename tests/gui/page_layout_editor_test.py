@@ -495,6 +495,32 @@ class TestLockedPosition(TestBase):
         assert offered() is True
 
 
+class TestNavigationButtons(TestBase):
+    def test_a_click_on_prev_changes_the_page_after_the_click_is_handled(self, editor):
+        from PyQt6.QtCore import QPointF, Qt
+        from PyQt6.QtTest import QTest
+
+        # GIVEN
+        editor.resize(900, 700)
+        editor.show()
+        editor.set_edit_mode(False)
+        key = _key(editor, "editor.jsonl")
+        button = editor.session.add_object(
+            key, {"page": 9, "id": 50, "obj": "btn", "text": "prev", "x": 300, "y": 200, "w": 80, "h": 40, "action": "prev"}
+        )
+        editor.set_page_index(9)
+        preview = editor.page_preview_widget
+        [item] = [item for item in preview.editable_items() if item.obj_data is button]
+
+        # WHEN
+        QTest.mouseClick(preview.viewport(), Qt.MouseButton.LeftButton, pos=preview.mapFromScene(QPointF(320, 220)))
+
+        # THEN the button outlives the click: changing the page clears the scene, which deleted it while it handled the
+        # click (a crash)
+        assert item.scene() is preview.scene()
+        wait_until(lambda: editor.current_index != 9)
+
+
 class TestPropertyEditor(TestBase):
     def _template_field(self, editor):
         from PyQt6.QtWidgets import QLineEdit
