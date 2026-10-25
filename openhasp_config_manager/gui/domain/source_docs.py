@@ -1,8 +1,10 @@
 """Short explanations of the properties of openHASP objects, for the hover text of the text editor. Qt-free."""
 
 import re
-from typing import Optional
+from typing import List, Optional, Tuple
 
+from openhasp_config_manager.gui.domain.source_objects import SourceObject, object_at_line
+from openhasp_config_manager.gui.domain.source_syntax import Language, TokenKind, tokenize_line
 from openhasp_config_manager.gui.domain.style_parts import OBJECT_PARTS, PART_DESCRIPTIONS, STATE_DESCRIPTIONS, Part, State
 
 # https://www.openhasp.com/latest/design/objects/ and https://www.openhasp.com/latest/design/styling/
@@ -104,3 +106,19 @@ def describe_property(name: str, object_type: Optional[str] = None) -> Optional[
     if state in State:
         lines[-1] += f"; state {state} is {STATE_DESCRIPTIONS[State(state)]}"
     return "\n".join(lines) + "."
+
+
+def documentation_at(objects: List[SourceObject], line: str, line_number: int, column: int) -> Optional[Tuple[str, str]]:
+    """
+    :param objects: the objects of the .jsonl text (see `scan_objects`), for the type of the object the line is in
+    :param line: the text of the line, `line_number` its number (starting at 1)
+    :return: the name and the explanation of the property whose key is at a column, None if there is none or it is not known
+    """
+    for token in tokenize_line(line, Language.JSONL):
+        if token.kind == TokenKind.KEY and token.start <= column <= token.end:
+            name = token.text(line).strip('"')
+            found = object_at_line(objects, line_number)
+            obj_type = None if found is None or found.get("obj") is None else (found.get("obj").value or "").strip('"')
+            text = describe_property(name, obj_type)
+            return None if text is None else (name, text)
+    return None

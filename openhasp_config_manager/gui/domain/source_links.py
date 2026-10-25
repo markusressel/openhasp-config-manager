@@ -3,7 +3,7 @@
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Optional, Set
+from typing import Iterable, List, Optional, Set
 
 from openhasp_config_manager.gui.domain.source_syntax import Language
 
@@ -36,6 +36,16 @@ def plate_names(path: Path, config_dir: Path) -> Set[str]:
     """
     parts = path.relative_to(config_dir).parts
     return {"_".join(parts[index:]) for index in range(len(parts))}
+
+
+def link_targets(config_dir: Path) -> List[Path]:
+    """:return: the files of a config directory a reference can be to, without hidden folders and files"""
+    return [
+        file
+        for suffix in ("*.jsonl", "*.cmd")
+        for file in config_dir.rglob(suffix)
+        if not any(part.startswith(".") for part in file.relative_to(config_dir).parts)
+    ]
 
 
 def resolve_link(target: str, files: Iterable[Path], config_dir: Path, near: Path) -> Optional[Path]:

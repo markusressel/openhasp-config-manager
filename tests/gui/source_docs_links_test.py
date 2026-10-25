@@ -1,7 +1,8 @@
 from pathlib import Path
 
-from openhasp_config_manager.gui.domain.source_docs import describe_property
-from openhasp_config_manager.gui.domain.source_links import find_links, link_at, plate_names, resolve_link
+from openhasp_config_manager.gui.domain.source_docs import describe_property, documentation_at
+from openhasp_config_manager.gui.domain.source_links import find_links, link_at, link_targets, plate_names, resolve_link
+from openhasp_config_manager.gui.domain.source_objects import scan_objects
 from openhasp_config_manager.gui.domain.source_syntax import Language
 from tests import TestBase
 
@@ -35,6 +36,21 @@ class TestDocs(TestBase):
         assert describe_property("12") is None
 
 
+class TestDocumentationAt(TestBase):
+    def test_the_key_at_the_column_with_the_parts_of_its_object(self):
+        text = '{"obj": "switch",\n "bg_color20": "red", "nope": 1}'
+        objects = scan_objects(text)
+        line = text.split("\n")[1]
+
+        name, doc = documentation_at(objects, line, 2, line.index("bg_color20"))
+        assert name == "bg_color20" and "part 2 is the knob" in doc
+        assert documentation_at(objects, line, 2, line.index("red")) is None
+        assert documentation_at(objects, line, 2, line.index("nope")) is None
+
+    def test_outside_of_objects(self):
+        assert documentation_at([], '"x": 1', 1, 1)[0] == "x"
+
+
 class TestLinks(TestBase):
     def test_find_links(self):
         line = "run L:/devices_plate1_pages.jsonl; page 1"
@@ -63,3 +79,12 @@ class TestLinks(TestBase):
         assert resolve_link("pages.jsonl", files, root, root / "devices" / "b" / "boot.cmd") == files[1]
         assert resolve_link("devices_a_pages.jsonl", files, root, root / "devices" / "b" / "boot.cmd") == files[0]
         assert resolve_link("nope.jsonl", files, root, root / "boot.cmd") is None
+
+    def test_link_targets_leave_out_hidden_folders(self, tmp_path):
+        for name in ("common/a.jsonl", "devices/p/boot.cmd", "devices/p/vars.yaml", ".git/b.jsonl", "devices/.c.jsonl"):
+            (tmp_path / name).parent.mkdir(parents=True, exist_ok=True)
+            (tmp_path / name).write_text("")
+        assert sorted(path.relative_to(tmp_path).as_posix() for path in link_targets(tmp_path)) == [
+            "common/a.jsonl",
+            "devices/p/boot.cmd",
+        ]

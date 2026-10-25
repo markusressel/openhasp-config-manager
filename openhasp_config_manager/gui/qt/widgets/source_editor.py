@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import QFrame, QInputDialog, QMessageBox, QStackedLayout, Q
 from openhasp_config_manager.gui.dimensions import UiDimensions
 from openhasp_config_manager.gui.domain.source_buffers import DiskChange, SourceBuffer, SourceBuffers, read_text
 from openhasp_config_manager.gui.domain.source_issues import SourceIssue
-from openhasp_config_manager.gui.domain.source_links import resolve_link
+from openhasp_config_manager.gui.domain.source_links import link_targets, resolve_link
 from openhasp_config_manager.gui.domain.source_syntax import language_of
 from openhasp_config_manager.gui.qt.components import UiComponents
 from openhasp_config_manager.gui.qt.widgets.code_editor import CodeEditor
@@ -377,13 +377,7 @@ class SourceEditorWidget(QWidget):
     def _open_link(self, path: Path, target: str):
         """Ctrl+click on `L:/pages.jsonl`: open the file with that name on the plate."""
         config_dir = self._config_dir.resolve()
-        files = [
-            file
-            for suffix in ("*.jsonl", "*.cmd")
-            for file in config_dir.rglob(suffix)
-            if not any(part.startswith(".") for part in file.relative_to(config_dir).parts)
-        ]
-        found = resolve_link(target, files, config_dir, path)
+        found = resolve_link(target, link_targets(config_dir), config_dir, path)
         if found is None:
             self.show_message(f"No file in the config directory is L:/{target} on the plate")
             return

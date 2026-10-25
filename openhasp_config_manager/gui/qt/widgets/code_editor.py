@@ -21,14 +21,14 @@ from PyQt6.QtWidgets import QCompleter, QMenu, QPlainTextEdit, QTextEdit, QToolT
 
 from openhasp_config_manager.gui.domain.problems import Severity
 from openhasp_config_manager.gui.domain.source_completion import OBJECT_PROPERTIES, complete, completion_context
-from openhasp_config_manager.gui.domain.source_docs import describe_property
+from openhasp_config_manager.gui.domain.source_docs import documentation_at
 from openhasp_config_manager.gui.domain.source_edit import INDENT, indent_for_new_line, matching_bracket, toggle_comment
 from openhasp_config_manager.gui.domain.source_format import format_text
 from openhasp_config_manager.gui.domain.source_issues import SourceIssue, find_source_issues
 from openhasp_config_manager.gui.domain.source_links import Link, link_at
 from openhasp_config_manager.gui.domain.source_objects import SourceObject, foldable, object_at_line, scan_objects
 from openhasp_config_manager.gui.domain.source_rename import id_at_line, rename_object_id
-from openhasp_config_manager.gui.domain.source_syntax import Language, TokenKind, tokenize_line
+from openhasp_config_manager.gui.domain.source_syntax import Language
 from openhasp_config_manager.gui.qt.source_highlighter import SourceHighlighter
 from openhasp_config_manager.gui.qt.theme import current_colors
 
@@ -590,19 +590,14 @@ class CodeEditor(QPlainTextEdit):
 
     def _documentation_at(self, position) -> Optional[str]:
         """:return: the explanation of the property under the mouse, as rich text"""
+        if self.language != Language.JSONL:
+            return None
         cursor = self.cursorForPosition(position)
-        line, column = cursor.block().text(), cursor.positionInBlock()
-        for token in tokenize_line(line, self.language):
-            if token.kind == TokenKind.KEY and token.start <= column <= token.end and self.language == Language.JSONL:
-                name = token.text(line).strip('"')
-                found = object_at_line(self.objects(), cursor.blockNumber() + 1)
-                kind = None if found is None or found.get("obj") is None else (found.get("obj").value or "").strip('"')
-                text = describe_property(name, kind)
-                if text is not None:
-                    return f"<b>{html.escape(name)}</b><br>" + _CODE.sub(r"<code>\1</code>", html.escape(text)).replace(
-                        "\n", "<br>"
-                    )
-        return None
+        found = documentation_at(self.objects(), cursor.block().text(), cursor.blockNumber() + 1, cursor.positionInBlock())
+        if found is None:
+            return None
+        name, text = found
+        return f"<b>{html.escape(name)}</b><br>" + _CODE.sub(r"<code>\1</code>", html.escape(text)).replace("\n", "<br>")
 
     def contextMenuEvent(self, event):
         menu: QMenu = self.createStandardContextMenu()

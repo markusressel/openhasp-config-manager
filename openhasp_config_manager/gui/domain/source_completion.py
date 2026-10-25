@@ -3,9 +3,11 @@
 from dataclasses import dataclass
 from typing import Iterable, List, Optional
 
+from openhasp_config_manager.gui.domain.source_docs import PROPERTY_DOCS
 from openhasp_config_manager.gui.domain.source_syntax import Language, TokenKind, tokenize_line
 
-# the properties of openHASP objects (https://www.openhasp.com/latest/design/objects/), for the keys of an object
+# the properties of openHASP objects (https://www.openhasp.com/latest/design/objects/), for the keys of an object, and every
+# property that has an explanation
 OBJECT_PROPERTIES = sorted(
     {
         "page", "id", "obj", "parentid", "groupid", "x", "y", "w", "h", "action", "text", "align", "mode", "val", "min", "max",
@@ -21,6 +23,7 @@ OBJECT_PROPERTIES = sorted(
         "radius_div", "start_angle", "end_angle", "rotation", "type", "line_width02", "line_color02", "line_width03",
         "line_color03", "points", "scale", "pad_all",
     }
+    | PROPERTY_DOCS.keys()
 )  # fmt: skip
 
 

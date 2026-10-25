@@ -5,7 +5,6 @@ A buffer remembers the text of the file as it was on disk (`disk_text`) when it 
 changes (`text` differs) from those of someone else (the file differs from `disk_text`).
 """
 
-import hashlib
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -29,10 +28,6 @@ def read_text(path: Path) -> Optional[str]:
         return path.read_text(encoding="utf-8")
     except FileNotFoundError:
         return None
-
-
-def _hash(text: Optional[str]) -> Optional[str]:
-    return None if text is None else hashlib.sha256(text.encode()).hexdigest()
 
 
 @dataclass
@@ -59,7 +54,7 @@ class SourceBuffer:
     def on_disk_changed(self) -> DiskChange:
         """Look at the file after a change event, and follow it if the buffer has no changes of its own."""
         current = read_text(self.path)
-        if _hash(current) == _hash(self.disk_text):
+        if current == self.disk_text:
             return DiskChange.NONE
         if current is not None and current == self.text:
             # someone saved what the buffer has

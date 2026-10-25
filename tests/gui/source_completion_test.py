@@ -35,3 +35,12 @@ class TestComplete(TestBase):
     def test_variables_exclude_the_typed_word(self):
         context = CompletionContext("variable", "a.b", 0)
         assert complete(context, variables=["a.b", "a.bc", "a.c", "x"]) == ["a.bc"]
+
+
+class TestProperties(TestBase):
+    def test_documented_properties_are_completed(self):
+        from openhasp_config_manager.gui.domain.source_completion import OBJECT_PROPERTIES
+        from openhasp_config_manager.gui.domain.source_docs import PROPERTY_DOCS
+
+        assert set(PROPERTY_DOCS) <= set(OBJECT_PROPERTIES)
+        assert "tag" in complete(CompletionContext("property", "ta", 1))
