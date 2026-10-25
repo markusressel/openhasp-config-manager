@@ -8,7 +8,8 @@ from PyQt6.QtTest import QTest  # noqa: E402
 
 from openhasp_config_manager.gui.domain.problems import Severity  # noqa: E402
 from openhasp_config_manager.gui.domain.source_syntax import Language  # noqa: E402
-from openhasp_config_manager.gui.qt.widgets.code_editor import CodeEditor, Marker  # noqa: E402
+from openhasp_config_manager.gui.domain.source_issues import SourceIssue  # noqa: E402
+from openhasp_config_manager.gui.qt.widgets.code_editor import CodeEditor  # noqa: E402
 from tests import TestBase  # noqa: E402
 
 
@@ -55,7 +56,7 @@ class TestText(TestBase):
     def test_issues_are_found(self, editor):
         editor.set_text('{"page": }')
         assert [(m.line, m.severity) for m in editor.issues] == [(1, Severity.ERROR)]
-        editor.set_app_markers([Marker(1, 0, 1, Severity.WARNING, "outside")])
+        editor.set_app_markers([SourceIssue(1, 0, 1, Severity.WARNING, "outside")])
         assert len(editor.extraSelections()) >= 3
         editor.set_text('{"page": 1}')
         assert editor.issues == []

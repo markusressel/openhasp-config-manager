@@ -1,0 +1,140 @@
+from pathlib import Path
+from typing import Callable, Dict, List, Optional
+
+from PyQt6 import QtCore
+
+from openhasp_config_manager.gui.domain.gui_state import relative
+from openhasp_config_manager.gui.domain.plate_session import PlateSession
+from openhasp_config_manager.gui.domain.source_issues import SourceIssue
+from openhasp_config_manager.gui.qt.ui_session_store import UiSessionStore
+from openhasp_config_manager.gui.qt.widgets.code_view import CodeView
+from openhasp_config_manager.gui.qt.widgets.pagelayout.page_layout_editor import PageLayoutEditorWidget
+from openhasp_config_manager.gui.qt.widgets.source_editor import SourceEditorWidget
+
+
+class SourceEditorSync(QtCore.QObject):
+    """
+    Keeps the text editor and the draft of the page layout editor in step: selecting an object in the preview shows where it
+    is written, moving the cursor into an object selects it, the problems of the page are marked in their files, and the open
+    tabs are remembered for the next start. Saving a tab is up to the window (it reloads the draft).
+    """
+
+    def __init__(
+        self,
+        source_editor: SourceEditorWidget,
+        code_view: CodeView,
+        page_editor: PageLayoutEditorWidget,
+        session: Callable[[], Optional[PlateSession]],
+        ui_session: UiSessionStore,
+        config_dir: Path,
+        parent: Optional[QtCore.QObject] = None,
+    ):
+        """:param session: the draft of the selected device, None if there is none"""
+        super().__init__(parent)
+        self._source_editor = source_editor
+        self._code_view = code_view
+        self._page_editor = page_editor
+        self._session = session
+        self._ui_session = ui_session
+        self._config_dir = config_dir
+        self._restoring_open_files = False
+
+        page_editor.stateChanged.connect(self.update_markers)
+        page_editor.page_preview_widget.selectionChanged.connect(self._reveal_selection)
+        source_editor.objectAtCursorChanged.connect(self._select_object_of_cursor)
+        source_editor.stateChanged.connect(self._remember_open_files)
+        source_editor.set_variables(self.variables_of_file)
+
+    def open_file(self, path: Path):
+        """Show a file in the text editor, for editing (not as a preview)."""
+        self._code_view.show_source()
+        self._source_editor.open_file(path)
+
+    def variables_of_file(self, path: Path) -> List[str]:
+        """:return: the template variables a file of the draft can use, for the completion"""
+        session = self._loaded_session()
+        component = None if session is None else session.component_at(path)
+        return [] if component is None else session.variable_names(component.key)
+
+    # --- open tabs ---
+
+    def restore_open_files(self):
+        """Open the files of the last session that still exist."""
+        session = self._ui_session.session
+        self._restoring_open_files = True
+        try:
+            for name in session.open_files:
+                path = self._config_dir / name
+                if path.is_file():
+                    self._source_editor.open_file(path, focus=False)
+            current = None if session.current_file is None else self._config_dir / session.current_file
+            if current is not None and current.is_file():
+                self._source_editor.open_file(current, focus=False)
+        finally:
+            self._restoring_open_files = False
+        self._remember_open_files()
+
+    def _remember_open_files(self):
+        if self._restoring_open_files:
+            return
+        current = self._source_editor.current_file
+        session = self._ui_session.session
+        session.open_files = [relative(path, self._config_dir) for path in self._source_editor.open_files]
+        session.current_file = None if current is None else relative(current, self._config_dir)
+        self._ui_session.save()
+
+    # --- objects ---
+
+    def _loaded_session(self) -> Optional[PlateSession]:
+        session = self._session()
+        return session if session is not None and session.is_loaded else None
+
+    def _shown_session(self) -> Optional[PlateSession]:
+        """:return: the draft the page editor shows, None while it shows none or another one (loading)"""
+        session = self._loaded_session()
+        return session if session is not None and self._page_editor.session is session else None
+
+    def _reveal_selection(self, selected: list):
+        """Selecting an object in the preview shows where it is written, if the source is visible."""
+        session = self._session()
+        if len(selected) != 1 or not self._code_view.shows_source or session is None or session.is_dirty:
+            return
+        obj = selected[0].obj_data
+        line = session.line_of(obj)
+        if line is not None and not self._cursor_is_in_object(session, obj):
+            self._source_editor.open_file(session.component_of(obj).path, line, focus=False, preview=True)
+
+    def _cursor_is_in_object(self, session: PlateSession, obj: Dict) -> bool:
+        """Whether the cursor of the text editor is already in the lines of an object (so it doesn't jump to its first line)."""
+        editor = self._source_editor.editor_of(session.component_of(obj).path)
+        current = None if editor is None else editor.object_at_cursor()
+        return current is not None and current.index == session.source_index(obj)
+
+    def _select_object_of_cursor(self, path: Path, index: int):
+        """The cursor of the text editor is in an object: select it in the preview, on its page."""
+        session = self._shown_session()
+        if index < 0 or session is None:
+            return
+        component = session.component_at(path)
+        buffer = self._source_editor.buffer_of(path)
+        # the text must be the one the objects of the draft come from, or the indices are not the same
+        if component is None or buffer is None or buffer.text != component.content:
+            return
+        obj = session.object_of_source(component.key, index)
+        if obj is None:
+            return
+        page = obj.get("page")
+        if isinstance(page, int) and page > 0 and page != self._page_editor.current_index:
+            self._page_editor.set_page_index(page)
+        self._page_editor.page_preview_widget.select_object(obj)
+
+    def update_markers(self):
+        """The problems of the open page are shown in the editors of their files."""
+        session = self._shown_session()
+        markers: Dict[Path, List[SourceIssue]] = {}
+        for problem in [] if session is None else self._page_editor.problems:
+            line = session.line_of(problem.obj)
+            if line is not None:
+                path = session.component_of(problem.obj).path.resolve()
+                markers.setdefault(path, []).append(SourceIssue(line, 0, 1, problem.severity, problem.message))
+        self._source_editor.set_markers(markers)

@@ -10,6 +10,8 @@ from enum import Enum, StrEnum
 from pathlib import Path
 from typing import List, Optional
 
+from openhasp_config_manager.processing.template_rendering import template_spans
+
 
 class Language(Enum):
     JSONL = "jsonl"
@@ -68,42 +70,8 @@ def tokenize_line(line: str, language: Language) -> List[Token]:
 
 
 def find_templates(text: str, offset: int = 0) -> List[Token]:
-    """
-    :return: the templates in a text, as (start, end) with their delimiters. Templates inside of templates belong to the outer one
-        (`{{ p{{ page }}b1.x }}` is one). A template that is not closed reaches to the end of the text.
-    """
-    result = []
-    i = 0
-    while i < len(text):
-        if text.startswith("{{", i):
-            end = _end_of_expression(text, i)
-        elif text.startswith(("{%", "{#"), i):
-            closing = "%}" if text[i + 1] == "%" else "#}"
-            found = text.find(closing, i + 2)
-            end = len(text) if found < 0 else found + 2
-        else:
-            i += 1
-            continue
-        result.append(Token(offset + i, offset + end, TokenKind.TEMPLATE))
-        i = end
-    return result
-
-
-def _end_of_expression(text: str, start: int) -> int:
-    depth = 0
-    i = start
-    while i < len(text):
-        if text.startswith("{{", i):
-            depth += 1
-            i += 2
-        elif text.startswith("}}", i):
-            depth -= 1
-            i += 2
-            if depth == 0:
-                return i
-        else:
-            i += 1
-    return len(text)
+    """:return: the templates in a text (see `template_spans`), shifted by `offset`"""
+    return [Token(offset + start, offset + end, TokenKind.TEMPLATE) for start, end in template_spans(text)]
 
 
 def _tokenize_jsonl(line: str) -> List[Token]:

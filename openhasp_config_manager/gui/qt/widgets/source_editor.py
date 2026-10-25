@@ -8,10 +8,11 @@ from PyQt6.QtWidgets import QFrame, QInputDialog, QMessageBox, QStackedLayout, Q
 
 from openhasp_config_manager.gui.dimensions import UiDimensions
 from openhasp_config_manager.gui.domain.source_buffers import DiskChange, SourceBuffer, SourceBuffers, read_text
+from openhasp_config_manager.gui.domain.source_issues import SourceIssue
 from openhasp_config_manager.gui.domain.source_links import resolve_link
 from openhasp_config_manager.gui.domain.source_syntax import language_of
 from openhasp_config_manager.gui.qt.components import UiComponents
-from openhasp_config_manager.gui.qt.widgets.code_editor import CodeEditor, Marker
+from openhasp_config_manager.gui.qt.widgets.code_editor import CodeEditor
 from openhasp_config_manager.gui.qt.widgets.find_bar import FindBar
 
 LOGGER = logging.getLogger(__name__)
@@ -95,7 +96,7 @@ class SourceEditorWidget(QWidget):
         # the file opened by selecting an object: replaced by the next one until the user edits it or opens it for real
         self._preview_tab: Optional[Path] = None
         self._variables: Callable[[Path], List[str]] = lambda path: []
-        self._markers: Dict[Path, List[Marker]] = {}
+        self._markers: Dict[Path, List[SourceIssue]] = {}
         self._word_wrap = False
         self._show_whitespace = False
         # asks whether to overwrite a file that changed on disk; replaced in tests
@@ -329,7 +330,7 @@ class SourceEditorWidget(QWidget):
 
     # --- markers ---
 
-    def set_markers(self, markers: Dict[Path, List[Marker]]):
+    def set_markers(self, markers: Dict[Path, List[SourceIssue]]):
         """The problems the app found, per file (resolved paths), shown in the editors of those files."""
         self._markers = markers
         for path, page in self._pages.items():

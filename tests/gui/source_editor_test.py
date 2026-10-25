@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import QMessageBox, QWidget  # noqa: E402
 
 from openhasp_config_manager.gui.domain.problems import Severity  # noqa: E402
 from openhasp_config_manager.gui.domain.source_buffers import DiskChange  # noqa: E402
-from openhasp_config_manager.gui.qt.widgets.code_editor import Marker  # noqa: E402
+from openhasp_config_manager.gui.domain.source_issues import SourceIssue  # noqa: E402
 from openhasp_config_manager.gui.qt.widgets.code_view import CodeView, CodeViewMode  # noqa: E402
 from openhasp_config_manager.gui.qt.widgets.source_editor import SourceEditorWidget  # noqa: E402
 from tests import TestBase  # noqa: E402
@@ -248,7 +248,7 @@ class TestChangesOnDisk(TestBase):
 
 class TestMarkersAndOptions(TestBase):
     def test_markers_reach_open_and_later_opened_files(self, widget, folder):
-        marker = Marker(1, 0, 1, Severity.WARNING, "outside of the screen")
+        marker = SourceIssue(1, 0, 1, Severity.WARNING, "outside of the screen")
         widget.open_file(folder / "a.jsonl")
         widget.set_markers({(folder / "a.jsonl").resolve(): [marker], (folder / "b.jsonl").resolve(): [marker]})
         assert widget.current_editor._app_markers == [marker]

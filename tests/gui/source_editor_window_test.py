@@ -157,11 +157,11 @@ class TestMarkersAndCompletion(TestBase):
         assert "outside of the screen" in marker.message
 
     def test_variables_of_the_files_of_the_device_are_offered(self, window, editor_file):
-        names = window._variables_of_file(editor_file)
+        names = window.source_sync.variables_of_file(editor_file)
         assert names
         assert all(not name.startswith("{{") for name in names)
-        assert window._variables_of_file(editor_file.parent / "other.jsonl") == []
-        assert window._variables_of_file(editor_file.parent.parent.parent / "nothing.yaml") == []
+        assert window.source_sync.variables_of_file(editor_file.parent / "other.jsonl") == []
+        assert window.source_sync.variables_of_file(editor_file.parent.parent.parent / "nothing.yaml") == []
 
 
 class TestSessionAndState(TestBase):
@@ -175,7 +175,7 @@ class TestSessionAndState(TestBase):
 
         window.ui_session.session.open_files = ["devices/test_device/editor.jsonl", "gone.jsonl"]
         window.ui_session.session.current_file = "devices/test_device/editor.jsonl"
-        window._restore_open_files()
+        window.source_sync.restore_open_files()
         assert window.source_editor.open_files == [editor_file]
         assert window.source_editor.current_file == editor_file
 

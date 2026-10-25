@@ -1,6 +1,6 @@
 """
 All Jinja2 handling of the config files lives here: rendering a template, resolving the templates of a dict that refer to
-each other (`render_dict_recursive`), and asking what a template needs or is missing. Everything else (deployment, GUI,
+each other (`render_dict_recursive`), asking what a template needs or is missing, and where the templates of a text are. Everything else (deployment, GUI,
 `check`) calls these functions instead of using Jinja2 directly, so they all agree on what a template means.
 
 Templates in the config files are Jinja2 with some differences:
@@ -184,6 +184,66 @@ def check_template(content: str, template_vars: Dict[str, Any]) -> Optional[str]
     except TemplateError as ex:
         return f"Can't render: {ex.message}"
     return None
+
+
+def template_syntax_error(content: str) -> Optional[str]:
+    """
+    Check only the syntax of the templates in a text, without variables (e.g. while it is typed). Templates inside of templates
+    are checked on their own, and stand for a name in the template around them (`{{ p{{ page }}b1.x }}` is valid).
+    :return: why the text can't be parsed, or None if it can
+    """
+    try:
+        for _ in range(content.count("{{")):
+            nested = _find_nested_template(content)
+            if nested is None:
+                break
+            start, end = nested
+            _compile(content[start:end], False)
+            content = content[:start] + "_" + content[end:]
+        _compile(content, False)
+    except TemplateSyntaxError as ex:
+        return f"Invalid template: {ex.message}"
+    return None
+
+
+def template_spans(text: str) -> List[Tuple[int, int]]:
+    """
+    :return: where the templates of a text are, as (start, end) with their delimiters, in order. A template inside of a
+        template belongs to the outer one (`{{ p{{ page }}b1.x }}` is one). A template that is not closed reaches to the end.
+    """
+    result = []
+    i = 0
+    while i < len(text):
+        if text.startswith("{{", i):
+            end = _end_of_expression(text, i)
+        elif text.startswith(("{%", "{#"), i):
+            closing = "%}" if text[i + 1] == "%" else "#}"
+            found = text.find(closing, i + 2)
+            end = len(text) if found < 0 else found + 2
+        else:
+            i += 1
+            continue
+        result.append((i, end))
+        i = end
+    return result
+
+
+def _end_of_expression(text: str, start: int) -> int:
+    """:return: the index after the `}}` that closes the `{{` at `start` (counting nested ones), the end of the text if none"""
+    depth = 0
+    i = start
+    while i < len(text):
+        if text.startswith("{{", i):
+            depth += 1
+            i += 2
+        elif text.startswith("}}", i):
+            depth -= 1
+            i += 2
+            if depth == 0:
+                return i
+        else:
+            i += 1
+    return len(text)
 
 
 _OBJECT_NAME = re.compile(r"\bp\d+b\d+\b")

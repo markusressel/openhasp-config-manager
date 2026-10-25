@@ -90,21 +90,12 @@ class TestJsonl(TestBase):
 
 
 class TestTemplates(TestBase):
-    def test_nested_templates_are_one(self):
-        [token] = find_templates("{{ p{{ page }}b1.x }}")
-        assert (token.start, token.end) == (0, 21)
-
-    def test_statement_and_comment_templates(self):
-        text = "a {% if x %}b{% endif %} {# c #}"
-        assert [text[t.start : t.end] for t in find_templates(text)] == ["{% if x %}", "{% endif %}", "{# c #}"]
-
-    def test_unclosed_templates_reach_the_end(self):
-        assert [(t.start, t.end) for t in find_templates("a {{ b")] == [(2, 6)]
-        assert [(t.start, t.end) for t in find_templates("a {% b")] == [(2, 6)]
-        assert [(t.start, t.end) for t in find_templates("a {{ {{ b }}")] == [(2, 12)]
-
-    def test_offset(self):
-        assert [(t.start, t.end) for t in find_templates("{{ a }}", offset=5)] == [(5, 12)]
+    # where templates are is tested in template_rendering_test (`template_spans`)
+    def test_templates_are_tokens_at_their_offset(self):
+        assert [(t.start, t.end, t.kind) for t in find_templates("{{ a }} {% b %}", offset=5)] == [
+            (5, 12, TokenKind.TEMPLATE),
+            (13, 20, TokenKind.TEMPLATE),
+        ]
 
 
 class TestCmd(TestBase):

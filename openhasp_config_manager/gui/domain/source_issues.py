@@ -12,18 +12,21 @@ from typing import Dict, List
 import yaml
 
 from openhasp_config_manager.gui.domain.problems import Severity
-from openhasp_config_manager.gui.domain.source_objects import scan_objects
-from openhasp_config_manager.gui.domain.source_rename import pages_of
+from openhasp_config_manager.gui.domain.source_objects import pages_of, scan_objects
 from openhasp_config_manager.gui.domain.source_syntax import Language, TokenKind, tokenize_line
-from openhasp_config_manager.processing.template_rendering import check_template
+from openhasp_config_manager.processing.template_rendering import template_syntax_error
 
 _OBJECT_START = re.compile(r"^(?!\n)\s*(?=\{)", re.MULTILINE)
 _TRAILING_COMMA = re.compile(r",(\s*})")
-_INVALID_TEMPLATE = "Invalid template"
 
 
 @dataclass(frozen=True)
 class SourceIssue:
+    """
+    Something to point out in the text of a file: shown in the gutter of the text editor, underlined, and explained on hover.
+    Problems the app finds in the objects of a file are shown the same way.
+    """
+
     # starts at 1, like the line numbers of the editor
     line: int
     # starts at 0
@@ -123,7 +126,7 @@ def _template_issues(text: str, language: Language) -> List[SourceIssue]:
             if token.kind != TokenKind.TEMPLATE:
                 continue
             # only the syntax: the variables are not known here
-            error = check_template(token.text(line), {})
-            if error is not None and error.startswith(_INVALID_TEMPLATE):
+            error = template_syntax_error(token.text(line))
+            if error is not None:
                 issues.append(SourceIssue(number, token.start, token.end - token.start, Severity.ERROR, error))
     return issues

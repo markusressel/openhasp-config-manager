@@ -51,16 +51,15 @@ from openhasp_config_manager.gui.domain.gui_state import (
 )
 from openhasp_config_manager.gui.domain.page_objects import get_navigable_page_indices
 from openhasp_config_manager.gui.domain.plate_session import PlateSession
-from openhasp_config_manager.gui.domain.problems import Severity as ProblemSeverity
 from openhasp_config_manager.gui.qt.components import UiComponents, ThemedIcons
 from openhasp_config_manager.gui.qt.config_watcher import ConfigWatcher
 from openhasp_config_manager.gui.qt.gui_state_publisher import GuiStatePublisher
+from openhasp_config_manager.gui.qt.source_sync import SourceEditorSync
 from openhasp_config_manager.gui.qt.connection import ConnectionController
 from openhasp_config_manager.gui.qt.operations import OperationStatus, error_text, run_busy
 from openhasp_config_manager.gui.qt.ui_session_store import UiSessionStore
 from openhasp_config_manager.gui.qt.theme import ThemeMode, apply_theme, current_mode, current_colors
 from openhasp_config_manager.gui.qt.async_bridge import run_async
-from openhasp_config_manager.gui.qt.widgets.code_editor import Marker
 from openhasp_config_manager.gui.qt.widgets.code_view import CodeView
 from openhasp_config_manager.gui.qt.widgets.device_list import DeviceListWidget
 from openhasp_config_manager.gui.qt.widgets.file_tree import FileTreeWidget
@@ -205,7 +204,6 @@ class MainWindow(QMainWindow):
         self._disk_changes: List[str] = []
         # select the device of the last session once the devices are loaded the first time
         self._restore_selection = True
-        self._restoring_open_files = False
         # what is restored on the next start: the selected device, the file for new objects, ...
         self.ui_session = UiSessionStore(Path(config_manager.cfg_root), QSettings())
 
@@ -230,7 +228,7 @@ class MainWindow(QMainWindow):
         self.page_layout_editor_widget.action_edit_mode.toggled.connect(self._on_edit_mode_toggled)
         self.load_plates()
         self._start_watching_config_dir()
-        self._restore_open_files()
+        self.source_sync.restore_open_files()
         self._state_publisher.request()
 
     # --- layout ---
@@ -241,8 +239,6 @@ class MainWindow(QMainWindow):
         self.page_layout_editor_widget.dirtyChanged.connect(lambda dirty: self.status_bar.set_dirty(dirty))
         self.page_layout_editor_widget.dirtyChanged.connect(lambda _: self._update_draft_actions())
         self.page_layout_editor_widget.stateChanged.connect(self._state_publisher.request)
-        self.page_layout_editor_widget.stateChanged.connect(self._update_source_markers)
-        self.page_layout_editor_widget.page_preview_widget.selectionChanged.connect(self._reveal_selection_in_source)
         self.page_layout_editor_widget.dirtyChanged.connect(lambda _: self._state_publisher.request())
         self.page_layout_editor_widget.pageChanged.connect(lambda *_: self._state_publisher.request())
         self.addToolBar(self.page_layout_editor_widget.toolbar)
@@ -278,7 +274,6 @@ class MainWindow(QMainWindow):
         self.file_tree_widget = FileTreeWidget()
         self.file_tree_widget.highlightRequested.connect(editor.highlight_component)
         self.file_tree_widget.targetRequested.connect(editor.set_target_component)
-        self.file_tree_widget.openRequested.connect(self._open_in_editor)
         editor.selectedObjectComponentChanged.connect(self.file_tree_widget.reveal)
         editor.fileStateChanged.connect(self._update_file_tree_state)
 
@@ -297,23 +292,26 @@ class MainWindow(QMainWindow):
         self.splitDockWidget(self.devices_dock, self.preview_dock, Qt.Orientation.Horizontal)
 
         # right: the properties of the selected object
-        self.properties_dock = self._add_dock(
-            "Properties", "properties_dock", self.page_layout_editor_widget.property_editor
-        )
+        self.properties_dock = self._add_dock("Properties", "properties_dock", self.page_layout_editor_widget.property_editor)
         self.splitDockWidget(self.preview_dock, self.properties_dock, Qt.Orientation.Horizontal)
 
         # below the preview: the files as text (source), and the JSONL of the page (rendered)
         self.source_editor = SourceEditorWidget(self._cfg_root)
         self.source_editor.saved.connect(self._on_source_saved)
-        self.source_editor.objectAtCursorChanged.connect(self._select_object_of_cursor)
         self.source_editor.stateChanged.connect(self._state_publisher.request)
-        self.source_editor.stateChanged.connect(self._remember_open_files)
-        self.source_editor.openFailed.connect(
-            lambda path, message: self.status.failed.emit(f"Opening {path.name}", message)
-        )
-        self.source_editor.set_variables(self._variables_of_file)
+        self.source_editor.openFailed.connect(lambda path, message: self.status.failed.emit(f"Opening {path.name}", message))
         self.code_view = CodeView(self.source_editor, self.page_layout_editor_widget.jsonl_preview)
         self.code_view.modeChanged.connect(lambda _mode: self._state_publisher.request())
+        self.source_sync = SourceEditorSync(
+            self.source_editor,
+            self.code_view,
+            self.page_layout_editor_widget,
+            lambda: self.session,
+            self.ui_session,
+            self._cfg_root,
+            parent=self,
+        )
+        self.file_tree_widget.openRequested.connect(self.source_sync.open_file)
         self.jsonl_dock = self._add_dock("Code", "jsonl_dock", self.code_view)
         self.splitDockWidget(self.preview_dock, self.jsonl_dock, Qt.Orientation.Vertical)
         self._size_docks()
@@ -338,7 +336,9 @@ class MainWindow(QMainWindow):
 
     def _size_docks(self):
         self.resizeDocks([self.preview_dock, self.jsonl_dock], [520, 280], Qt.Orientation.Vertical)
-        self.resizeDocks([self.devices_dock, self.preview_dock, self.properties_dock], [280, 700, 360], Qt.Orientation.Horizontal)
+        self.resizeDocks(
+            [self.devices_dock, self.preview_dock, self.properties_dock], [280, 700, 360], Qt.Orientation.Horizontal
+        )
 
     def _add_dock(self, title: str, name: str, widget: QWidget, closable: bool = True) -> QDockWidget:
         dock = QDockWidget(title, self)
@@ -506,9 +506,7 @@ class MainWindow(QMainWindow):
         return [f"{device} ({cmd})" for (device, cmd), session in self.sessions.items() if session.is_dirty]
 
     def closeEvent(self, event):
-        dirty = self._dirty_draft_names() + [
-            f"{path.name} (text editor)" for path in self.source_editor.dirty_files()
-        ]
+        dirty = self._dirty_draft_names() + [f"{path.name} (text editor)" for path in self.source_editor.dirty_files()]
         if dirty and not self._discard_drafts_on_close:
             answer = QMessageBox.question(
                 self,
@@ -672,95 +670,12 @@ class MainWindow(QMainWindow):
 
     # --- text editor ---
 
-    def _remember_open_files(self):
-        if self._restoring_open_files:
-            return
-        current = self.source_editor.current_file
-        session = self.ui_session.session
-        session.open_files = [relative(path, self._cfg_root) for path in self.source_editor.open_files]
-        session.current_file = None if current is None else relative(current, self._cfg_root)
-        self.ui_session.save()
-
-    def _restore_open_files(self):
-        """Open the files of the last session that still exist."""
-        session = self.ui_session.session
-        self._restoring_open_files = True
-        try:
-            for name in session.open_files:
-                path = self._cfg_root / name
-                if path.is_file():
-                    self.source_editor.open_file(path, focus=False)
-            current = None if session.current_file is None else self._cfg_root / session.current_file
-            if current is not None and current.is_file():
-                self.source_editor.open_file(current, focus=False)
-        finally:
-            self._restoring_open_files = False
-        self._remember_open_files()
-
-    def _open_in_editor(self, path: Path):
-        self.code_view.show_source()
-        self.source_editor.open_file(path)
-
     def _on_source_saved(self, path: Path, text: str):
         """A file was saved in the text editor: the pages follow it, like after a change on disk by someone else."""
         self._own_writes.written(path.resolve(), text)
         self.status.succeeded.emit(f"Saved {path.name}")
         if self.device is not None:
             self._apply_changes_to_draft({path.resolve()})
-
-    def _variables_of_file(self, path: Path) -> List[str]:
-        session = self.session
-        if session is None or not session.is_loaded:
-            return []
-        component = next((c for c in session.components if c.path.resolve() == path.resolve()), None)
-        return [] if component is None else session.variable_names(component.key)
-
-    def _reveal_selection_in_source(self, selected: list):
-        """Selecting an object in the preview shows where it is written, if the source is visible."""
-        session = self.session
-        if len(selected) != 1 or not self.code_view.shows_source or session is None or session.is_dirty:
-            return
-        location = describe_object(session, selected[0].obj_data, self._cfg_root)
-        if location["line"] is not None and not self._cursor_is_in_object(session, selected[0].obj_data):
-            self.source_editor.open_file(self._cfg_root / location["file"], location["line"], focus=False, preview=True)
-
-    def _cursor_is_in_object(self, session: PlateSession, obj: Dict) -> bool:
-        """Whether the cursor of the text editor is already in the lines of an object (so it doesn't jump to its first line)."""
-        path = session.component_of(obj).path.resolve()
-        editor = self.source_editor.editor_of(path)
-        current = None if editor is None else editor.object_at_cursor()
-        return current is not None and current.index == session.source_index(obj)
-
-    def _select_object_of_cursor(self, path: Path, index: int):
-        """The cursor of the text editor is in an object: select it in the preview, on its page."""
-        session = self.session
-        if index < 0 or session is None or not session.is_loaded or self.page_layout_editor_widget.session is not session:
-            return
-        component = next((c for c in session.components if c.path.resolve() == path.resolve()), None)
-        buffer = self.source_editor.buffer_of(path)
-        # the text must be the one the objects of the draft come from, or the indices are not the same
-        if component is None or buffer is None or buffer.text != component.content:
-            return
-        obj = session.object_of_source(component.key, index)
-        if obj is None:
-            return
-        editor = self.page_layout_editor_widget
-        page = obj.get("page")
-        if isinstance(page, int) and page > 0 and page != editor.current_index:
-            editor.set_page_index(page)
-        editor.page_preview_widget.select_object(obj)
-
-    def _update_source_markers(self):
-        """The problems of the open page are shown in the editors of their files."""
-        session = self.session
-        markers: Dict[Path, List[Marker]] = {}
-        if session is not None and session.is_loaded and self.page_layout_editor_widget.session is session:
-            for problem in describe_problems(session, self.page_layout_editor_widget.problems, self._cfg_root):
-                if problem["line"] is not None:
-                    markers.setdefault((self._cfg_root / problem["file"]).resolve(), []).append(
-                        Marker(problem["line"], 0, 1, ProblemSeverity(problem["severity"]), problem["message"])
-                    )
-        self.source_editor.set_markers(markers)
 
     def _show_disk_changes(self, paths: Set[Path]):
         """Offer to reload, if the changes can affect the device of the draft."""
@@ -862,9 +777,7 @@ class MainWindow(QMainWindow):
             "check_command": f"openhasp-config-manager check -c {shlex.quote(str(root))} --json",
             "devices": [device.name for device in self.devices],
             "device": device,
-            "editor": describe_editor(
-                self.code_view.mode.value, self._editor_tabs(), self.source_editor.current_file, root
-            ),
+            "editor": describe_editor(self.code_view.mode.value, self._editor_tabs(), self.source_editor.current_file, root),
             "problems": problems,
             "load_error": self._load_error,
             "files_changed_on_disk": [] if self.disk_changes_banner.isHidden() else self._disk_changes,

@@ -32,6 +32,10 @@ class TestJsonl(TestBase):
         assert (issue.line, issue.column, issue.length) == (1, 12, 9)
         assert issue.message.startswith("Invalid template")
 
+    def test_invalid_template_around_a_nested_template(self):
+        [issue] = find_source_issues('{"x": "{{ p{{ page }}b1.x + }}"}', Language.JSONL)
+        assert issue.message.startswith("Invalid template")
+
     def test_unknown_variables_are_no_issue_here(self):
         assert _issues('{"text": "{{ nope.x }}", "w": "{{ {{ a }} }}"}') == []
 

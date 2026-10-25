@@ -14,6 +14,8 @@ from openhasp_config_manager.processing.template_rendering import (
     referenced_objects,
     render_nested_templates,
     render_template_or_keep,
+    template_spans,
+    template_syntax_error,
 )
 from tests import TestBase
 
@@ -300,6 +302,51 @@ class TestCheckTemplate(TestBase):
 
         # THEN
         assert check_template("{{ a }}", {}) == "Can't render: it broke"
+
+
+class TestTemplateSyntaxError(TestBase):
+    def test_valid_templates(self):
+        # THEN
+        assert template_syntax_error("plain") is None
+        assert template_syntax_error("{{ nope }}") is None
+        assert template_syntax_error("{{ p{{ page }}b1.x }}") is None
+        assert template_syntax_error("{{ {{ a }} + {{ b }} }}") is None
+        assert template_syntax_error("{% if a %}x{% endif %}") is None
+
+    def test_invalid_templates(self):
+        # THEN
+        assert template_syntax_error("{{ unclosed").startswith("Invalid template: ")
+        assert template_syntax_error("{{ 5 | no_such_filter }}").startswith("Invalid template: ")
+        assert template_syntax_error("{% if a %}").startswith("Invalid template: ")
+
+    def test_nested_templates_are_checked_on_their_own(self):
+        # THEN
+        assert template_syntax_error("{{ p{{ page + }}b1.x }}").startswith("Invalid template: ")
+        assert template_syntax_error("{{ p{{ page }}b1.x + }}").startswith("Invalid template: ")
+
+
+class TestTemplateSpans(TestBase):
+    def test_nested_templates_are_one(self):
+        # THEN
+        assert template_spans("{{ p{{ page }}b1.x }}") == [(0, 21)]
+
+    def test_statement_and_comment_templates(self):
+        # GIVEN
+        text = "a {% if x %}b{% endif %} {# c #}"
+
+        # THEN
+        assert [text[start:end] for start, end in template_spans(text)] == ["{% if x %}", "{% endif %}", "{# c #}"]
+
+    def test_unclosed_templates_reach_the_end(self):
+        # THEN
+        assert template_spans("a {{ b") == [(2, 6)]
+        assert template_spans("a {% b") == [(2, 6)]
+        assert template_spans("a {# b") == [(2, 6)]
+        assert template_spans("a {{ {{ b }}") == [(2, 12)]
+
+    def test_text_without_templates(self):
+        # THEN
+        assert template_spans("a } b {") == []
 
 
 class TestReferencedVariables(TestBase):

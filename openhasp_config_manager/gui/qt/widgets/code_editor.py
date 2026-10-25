@@ -1,6 +1,5 @@
 import html
 import re
-from dataclasses import dataclass
 from typing import Callable, List, Optional, Set, Tuple
 
 from PyQt6 import QtCore
@@ -25,7 +24,7 @@ from openhasp_config_manager.gui.domain.source_completion import OBJECT_PROPERTI
 from openhasp_config_manager.gui.domain.source_docs import describe_property
 from openhasp_config_manager.gui.domain.source_edit import INDENT, indent_for_new_line, matching_bracket, toggle_comment
 from openhasp_config_manager.gui.domain.source_format import format_text
-from openhasp_config_manager.gui.domain.source_issues import find_source_issues
+from openhasp_config_manager.gui.domain.source_issues import SourceIssue, find_source_issues
 from openhasp_config_manager.gui.domain.source_links import Link, link_at
 from openhasp_config_manager.gui.domain.source_objects import SourceObject, foldable, object_at_line, scan_objects
 from openhasp_config_manager.gui.domain.source_rename import id_at_line, rename_object_id
@@ -40,17 +39,6 @@ _MAX_SEARCH_MATCHES = 1000
 _PAIRS = {"{": "}", "[": "]", '"': '"'}
 _FOLD_WIDTH = 14
 _CODE = re.compile(r"`([^`]+)`")
-
-
-@dataclass(frozen=True)
-class Marker:
-    """Something to point out in the text: shown in the gutter, underlined, and explained on hover."""
-
-    line: int  # starts at 1
-    column: int
-    length: int
-    severity: Severity
-    message: str
 
 
 def _marker_color(severity: Severity) -> QColor:
@@ -98,8 +86,8 @@ class CodeEditor(QPlainTextEdit):
         super().__init__(parent)
         self.language = language
         self._loading = False
-        self._text_markers: List[Marker] = []
-        self._app_markers: List[Marker] = []
+        self._text_markers: List[SourceIssue] = []
+        self._app_markers: List[SourceIssue] = []
         self._search: Optional[QRegularExpression] = None
         self._search_flags = QTextDocument.FindFlag(0)
         self._variables: Callable[[], List[str]] = lambda: []
@@ -190,30 +178,27 @@ class CodeEditor(QPlainTextEdit):
     # --- issues and markers ---
 
     @property
-    def issues(self) -> List[Marker]:
+    def issues(self) -> List[SourceIssue]:
         return list(self._text_markers)
 
     def update_issues(self):
         """Look at the text for problems now (otherwise a moment after the last edit)."""
         self._issue_timer.stop()
-        self._text_markers = [
-            Marker(issue.line, issue.column, issue.length, issue.severity, issue.message)
-            for issue in find_source_issues(self.toPlainText(), self.language)
-        ]
+        self._text_markers = find_source_issues(self.toPlainText(), self.language)
         self._update_selections()
         self._gutter.update()
         self.issuesChanged.emit()
 
-    def set_app_markers(self, markers: List[Marker]):
+    def set_app_markers(self, markers: List[SourceIssue]):
         """Problems found by the app for the objects of this file (e.g. one is outside of the screen)."""
         self._app_markers = list(markers)
         self._update_selections()
         self._gutter.update()
 
-    def _markers(self) -> List[Marker]:
+    def _markers(self) -> List[SourceIssue]:
         return self._text_markers + self._app_markers
 
-    def _markers_at(self, line: int) -> List[Marker]:
+    def _markers_at(self, line: int) -> List[SourceIssue]:
         return [marker for marker in self._markers() if marker.line == line]
 
     # --- appearance ---

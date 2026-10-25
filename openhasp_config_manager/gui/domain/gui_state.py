@@ -11,7 +11,6 @@ from openhasp_config_manager.gui.domain.connection import ConnectionStatus
 from openhasp_config_manager.gui.domain.plate_session import ComponentSource, PlateSession
 from openhasp_config_manager.gui.domain.problems import Problem, object_name
 from openhasp_config_manager.openhasp_client.model.device import Device
-from openhasp_config_manager.processing.jsonl.source_editor import JsonlSourceEditor
 
 LOGGER = logging.getLogger(__name__)
 
@@ -95,7 +94,6 @@ def _short(text: Optional[str]) -> Optional[str]:
 def describe_object(session: PlateSession, obj: Dict[str, Any], config_dir: Path) -> Dict[str, Any]:
     """:return: where an object is: its name, type, file and line, and where it is drawn (rendered and as written)"""
     component = session.component_of(obj)
-    index = session.source_index(obj)
     source = session.source_of(obj)
     return {
         "name": object_name(obj),
@@ -103,7 +101,7 @@ def describe_object(session: PlateSession, obj: Dict[str, Any], config_dir: Path
         "page": obj.get("page"),
         "type": obj.get("obj"),
         "file": relative(component.path, config_dir),
-        "line": None if index is None else JsonlSourceEditor(component.content).line_of(index),
+        "line": session.line_of(obj),
         "rendered": {key: obj[key] for key in _GEOMETRY_KEYS if key in obj},
         "source": {key: source[key] for key in _GEOMETRY_KEYS if key in source},
     }

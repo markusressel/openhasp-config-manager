@@ -2,6 +2,7 @@ import copy
 import re
 from collections import OrderedDict
 from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
 from typing import List, Dict, Optional, Any, Protocol, Set, Tuple
 
@@ -12,6 +13,7 @@ from openhasp_config_manager.gui.domain.problems import object_name
 from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.processing.template_rendering import has_nested_templates, referenced_objects
 from openhasp_config_manager.processing.jsonl.jsonl import ObjectDimensionsProcessor, NUMERIC_PROPERTY_NAMES
+from openhasp_config_manager.processing.jsonl.source_editor import JsonlSourceEditor
 
 _NUMERIC_PROPERTY = re.compile(NUMERIC_PROPERTY_NAMES)
 
@@ -79,6 +81,12 @@ def _has_template(source: Dict[str, Any]) -> bool:
 ANY_OBJECT = "*"
 
 
+@lru_cache(maxsize=64)
+def _source_editor(content: str) -> JsonlSourceEditor:
+    # the text of a component is parsed once, not for every object asked about
+    return JsonlSourceEditor(content)
+
+
 class PlateSession:
     """
     The draft of a device's pages (of one cmd component) during an app session.
@@ -144,6 +152,16 @@ class PlateSession:
     def source_index(self, obj: Dict) -> Optional[int]:
         """:return: the index of the object in its source file, None for an object added in the draft"""
         return self._entry(obj).index
+
+    def line_of(self, obj: Dict) -> Optional[int]:
+        """:return: the line (starting at 1) on which the object starts in its source file, None for an object added in the draft"""
+        index = self.source_index(obj)
+        return None if index is None else _source_editor(self.component_of(obj).content).line_of(index)
+
+    def component_at(self, path: Path) -> Optional[ComponentSource]:
+        """:return: the component of a file (the path in any spelling), None if the draft has no objects of that file"""
+        resolved = path.resolve()
+        return next((component for component in self._components.values() if component.path.resolve() == resolved), None)
 
     def object_of_source(self, component: str, index: int) -> Optional[Dict]:
         """:return: the rendered object that was written as the n-th object of a component's file, None if it was deleted"""

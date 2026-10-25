@@ -121,3 +121,15 @@ def foldable(objects: List[SourceObject]) -> List[Tuple[int, int]]:
 
 def fold_ranges(text: str) -> List[Tuple[int, int]]:
     return foldable(scan_objects(text))
+
+
+def pages_of(objects: List[SourceObject]) -> List[Optional[str]]:
+    """The page of every object as written: an object without a page is on the page of the object before it."""
+    pages: List[Optional[str]] = []
+    page = None
+    for obj in objects:
+        prop = obj.get("page")
+        if prop is not None:
+            page = prop.value
+        pages.append(page)
+    return pages

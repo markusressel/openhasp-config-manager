@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
-from openhasp_config_manager.gui.domain.source_objects import SourceObject, object_at_line, scan_objects
+from openhasp_config_manager.gui.domain.source_objects import object_at_line, pages_of, scan_objects
 
 _NUMBER = re.compile(r"\d+")
 
@@ -62,15 +62,3 @@ def rename_object_id(text: str, line: int, new_id: int) -> Rename:
     for number, start, end in sorted(edits, reverse=True):
         lines[number - 1] = lines[number - 1][:start] + str(new_id) + lines[number - 1][end:]
     return Rename("\n".join(lines), sorted(number for number, _, _ in edits))
-
-
-def pages_of(objects: List[SourceObject]) -> List[Optional[str]]:
-    """The page of every object as written: an object without a page is on the page of the object before it."""
-    pages: List[Optional[str]] = []
-    page = None
-    for obj in objects:
-        prop = obj.get("page")
-        if prop is not None:
-            page = prop.value
-        pages.append(page)
-    return pages

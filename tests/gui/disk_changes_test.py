@@ -5,6 +5,7 @@ import pytest
 from tests import TestBase
 from tests.gui.helpers import EDITOR_JSONL, create_editor_cfg_root, gui_state, qwait, wait_until, x_of_label
 
+
 @pytest.fixture
 def cfg_root(tmp_path) -> Path:
     return create_editor_cfg_root(tmp_path)

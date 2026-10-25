@@ -79,6 +79,25 @@ class TestPlateSession(TestBase):
         assert session.is_dirty is False
         assert session.changes() == []
 
+    def test_where_objects_are_written(self, tmp_path):
+        # GIVEN
+        path = tmp_path / "a.jsonl"
+        content = '// two objects\n{"page": 1, "id": 1}\n\n{\n  "page": 1, "id": 2\n}\n'
+        session = PlateSession(device=None)
+        session.load(
+            [ComponentSource("a.jsonl", path, content, False, [{"page": 1, "id": 1}, {"page": 1, "id": 2}])],
+            FakeRenderer({}),
+        )
+        first, second = session.working_objects["a.jsonl"]
+
+        # WHEN
+        added = session.add_object("a.jsonl", {"page": 1, "id": 3, "obj": "btn"})
+
+        # THEN
+        assert (session.line_of(first), session.line_of(second), session.line_of(added)) == (2, 4, None)
+        assert session.component_at(tmp_path / "." / "a.jsonl").key == "a.jsonl"
+        assert session.component_at(tmp_path / "b.jsonl") is None
+
     def test_set_a_value_renders_into_the_same_object(self):
         # GIVEN
         session = _session()
