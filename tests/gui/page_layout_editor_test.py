@@ -58,10 +58,10 @@ def plate(monkeypatch) -> _Plate:
 @pytest.fixture
 def editor(qapp, async_loop, plate, tmp_path, monkeypatch):
     from openhasp_config_manager.gui.qt.operations import OperationStatus
-    from openhasp_config_manager.gui.qt.widgets.pagelayout import OpenHaspDevicePagesData, page_layout_editor
+    from openhasp_config_manager.gui.qt.widgets.pagelayout import OpenHaspDevicePagesData, plate_link
     from openhasp_config_manager.gui.qt.widgets.pagelayout.page_layout_editor import PageLayoutEditorWidget
 
-    monkeypatch.setattr(page_layout_editor, "SEND_DELAY_SECONDS", 0)
+    monkeypatch.setattr(plate_link, "SEND_DELAY_SECONDS", 0)
 
     root = tmp_path / "cfg"
     shutil.copytree(Path(__file__).parent.parent / "_test_cfg_root", root)
@@ -93,7 +93,7 @@ def _object(editor, obj_id: int):
 
 class TestLivePreview(TestBase):
     def _start(self, editor, plate):
-        editor.action_live_preview.setChecked(True)
+        editor.plate.action_live_preview.setChecked(True)
         wait_until(lambda: plate.calls and plate.calls[-1] == ("set_page", 9))
 
     def test_turning_it_on_sends_the_page_and_shows_it(self, editor, plate):
@@ -149,7 +149,7 @@ class TestLivePreview(TestBase):
         self._start(editor, plate)
 
         # THEN
-        assert editor.action_clear.isEnabled() is False
+        assert editor.plate.action_clear.isEnabled() is False
 
     def test_stopping_silently_sends_nothing_more(self, editor, plate):
         # GIVEN
@@ -157,7 +157,7 @@ class TestLivePreview(TestBase):
         plate.clear()
 
         # WHEN
-        editor.stop_live_preview()
+        editor.plate.stop_live_preview()
         editor.session.set_source_value(_object(editor, 1), "x", 20)
 
         # THEN
@@ -165,25 +165,25 @@ class TestLivePreview(TestBase):
 
         QTest.qWait(150)
         assert plate.calls == []
-        assert editor.live_preview is False
+        assert editor.plate.live is False
 
 
 class TestRestorePlate(TestBase):
     def test_restore_ends_live_preview_and_rebuilds_the_plate_from_its_files(self, editor, plate):
         # GIVEN
         restored = []
-        editor.plateRestored.connect(lambda: restored.append(True))
-        editor.action_live_preview.setChecked(True)
+        editor.plate.plateRestored.connect(lambda: restored.append(True))
+        editor.plate.action_live_preview.setChecked(True)
         wait_until(lambda: plate.calls and plate.calls[-1] == ("set_page", 9))
         plate.clear()
 
         # WHEN
-        editor.restore_plate()
+        editor.plate.restore_plate()
 
         # THEN
         wait_until(lambda: restored)
         assert plate.calls == [("restore_from_files",)]
-        assert editor.live_preview is False
+        assert editor.plate.live is False
 
 
 def _key(editor, file_name: str) -> str:
@@ -640,7 +640,7 @@ class TestUndo(TestBase):
 
     def test_live_preview_follows_an_undo(self, editor, plate):
         # GIVEN
-        editor.action_live_preview.setChecked(True)
+        editor.plate.action_live_preview.setChecked(True)
         wait_until(lambda: plate.calls and plate.calls[-1] == ("set_page", 9))
         self._select(editor, 1)
         editor.nudge_selected_objects(5, 0)

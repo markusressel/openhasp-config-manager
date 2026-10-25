@@ -102,7 +102,7 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
   (written into that folder). `MainWindow._collect_gui_state` builds it, `GuiStatePublisher` writes it debounced. When you add state
   worth knowing for such tools, add it there, bump `SCHEMA_VERSION` only for breaking changes, and keep that README current. Never put
   credentials or plate configuration in it.
-- **Plate actions** (names and tooltips agreed with the user): *Live preview* sends the draft to the plate while editing (nothing is stored
+- **Plate actions** (`PlateLink` in `gui/qt/widgets/pagelayout/plate_link.py`, names and tooltips agreed with the user): *Live preview* sends the draft to the plate while editing (nothing is stored
   on it), *Restore plate* rebuilds the pages from the files on the plate like a restart, *Deploy* uploads the saved files. *Revert*
   discards the draft; *Undo*/*Redo* step through the edits of the draft.
 - **Remembered state**: what should survive a restart for a config directory or a device goes into `UiSession`/`DeviceSession`
