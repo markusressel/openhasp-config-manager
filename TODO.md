@@ -66,5 +66,3 @@ Found in a review of the text editor and preview work, not done yet:
   tested without Qt.
 - [ ] `MainWindow._collect_gui_state` builds the `device` part of the state file by hand: a `describe_device` in `gui_state.py`
   would make it testable without a window, like the other parts.
-- [ ] `tests/gui/source_editor_test.py::TestCodeView::test_zoom_reset_with_an_open_file` errors at teardown in a full
-  `tests/gui` run (`RuntimeError: wrapped C/C++ object of type QTabWidget has been deleted` in `widget.close_all`), but passes alone.
