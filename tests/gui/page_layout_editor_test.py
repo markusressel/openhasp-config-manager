@@ -219,6 +219,21 @@ class TestFiles(TestBase):
         assert (added["page"], added["obj"]) == (9, "label")
         assert editor.target_component == home
 
+    def test_a_new_tab_goes_into_the_tabview_of_the_page(self, editor):
+        # GIVEN
+        from openhasp_config_manager.gui.domain.page_objects import OpenHASPWidgetType
+
+        home = _key(editor, "page.jsonl")
+        editor.set_target_component(home)
+        editor.add_object(OpenHASPWidgetType.TABVIEW)
+        tabview = editor.working_objects[home][-1]
+
+        # WHEN
+        editor.add_object(OpenHASPWidgetType.TAB)
+
+        # THEN
+        assert editor.working_objects[home][-1]["parentid"] == tabview["id"]
+
     def test_the_chosen_file_is_remembered_for_the_next_start(self, editor, settings):
         # GIVEN
         from openhasp_config_manager.gui.domain.file_tree import config_root_of
@@ -484,9 +499,7 @@ class TestPropertyEditor(TestBase):
 
 class TestHighlightComponent(TestBase):
     def _dimmed_ids(self, editor):
-        return [
-            orjson.loads(selection.cursor.block().text())["id"] for selection in editor.jsonl_preview.extraSelections()
-        ]
+        return [orjson.loads(selection.cursor.block().text())["id"] for selection in editor.jsonl_preview.extraSelections()]
 
     def test_the_jsonl_dims_the_objects_of_other_files(self, editor):
         # GIVEN: the objects of page 9 are all in editor.jsonl
@@ -558,7 +571,16 @@ class TestOutsideTheScreen(TestBase):
         component = editor.session.components[0].key
         editor.session.add_object(
             component,
-            {"page": 9, "id": 99, "obj": "btn", "x": int(plate.width()) - 50, "y": 0, "w": 100, "h": 100, "bg_color": "#FFFFFF"},
+            {
+                "page": 9,
+                "id": 99,
+                "obj": "btn",
+                "x": int(plate.width()) - 50,
+                "y": 0,
+                "w": 100,
+                "h": 100,
+                "bg_color": "#FFFFFF",
+            },
         )
         editor.set_page_index(9)
         editor.page_preview_widget.fit_to_view()

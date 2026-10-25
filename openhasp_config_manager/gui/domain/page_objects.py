@@ -17,6 +17,7 @@ class OpenHASPWidgetType(StrEnum):
     IMAGE = "img"
     BAR = "bar"
     SLIDER = "slider"
+    TAB = "tab"
     TABVIEW = "tabview"
     BASE_OBJECT = "obj"
     QRCODE = "qrcode"
@@ -148,6 +149,12 @@ WIDGET_TYPES: Dict[OpenHASPWidgetType, WidgetTypeInfo] = {
         icon="tab",
         defaults={"w": 300, "h": 200, "val": 0, "btn_pos": 1},
     ),
+    OpenHASPWidgetType.TAB: WidgetTypeInfo(
+        title="Tab",
+        description="A page of a tabview",
+        icon="tab",
+        defaults={"text": "Tab"},
+    ),
 }
 
 
@@ -237,11 +244,16 @@ def create_object(
     obj_id: int,
     screen_width: int,
     screen_height: int,
+    parent_id: Optional[int] = None,
 ) -> Dict:
     """
-    Create a new object with sensible defaults, centered on the screen.
+    Create a new object with sensible defaults, centered on the screen (if it has a size).
+    :param parent_id: the object that contains the new one (the tabview of a tab)
     """
     obj = {"page": page, "id": obj_id, "obj": str(widget_type), **copy.deepcopy(WIDGET_TYPES[widget_type].defaults)}
-    obj["x"] = max(0, (screen_width - obj["w"]) // 2)
-    obj["y"] = max(0, (screen_height - obj["h"]) // 2)
+    if parent_id is not None:
+        obj["parentid"] = parent_id
+    if "w" in obj and "h" in obj:
+        obj["x"] = max(0, (screen_width - obj["w"]) // 2)
+        obj["y"] = max(0, (screen_height - obj["h"]) // 2)
     return obj

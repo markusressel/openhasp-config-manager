@@ -12,6 +12,7 @@ from PyQt6.QtGui import QAction, QKeySequence
 from PyQt6.QtWidgets import QApplication, QSlider, QWidget, QToolBar, QComboBox, QMessageBox, QToolButton, QFrame, QHBoxLayout
 
 from openhasp_config_manager.gui.domain.problems import Problem, find_problems
+from openhasp_config_manager.gui.domain.tabs import last_tabview_id
 from openhasp_config_manager.gui.domain.page_objects import (
     OpenHASPWidgetType,
     get_page_objects,
@@ -703,10 +704,18 @@ class PageLayoutEditorWidget(QWidget):
             obj_id=obj_id,
             screen_width=screen.width,
             screen_height=screen.height,
+            parent_id=self._parent_for(widget_type),
         )
         obj = self.session.add_object(component, obj)
         self._mark_dirty()
         self._reload_page(select=[obj])
+
+    def _parent_for(self, widget_type: OpenHASPWidgetType) -> Optional[int]:
+        """The object a new object belongs to: a tab goes into the last tabview of the page."""
+        if widget_type != OpenHASPWidgetType.TAB:
+            return None
+        objects = [obj for objects in self.working_objects.values() for obj in objects]
+        return last_tabview_id(objects, self.current_index)
 
     def duplicate_selected_objects(self):
         items = self.page_preview_widget.selected_items()

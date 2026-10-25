@@ -6,13 +6,13 @@ from PyQt6 import QtGui
 from tests import TestBase
 
 
-def render(obj: dict) -> "QtGui.QImage":
-    """Draw the object the way the preview does, on a transparent image."""
+def render(obj: dict, *others: dict) -> "QtGui.QImage":
+    """Draw the objects (of one page) the way the preview does, on a black image."""
     from PyQt6 import QtCore
     from openhasp_config_manager.gui.qt.widgets.pagelayout.page_preview_layout import PagePreviewWidget
 
     view = PagePreviewWidget()
-    view.set_objects([obj])
+    view.set_objects([obj, *others])
     image = QtGui.QImage(480, 320, QtGui.QImage.Format.Format_ARGB32)
     image.fill(QtGui.QColor("black"))
     painter = QtGui.QPainter(image)
@@ -184,5 +184,10 @@ class TestPreviewItems(TestBase):
         item.obj_data["btn_pos"] = 0
         assert item.button_area().isEmpty()
 
-        image = QtGui.QImage(480, 320, QtGui.QImage.Format.Format_ARGB32)
         assert painted(render(view)) > 0
+
+    def test_tab_is_not_drawn_itself_but_tabview_draws_its_button(self):
+        tabview = {"page": 1, "id": 2, "obj": "tabview", "x": 0, "y": 0, "w": 300, "h": 200}
+        tab = {"page": 1, "id": 3, "obj": "tab", "parentid": 2, "text": "Lights"}
+        assert painted(render(tab)) == 0
+        assert render(tabview, tab) != render(tabview)
