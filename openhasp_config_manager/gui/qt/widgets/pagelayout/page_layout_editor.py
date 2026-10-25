@@ -692,6 +692,10 @@ class PageLayoutEditorWidget(QWidget):
         if not self.edit_mode:
             self.action_edit_mode.setChecked(True)
 
+        parent_id = self._parent_for(widget_type)
+        if widget_type == OpenHASPWidgetType.TAB and parent_id is None:
+            self.status.failed.emit("Adding a tab", "A tab belongs to a tabview: add a tabview to this page first")
+            return
         try:
             obj_id = next_free_id(self.working_objects, self.current_index)
         except ValueError as ex:
@@ -704,7 +708,7 @@ class PageLayoutEditorWidget(QWidget):
             obj_id=obj_id,
             screen_width=screen.width,
             screen_height=screen.height,
-            parent_id=self._parent_for(widget_type),
+            parent_id=parent_id,
         )
         obj = self.session.add_object(component, obj)
         self._mark_dirty()

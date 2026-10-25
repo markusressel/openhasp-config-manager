@@ -234,6 +234,20 @@ class TestFiles(TestBase):
         # THEN
         assert editor.working_objects[home][-1]["parentid"] == tabview["id"]
 
+    def test_a_tab_needs_a_tabview_on_the_page(self, editor):
+        # GIVEN
+        from openhasp_config_manager.gui.domain.page_objects import OpenHASPWidgetType
+
+        home = _key(editor, "page.jsonl")
+        editor.set_target_component(home)
+        count = len(editor.working_objects[home])
+
+        # WHEN
+        editor.add_object(OpenHASPWidgetType.TAB)
+
+        # THEN
+        assert len(editor.working_objects[home]) == count
+
     def test_the_chosen_file_is_remembered_for_the_next_start(self, editor, settings):
         # GIVEN
         from openhasp_config_manager.gui.domain.file_tree import config_root_of
