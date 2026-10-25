@@ -163,3 +163,26 @@ class TestPreviewItems(TestBase):
         box = {"page": 1, "id": 1, "obj": "obj", "x": 10, "y": 10, "w": 100, "h": 50, "border_width": 0}
         assert painted(render(box)) >= 100 * 50 - 100
         assert painted(render({**box, "radius": 25})) < painted(render(box))
+
+    def test_tabview_shows_the_buttons_of_its_tabs(self):
+        from openhasp_config_manager.gui.domain.tabs import last_tabview_id, tab_texts
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.tabview import HaspTabviewItem
+
+        view = {"page": 1, "id": 2, "obj": "tabview", "x": 0, "y": 0, "w": 300, "h": 200}
+        objects = [
+            view,
+            {"page": 1, "id": 3, "obj": "tab", "parentid": 2, "text": "Lights"},
+            {"page": 1, "id": 4, "obj": "tab", "parentid": 9},
+        ]
+        assert tab_texts(objects, view) == ["Lights"]
+        assert last_tabview_id(objects, 1) == 2 and last_tabview_id(objects, 2) is None
+
+        item = HaspTabviewItem(view)
+        assert item.button_area().height() == 40
+        item.obj_data["btn_pos"] = 2
+        assert item.button_area().top() == 160
+        item.obj_data["btn_pos"] = 0
+        assert item.button_area().isEmpty()
+
+        image = QtGui.QImage(480, 320, QtGui.QImage.Format.Format_ARGB32)
+        assert painted(render(view)) > 0

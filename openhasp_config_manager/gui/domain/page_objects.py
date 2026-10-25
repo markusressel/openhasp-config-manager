@@ -17,6 +17,7 @@ class OpenHASPWidgetType(StrEnum):
     IMAGE = "img"
     BAR = "bar"
     SLIDER = "slider"
+    TABVIEW = "tabview"
     BASE_OBJECT = "obj"
     QRCODE = "qrcode"
     LINE = "line"
@@ -140,6 +141,12 @@ WIDGET_TYPES: Dict[OpenHASPWidgetType, WidgetTypeInfo] = {
         description="Rectangle, e.g. a background",
         icon="crop-square",
         defaults={"w": 200, "h": 100, "click": 0},
+    ),
+    OpenHASPWidgetType.TABVIEW: WidgetTypeInfo(
+        title="Tabview",
+        description="Container with tab buttons",
+        icon="tab",
+        defaults={"w": 300, "h": 200, "val": 0, "btn_pos": 1},
     ),
 }
 
