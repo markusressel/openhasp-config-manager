@@ -1,4 +1,4 @@
-from typing import Callable, Dict, List
+from typing import Callable, Dict, List, Set
 
 from PyQt6.QtGui import QFont, QPalette, QTextCharFormat, QTextCursor, QTextFormat
 from PyQt6.QtWidgets import QSizePolicy, QTextEdit
@@ -26,6 +26,9 @@ class PageJsonlPreviewWidget(QTextEdit):
         # the objects in the order of the lines, and which of them are dimmed (e.g. those of other files)
         self._objects: List[dict] = []
         self._is_dimmed: Callable[[Dict], bool] = lambda _obj: False
+        # the lines of the dimmed objects, decided when the objects or the predicate change: a selection changes nothing about it,
+        # and the objects can be gone from the draft by then (removed, the page is rebuilt after the selection changed)
+        self._dimmed_lines: Set[int] = set()
         # the objects selected in the preview, their lines are highlighted
         self._selected: List[dict] = []
 
@@ -40,6 +43,7 @@ class PageJsonlPreviewWidget(QTextEdit):
     def set_dimmed_predicate(self, is_dimmed: Callable[[Dict], bool]):
         """Dim the lines of the objects for which the predicate is true."""
         self._is_dimmed = is_dimmed
+        self._update_dimmed_lines()
         self._update_selections()
 
     def set_selected_objects(self, objects: List[dict]):
@@ -56,6 +60,9 @@ class PageJsonlPreviewWidget(QTextEdit):
         """:return: the lines (starting at 0) of the selected objects that are on the page"""
         return [index for index, obj in enumerate(self._objects) if any(obj is selected for selected in self._selected)]
 
+    def _update_dimmed_lines(self):
+        self._dimmed_lines = {index for index, obj in enumerate(self._objects) if self._is_dimmed(obj)}
+
     def _update_selections(self):
         dimmed_color = self.palette().color(self.foregroundRole())
         dimmed_color.setAlpha(DIMMED_ALPHA)
@@ -69,10 +76,10 @@ class PageJsonlPreviewWidget(QTextEdit):
 
         selections = []
         selected_lines = set(self.selected_lines)
-        for index, obj in enumerate(self._objects):
+        for index in range(len(self._objects)):
             if index in selected_lines:
                 selections.append(self._line_selection(index, selected))
-            if self._is_dimmed(obj):
+            if index in self._dimmed_lines:
                 selections.append(self._line_selection(index, dimmed))
         self.setExtraSelections(selections)
 
@@ -102,4 +109,5 @@ class PageJsonlPreviewWidget(QTextEdit):
         self._objects = sorted_page_objects
         content = "\n".join(map(lambda x: orjson.dumps(x).decode(), sorted_page_objects))
         self.setText(content)
+        self._update_dimmed_lines()
         self._update_selections()

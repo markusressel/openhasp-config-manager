@@ -108,6 +108,10 @@ class PageLayoutEditorWidget(QWidget):
         self._ui_session = ui_session or UiSessionStore.in_memory()
         # the component whose objects are highlighted (the others are dimmed)
         self._highlighted_component: Optional[str] = None
+        # the component of the selected object, None unless exactly one is selected: the JSONL dims the other files
+        self._selected_component: Optional[str] = None
+        # the component the JSONL shows undimmed (the others are dimmed), None if it dims nothing
+        self._jsonl_dimmed_component: Optional[str] = None
         # what is wrong with the objects on the page
         self.problems: List[Problem] = []
         self._paste_cascade = PasteCascade()
@@ -572,14 +576,15 @@ class PageLayoutEditorWidget(QWidget):
         self.jsonl_preview.set_selected_objects([widget.obj_data for widget in editable_widgets])
         self._update_actions()
         self.stateChanged.emit()
-        if len(editable_widgets) == 1:
-            key = self.session.component_of(editable_widgets[0].obj_data).key
-            if self._highlighted_component not in (None, key):
-                # the object of another file was selected: the highlight would not match the file tree anymore
-                self.highlight_component(None)
-            self.selectedObjectComponentChanged.emit(key)
+        # the file of a single selected object is selected in the file tree (see `selectedObjectComponentChanged`)
+        key = self.session.component_of(editable_widgets[0].obj_data).key if len(editable_widgets) == 1 else None
+        self._selected_component = key
+        if self._highlighted_component not in (None, key) and key is not None:
+            # the object of another file was selected: the highlight would not match the file tree anymore
+            self.highlight_component(None)
         else:
-            self.selectedObjectComponentChanged.emit(None)
+            self._update_jsonl_dimming()
+        self.selectedObjectComponentChanged.emit(key)
 
     def _update_page_views(self):
         """Update what is derived from the objects of the page: the JSONL and the problems."""
@@ -681,12 +686,22 @@ class PageLayoutEditorWidget(QWidget):
     def highlight_component(self, key: Optional[str]):
         """Dim all objects that are not in the given component, or none (None)."""
         self._highlighted_component = key
+        self.page_preview_widget.set_dimmed_predicate(self._outside_of(key))
+        self._update_jsonl_dimming()
 
-        def is_dimmed(obj) -> bool:
-            return key is not None and self.session.component_of(obj).key != key
+    def _update_jsonl_dimming(self):
+        """
+        The JSONL dims the lines of the other files: of the highlighted file, or else of the file of the selected objects. The
+        preview dims nothing for a selection, the objects around the selected ones are needed to edit them.
+        """
+        key = self._highlighted_component or self._selected_component
+        if key != self._jsonl_dimmed_component:
+            self._jsonl_dimmed_component = key
+            self.jsonl_preview.set_dimmed_predicate(self._outside_of(key))
 
-        self.page_preview_widget.set_dimmed_predicate(is_dimmed)
-        self.jsonl_preview.set_dimmed_predicate(is_dimmed)
+    def _outside_of(self, key: Optional[str]) -> Callable[[Dict], bool]:
+        """:return: whether an object is not in the component (False for all objects if None)"""
+        return lambda obj: key is not None and self.session.component_of(obj).key != key
 
     def add_object(self, widget_type: OpenHASPWidgetType):
         component = self.target_component

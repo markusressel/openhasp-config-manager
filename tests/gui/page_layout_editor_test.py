@@ -258,6 +258,21 @@ class TestFiles(TestBase):
         assert len(rebuilds) == 1
         assert len(editor.page_preview_widget.editable_items()) == 1
 
+    def test_removing_an_object_while_its_file_is_highlighted(self, editor, monkeypatch):
+        # GIVEN
+        from PyQt6.QtWidgets import QMessageBox
+
+        editor.set_edit_mode(True)
+        editor.highlight_component(_key(editor, "editor.jsonl"))
+        editor.page_preview_widget.editable_items()[0].setSelected(True)
+        monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *args: QMessageBox.StandardButton.Yes))
+
+        # WHEN
+        editor.remove_selected_objects()
+
+        # THEN
+        assert len(editor.page_preview_widget.editable_items()) == 1
+
     def test_the_chosen_file_is_remembered_for_the_next_start(self, editor, settings):
         # GIVEN
         from openhasp_config_manager.gui.domain.file_tree import config_root_of
@@ -549,7 +564,11 @@ class TestPropertyEditor(TestBase):
 
 class TestHighlightComponent(TestBase):
     def _dimmed_ids(self, editor):
-        return [orjson.loads(selection.cursor.block().text())["id"] for selection in editor.jsonl_preview.extraSelections()]
+        return [
+            orjson.loads(selection.cursor.block().text())["id"]
+            for selection in editor.jsonl_preview.extraSelections()
+            if selection.format.foreground().color().alpha() < 255
+        ]
 
     def test_the_jsonl_dims_the_objects_of_other_files(self, editor):
         # GIVEN: the objects of page 9 are all in editor.jsonl
@@ -566,6 +585,30 @@ class TestHighlightComponent(TestBase):
         assert other_file == ids
         assert same_file == set()
         assert editor.jsonl_preview.extraSelections() == []
+
+    def test_selecting_an_object_dims_the_lines_of_other_files_but_not_the_preview(self, editor):
+        # GIVEN: an object of another file on page 9
+        other = editor.session.add_object(
+            _key(editor, "page.jsonl"), {"page": 9, "id": 60, "obj": "label", "text": "other", "x": 0, "y": 0}
+        )
+        editor.set_edit_mode(True)
+        editor.set_page_index(9)
+        preview = editor.page_preview_widget
+        own = _object(editor, 1)
+
+        # WHEN
+        preview.select_object(own)
+        dimmed_while_selected = set(self._dimmed_ids(editor))
+        dimmed_items = [item.obj_data["id"] for item in preview.editable_items() if item.opacity() < 1]
+        preview.select_object(other)
+        dimmed_for_other = set(self._dimmed_ids(editor))
+        preview.scene().clearSelection()
+
+        # THEN
+        assert dimmed_while_selected == {60}
+        assert dimmed_items == []
+        assert dimmed_for_other == {obj["id"] for obj in editor.page_objects} - {60}
+        assert self._dimmed_ids(editor) == []
 
 
 class TestScreenBrightness(TestBase):
