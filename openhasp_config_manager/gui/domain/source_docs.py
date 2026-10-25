@@ -3,6 +3,8 @@
 import re
 from typing import Optional
 
+from openhasp_config_manager.gui.domain.style_parts import OBJECT_PARTS, PART_DESCRIPTIONS, STATE_DESCRIPTIONS, Part, State
+
 # https://www.openhasp.com/latest/design/objects/ and https://www.openhasp.com/latest/design/styling/
 PROPERTY_DOCS = {
     "page": "The page the object is on (1 to 12, 0 for all pages). Objects without a page are on the page of the object before them.",
@@ -81,35 +83,6 @@ PROPERTY_DOCS = {
     "back": "Page of the page settings (id 0): the page the `back` action goes to.",
 }
 
-# https://www.openhasp.com/0.7.0/design/styling/: a style property can end in two digits, the part and the state of the object
-_PARTS = {
-    0: "the main part of the object (the background)",
-    1: "the indicator or needle, highlighting the current value",
-    2: "the knob which can be used to change the value",
-    3: "the background of the items/buttons",
-    4: "the items/buttons",
-    5: "the selected item",
-    6: "the major ticks of the gauge",
-    7: "the text cursor",
-    8: "the scrollbar",
-    9: "another special part",
-}
-_STATES = {
-    0: "default",
-    1: "toggled",
-    2: "pressed, not toggled",
-    3: "pressed and toggled",
-    4: "disabled, not toggled",
-    5: "disabled and toggled",
-}
-# what the parts are for the objects that say so in their documentation (https://www.openhasp.com/0.7.0/design/objects/)
-_OBJECT_PARTS = {
-    "switch": {1: "the indicator (the colored track)", 2: "the knob"},
-    "arc": {1: "the indicator arc", 2: "the knob"},
-    "spinner": {0: "the background circle", 1: "the spinning segment"},
-    "tabview": {4: "the tab buttons"},
-}
-
 _SUFFIXED = re.compile(r"^(?P<base>.+?)(?P<part>\d)(?P<state>\d)$")
 
 
@@ -117,16 +90,17 @@ def describe_property(name: str, object_type: Optional[str] = None) -> Optional[
     """
     :param object_type: the `obj` of the object the property is in, for what its parts are
     :return: what a property is, None if it is not known. A style property can end in two digits for the part and the state of
-        the object (`bg_color12` is the background color of the indicator while pressed), which are explained as well.
+        the object (`bg_color12` is the background color of the indicator while pressed), which are explained as well
+        (see `style_parts.py`).
     """
     if name in PROPERTY_DOCS:
         return PROPERTY_DOCS[name]
     match = _SUFFIXED.match(name)
     if not match or match["base"] not in PROPERTY_DOCS:
         return None
-    part, state = int(match["part"]), int(match["state"])
-    part_text = _OBJECT_PARTS.get(object_type or "", {}).get(part) or _PARTS[part]
+    part, state = Part(int(match["part"])), int(match["state"])
+    part_text = OBJECT_PARTS.get(object_type or "", {}).get(part) or PART_DESCRIPTIONS[part]
     lines = [PROPERTY_DOCS[match["base"]], f"Suffix `{match['part']}{match['state']}`: part {part} is {part_text}"]
-    if state in _STATES:
-        lines[-1] += f"; state {state} is {_STATES[state]}"
+    if state in State:
+        lines[-1] += f"; state {state} is {STATE_DESCRIPTIONS[State(state)]}"
     return "\n".join(lines) + "."

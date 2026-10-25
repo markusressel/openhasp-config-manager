@@ -7,11 +7,13 @@ the screen) is `problems.py` and `check.py`.
 import json
 import re
 from dataclasses import dataclass
-from typing import List
+from typing import Dict, List
 
 import yaml
 
 from openhasp_config_manager.gui.domain.problems import Severity
+from openhasp_config_manager.gui.domain.source_objects import scan_objects
+from openhasp_config_manager.gui.domain.source_rename import pages_of
 from openhasp_config_manager.gui.domain.source_syntax import Language, TokenKind, tokenize_line
 from openhasp_config_manager.processing.template_rendering import check_template
 
@@ -36,6 +38,7 @@ def find_source_issues(text: str, language: Language) -> List[SourceIssue]:
     issues: List[SourceIssue] = []
     if language == Language.JSONL:
         issues += _jsonl_issues(text)
+        issues += _duplicate_id_issues(text)
     elif language == Language.YAML:
         issues += _yaml_issues(text)
     issues += _template_issues(text, language)
@@ -59,6 +62,33 @@ def _jsonl_issues(text: str) -> List[SourceIssue]:
         except json.JSONDecodeError as ex:
             issues.append(
                 SourceIssue(first_line + ex.lineno - 1, max(ex.colno - 1, 0), 1, Severity.ERROR, f"Invalid JSON: {ex.msg}")
+            )
+    return issues
+
+
+def _duplicate_id_issues(text: str) -> List[SourceIssue]:
+    """The `id` of every object whose id is used by another object on the same page of this text (as written, no templates)."""
+    objects = scan_objects(text)
+    pages = pages_of(objects)
+    users: Dict[tuple, list] = {}
+    for obj in objects:
+        prop = obj.get("id")
+        if prop is None or prop.value is None or "{" in prop.value or "{" in (pages[obj.index] or ""):
+            continue
+        users.setdefault((pages[obj.index], prop.value), []).append(obj)
+    issues = []
+    for (_, obj_id), same in users.items():
+        for obj in same if len(same) > 1 else []:
+            prop = obj.get("id")
+            others = ", ".join(str(other.start_line) for other in same if other is not obj)
+            issues.append(
+                SourceIssue(
+                    prop.value_line,
+                    prop.value_start,
+                    prop.value_end - prop.value_start,
+                    Severity.ERROR,
+                    f"The id {obj_id} is also used on this page by the object at line {others}",
+                )
             )
     return issues
 

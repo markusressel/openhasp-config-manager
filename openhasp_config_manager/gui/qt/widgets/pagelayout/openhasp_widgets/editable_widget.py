@@ -5,6 +5,7 @@ from PyQt6.QtWidgets import QGraphicsObject, QGraphicsItem
 
 from openhasp_config_manager.gui.domain.page_objects import is_hidden
 from openhasp_config_manager.gui.domain.problems import geometry_value
+from openhasp_config_manager.gui.domain.style_parts import Part, State, style_key
 from openhasp_config_manager.gui.qt.theme import current_colors
 
 # the opacity of objects that are hidden on the plate
@@ -37,6 +38,18 @@ class EditableWidget(QGraphicsObject):
     @property
     def obj_h(self) -> int:
         return geometry_value(self.obj_data, "h")
+
+    def style(self, name: str, default=None, part: Part = Part.MAIN, state: State = State.DEFAULT):
+        """
+        :param name: a style property without suffix, e.g. `bg_color`
+        :param part: the part of the object the style is for: the key is `<name><part><state>`, e.g. `bg_color20` is the color of
+            the knob (`Part.KNOB`) in the default state. `radius` and `radius00` are the same, see `style_parts.py`.
+        :return: the value of the property for a part and state, `default` if the object has none
+        """
+        data = self.obj_data
+        if part == Part.MAIN and state == State.DEFAULT and name in data:
+            return data[name]
+        return data.get(style_key(name, part, state), default)
 
     def __init__(self, object_data: Dict, *args, **kwargs):
         self._object_data = object_data

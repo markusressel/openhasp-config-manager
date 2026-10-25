@@ -38,7 +38,7 @@ def rename_object_id(text: str, line: int, new_id: int) -> Rename:
     if id_property is None or id_property.value is None or not _NUMBER.fullmatch(id_property.value):
         raise ValueError("The id of this object is not a plain number")
     old_id = id_property.value
-    pages = _pages_of(objects)
+    pages = pages_of(objects)
     page = pages[target.index]
     if str(new_id) == old_id:
         return Rename(text, [])
@@ -64,7 +64,7 @@ def rename_object_id(text: str, line: int, new_id: int) -> Rename:
     return Rename("\n".join(lines), sorted(number for number, _, _ in edits))
 
 
-def _pages_of(objects: List[SourceObject]) -> List[Optional[str]]:
+def pages_of(objects: List[SourceObject]) -> List[Optional[str]]:
     """The page of every object as written: an object without a page is on the page of the object before it."""
     pages: List[Optional[str]] = []
     page = None

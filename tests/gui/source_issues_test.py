@@ -58,3 +58,22 @@ class TestOtherLanguages(TestBase):
         assert _issues("run L:/{{ a + }}.jsonl", Language.CMD)[0][3].startswith("Invalid template")
         assert _issues("run L:/x.jsonl", Language.CMD) == []
         assert _issues("{{ broken", Language.TEXT) == []
+
+
+class TestDuplicateIds(TestBase):
+    def test_both_ids_are_marked(self):
+        text = '{"page": 1, "id": 3}\n{\n  "page": 1,\n  "id": 3\n}\n'
+        assert _issues(text) == [
+            (1, 18, Severity.ERROR, "The id 3 is also used on this page by the object at line 2"),
+            (4, 8, Severity.ERROR, "The id 3 is also used on this page by the object at line 1"),
+        ]
+
+    def test_the_page_is_inherited_from_the_object_before(self):
+        text = '{"page": 1, "id": 3}\n{"id": 3}\n{"page": 2, "id": 3}\n'
+        assert [issue[0] for issue in _issues(text)] == [1, 2]
+
+    def test_same_id_on_other_pages_and_templates_are_fine(self):
+        assert (
+            _issues('{"page": 1, "id": 3}\n{"page": 2, "id": 3}\n{"page": 2, "id": "{{ a }}"}\n{"page": 2, "id": "{{ a }}"}')
+            == []
+        )
