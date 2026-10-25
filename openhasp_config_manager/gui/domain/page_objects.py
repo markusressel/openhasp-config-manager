@@ -17,6 +17,7 @@ class OpenHASPWidgetType(StrEnum):
     IMAGE = "img"
     BAR = "bar"
     SLIDER = "slider"
+    BASE_OBJECT = "obj"
     QRCODE = "qrcode"
     LINE = "line"
     GAUGE = "gauge"
@@ -133,6 +134,12 @@ WIDGET_TYPES: Dict[OpenHASPWidgetType, WidgetTypeInfo] = {
         description="Square code for a text",
         icon="qrcode",
         defaults={"w": 140, "h": 140, "size": 140, "text": "https://www.openhasp.com"},
+    ),
+    OpenHASPWidgetType.BASE_OBJECT: WidgetTypeInfo(
+        title="Base object",
+        description="Rectangle, e.g. a background",
+        icon="crop-square",
+        defaults={"w": 200, "h": 100, "click": 0},
     ),
 }
 

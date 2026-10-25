@@ -158,3 +158,8 @@ class TestPreviewItems(TestBase):
         # the finder square in the top left corner
         assert all(placeholder_modules("a")[0][:7]) and not placeholder_modules("a")[1][1]
         assert render({**code, "text": "other"}) != render(code)
+
+    def test_base_object_is_a_rounded_rectangle(self):
+        box = {"page": 1, "id": 1, "obj": "obj", "x": 10, "y": 10, "w": 100, "h": 50, "border_width": 0}
+        assert painted(render(box)) >= 100 * 50 - 100
+        assert painted(render({**box, "radius": 25})) < painted(render(box))
