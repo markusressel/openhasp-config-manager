@@ -6,9 +6,11 @@ from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.checkbox
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.arc import HaspArcItem
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.dropdown import HaspDropdownItem
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.roller import HaspRollerItem
 
 ITEM_CLASSES: Dict[str, Type[EditableWidget]] = {
     "checkbox": HaspCheckboxItem,
     "arc": HaspArcItem,
     "dropdown": HaspDropdownItem,
+    "roller": HaspRollerItem,
 }

@@ -17,6 +17,7 @@ class OpenHASPWidgetType(StrEnum):
     IMAGE = "img"
     BAR = "bar"
     SLIDER = "slider"
+    ROLLER = "roller"
     DROPDOWN = "dropdown"
     ARC = "arc"
     CHECKBOX = "checkbox"
@@ -84,6 +85,12 @@ WIDGET_TYPES: Dict[OpenHASPWidgetType, WidgetTypeInfo] = {
         description="Pick one of a list",
         icon="arrow-down-drop-circle-outline",
         defaults={"w": 150, "h": 30, "options": "Apple\nBanana\nOrange", "val": 0},
+    ),
+    OpenHASPWidgetType.ROLLER: WidgetTypeInfo(
+        title="Roller",
+        description="Scroll to pick an entry",
+        icon="reload",
+        defaults={"w": 150, "h": 100, "rows": 3, "options": "Apple\nBanana\nOrange", "val": 0},
     ),
 }
 
