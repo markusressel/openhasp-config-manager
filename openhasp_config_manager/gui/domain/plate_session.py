@@ -3,7 +3,7 @@ import itertools
 import re
 from collections import OrderedDict
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from functools import lru_cache
 from pathlib import Path
@@ -76,6 +76,8 @@ class ChangeKind(Enum):
     EDIT = "edit"
     UNDO = "undo"
     REDO = "redo"
+    # the draft was saved: nothing changed but whether it has changes
+    SAVE = "save"
 
 
 @dataclass(frozen=True)
@@ -446,34 +448,6 @@ class PlateSession:
         step = self._history.redo()
         return None if step is None else self._restore(step.after, step.description, ChangeKind.REDO)
 
-    def adopt_history(self, saved: "PlateSession") -> bool:
-        """
-        Continue the undo history of a draft that was saved, after its files were loaded into this one: the saved changes can
-        be undone like before saving. Objects that were removed before saving come back as new objects (at the end of their
-        file) when their removal is undone.
-        :return: whether the history was adopted: not if the files are not what the draft saved (e.g. changed meanwhile)
-        """
-        state = saved._state()
-        if state.keys() != self._components.keys():
-            return False
-        for key, objects in state.items():
-            if [source for _uid, _index, source in objects] != self._components[key].sources:
-                return False
-        # the saved objects are in the files in the order of the draft
-        new_indices: Dict[int, int] = {}
-        for key, objects in state.items():
-            for index, (obj, (uid, _index, _source)) in enumerate(zip(self._working_objects[key], objects)):
-                self._entry(obj).uid = uid
-                new_indices[uid] = index
-        self._uids = saved._uids
-        self._history = saved._history.mapped(
-            lambda old: {
-                key: tuple((uid, new_indices.get(uid), source) for uid, _index, source in objects)
-                for key, objects in old.items()
-            }
-        )
-        return True
-
     # --- saving ---
 
     def changes(self) -> List[ComponentChanges]:
@@ -506,6 +480,37 @@ class PlateSession:
             if component_changes.changes or component_changes.deletions or component_changes.additions:
                 result.append(component_changes)
         return result
+
+    def mark_saved(self, written: Dict[Path, str]):
+        """
+        The draft was saved: its files have this content now (see `changes`), with the objects of the draft in their order.
+        The draft has no changes afterwards, and the undo history goes on: undoing a saved edit changes the draft again.
+        Objects that were removed before saving come back as new objects (at the end of their file) when that is undone.
+        :param written: the new content of every file that was written
+        """
+        new_indices: Dict[int, int] = {}
+        rewritten = set()
+        for key, component in list(self._components.items()):
+            if component.path not in written:
+                continue
+            rewritten.add(key)
+            entries = [self._entry(obj) for obj in self._working_objects[key]]
+            for index, entry in enumerate(entries):
+                entry.index = index
+                new_indices[entry.uid] = index
+            self._components[key] = replace(
+                component, content=written[component.path], sources=[copy.deepcopy(entry.source) for entry in entries]
+            )
+        self._history = self._history.mapped(
+            lambda state: {
+                key: tuple(
+                    (uid, new_indices.get(uid) if key in rewritten else index, source) for uid, index, source in objects
+                )
+                for key, objects in state.items()
+            }
+        )
+        self._dirty = self._differs_from_files()
+        self._notify(DraftChange(ChangeKind.SAVE, "Save", objects=[], added=[], removed=False, pages=set()))
 
     # --- internals ---
 

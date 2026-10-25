@@ -227,7 +227,7 @@ class TestDraftFiles(TestBase):
         # THEN
         assert label["text"] == "B"
 
-    def test_the_history_continues_after_saving(self, cfg_root):
+    def test_after_saving_the_draft_is_the_files_and_the_history_goes_on(self, cfg_root):
         # GIVEN
         session = _load(cfg_root)
         [component] = session.components
@@ -235,48 +235,60 @@ class TestDraftFiles(TestBase):
         session.set_source_value(label, "x", 42)
         session.remove_object(button)
         session.add_object(component.key, {"page": 9, "id": 3, "obj": "label", "text": "new"})
-        write_save(plan_save(session))
+        changes = plan_save(session)
+        write_save(changes)
 
-        # WHEN the saved files are loaded into a new draft
-        saved = _load(cfg_root)
-        assert saved.adopt_history(session) is True
+        # WHEN
+        session.mark_saved({change.path: change.content for change in changes})
 
-        # THEN the saved edits can be undone, against the new files
-        [component] = saved.components
-        saved.undo()
-        assert [obj["id"] for obj in saved.working_objects[component.key]] == [1]
-        assert saved.is_dirty is True
-        saved.undo()
-        # the removed button comes back at the end of the file
-        assert [obj["id"] for obj in saved.working_objects[component.key]] == [1, 2]
-        assert {c.component.key: c for c in saved.changes()}[component.key].additions == [
+        # THEN the draft is what loading the files gives
+        assert session.is_dirty is False
+        assert session.changes() == []
+        [saved] = session.components
+        loaded = _load(cfg_root)
+        [reloaded] = loaded.components
+        assert (saved.content, saved.sources) == (reloaded.content, reloaded.sources)
+        # the lines of the objects are those of the saved file, also of the added one
+        assert [session.line_of(obj) for obj in session.working_objects[saved.key]] == [
+            loaded.line_of(obj) for obj in loaded.working_objects[reloaded.key]
+        ]
+
+        # WHEN the saved edits are undone
+        session.undo()
+        assert [obj["id"] for obj in session.working_objects[saved.key]] == [1]
+        assert session.is_dirty is True
+        session.undo()
+        # THEN the removed button comes back at the end of the file
+        assert [obj["id"] for obj in session.working_objects[saved.key]] == [1, 2]
+        assert {c.component.key: c for c in session.changes()}[saved.key].additions == [
             {"page": 9, "id": 2, "obj": "btn", "text": "B"}
         ]
-        saved.undo()
-        assert saved.working_objects[component.key][0]["x"] == 10
-        assert saved.undo() is None
+        session.undo()
+        assert session.working_objects[saved.key][0]["x"] == 10
+        assert session.undo() is None
 
         # WHEN everything is redone
-        while saved.redo() is not None:
+        while session.redo() is not None:
             pass
         # THEN the draft is the saved files again
-        assert saved.is_dirty is False
+        assert session.is_dirty is False
 
-    def test_the_history_is_not_continued_if_the_files_are_not_what_was_saved(self, cfg_root):
+    def test_saving_again_after_saving(self, cfg_root):
         # GIVEN
         session = _load(cfg_root)
         [component] = session.components
-        session.set_source_value(session.working_objects[component.key][0], "x", 42)
-        write_save(plan_save(session))
-        path = cfg_root / "devices" / "test_device" / "editor.jsonl"
-        path.write_text(path.read_text().replace('"text": "B"', '"text": "changed meanwhile"'))
+        label = session.working_objects[component.key][0]
+        session.set_source_value(label, "x", 42)
+        changes = plan_save(session)
+        write_save(changes)
+        session.mark_saved({change.path: change.content for change in changes})
 
         # WHEN
-        saved = _load(cfg_root)
+        session.set_source_value(label, "x", 43)
+        write_save(plan_save(session))
 
         # THEN
-        assert saved.adopt_history(session) is False
-        assert saved.undo() is None
+        assert '"x": 43' in (cfg_root / "devices" / "test_device" / "editor.jsonl").read_text()
 
     def test_flatten_template_variables(self):
         assert flatten_template_variables({"a": {"b": 1, "not-an-identifier": 2, "c": [1]}, "d": "x"}) == [

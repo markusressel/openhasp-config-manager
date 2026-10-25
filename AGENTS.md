@@ -75,8 +75,9 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
 - **Undo/redo**: every change through the session is a step of its undo history (`gui/domain/edit_history.py`, whole states of
   the sources, so undo doesn't depend on how an edit was made). Group the changes of one user action with
   `with session.edit("Move 3 objects"):`, and pass a `merge_key` for actions repeated in a row (typing into a property, nudging). An
-  edit operation of the editor needs no undo code of its own, only the grouping. The history continues after Save
-  (`adopt_history`) and starts anew when the draft is loaded from changed files or reverted.
+  edit operation of the editor needs no undo code of its own, only the grouping. Save doesn't load the draft again: the
+  draft takes what it wrote as its files (`mark_saved`), so the history continues. It starts anew when the draft is loaded from
+  changed files or reverted.
 - **Templates are never replaced implicitly.** Objects whose `x`/`y` is a template or a percentage can't be dragged or nudged; the
   editor explains why, and "Use pixels for x/y" replaces them only when the user asks. Keep this for new edit operations.
 - **Files**: new objects go into the target file chosen in the Files tree (`gui/domain/file_tree.py` follows the folder structure of

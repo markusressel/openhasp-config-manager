@@ -529,8 +529,10 @@ class PageLayoutEditorWidget(QWidget):
 
     def _on_draft_changed(self, change: DraftChange):
         """Show a change of the draft: every edit, undo and redo ends here, wherever it was made."""
-        if change.kind != ChangeKind.EDIT:
+        if change.kind in (ChangeKind.UNDO, ChangeKind.REDO):
             self._show_undone(change)
+        elif change.kind == ChangeKind.SAVE:
+            pass
         elif change.adds_or_removes:
             self._reload_page(select=change.added)
         else:

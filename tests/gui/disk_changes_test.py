@@ -92,11 +92,14 @@ class TestChangesOnDisk(TestBase):
         [component] = window.session.components
         window.session.set_source_value(window.session.working_objects[component.key][0], "x", 20)
 
+        session = window.session
+
         # WHEN
         assert window.save_draft()
-        wait_until(lambda: window.session is not None and window.session.is_loaded)
 
-        # THEN
+        # THEN the draft is kept (not loaded again) and has no changes
+        assert window.session is session and editor.session is session
+        assert not window.session.is_dirty and not window.action_save.isEnabled()
         assert editor.action_undo.text() == "Undo Change x of p9b1"
         editor.undo()
         assert x_of_label(window) == 10

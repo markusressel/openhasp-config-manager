@@ -192,8 +192,6 @@ class MainWindow(QMainWindow):
         self._session_key: Optional[Tuple[str, str]] = None
         # the page to show after a draft was reloaded (saved or reverted), per session key
         self._page_after_reload: Dict[Tuple[str, str], int] = {}
-        # drafts that were saved and are loaded again, per session key: the new draft continues their undo history
-        self._saved_drafts: Dict[Tuple[str, str], PlateSession] = {}
         self._discard_drafts_on_close = False
         # what the app wrote itself (Save), to tell its own file changes from those of others
         self._own_writes = OwnWrites()
@@ -818,7 +816,7 @@ class MainWindow(QMainWindow):
 
     def save_draft(self) -> bool:
         """
-        Write the changes of the draft into the source files, then load them again.
+        Write the changes of the draft into the source files.
         :return: whether the draft was saved
         """
         session = self.session
@@ -858,9 +856,11 @@ class MainWindow(QMainWindow):
             return False
         for change in changes:
             self._own_writes.written(change.path.resolve(), change.content)
+        # own writes are no change on disk for the watcher, but open tabs of the files must follow them
+        self.source_editor.external_changes({change.path.resolve() for change in changes})
+        # the files are what the draft holds now: no need to load them again
+        session.mark_saved({change.path: change.content for change in changes})
         self.status.succeeded.emit(f"Saved {len(changes)} file{'' if len(changes) == 1 else 's'}")
-        self._saved_drafts[self._session_key] = session
-        self._reload_draft()
         return True
 
     def deploy_saved_files(self):
@@ -953,9 +953,6 @@ class MainWindow(QMainWindow):
         # a draft without changes follows the files on disk, one with changes is kept (Save detects conflicts)
         if not session.is_loaded or not session.is_dirty:
             session.load(loaded.components, loaded.renderer)
-            saved = self._saved_drafts.pop(key, None)
-            if saved is not None and not session.adopt_history(saved):
-                LOGGER.info(f"The files of {loaded.device.name} changed after saving: the undo history starts anew")
         self._session_key = key
         self.file_tree_widget.set_files(
             loaded.files,
