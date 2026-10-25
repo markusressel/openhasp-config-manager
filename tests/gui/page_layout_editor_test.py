@@ -510,6 +510,16 @@ class TestLockedPosition(TestBase):
         assert offered() is True
 
 
+class TestWidgetPicker(TestBase):
+    def test_the_list_of_object_types_scrolls_instead_of_growing_the_preview(self, editor):
+        from openhasp_config_manager.gui.domain.page_objects import WIDGET_TYPES
+
+        # THEN: all types are offered, but they don't make the editor taller than a small window
+        assert len(WIDGET_TYPES) > 20
+        assert editor.widget_picker.minimumSizeHint().height() < 300
+        assert editor.minimumSizeHint().height() < 600
+
+
 class TestNavigationButtons(TestBase):
     def test_a_click_on_prev_changes_the_page_after_the_click_is_handled(self, editor):
         from PyQt6.QtCore import QPointF, Qt
