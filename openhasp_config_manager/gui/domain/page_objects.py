@@ -17,6 +17,7 @@ class OpenHASPWidgetType(StrEnum):
     IMAGE = "img"
     BAR = "bar"
     SLIDER = "slider"
+    GAUGE = "gauge"
     LINEMETER = "linemeter"
     SPINNER = "spinner"
     LED = "led"
@@ -112,6 +113,12 @@ WIDGET_TYPES: Dict[OpenHASPWidgetType, WidgetTypeInfo] = {
         description="Round scale of lines",
         icon="speedometer",
         defaults={"w": 150, "h": 150, "min": 0, "max": 100, "val": 50},
+    ),
+    OpenHASPWidgetType.GAUGE: WidgetTypeInfo(
+        title="Gauge",
+        description="Dial with a needle",
+        icon="gauge",
+        defaults={"w": 200, "h": 200, "min": 0, "max": 100, "val": 40},
     ),
 }
 

@@ -113,3 +113,12 @@ class TestPreviewItems(TestBase):
         assert HaspLineMeterItem({**meter, "val": 500}).active_lines() == 20
         assert painted(render(meter)) > 0
         assert render({**meter, "val": 50}) != render({**meter, "val": 50, "type": 1})
+
+    def test_gauge_labels_and_needle(self):
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.gauge import HaspGaugeItem
+
+        gauge = {"page": 1, "id": 1, "obj": "gauge", "x": 10, "y": 10, "w": 200, "h": 200, "min": 0, "max": 1000}
+        assert HaspGaugeItem(gauge).labels() == ["0", "200", "400", "600", "800", "1000"]
+        assert HaspGaugeItem({**gauge, "format": 2, "label_count": 3}).labels() == ["0", "5", "10"]
+        assert painted(render(gauge)) > 0
+        assert render({**gauge, "val": 900}) != render({**gauge, "val": 100})

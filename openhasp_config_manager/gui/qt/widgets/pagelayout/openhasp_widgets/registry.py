@@ -10,6 +10,7 @@ from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.roller i
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.led import HaspLedItem
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.spinner import HaspSpinnerItem
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.linemeter import HaspLineMeterItem
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.gauge import HaspGaugeItem
 
 ITEM_CLASSES: Dict[str, Type[EditableWidget]] = {
     "checkbox": HaspCheckboxItem,
@@ -19,4 +20,5 @@ ITEM_CLASSES: Dict[str, Type[EditableWidget]] = {
     "led": HaspLedItem,
     "spinner": HaspSpinnerItem,
     "linemeter": HaspLineMeterItem,
+    "gauge": HaspGaugeItem,
 }
