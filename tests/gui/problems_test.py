@@ -1,3 +1,5 @@
+import pytest
+
 from openhasp_config_manager.gui.domain.problems import Severity, find_problems, geometry_value
 
 
@@ -69,6 +71,8 @@ def test_the_json_view_sorts_objects_with_values_that_are_not_numbers(qapp, sett
 
 def test_an_exception_in_a_slot_is_reported_instead_of_aborting(monkeypatch):
     import sys
+
+    pytest.importorskip("PyQt6")
 
     from openhasp_config_manager.cli.gui import install_exception_hook
 
