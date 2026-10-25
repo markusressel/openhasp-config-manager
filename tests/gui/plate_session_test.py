@@ -467,3 +467,18 @@ class TestUndo(TestBase):
 
         # THEN
         assert session.undo() is None
+
+    def test_the_states_of_the_history_share_the_sources_that_did_not_change(self):
+        # GIVEN
+        session = _session()
+        button, label = session.working_objects["a.jsonl"]
+        before = session._state()
+
+        # WHEN
+        session.set_source_value(label, "text", "C")
+
+        # THEN only the changed source is a new copy
+        after = session._state()
+        assert after["a.jsonl"][0][2] is before["a.jsonl"][0][2]
+        assert after["a.jsonl"][1][2] is not before["a.jsonl"][1][2]
+        assert before["a.jsonl"][1][2]["text"] == "B"

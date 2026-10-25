@@ -123,6 +123,8 @@ class PlateSession:
         self._uids = itertools.count()
         self._loaded = False
         self.history: EditHistory[DraftState] = EditHistory()
+        # uid -> the copy of its source in the last state taken: states share the sources that didn't change (memory)
+        self._frozen_sources: Dict[int, Dict[str, Any]] = {}
         # the edit that is running (see `edit`): its description, merge key and the state before it
         self._edit: Optional[Tuple[str, Optional[Hashable], DraftState]] = None
 
@@ -141,6 +143,7 @@ class PlateSession:
         self._working_objects = OrderedDict()
         self._entries = {}
         self.history.clear()
+        self._frozen_sources = {}
         self._renderer.set_draft_sources({component.key: component.sources for component in self._components.values()})
         for component in self._components.values():
             self._working_objects[component.key] = [
@@ -514,12 +517,19 @@ class PlateSession:
         obj.update(rendered)
 
     def _state(self) -> DraftState:
+        """The sources in it are shared with other states: never change them."""
         return {
-            key: tuple(
-                (entry.uid, entry.index, copy.deepcopy(entry.source)) for entry in (self._entry(obj) for obj in objects)
-            )
+            key: tuple((entry.uid, entry.index, self._frozen_source(entry)) for entry in map(self._entry, objects))
             for key, objects in self._working_objects.items()
         }
+
+    def _frozen_source(self, entry: _Entry) -> Dict[str, Any]:
+        """:return: a copy of the source of an object, the one of the last state if the source didn't change since"""
+        frozen = self._frozen_sources.get(entry.uid)
+        if frozen is None or frozen != entry.source:
+            frozen = copy.deepcopy(entry.source)
+            self._frozen_sources[entry.uid] = frozen
+        return frozen
 
     def _differs_from_files(self) -> bool:
         for component in self._components.values():
