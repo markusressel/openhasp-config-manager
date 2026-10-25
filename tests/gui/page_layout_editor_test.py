@@ -113,7 +113,6 @@ class TestLivePreview(TestBase):
 
         # WHEN
         editor.session.set_source_value(_object(editor, 1), "x", 20)
-        editor._mark_dirty()
 
         # THEN
         wait_until(lambda: plate.calls)
@@ -128,7 +127,6 @@ class TestLivePreview(TestBase):
         # WHEN
         for x in range(20, 30):
             editor.session.set_source_value(label, "x", x)
-            editor._mark_dirty()
 
         # THEN
         wait_until(lambda: plate.calls and plate.calls[-1] == ("jsonl", {"page": 9, "id": 1, "x": 29}))
@@ -141,7 +139,6 @@ class TestLivePreview(TestBase):
 
         # WHEN
         editor.session.remove_object(_object(editor, 2))
-        editor._mark_dirty()
 
         # THEN
         wait_until(lambda: plate.calls)
@@ -162,7 +159,6 @@ class TestLivePreview(TestBase):
         # WHEN
         editor.stop_live_preview()
         editor.session.set_source_value(_object(editor, 1), "x", 20)
-        editor._mark_dirty()
 
         # THEN
         from PyQt6.QtTest import QTest
@@ -594,7 +590,6 @@ class TestUndo(TestBase):
         editor.set_page_index(1)
         other = next(obj for obj in editor.page_objects if obj.get("id") == 50)
         editor.session.set_source_value(other, "text", "F")
-        editor._mark_dirty()
         editor.set_page_index(9)
 
         # WHEN
@@ -721,6 +716,28 @@ class TestPropertyEditor(TestBase):
         # THEN
         assert self._template_field(editor).text() == "{{ nope"
         assert editor.session.is_template(obj, "text") is False
+
+    def test_typing_does_not_rebuild_the_panel_but_a_move_does(self, editor, monkeypatch):
+        # GIVEN
+        editor.set_edit_mode(True)
+        editor.page_preview_widget.select_object(_object(editor, 1))
+        properties = editor.property_editor
+        rebuilds = []
+        original = properties._create_content
+        monkeypatch.setattr(properties, "_create_content", lambda: rebuilds.append(1) or original())
+
+        # WHEN typing
+        properties._on_property_edited("text", "Ab", properties._editable_widgets[0])
+
+        # THEN the field keeps its focus and cursor, the preview shows the text
+        assert rebuilds == []
+        assert _object(editor, 1)["text"] == "Ab"
+
+        # WHEN the object is moved in the preview
+        editor.nudge_selected_objects(1, 0)
+
+        # THEN the panel shows the new x
+        assert rebuilds == [1]
 
 
 class TestHighlightComponent(TestBase):

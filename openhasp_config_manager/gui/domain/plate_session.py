@@ -4,9 +4,10 @@ import re
 from collections import OrderedDict
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from enum import Enum
 from functools import lru_cache
 from pathlib import Path
-from typing import List, Dict, Optional, Any, Protocol, Set, Tuple, Hashable, Iterator
+from typing import List, Dict, Optional, Any, Protocol, Set, Tuple, Hashable, Iterator, Callable
 
 from jinja2 import TemplateError
 
@@ -71,16 +72,34 @@ class _Entry:
 DraftState = Dict[str, Tuple[Tuple[int, Optional[int], Dict[str, Any]], ...]]
 
 
-@dataclass(frozen=True)
-class Restored:
-    """What an undo or redo changed."""
+class ChangeKind(Enum):
+    EDIT = "edit"
+    UNDO = "undo"
+    REDO = "redo"
 
-    # the edit that was undone or redone
+
+@dataclass(frozen=True)
+class DraftChange:
+    """
+    What a finished edit, undo or redo changed in the draft. Objects with templates that refer to the changed ones may have
+    changed too (they are rendered again).
+    """
+
+    kind: ChangeKind
+    # the edit that was made, undone or redone, e.g. "Move p1b2"
     description: str
-    # the rendered objects that were changed or added again
+    # the rendered objects whose source changed, or that were added, in the order of the draft
     objects: List[Dict]
-    # the pages with changed, added or removed objects
+    # the rendered objects that were added (also in `objects`)
+    added: List[Dict]
+    # whether objects were removed
+    removed: bool
+    # the pages of the changed and added objects; for an undo or redo also of the removed ones and where objects were before
     pages: Set[Any]
+
+    @property
+    def adds_or_removes(self) -> bool:
+        return bool(self.added) or self.removed
 
 
 @dataclass
@@ -127,6 +146,7 @@ class PlateSession:
         self._frozen_sources: Dict[int, Dict[str, Any]] = {}
         # the edit that is running (see `edit`): its description, merge key and the state before it
         self._edit: Optional[Tuple[str, Optional[Hashable], DraftState]] = None
+        self._listeners: List[Callable[[DraftChange], None]] = []
 
         self._dirty = False
 
@@ -384,9 +404,19 @@ class PlateSession:
             description, merge_key, before = self._edit
             self._edit = None
             after = self._state()
+            self._dirty = self._differs_from_files()
             if after != before:
                 self._history.push(description, before, after, merge_key)
-            self._dirty = self._differs_from_files()
+                self._notify(self._change_between(before, after, description))
+
+    def add_listener(self, listener: Callable[[DraftChange], None]):
+        """Call the listener after every edit, undo and redo that changed the draft (not when it is loaded)."""
+        if listener not in self._listeners:
+            self._listeners.append(listener)
+
+    def remove_listener(self, listener: Callable[[DraftChange], None]):
+        if listener in self._listeners:
+            self._listeners.remove(listener)
 
     @property
     def undo_description(self) -> Optional[str]:
@@ -406,15 +436,15 @@ class PlateSession:
         """:return: what tells the object apart for the whole session, e.g. for a merge key of `edit`"""
         return self._entry(obj).uid
 
-    def undo(self) -> Optional[Restored]:
-        """:return: what was undone, None if there was nothing to undo"""
+    def undo(self) -> Optional[DraftChange]:
+        """:return: what was undone (the listeners get it too), None if there was nothing to undo"""
         step = self._history.undo()
-        return None if step is None else self._restore(step.before, step.description)
+        return None if step is None else self._restore(step.before, step.description, ChangeKind.UNDO)
 
-    def redo(self) -> Optional[Restored]:
-        """:return: what was redone, None if there was nothing to redo"""
+    def redo(self) -> Optional[DraftChange]:
+        """:return: what was redone (the listeners get it too), None if there was nothing to redo"""
         step = self._history.redo()
-        return None if step is None else self._restore(step.after, step.description)
+        return None if step is None else self._restore(step.after, step.description, ChangeKind.REDO)
 
     def adopt_history(self, saved: "PlateSession") -> bool:
         """
@@ -558,7 +588,7 @@ class PlateSession:
                 return True
         return False
 
-    def _restore(self, state: DraftState, description: str) -> Restored:
+    def _restore(self, state: DraftState, description: str, kind: ChangeKind) -> DraftChange:
         """Change the draft to a state of the undo history. Objects that stay keep their rendered dict."""
         current = {self._entry(obj).uid: obj for objects in self._working_objects.values() for obj in objects}
         changed: List[Dict] = []
@@ -592,7 +622,36 @@ class PlateSession:
         pages |= {obj.get("page") for obj in changed + added}
         self._render_referring(names, skip=changed + added)
         self._dirty = self._differs_from_files()
-        return Restored(description=description, objects=changed + added, pages=pages)
+        restored = DraftChange(
+            kind=kind,
+            description=description,
+            objects=[obj for obj in self._all_objects() if any(obj is other for other in changed + added)],
+            added=added,
+            removed=bool(current),
+            pages=pages,
+        )
+        self._notify(restored)
+        return restored
+
+    def _change_between(self, before: DraftState, after: DraftState, description: str) -> DraftChange:
+        old = {uid: source for objects in before.values() for uid, _index, source in objects}
+        new = {uid: source for objects in after.values() for uid, _index, source in objects}
+        objects = [obj for obj in self._all_objects() if old.get(self._entry(obj).uid) != new[self._entry(obj).uid]]
+        return DraftChange(
+            kind=ChangeKind.EDIT,
+            description=description,
+            objects=objects,
+            added=[obj for obj in objects if self._entry(obj).uid not in old],
+            removed=any(uid not in new for uid in old),
+            pages={obj.get("page") for obj in objects},
+        )
+
+    def _all_objects(self) -> Iterator[Dict]:
+        return (obj for objects in self._working_objects.values() for obj in objects)
+
+    def _notify(self, change: DraftChange):
+        for listener in list(self._listeners):
+            listener(change)
 
     def _entry(self, obj: Dict) -> _Entry:
         return self._entries[id(obj)]

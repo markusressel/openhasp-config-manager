@@ -1,5 +1,6 @@
 import copy
-from typing import List, Any, Dict, Callable, Optional
+from contextlib import contextmanager
+from typing import List, Any, Dict, Callable, Optional, Hashable, Iterator
 
 from PyQt6 import QtCore
 from PyQt6.QtGui import QColor
@@ -50,7 +51,6 @@ class OpenHASPWidgetPropertyEditor(QWidget):
     """
 
     # (editable widget, key, value), value can be a string, int, bool, ...
-    propertyChanged = QtCore.pyqtSignal(object, str, object)
 
     removeObjectClicked = QtCore.pyqtSignal()
     duplicateObjectClicked = QtCore.pyqtSignal()
@@ -67,6 +67,8 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         self._validator: Optional[PropertyValidator] = None
         # whether the content was built for the current selection (it is built when the editor is created)
         self._shows_content = False
+        # an edit of this panel is running (see `_edit`)
+        self._applying = False
 
         self.outer_layout = QVBoxLayout(self)
         self.outer_layout.setContentsMargins(0, 0, 0, 0)
@@ -297,19 +299,15 @@ class OpenHASPWidgetPropertyEditor(QWidget):
             for key in set(source) | set(self._original_snapshot)
             if source.get(key, _MISSING) != self._original_snapshot.get(key, _MISSING)
         ]
-        with self._session.edit(f"Reset {object_name(widget.obj_data)}"):
+        with self._edit(f"Reset {object_name(widget.obj_data)}"):
             for key in keys:
                 self._restore_value(widget, key)
-        # after the edit: the draft reports its changes when the edit is done
-        for key in keys:
-            self._report_change(widget, key)
         self._pending_templates.clear()
         self.refresh()
 
     def _restore(self, widget: EditableWidget, key: str):
-        with self._session.edit(f"Reset {key} of {object_name(widget.obj_data)}"):
+        with self._edit(f"Reset {key} of {object_name(widget.obj_data)}"):
             self._restore_value(widget, key)
-        self._report_change(widget, key)
 
     def _restore_value(self, widget: EditableWidget, key: str):
         # before the size changes, so the scene updates its index
@@ -319,9 +317,20 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         else:
             self._session.remove_source_value(widget.obj_data, key)
 
-    def _report_change(self, widget: EditableWidget, key: str):
-        widget.refresh()
-        self.propertyChanged.emit(widget, key, widget.obj_data.get(key))
+    @contextmanager
+    def _edit(self, description: str, merge_key: Optional[Hashable] = None) -> Iterator[None]:
+        """An edit of the draft (see `PlateSession.edit`) made by this panel: it is not rebuilt for it, see `refresh_after_change`."""
+        self._applying = True
+        try:
+            with self._session.edit(description, merge_key=merge_key):
+                yield
+        finally:
+            self._applying = False
+
+    def refresh_after_change(self):
+        """Show the values after the draft changed, unless this panel changed it: rebuilding it would interrupt typing."""
+        if not self._applying:
+            self.refresh()
 
     def _create_property_field(self, obj_data: Dict, key: str, widget: EditableWidget) -> QWidget:
         """The editor of a property: a literal value, or a template, switched by the button next to it."""
@@ -521,10 +530,8 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         widget.prepareGeometryChange()
         # typing into the field is one step
         typing = ("property", self._session.object_uid(widget.obj_data), key)
-        with self._session.edit(f"Change {key} of {object_name(widget.obj_data)}", merge_key=typing):
+        with self._edit(f"Change {key} of {object_name(widget.obj_data)}", merge_key=typing):
             self._session.set_source_value(widget.obj_data, key, value)
-        widget.refresh()
-        self.propertyChanged.emit(widget, key, value)
 
 
 def _plain_layout[L: QHBoxLayout | QVBoxLayout](layout: L) -> L:

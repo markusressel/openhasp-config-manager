@@ -91,7 +91,6 @@ class TestChangesOnDisk(TestBase):
         editor = window.page_layout_editor_widget
         [component] = window.session.components
         window.session.set_source_value(window.session.working_objects[component.key][0], "x", 20)
-        editor._mark_dirty()
 
         # WHEN
         assert window.save_draft()

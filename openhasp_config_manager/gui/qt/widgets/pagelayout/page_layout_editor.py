@@ -26,7 +26,7 @@ from openhasp_config_manager.gui.domain.page_objects import (
 from openhasp_config_manager.gui.domain.clipboard import PasteCascade, objects_from_text, objects_to_text, with_descendants
 from openhasp_config_manager.gui.domain.file_tree import default_target_component, relative_config_path
 from openhasp_config_manager.gui.domain.live_preview import LivePage
-from openhasp_config_manager.gui.domain.plate_session import PlateSession, Restored
+from openhasp_config_manager.gui.domain.plate_session import ChangeKind, DraftChange, PlateSession
 from openhasp_config_manager.gui.domain.ui_session import DeviceSession
 from openhasp_config_manager.gui.qt.components import UiComponents
 from openhasp_config_manager.gui.qt.layouts import frozen
@@ -134,7 +134,6 @@ class PageLayoutEditorWidget(QWidget):
         self.property_editor.removeObjectClicked.connect(self.remove_selected_objects)
         self.property_editor.duplicateObjectClicked.connect(self.duplicate_selected_objects)
         self.property_editor.usePixelPositionClicked.connect(self.use_pixel_positions)
-        self.property_editor.propertyChanged.connect(self._on_property_changed)
         self.property_editor.set_validator(self._validate_property)
 
         self.jsonl_preview = PageJsonlPreviewWidget()
@@ -454,6 +453,8 @@ class PageLayoutEditorWidget(QWidget):
     # --- data ---
 
     def clear(self):
+        if self.session is not None:
+            self.session.remove_listener(self._on_draft_changed)
         self.session = None
         self.device_pages_data = None
         self.current_index = 1
@@ -471,7 +472,10 @@ class PageLayoutEditorWidget(QWidget):
         :param session: the draft, loaded
         :param page: the page to show, defaults to the first one (also if the draft has no such page anymore)
         """
+        if self.session is not None and self.session is not session:
+            self.session.remove_listener(self._on_draft_changed)
         self.session = session
+        session.add_listener(self._on_draft_changed)
         self.device_pages_data = device_pages_data
         self.error_banner.hide()
         self.highlight_component(None)
@@ -523,8 +527,17 @@ class PageLayoutEditorWidget(QWidget):
         else:
             self.page_preview_widget.set_empty_hint(None)
 
-    def _mark_dirty(self):
-        """Report a change of the draft (the session marks itself dirty)."""
+    def _on_draft_changed(self, change: DraftChange):
+        """Show a change of the draft: every edit, undo and redo ends here, wherever it was made."""
+        if change.kind != ChangeKind.EDIT:
+            self._show_undone(change)
+        elif change.adds_or_removes:
+            self._reload_page(select=change.added)
+        else:
+            # objects with templates that refer to the changed ones may have changed too
+            self.page_preview_widget.refresh_items()
+            self._update_page_views()
+            self.property_editor.refresh_after_change()
         self.dirtyChanged.emit(self.session.is_dirty)
         self.fileStateChanged.emit()
         self._update_undo_actions()
@@ -582,26 +595,24 @@ class PageLayoutEditorWidget(QWidget):
 
     def undo(self):
         if self.session is not None:
-            self._show_restored(self.session.undo(), "Undone")
+            self.session.undo()
 
     def redo(self):
         if self.session is not None:
-            self._show_restored(self.session.redo(), "Redone")
+            self.session.redo()
 
-    def _show_restored(self, restored: Optional[Restored], done: str):
+    def _show_undone(self, change: DraftChange):
         """Show what an undo or redo changed: on its page, with the changed objects selected."""
-        if restored is None:
-            return
         pages = get_navigable_page_indices(self.working_objects)
         # the objects of page 0 are on every page
         shown = {self.current_index, 0}
-        candidates = sorted(page for page in restored.pages if isinstance(page, int) and page in pages)
-        if not restored.pages & shown and candidates:
+        candidates = sorted(page for page in change.pages if isinstance(page, int) and page in pages)
+        if not change.pages & shown and candidates:
             self._go_to_page(candidates[0])
             shown = {self.current_index, 0}
-        self._mark_dirty()
-        self._reload_page(select=[obj for obj in restored.objects if obj.get("page") in shown])
-        self.status.succeeded.emit(f"{done}: {restored.description}")
+        self._reload_page(select=[obj for obj in change.objects if obj.get("page") in shown])
+        done = "Undone" if change.kind == ChangeKind.UNDO else "Redone"
+        self.status.succeeded.emit(f"{done}: {change.description}")
 
     @staticmethod
     def _describe(action: str, items: List[EditableWidget]) -> str:
@@ -654,11 +665,6 @@ class PageLayoutEditorWidget(QWidget):
         self.problems_panel.set_problems(self.problems)
         self.stateChanged.emit()
 
-    def _on_property_changed(self, _widget: EditableWidget, _key: str, _value: Any):
-        self.page_preview_widget.refresh_items()
-        self._mark_dirty()
-        self._update_page_views()
-
     def _validate_property(self, obj: Dict, key: str, value: Any) -> Optional[str]:
         if key == "id" and is_id_used(self.working_objects, obj.get("page"), value, ignore=obj):
             return f"Id {value} is already used on page {obj.get('page')}."
@@ -685,14 +691,11 @@ class PageLayoutEditorWidget(QWidget):
         with self.session.edit(self._describe("Use pixels for x/y of", items)):
             for item in items:
                 self.session.use_pixel_position(item.obj_data)
-        self.page_preview_widget.refresh_movable()
-        self._after_geometry_edit()
 
     def _on_items_moved(self, items: List[EditableWidget]):
         with self.session.edit(self._describe("Move", items)):
             for item in items:
                 self._move(item, item.live_x, item.live_y)
-        self._after_geometry_edit()
 
     def nudge_selected_objects(self, dx: int, dy: int):
         items = self.page_preview_widget.selected_items()
@@ -707,18 +710,10 @@ class PageLayoutEditorWidget(QWidget):
         with self.session.edit(self._describe("Move", movable), merge_key=nudged):
             for item in movable:
                 self._move(item, item.obj_x + dx, item.obj_y + dy)
-        self._after_geometry_edit()
 
     def _move(self, item: EditableWidget, x: int, y: int):
         self.session.set_source_value(item.obj_data, "x", x)
         self.session.set_source_value(item.obj_data, "y", y)
-        item.refresh()
-
-    def _after_geometry_edit(self):
-        self.page_preview_widget.refresh_items()
-        self._mark_dirty()
-        self._update_page_views()
-        self.property_editor.refresh()
 
     # --- files ---
 
@@ -793,9 +788,7 @@ class PageLayoutEditorWidget(QWidget):
             screen_height=screen.height,
             parent_id=parent_id,
         )
-        obj = self.session.add_object(component, obj)
-        self._mark_dirty()
-        self._reload_page(select=[obj])
+        self.session.add_object(component, obj)
 
     def _parent_for(self, widget_type: OpenHASPWidgetType) -> Optional[int]:
         """The object a new object belongs to: a tab goes into the last tabview of the page."""
@@ -808,16 +801,13 @@ class PageLayoutEditorWidget(QWidget):
         items = self.page_preview_widget.selected_items()
         if not self.edit_mode or not items:
             return
-        duplicates = []
         with self.session.edit(self._describe("Duplicate", items)):
             for item in items:
                 try:
-                    duplicates.append(self.session.duplicate_object(item.obj_data))
+                    self.session.duplicate_object(item.obj_data)
                 except ValueError as ex:
                     self.status.failed.emit(f"Duplicating p{item.obj_data.get('page')}b{item.obj_id}", error_text(ex))
                     break
-        self._mark_dirty()
-        self._reload_page(select=duplicates)
 
     def copy_selected_objects(self):
         """Copy the selected objects (with the objects inside of them) to the clipboard, as JSONL with their templates."""
@@ -847,7 +837,7 @@ class PageLayoutEditorWidget(QWidget):
         screen = self.device_pages_data.device.config.openhasp_config_manager.device.screen
         position = self.page_preview_widget.cursor_plate_position()
         try:
-            pasted = self.session.paste_objects(
+            self.session.paste_objects(
                 component,
                 sources,
                 page=self.current_index,
@@ -857,9 +847,6 @@ class PageLayoutEditorWidget(QWidget):
             )
         except (ValueError, TemplateError) as ex:
             self.status.failed.emit("Pasting", error_text(ex))
-            return
-        self._mark_dirty()
-        self._reload_page(select=pasted)
 
     def remove_selected_objects(self):
         items = self.page_preview_widget.selected_items()
@@ -879,8 +866,6 @@ class PageLayoutEditorWidget(QWidget):
         with self.session.edit(self._describe("Remove", items)):
             for item in items:
                 self.session.remove_object(item.obj_data)
-        self._mark_dirty()
-        self._reload_page()
 
     # --- plate ---
 
