@@ -14,6 +14,7 @@ from openhasp_config_manager.gui.qt.components import UiComponents
 from openhasp_config_manager.gui.qt.theme import current_colors
 from openhasp_config_manager.gui.qt.async_bridge import qBridge
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.bar import HaspBarItem
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.registry import ITEM_CLASSES
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.button import HaspButtonItem
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.image import HaspImageItem
@@ -229,6 +230,8 @@ class PagePreviewWidget(QGraphicsView):
                 item = self._create_label_widget(obj_data)
             elif obj_type == "img":
                 item = self._create_img_widget(obj_data)
+            elif obj_type in ITEM_CLASSES:
+                item = ITEM_CLASSES[obj_type](obj_data=obj_data, parent_widget=self)
 
             if item is not None:
                 LOGGER.debug(f"Adding '{obj_type}' item to scene: {item}")
