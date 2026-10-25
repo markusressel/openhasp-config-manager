@@ -248,6 +248,25 @@ class TestFiles(TestBase):
         # THEN
         assert len(editor.working_objects[home]) == count
 
+    def test_removing_an_object_rebuilds_the_properties_once(self, editor, monkeypatch):
+        # GIVEN
+        from PyQt6.QtWidgets import QMessageBox
+
+        editor.set_edit_mode(True)
+        item = editor.page_preview_widget.editable_items()[0]
+        item.setSelected(True)
+        monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *args: QMessageBox.StandardButton.Yes))
+        rebuilds = []
+        original = editor.property_editor._create_content
+        monkeypatch.setattr(editor.property_editor, "_create_content", lambda: rebuilds.append(1) or original())
+
+        # WHEN
+        editor.remove_selected_objects()
+
+        # THEN
+        assert len(rebuilds) == 1
+        assert len(editor.page_preview_widget.editable_items()) == 1
+
     def test_the_chosen_file_is_remembered_for_the_next_start(self, editor, settings):
         # GIVEN
         from openhasp_config_manager.gui.domain.file_tree import config_root_of

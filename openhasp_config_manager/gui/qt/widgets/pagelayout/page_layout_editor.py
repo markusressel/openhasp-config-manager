@@ -29,6 +29,7 @@ from openhasp_config_manager.gui.domain.live_preview import LivePage
 from openhasp_config_manager.gui.domain.plate_session import PlateSession
 from openhasp_config_manager.gui.domain.ui_session import DeviceSession
 from openhasp_config_manager.gui.qt.components import UiComponents
+from openhasp_config_manager.gui.qt.layouts import frozen
 from openhasp_config_manager.gui.qt.operations import BusyState, OperationStatus, run_busy, error_text
 from openhasp_config_manager.gui.qt.async_bridge import qBridge, run_async
 from openhasp_config_manager.gui.qt.throttle import LatestValueThrottle
@@ -502,11 +503,12 @@ class PageLayoutEditorWidget(QWidget):
 
     def _reload_page(self, select: List[Dict] = ()):
         """Rebuilds the preview from the draft after objects were added or removed, and selects the given objects."""
-        self.set_page_index(self.current_index)
-        for obj in select:
-            for item in self.page_preview_widget.editable_items():
-                if item.obj_data is obj:
-                    item.setSelected(True)
+        with frozen(self):
+            self.set_page_index(self.current_index)
+            for obj in select:
+                for item in self.page_preview_widget.editable_items():
+                    if item.obj_data is obj:
+                        item.setSelected(True)
         self.page_preview_widget.setFocus()
 
     # --- page navigation ---

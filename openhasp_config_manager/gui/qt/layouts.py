@@ -1,3 +1,6 @@
+from contextlib import contextmanager
+
+
 def clear_layout(layout):
     """Recursively delete all widgets and layouts in the given layout."""
     if layout is None:
@@ -11,3 +14,13 @@ def clear_layout(layout):
             child_widget.deleteLater()
         elif child.layout() is not None:
             clear_layout(child.layout())
+
+
+@contextmanager
+def frozen(widget):
+    """Don't repaint a widget (and its children) while it is changed in several steps, so the steps don't show as flicker."""
+    widget.setUpdatesEnabled(False)
+    try:
+        yield
+    finally:
+        widget.setUpdatesEnabled(True)
