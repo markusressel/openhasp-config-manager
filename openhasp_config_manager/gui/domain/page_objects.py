@@ -17,6 +17,7 @@ class OpenHASPWidgetType(StrEnum):
     IMAGE = "img"
     BAR = "bar"
     SLIDER = "slider"
+    CHECKBOX = "checkbox"
 
 
 @dataclass(frozen=True)
@@ -63,6 +64,12 @@ WIDGET_TYPES: Dict[OpenHASPWidgetType, WidgetTypeInfo] = {
         description="Drag to set a value",
         icon="tune-variant",
         defaults={"w": 200, "h": 30, "min": 0, "max": 100, "val": 50},
+    ),
+    OpenHASPWidgetType.CHECKBOX: WidgetTypeInfo(
+        title="Checkbox",
+        description="Tick box with a text",
+        icon="checkbox-marked-outline",
+        defaults={"w": 150, "h": 30, "text": "Checkbox", "val": 0},
     ),
 }
 

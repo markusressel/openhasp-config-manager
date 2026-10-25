@@ -2,6 +2,9 @@
 
 from typing import Dict, Type
 
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.checkbox import HaspCheckboxItem
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
 
-ITEM_CLASSES: Dict[str, Type[EditableWidget]] = {}
+ITEM_CLASSES: Dict[str, Type[EditableWidget]] = {
+    "checkbox": HaspCheckboxItem,
+}
