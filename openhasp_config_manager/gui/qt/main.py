@@ -63,7 +63,7 @@ from openhasp_config_manager.gui.qt.async_bridge import run_async
 from openhasp_config_manager.gui.qt.widgets.code_view import CodeView
 from openhasp_config_manager.gui.qt.widgets.device_list import DeviceListWidget
 from openhasp_config_manager.gui.qt.widgets.file_tree import FileTreeWidget
-from openhasp_config_manager.gui.qt.widgets.message_panel import MessagePanel, DiskChangesBanner
+from openhasp_config_manager.gui.qt.widgets.message_panel import MessagePanel, DiskConflictBanner, file_list_text
 from openhasp_config_manager.gui.qt.widgets.pagelayout import OpenHaspDevicePagesData
 from openhasp_config_manager.gui.qt.widgets.pagelayout.page_layout_editor import PageLayoutEditorWidget
 from openhasp_config_manager.gui.qt.widgets.source_editor import SourceEditorWidget
@@ -254,7 +254,11 @@ class MainWindow(QMainWindow):
         self.center_stack.addWidget(self.message_panel)
         self.center_stack.addWidget(self.page_layout_editor_widget)
         # files changed on disk while the draft has changes of its own
-        self.disk_changes_banner = DiskChangesBanner()
+        self.disk_changes_banner = DiskConflictBanner(
+            reload_tooltip="Discard the changes of the draft and load the files as they are on disk now",
+            keep_title="Keep my changes",
+            keep_tooltip="Keep the draft. Save fails for files that changed on disk, until the draft is reverted.",
+        )
         self.disk_changes_banner.reloadRequested.connect(self._reload_draft)
         self.disk_changes_banner.visibilityChanged.connect(self._state_publisher.request)
         center = QWidget()
@@ -685,7 +689,9 @@ class MainWindow(QMainWindow):
         )
         if affecting:
             self._disk_changes = [str(path.relative_to(self._cfg_root)) for path in affecting]
-            self.disk_changes_banner.show_changes([str(path.relative_to(self._cfg_root)) for path in affecting])
+            self.disk_changes_banner.show_message(
+                f"Changed on disk since this draft was loaded: {file_list_text(self._disk_changes)}"
+            )
 
     def _reload_changed_files(self, paths: Set[Path]):
         """Load the device again, in the background and without leaving the editor: the page and zoom stay."""

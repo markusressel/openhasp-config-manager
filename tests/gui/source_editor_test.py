@@ -236,7 +236,7 @@ class TestChangesOnDisk(TestBase):
         widget.external_changes({folder / "b.jsonl"})
         page = widget._pages[(folder / "b.jsonl").resolve()]
         assert not page.banner.isHidden()
-        assert "deleted" in page.banner._text.text()
+        assert "deleted" in page.banner.text
         widget.confirm_overwrite = lambda path: True
         assert widget.save()
         assert (folder / "b.jsonl").exists()

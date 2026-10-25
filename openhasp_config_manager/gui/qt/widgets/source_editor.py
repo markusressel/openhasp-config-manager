@@ -4,7 +4,7 @@ from typing import Callable, Dict, List, Optional, Set
 
 from PyQt6 import QtCore
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QFrame, QInputDialog, QMessageBox, QStackedLayout, QTabWidget, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QInputDialog, QMessageBox, QStackedLayout, QTabWidget, QVBoxLayout, QWidget
 
 from openhasp_config_manager.gui.dimensions import UiDimensions
 from openhasp_config_manager.gui.domain.source_buffers import DiskChange, SourceBuffer, SourceBuffers, read_text
@@ -14,49 +14,9 @@ from openhasp_config_manager.gui.domain.source_syntax import language_of
 from openhasp_config_manager.gui.qt.components import UiComponents
 from openhasp_config_manager.gui.qt.widgets.code_editor import CodeEditor
 from openhasp_config_manager.gui.qt.widgets.find_bar import FindBar
+from openhasp_config_manager.gui.qt.widgets.message_panel import DiskConflictBanner
 
 LOGGER = logging.getLogger(__name__)
-
-
-class _ConflictBanner(QFrame):
-    """The file of a tab with changes changed on disk too: the user chooses which version to keep."""
-
-    reloadRequested = QtCore.pyqtSignal()
-    keepRequested = QtCore.pyqtSignal()
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setProperty("role", "banner")
-        row = UiComponents.create_row(parent=self, alignment=Qt.AlignmentFlag.AlignVCenter)
-        row.setContentsMargins(UiDimensions.one, UiDimensions.half, UiDimensions.one, UiDimensions.half)
-        row.addWidget(UiComponents.create_icon_label("file-alert-outline"))
-        self._text = UiComponents.create_label("", word_wrap=True)
-        row.addWidget(self._text, 1)
-        row.addWidget(
-            UiComponents.create_button(
-                "Reload from disk",
-                self.reloadRequested.emit,
-                icon="refresh",
-                tooltip="Discard the changes in this editor and load the file as it is on disk now",
-            )
-        )
-        row.addWidget(
-            UiComponents.create_button(
-                "Keep my version",
-                self.keepRequested.emit,
-                icon="close",
-                tooltip="Keep the text in this editor. Saving overwrites the file on disk.",
-            )
-        )
-        self.hide()
-
-    def show_conflict(self, deleted: bool):
-        self._text.setText(
-            "This file was deleted on disk. Saving writes it again."
-            if deleted
-            else "This file changed on disk, and you have unsaved changes here."
-        )
-        self.show()
 
 
 class _Page(QWidget):
@@ -65,7 +25,11 @@ class _Page(QWidget):
     def __init__(self, editor: CodeEditor):
         super().__init__()
         self.editor = editor
-        self.banner = _ConflictBanner()
+        self.banner = DiskConflictBanner(
+            reload_tooltip="Discard the changes in this editor and load the file as it is on disk now",
+            keep_title="Keep my version",
+            keep_tooltip="Keep the text in this editor. Saving overwrites the file on disk.",
+        )
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
@@ -303,7 +267,11 @@ class SourceEditorWidget(QWidget):
             if change == DiskChange.RELOADED:
                 page.editor.set_text(self._buffers.get(path).text)
             elif change == DiskChange.CONFLICT:
-                page.banner.show_conflict(deleted=read_text(path) is None)
+                page.banner.show_message(
+                    "This file was deleted on disk. Saving writes it again."
+                    if read_text(path) is None
+                    else "This file changed on disk, and you have unsaved changes here."
+                )
             elif change == DiskChange.DELETED:
                 self._remove_tab(path)
                 continue

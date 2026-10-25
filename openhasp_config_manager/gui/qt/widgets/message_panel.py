@@ -119,16 +119,17 @@ class ErrorBanner(QFrame):
             self._retry()
 
 
-class DiskChangesBanner(QFrame):
+class DiskConflictBanner(QFrame):
     """
-    Tells that files of the draft changed on disk (e.g. edited by an LLM or in a text editor) while the draft has
-    unsaved changes of its own, and lets the user choose which side to keep.
+    Files changed on disk (e.g. edited by an LLM or in a text editor) while there are unsaved changes of their own here: the
+    user chooses which side to keep. Both choices hide the banner.
     """
 
     reloadRequested = QtCore.pyqtSignal()
+    keepRequested = QtCore.pyqtSignal()
     visibilityChanged = QtCore.pyqtSignal()
 
-    def __init__(self, parent=None):
+    def __init__(self, reload_tooltip: str, keep_title: str, keep_tooltip: str, parent=None):
         super().__init__(parent)
         self.setProperty("role", "banner")
 
@@ -142,24 +143,24 @@ class DiskChangesBanner(QFrame):
             UiComponents.create_button(
                 title="Reload from disk",
                 icon="refresh",
-                tooltip="Discard the changes of the draft and load the files as they are on disk now",
-                on_click=self._on_reload,
+                tooltip=reload_tooltip,
+                on_click=lambda: self._choose(self.reloadRequested),
             )
         )
         row.addWidget(
             UiComponents.create_button(
-                title="Keep my changes",
-                icon="close",
-                tooltip="Keep the draft. Save fails for files that changed on disk, until the draft is reverted.",
-                on_click=self.hide,
+                title=keep_title, icon="close", tooltip=keep_tooltip, on_click=lambda: self._choose(self.keepRequested)
             )
         )
         self.hide()
 
-    def show_changes(self, files: List[str]):
-        shown = ", ".join(files[:3]) + (f" and {len(files) - 3} more" if len(files) > 3 else "")
+    @property
+    def text(self) -> str:
+        return self._text.text()
+
+    def show_message(self, text: str):
         # lets long paths wrap at their separators
-        self._text.setText(f"Changed on disk since this draft was loaded: {shown}".replace("/", "/​"))
+        self._text.setText(text.replace("/", "/\u200b"))
         self.show()
 
     def setVisible(self, visible: bool):
@@ -167,6 +168,11 @@ class DiskChangesBanner(QFrame):
         super().setVisible(visible)
         self.visibilityChanged.emit()
 
-    def _on_reload(self):
+    def _choose(self, signal):
         self.hide()
-        self.reloadRequested.emit()
+        signal.emit()
+
+
+def file_list_text(files: List[str], shown: int = 3) -> str:
+    """:return: the first files, and how many more there are"""
+    return ", ".join(files[:shown]) + (f" and {len(files) - shown} more" if len(files) > shown else "")
