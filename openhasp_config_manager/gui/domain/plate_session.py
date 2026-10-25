@@ -122,14 +122,13 @@ class PlateSession:
         self._entries: Dict[int, _Entry] = {}
         self._uids = itertools.count()
         self._loaded = False
-        self.history: EditHistory[DraftState] = EditHistory()
+        self._history: EditHistory[DraftState] = EditHistory()
         # uid -> the copy of its source in the last state taken: states share the sources that didn't change (memory)
         self._frozen_sources: Dict[int, Dict[str, Any]] = {}
         # the edit that is running (see `edit`): its description, merge key and the state before it
         self._edit: Optional[Tuple[str, Optional[Hashable], DraftState]] = None
 
-        # whether the draft differs from the files it was loaded from
-        self.is_dirty: bool = False
+        self._dirty = False
 
     def load(self, components: List[ComponentSource], renderer: DraftRenderer):
         """Initializes the draft from the components as they are on disk."""
@@ -142,14 +141,19 @@ class PlateSession:
         """Discards all changes of the draft and its undo history. The rendered objects are new objects afterwards."""
         self._working_objects = OrderedDict()
         self._entries = {}
-        self.history.clear()
+        self._history.clear()
         self._frozen_sources = {}
         self._renderer.set_draft_sources({component.key: component.sources for component in self._components.values()})
         for component in self._components.values():
             self._working_objects[component.key] = [
                 self._create(component.key, index, copy.deepcopy(source)) for index, source in enumerate(component.sources)
             ]
-        self.is_dirty = False
+        self._dirty = False
+
+    @property
+    def is_dirty(self) -> bool:
+        """Whether the draft differs from the files it was loaded from."""
+        return self._dirty
 
     @property
     def is_loaded(self) -> bool:
@@ -381,8 +385,22 @@ class PlateSession:
             self._edit = None
             after = self._state()
             if after != before:
-                self.history.push(description, before, after, merge_key)
-            self.is_dirty = self._differs_from_files()
+                self._history.push(description, before, after, merge_key)
+            self._dirty = self._differs_from_files()
+
+    @property
+    def undo_description(self) -> Optional[str]:
+        """:return: what `undo` undoes, None if there is nothing to undo"""
+        return self._history.undo_description
+
+    @property
+    def redo_description(self) -> Optional[str]:
+        """:return: what `redo` redoes, None if there is nothing to redo"""
+        return self._history.redo_description
+
+    def end_merging(self):
+        """The next edit is a step of its own, even with the merge key of the last one (e.g. another object was selected)."""
+        self._history.seal()
 
     def object_uid(self, obj: Dict) -> int:
         """:return: what tells the object apart for the whole session, e.g. for a merge key of `edit`"""
@@ -390,12 +408,12 @@ class PlateSession:
 
     def undo(self) -> Optional[Restored]:
         """:return: what was undone, None if there was nothing to undo"""
-        step = self.history.undo()
+        step = self._history.undo()
         return None if step is None else self._restore(step.before, step.description)
 
     def redo(self) -> Optional[Restored]:
         """:return: what was redone, None if there was nothing to redo"""
-        step = self.history.redo()
+        step = self._history.redo()
         return None if step is None else self._restore(step.after, step.description)
 
     def adopt_history(self, saved: "PlateSession") -> bool:
@@ -418,7 +436,7 @@ class PlateSession:
                 self._entry(obj).uid = uid
                 new_indices[uid] = index
         self._uids = saved._uids
-        self.history = saved.history.mapped(
+        self._history = saved._history.mapped(
             lambda old: {
                 key: tuple((uid, new_indices.get(uid), source) for uid, _index, source in objects)
                 for key, objects in old.items()
@@ -573,7 +591,7 @@ class PlateSession:
         names |= {object_name(obj) for obj in changed + added}
         pages |= {obj.get("page") for obj in changed + added}
         self._render_referring(names, skip=changed + added)
-        self.is_dirty = self._differs_from_files()
+        self._dirty = self._differs_from_files()
         return Restored(description=description, objects=changed + added, pages=pages)
 
     def _entry(self, obj: Dict) -> _Entry:

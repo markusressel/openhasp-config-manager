@@ -441,10 +441,10 @@ class PageLayoutEditorWidget(QWidget):
         self.widget_picker.setEnabled(has_data and len(self.working_objects) > 0)
 
     def _update_undo_actions(self):
-        history = None if self.session is None else self.session.history
+        session = self.session
         for action, title, description in [
-            (self.action_undo, "Undo", history and history.undo_description),
-            (self.action_redo, "Redo", history and history.redo_description),
+            (self.action_undo, "Undo", session and session.undo_description),
+            (self.action_redo, "Redo", session and session.redo_description),
         ]:
             text = title if description is None else f"{title} {description}"
             action.setEnabled(description is not None)
@@ -633,7 +633,7 @@ class PageLayoutEditorWidget(QWidget):
         self.jsonl_preview.set_selected_objects([widget.obj_data for widget in editable_widgets])
         if self.session is not None:
             # e.g. typing into the same property of another object is another step
-            self.session.history.seal()
+            self.session.end_merging()
         self._update_actions()
         self.stateChanged.emit()
         # the file of a single selected object is selected in the file tree (see `selectedObjectComponentChanged`)

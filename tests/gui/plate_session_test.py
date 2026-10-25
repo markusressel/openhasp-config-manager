@@ -382,7 +382,7 @@ class TestUndo(TestBase):
             session.set_source_value(label, "y", 60)
 
         # THEN
-        assert session.history.undo_description == "Move 2 objects"
+        assert session.undo_description == "Move 2 objects"
         session.undo()
         assert (button["x"], label["y"]) == (10, "15%")
         assert session.undo() is None
@@ -397,9 +397,9 @@ class TestUndo(TestBase):
         session.duplicate_object(button)
 
         # THEN
-        assert session.history.undo_description == "Duplicate p1b1"
+        assert session.undo_description == "Duplicate p1b1"
         session.undo()
-        assert session.history.undo_description == "Paste 2 objects"
+        assert session.undo_description == "Paste 2 objects"
         session.undo()
         assert session.working_objects["a.jsonl"] == [button, label]
         assert session.working_objects["b.jsonl"] == []

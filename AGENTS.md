@@ -69,7 +69,7 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
 - **Draft**: `PlateSession` (`gui/domain/plate_session.py`) keeps every object twice: rendered (shown in the preview) and as written in its
   file, with its templates. Change objects through the session (`set_source_value`, `add_object`, `paste_objects`, ...), never by
   mutating the rendered dicts: Save patches only the changed source properties back into the files.
-- **Undo/redo**: every change through the session is a step of `PlateSession.history` (`gui/domain/edit_history.py`, whole states of
+- **Undo/redo**: every change through the session is a step of its undo history (`gui/domain/edit_history.py`, whole states of
   the sources, so undo doesn't depend on how an edit was made). Group the changes of one user action with
   `with session.edit("Move 3 objects"):`, and pass a `merge_key` for actions repeated in a row (typing into a property, nudging). An
   edit operation of the editor needs no undo code of its own, only the grouping. The history continues after Save
