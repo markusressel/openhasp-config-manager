@@ -10,6 +10,7 @@ from jinja2 import TemplateError
 from openhasp_config_manager.gui.domain.page_objects import next_free_id
 from openhasp_config_manager.gui.domain.problems import object_name
 from openhasp_config_manager.openhasp_client.model.device import Device
+from openhasp_config_manager.processing.template_rendering import has_nested_templates, referenced_objects
 from openhasp_config_manager.processing.jsonl.jsonl import ObjectDimensionsProcessor, NUMERIC_PROPERTY_NAMES
 
 _NUMERIC_PROPERTY = re.compile(NUMERIC_PROPERTY_NAMES)
@@ -74,26 +75,8 @@ def _has_template(source: Dict[str, Any]) -> bool:
     return any(isinstance(value, str) and "{{" in value for value in source.values())
 
 
-OBJECT_REFERENCE = re.compile(r"\bp\d+b\d+\b")
-# a name that is built by a template inside of the template: `{{ p{{ page.index }}b2.x }}`, `{{ p3b{{ id }}.x }}`
-_BUILT_REFERENCE = re.compile(r"\bp(?:\d+b\{\{|\{\{)|\}\}b(?:\d|\{\{)")
-
-# stands for every object: the template builds the name of the object it refers to
+# stands for every object: the objects a template refers to can't be told
 ANY_OBJECT = "*"
-
-
-def _has_built_reference(source: Dict[str, Any]) -> bool:
-    return any(isinstance(value, str) and "{{" in value and _BUILT_REFERENCE.search(value) for value in source.values())
-
-
-def _written_references(source: Dict[str, Any]) -> Set[str]:
-    """:return: the objects (`p1b2`) the templates of a source object name"""
-    return {
-        name
-        for value in source.values()
-        if isinstance(value, str) and ("{{" in value or "{%" in value)
-        for name in OBJECT_REFERENCE.findall(value)
-    }
 
 
 class PlateSession:
@@ -395,10 +378,11 @@ class PlateSession:
 
     def _references_of(self, entry: _Entry) -> Set[str]:
         """:return: the objects the templates of an object refer to (`ANY_OBJECT` if that can't be told)"""
-        if not _has_built_reference(entry.source):
-            return _written_references(entry.source)
-        resolve = getattr(self._renderer, "referenced_objects", None)
-        return resolve(entry.component, entry.source) if resolve else {ANY_OBJECT}
+        values = [value for value in entry.source.values() if isinstance(value, str)]
+        if any(has_nested_templates(value) for value in values):
+            # the names are built by templates, which need the variables of the component
+            return self._renderer.referenced_objects(entry.component, entry.source)
+        return set().union(*(referenced_objects(value, {}) for value in values))
 
     def _render_with(self, obj: Dict, key: str, value: Any) -> Dict:
         """:return: the object rendered with a different source value, without changing it"""

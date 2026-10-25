@@ -10,6 +10,8 @@ from openhasp_config_manager.processing.template_rendering import (
     render_dict_recursive,
     render_template,
     render_template_collecting_unknown,
+    has_nested_templates,
+    referenced_objects,
     render_nested_templates,
     render_template_or_keep,
 )
@@ -588,3 +590,18 @@ class TestRenderNestedTemplates(TestBase):
 
     def test_text_without_nested_templates_stays(self):
         assert render_nested_templates("{{ a }} and {{ b }}", {"a": 1}) == "{{ a }} and {{ b }}"
+
+
+class TestReferencedObjects(TestBase):
+    def test_names_written_in_templates(self):
+        assert referenced_objects("{{ p1b2.x + p3b4.w }} and p5b6", {}) == {"p1b2", "p3b4", "p5b6"}
+
+    def test_text_without_templates_refers_to_nothing(self):
+        assert referenced_objects("p1b2", {}) == set()
+
+    def test_names_built_by_nested_templates(self):
+        assert has_nested_templates("{{ p{{ page }}b2.x }}") and not has_nested_templates("{{ p1b2.x }}")
+        assert referenced_objects("{{ p{{ page }}b2.x }}", {"page": 3}) == {"p3b2"}
+
+    def test_none_if_a_nested_template_is_not_valid(self):
+        assert referenced_objects("{{ p{{ 1 + }}b2.x }}", {}) is None

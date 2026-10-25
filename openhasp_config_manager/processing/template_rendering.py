@@ -186,6 +186,28 @@ def check_template(content: str, template_vars: Dict[str, Any]) -> Optional[str]
     return None
 
 
+_OBJECT_NAME = re.compile(r"\bp\d+b\d+\b")
+
+
+def has_nested_templates(content: str) -> bool:
+    """:return: whether a template is inside of another one (`{{ p{{ page }}b2.x }}`)"""
+    return _find_nested_template(content) is not None
+
+
+def referenced_objects(content: str, template_vars: Dict[str, Any]) -> Optional[Set[str]]:
+    """
+    :param template_vars: the variables for the templates inside of templates, which are rendered first (see `render_template`)
+    :return: the objects (`p1b2`) that the templates in a text name, also when a template builds the name
+        (`{{ p{{ page }}b2.x }}` names `p3b2` if `page` is 3). None if that can't be told because a nested template is not valid.
+    """
+    if "{{" not in content and "{%" not in content:
+        return set()
+    try:
+        return set(_OBJECT_NAME.findall(render_nested_templates(content, template_vars)))
+    except TemplateError:
+        return None
+
+
 def referenced_variables(text: str) -> Set[str]:
     """
     :return: the top-level names the templates in a text use, e.g. {"about"} for "{{ about.title }}". If the text can't be

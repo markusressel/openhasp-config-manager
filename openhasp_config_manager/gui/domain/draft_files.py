@@ -5,17 +5,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from jinja2 import TemplateError
-
 from openhasp_config_manager.const import DEVICES_FOLDER_NAME, COMMON_FOLDER_NAME
 from openhasp_config_manager.gui.domain.file_tree import FileNode, scan_file_tree, used_files, used_variable_files
-from openhasp_config_manager.gui.domain.plate_session import ANY_OBJECT, OBJECT_REFERENCE, PlateSession, ComponentSource
+from openhasp_config_manager.gui.domain.plate_session import ANY_OBJECT, PlateSession, ComponentSource
 from openhasp_config_manager.manager import ConfigManager
 from openhasp_config_manager.openhasp_client.model.component import CmdComponent, JsonlComponent
 from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.processing.device_processor import DeviceProcessor
 from openhasp_config_manager.processing.jsonl.source_editor import JsonlSourceEditor, verify_jsonl_source
-from openhasp_config_manager.processing.template_rendering import check_template, render_nested_templates
+from openhasp_config_manager.processing.template_rendering import check_template, referenced_objects
 
 # how deep nested variables are offered as suggestions
 _MAX_SUGGESTION_DEPTH = 6
@@ -66,12 +64,13 @@ class ProcessorDraftRenderer:
         key = (component, json.dumps(source, sort_keys=True, default=str))
         if key not in self._references:
             names: Set[str] = set()
-            try:
-                for value in source.values():
-                    if isinstance(value, str) and ("{{" in value or "{%" in value):
-                        names.update(OBJECT_REFERENCE.findall(render_nested_templates(value, self._vars_of(component))))
-            except TemplateError:
-                names = {ANY_OBJECT}
+            for value in source.values():
+                if isinstance(value, str):
+                    found = referenced_objects(value, self._vars_of(component))
+                    if found is None:
+                        names = {ANY_OBJECT}
+                        break
+                    names |= found
             self._references[key] = names
         return self._references[key]
 
