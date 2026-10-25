@@ -1,31 +1,23 @@
 import json
-import shutil
 from pathlib import Path
 
 import pytest
 
 from tests import TestBase
-from tests.gui.disk_changes_test import EDITOR_JSONL, _state, _x_of_label  # noqa: F401
-from tests.gui.main_window_test import _wait_until, create_window  # noqa: F401 (a fixture)
+from tests.gui.helpers import EDITOR_JSONL, create_editor_cfg_root, gui_state, wait_until, x_of_label
 
 
 @pytest.fixture
 def cfg_root(tmp_path) -> Path:
-    pytest.importorskip("watchdog")
-    root = tmp_path / "cfg"
-    shutil.copytree(Path(__file__).parent.parent / "_test_cfg_root", root)
-    device = root / "devices" / "test_device"
-    (device / "editor.jsonl").write_text(EDITOR_JSONL)
-    (device / "boot.cmd").write_text("run L:/editor.jsonl\n")
-    return root
+    return create_editor_cfg_root(tmp_path)
 
 
 @pytest.fixture
-def window(create_window):  # noqa: F811
+def window(create_window):
     window = create_window()
-    _wait_until(lambda: window.devices)
+    wait_until(lambda: window.devices)
     window.on_device_selected("test_device")
-    _wait_until(lambda: window.session is not None and window.session.is_loaded)
+    wait_until(lambda: window.session is not None and window.session.is_loaded)
     window.page_layout_editor_widget.set_page_index(9)
     window.page_layout_editor_widget.set_edit_mode(True)
     return window
@@ -98,7 +90,7 @@ class TestSaving(TestBase):
         assert window.source_editor.save()
 
         # THEN
-        _wait_until(lambda: _x_of_label(window) == 55)
+        wait_until(lambda: x_of_label(window) == 55)
         assert "Saved editor.jsonl" in messages
         assert window.source_editor.dirty_files() == []
         assert editor_file.read_text().count('"x": 55') == 1
@@ -108,7 +100,7 @@ class TestSaving(TestBase):
         window.source_editor.current_editor.set_text("{}\n")
         window.source_editor.current_editor.textEdited.emit()
         window.source_editor.save()
-        _wait_until(lambda: window.session is not None and window.session.is_loaded)
+        wait_until(lambda: window.session is not None and window.session.is_loaded)
         from PyQt6.QtTest import QTest
 
         QTest.qWait(800)
@@ -128,7 +120,7 @@ class TestSaving(TestBase):
 
         # THEN
         assert not window.disk_changes_banner.isHidden()
-        assert _x_of_label(window) == 20
+        assert x_of_label(window) == 20
 
 
 class TestChangesOnDisk(TestBase):
@@ -137,8 +129,8 @@ class TestChangesOnDisk(TestBase):
 
         editor_file.write_text(EDITOR_JSONL.replace('"x": 10', '"x": 77'))
 
-        _wait_until(lambda: '"x": 77' in window.source_editor.current_editor.toPlainText())
-        _wait_until(lambda: _x_of_label(window) == 77)
+        wait_until(lambda: '"x": 77' in window.source_editor.current_editor.toPlainText())
+        wait_until(lambda: x_of_label(window) == 77)
 
     def test_changes_made_elsewhere_to_a_file_with_text_changes_conflict(self, window, editor_file):
         window.file_tree_widget.openRequested.emit(editor_file)
@@ -147,8 +139,8 @@ class TestChangesOnDisk(TestBase):
 
         editor_file.write_text(EDITOR_JSONL.replace('"x": 10', '"x": 77'))
 
-        _wait_until(lambda: window.source_editor.buffer_of(editor_file).conflict)
-        _wait_until(lambda: (_state(window._cfg_root).get("editor") or {}).get("files", [{}])[0].get("conflict"))
+        wait_until(lambda: window.source_editor.buffer_of(editor_file).conflict)
+        wait_until(lambda: (gui_state(window._cfg_root).get("editor") or {}).get("files", [{}])[0].get("conflict"))
         assert window.source_editor.current_editor.toPlainText() == "mine"
 
 
@@ -159,7 +151,7 @@ class TestMarkersAndCompletion(TestBase):
         window.file_tree_widget.openRequested.emit(editor_file)
 
         # THEN
-        _wait_until(lambda: window.source_editor.current_editor._app_markers)
+        wait_until(lambda: window.source_editor.current_editor._app_markers)
         [marker] = window.source_editor.current_editor._app_markers
         assert marker.line == 3
         assert "outside of the screen" in marker.message
@@ -193,9 +185,9 @@ class TestSessionAndState(TestBase):
         window.source_editor.current_editor.textEdited.emit()
         window.source_editor.current_editor.go_to(1, 1)
 
-        _wait_until(lambda: (_state(window._cfg_root).get("editor") or {}).get("files", [{}])[0].get("dirty"))
+        wait_until(lambda: (gui_state(window._cfg_root).get("editor") or {}).get("files", [{}])[0].get("dirty"))
 
-        state = _state(window._cfg_root)
+        state = gui_state(window._cfg_root)
         assert state["editor"]["mode"] == "split"
         assert state["editor"]["current"] == "devices/test_device/editor.jsonl"
         [tab] = state["editor"]["files"]
@@ -277,7 +269,7 @@ class TestCursorSelectsObject(TestBase):
 
     def test_an_object_on_another_page_switches_the_page(self, window, editor_file):
         editor_file.write_text(EDITOR_JSONL + '{"page": 8, "id": 1, "obj": "btn", "text": "C"}\n')
-        _wait_until(lambda: len(window.session.working_objects[window.session.components[0].key]) == 3)
+        wait_until(lambda: len(window.session.working_objects[window.session.components[0].key]) == 3)
         [component] = window.session.components
 
         window.source_editor.open_file(editor_file, focus=False)
@@ -294,11 +286,11 @@ class TestMistakesDoNotCrash(TestBase):
         # GIVEN: object 2 positions itself relative to object 1
         content = EDITOR_JSONL.replace('"text": "B"', '"text": "B", "x": "{{ p9b1.x + 5 }}"')
         editor_file.write_text(content)
-        _wait_until(lambda: window.session.working_objects[window.session.components[0].key][1].get("x") == 15)
+        wait_until(lambda: window.session.working_objects[window.session.components[0].key][1].get("x") == 15)
 
         # WHEN: object 1 gets another id, so p9b1 is gone
         editor_file.write_text(content.replace('"id": 1,', '"id": 7,'))
 
         # THEN: the reload works, the template stays as written and is reported
-        _wait_until(lambda: window.session.working_objects[window.session.components[0].key][1].get("x") == "{{ p9b1.x + 5 }}")
-        _wait_until(lambda: any("x is not a number" in p.message for p in window.page_layout_editor_widget.problems))
+        wait_until(lambda: window.session.working_objects[window.session.components[0].key][1].get("x") == "{{ p9b1.x + 5 }}")
+        wait_until(lambda: any("x is not a number" in p.message for p in window.page_layout_editor_widget.problems))

@@ -11,6 +11,7 @@ from openhasp_config_manager.gui.domain.draft_files import load_device
 from openhasp_config_manager.gui.domain.plate_session import PlateSession
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 from tests import TestBase
+from tests.gui.helpers import wait_until
 
 EDITOR_JSONL = """{"page": 9, "id": 1, "obj": "label", "text": "A", "x": 10}
 {"page": 9, "id": 2, "obj": "btn", "text": "B"}
@@ -82,16 +83,6 @@ def editor(qapp, async_loop, plate, tmp_path, monkeypatch):
     return widget
 
 
-def _wait_until(condition, timeout_ms: int = 2000):
-    from PyQt6.QtTest import QTest
-
-    for _ in range(timeout_ms // 10):
-        if condition():
-            return
-        QTest.qWait(10)
-    raise AssertionError("timed out")
-
-
 def _sent_objects(plate: _Plate):
     return [(call[1].get("page"), call[1].get("id")) for call in plate.calls if call[0] == "jsonl"]
 
@@ -103,7 +94,7 @@ def _object(editor, obj_id: int):
 class TestLivePreview(TestBase):
     def _start(self, editor, plate):
         editor.action_live_preview.setChecked(True)
-        _wait_until(lambda: plate.calls and plate.calls[-1] == ("set_page", 9))
+        wait_until(lambda: plate.calls and plate.calls[-1] == ("set_page", 9))
 
     def test_turning_it_on_sends_the_page_and_shows_it(self, editor, plate):
         # WHEN
@@ -125,7 +116,7 @@ class TestLivePreview(TestBase):
         editor._mark_dirty()
 
         # THEN
-        _wait_until(lambda: plate.calls)
+        wait_until(lambda: plate.calls)
         assert plate.calls == [("jsonl", {"page": 9, "id": 1, "x": 20})]
 
     def test_fast_edits_are_coalesced_and_the_last_one_is_sent(self, editor, plate):
@@ -140,7 +131,7 @@ class TestLivePreview(TestBase):
             editor._mark_dirty()
 
         # THEN
-        _wait_until(lambda: plate.calls and plate.calls[-1] == ("jsonl", {"page": 9, "id": 1, "x": 29}))
+        wait_until(lambda: plate.calls and plate.calls[-1] == ("jsonl", {"page": 9, "id": 1, "x": 29}))
         assert len(plate.calls) == 2
 
     def test_removing_an_object_deletes_it(self, editor, plate):
@@ -153,7 +144,7 @@ class TestLivePreview(TestBase):
         editor._mark_dirty()
 
         # THEN
-        _wait_until(lambda: plate.calls)
+        wait_until(lambda: plate.calls)
         assert plate.calls == [("delete_object_id", 9, 2)]
 
     def test_clear_page_is_disabled_while_it_is_on(self, editor, plate):
@@ -187,14 +178,14 @@ class TestRestorePlate(TestBase):
         restored = []
         editor.plateRestored.connect(lambda: restored.append(True))
         editor.action_live_preview.setChecked(True)
-        _wait_until(lambda: plate.calls and plate.calls[-1] == ("set_page", 9))
+        wait_until(lambda: plate.calls and plate.calls[-1] == ("set_page", 9))
         plate.clear()
 
         # WHEN
         editor.restore_plate()
 
         # THEN
-        _wait_until(lambda: restored)
+        wait_until(lambda: restored)
         assert plate.calls == [("restore_from_files",)]
         assert editor.live_preview is False
 
