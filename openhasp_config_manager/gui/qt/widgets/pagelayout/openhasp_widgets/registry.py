@@ -7,10 +7,14 @@ from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.arc import HaspArcItem
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.dropdown import HaspDropdownItem
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.roller import HaspRollerItem
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.led import HaspLedItem
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.spinner import HaspSpinnerItem
 
 ITEM_CLASSES: Dict[str, Type[EditableWidget]] = {
     "checkbox": HaspCheckboxItem,
     "arc": HaspArcItem,
     "dropdown": HaspDropdownItem,
     "roller": HaspRollerItem,
+    "led": HaspLedItem,
+    "spinner": HaspSpinnerItem,
 }

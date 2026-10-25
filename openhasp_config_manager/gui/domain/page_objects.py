@@ -17,6 +17,8 @@ class OpenHASPWidgetType(StrEnum):
     IMAGE = "img"
     BAR = "bar"
     SLIDER = "slider"
+    SPINNER = "spinner"
+    LED = "led"
     ROLLER = "roller"
     DROPDOWN = "dropdown"
     ARC = "arc"
@@ -91,6 +93,18 @@ WIDGET_TYPES: Dict[OpenHASPWidgetType, WidgetTypeInfo] = {
         description="Scroll to pick an entry",
         icon="reload",
         defaults={"w": 150, "h": 100, "rows": 3, "options": "Apple\nBanana\nOrange", "val": 0},
+    ),
+    OpenHASPWidgetType.LED: WidgetTypeInfo(
+        title="LED",
+        description="Light with a brightness",
+        icon="led-on",
+        defaults={"w": 30, "h": 30, "val": 255},
+    ),
+    OpenHASPWidgetType.SPINNER: WidgetTypeInfo(
+        title="Spinner",
+        description="Busy indicator",
+        icon="timer-sand",
+        defaults={"w": 60, "h": 60, "angle": 60},
     ),
 }
 

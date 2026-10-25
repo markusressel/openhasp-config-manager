@@ -89,3 +89,18 @@ class TestPreviewItems(TestBase):
         assert (
             painted(render({"page": 1, "id": 1, "obj": "roller", "x": 5, "y": 5, "w": 100, "options": "a\nb", "val": 1})) > 0
         )
+
+    def test_led_is_brighter_with_a_higher_value(self):
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.led import HaspLedItem
+
+        led = {"page": 1, "id": 1, "obj": "led", "x": 10, "y": 10, "w": 30, "h": 30, "bg_color": "#ff0000"}
+        assert HaspLedItem({**led, "val": 255}).brightness == 1
+        assert HaspLedItem({**led, "val": "{{ x }}"}).brightness == 0
+        assert painted(render({**led, "val": 0})) > 0
+        assert render({**led, "val": 255}) != render({**led, "val": 0})
+
+    def test_spinner_draws_a_ring_and_a_segment(self):
+        spinner = {"page": 1, "id": 1, "obj": "spinner", "x": 10, "y": 10, "w": 60, "h": 60, "line_width": 6}
+        ring_only = painted(render({**spinner, "angle": 0, "line_color10": "#000000"}))
+        assert ring_only > 0
+        assert render({**spinner, "angle": 120, "line_color10": "#00ff00"}) != render({**spinner, "angle": 0})
