@@ -214,7 +214,8 @@ class TestSessionAndState(TestBase):
         window.source_editor.current_editor.textEdited.emit()
         window.source_editor.current_editor.go_to(1, 1)
 
-        wait_until(lambda: (gui_state(window._cfg_root).get("editor") or {}).get("files", [{}])[0].get("dirty"))
+        # the state file may be written before the tab is in it ("files": [])
+        wait_until(lambda: ((gui_state(window._cfg_root).get("editor") or {}).get("files") or [{}])[0].get("dirty"))
 
         state = gui_state(window._cfg_root)
         assert state["editor"]["mode"] == "split"
