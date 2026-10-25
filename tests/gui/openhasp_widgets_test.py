@@ -44,6 +44,19 @@ class TestOpenHaspWidgets(TestBase):
         # THEN
         assert label.text_item.pos().y() == 0
 
+    def test_label_text_has_no_margin_around_it(self):
+        # GIVEN
+        from PyQt6 import QtGui
+
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.label import HaspLabelItem
+
+        # WHEN
+        label = HaspLabelItem(obj_data={"obj": "label", "x": 0, "y": 0, "w": 200, "h": 30, "text": "Desk", "text_font": 25})
+
+        # THEN the text is as tall as its line, not 8px taller (Qt's default margin), so it is not pushed down in a small label
+        text_item = label.text_item
+        assert text_item.boundingRect().height() < QtGui.QFontMetricsF(text_item.font()).height() + 1
+
     def test_switch_value_and_position_follow_its_data(self):
         # GIVEN
         from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.switch import HaspSwitchItem

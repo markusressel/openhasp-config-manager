@@ -42,6 +42,8 @@ class HaspLabelItem(EditableWidget):
 
         # Child item for text rendering
         self.text_item = QGraphicsTextItem(parent=self)
+        # without the default margin of 4px around the text, it starts exactly at the top and left of the label
+        self.text_item.document().setDocumentMargin(0)
         self._setup_text()
 
     def _setup_text(self):
