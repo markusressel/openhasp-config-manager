@@ -31,6 +31,19 @@ class TestOpenHaspWidgets(TestBase):
         # THEN
         assert label.text_item.toPlainText() == ""
 
+    def test_label_text_starts_at_the_top_whatever_the_height(self):
+        # GIVEN
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.label import HaspLabelItem
+
+        label = HaspLabelItem(obj_data={"obj": "label", "x": 0, "y": 0, "w": 100, "h": 20, "text": "Desk"})
+
+        # WHEN
+        label.obj_data["h"] = 60
+        label.refresh()
+
+        # THEN
+        assert label.text_item.pos().y() == 0
+
     def test_switch_value_and_position_follow_its_data(self):
         # GIVEN
         from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.switch import HaspSwitchItem

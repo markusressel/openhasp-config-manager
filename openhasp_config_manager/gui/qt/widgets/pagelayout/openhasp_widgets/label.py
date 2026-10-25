@@ -75,8 +75,8 @@ class HaspLabelItem(EditableWidget):
         align = self.align
         t_rect = self.text_item.boundingRect()
 
-        # Vertical center is standard for HASP labels
-        y_pos = (self.obj_h - t_rect.height()) / 2
+        # the text of a label starts at its top, whatever its height (like in LVGL)
+        y_pos = 0
 
         if align == "center":
             x_pos = (self.obj_w - t_rect.width()) / 2
