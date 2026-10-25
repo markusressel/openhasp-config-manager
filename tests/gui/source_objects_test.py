@@ -1,4 +1,4 @@
-from openhasp_config_manager.gui.domain.source_objects import fold_ranges, object_at_line, scan_objects
+from openhasp_config_manager.gui.domain.source_objects import foldable, object_at_line, scan_objects
 from openhasp_config_manager.processing.jsonl.source_editor import JsonlSourceEditor
 from tests import TestBase
 
@@ -71,6 +71,6 @@ class TestScanObjects(TestBase):
         assert object_at_line(objects, 3) is None
 
     def test_fold_ranges(self):
-        assert fold_ranges(TEXT) == [(4, 10)]
-        assert fold_ranges('{\n"a": 1\n}') == [(1, 3)]
-        assert fold_ranges('{"a": 1,\n"b": 2}') == []
+        assert foldable(scan_objects(TEXT)) == [(4, 10)]
+        assert foldable(scan_objects('{\n"a": 1\n}')) == [(1, 3)]
+        assert foldable(scan_objects('{"a": 1,\n"b": 2}')) == []

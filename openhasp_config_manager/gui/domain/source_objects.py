@@ -119,10 +119,6 @@ def foldable(objects: List[SourceObject]) -> List[Tuple[int, int]]:
     return [(obj.start_line, obj.end_line) for obj in objects if obj.end_line - obj.start_line >= 2]
 
 
-def fold_ranges(text: str) -> List[Tuple[int, int]]:
-    return foldable(scan_objects(text))
-
-
 def pages_of(objects: List[SourceObject]) -> List[Optional[str]]:
     """The page of every object as written: an object without a page is on the page of the object before it."""
     pages: List[Optional[str]] = []

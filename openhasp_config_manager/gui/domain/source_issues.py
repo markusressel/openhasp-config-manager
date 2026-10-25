@@ -14,9 +14,9 @@ import yaml
 from openhasp_config_manager.gui.domain.problems import Severity
 from openhasp_config_manager.gui.domain.source_objects import pages_of, scan_objects
 from openhasp_config_manager.gui.domain.source_syntax import Language, TokenKind, tokenize_line
+from openhasp_config_manager.processing.preprocessor.jsonl_preprocessor import OBJECT_START
 from openhasp_config_manager.processing.template_rendering import template_syntax_error
 
-_OBJECT_START = re.compile(r"^(?!\n)\s*(?=\{)", re.MULTILINE)
 _TRAILING_COMMA = re.compile(r",(\s*})")
 
 
@@ -49,7 +49,7 @@ def find_source_issues(text: str, language: Language) -> List[SourceIssue]:
 
 
 def _jsonl_issues(text: str) -> List[SourceIssue]:
-    starts = [match.end() for match in _OBJECT_START.finditer(text)]
+    starts = [match.end() for match in OBJECT_START.finditer(text)]
     issues = []
     for index, start in enumerate(starts):
         end = starts[index + 1] if index + 1 < len(starts) else len(text)

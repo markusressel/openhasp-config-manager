@@ -73,10 +73,6 @@ class ComponentChanges:
     expected_sources: List[Dict[str, Any]] = field(default_factory=list)
 
 
-def _has_template(source: Dict[str, Any]) -> bool:
-    return any(isinstance(value, str) and "{{" in value for value in source.values())
-
-
 # stands for every object: the objects a template refers to can't be told
 ANY_OBJECT = "*"
 
