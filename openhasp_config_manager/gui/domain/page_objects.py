@@ -17,6 +17,7 @@ class OpenHASPWidgetType(StrEnum):
     IMAGE = "img"
     BAR = "bar"
     SLIDER = "slider"
+    MESSAGE_BOX = "msgbox"
     BUTTON_MATRIX = "btnmatrix"
     TAB = "tab"
     TABVIEW = "tabview"
@@ -161,6 +162,12 @@ WIDGET_TYPES: Dict[OpenHASPWidgetType, WidgetTypeInfo] = {
         description="Grid of buttons",
         icon="dialpad",
         defaults={"w": 220, "h": 150, "options": ["1", "2", "3", "\n", "4", "5", "6"], "toggle": False},
+    ),
+    OpenHASPWidgetType.MESSAGE_BOX: WidgetTypeInfo(
+        title="Message box",
+        description="Pop-up with buttons",
+        icon="message-text",
+        defaults={"w": 300, "h": 140, "text": "Message", "options": ["OK"]},
     ),
 }
 

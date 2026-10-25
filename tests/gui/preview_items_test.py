@@ -206,3 +206,12 @@ class TestPreviewItems(TestBase):
         assert len(rects) == 3
         assert rects[0][0].width() == rects[1][0].width() < rects[2][0].width() == 220
         assert render({**matrix, "toggle": True, "val": 1}) != render(matrix)
+
+    def test_msgbox_has_a_button_for_every_option(self):
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.msgbox import HaspMessageBoxItem
+
+        box = {"page": 1, "id": 1, "obj": "msgbox", "x": 20, "y": 20, "w": 300, "h": 140, "text": "Really?"}
+        assert HaspMessageBoxItem(box).buttons() == ["OK"]
+        assert HaspMessageBoxItem({**box, "options": ["Yes", "No"]}).buttons() == ["Yes", "No"]
+        assert painted(render(box)) > 0
+        assert render({**box, "options": ["Yes", "No"]}) != render(box)
