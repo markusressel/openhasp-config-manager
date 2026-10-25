@@ -44,3 +44,8 @@ def fraction(value, minimum, maximum) -> float:
     """:return: where a value is between the minimum and the maximum (0 to 1), 0 if the range is empty"""
     low, high = number(minimum, 0), number(maximum, 100)
     return 0.0 if high <= low else max(0.0, min((number(value, low) - low) / (high - low), 1.0))
+
+
+def option_lines(options) -> list:
+    """:return: the entries of an `options` property (separated by a line break, written `\\n` in the file)"""
+    return str(options).split("\n") if options else []

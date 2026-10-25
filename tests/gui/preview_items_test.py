@@ -57,3 +57,35 @@ class TestPreviewItems(TestBase):
         item.obj_data["type"] = 1
         item.obj_data["val"] = 25
         assert item.angles()[1] == (45, 45)
+
+    def test_dropdown_shows_the_selected_option(self):
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.dropdown import HaspDropdownItem
+
+        dropdown = {
+            "page": 1,
+            "id": 1,
+            "obj": "dropdown",
+            "x": 10,
+            "y": 10,
+            "w": 150,
+            "h": 30,
+            "options": "Apple\nBanana",
+            "val": 1,
+        }
+        assert HaspDropdownItem(dropdown).selected_text == "Banana"
+        assert HaspDropdownItem({**dropdown, "val": 7}).selected_text == ""
+        assert render({**dropdown, "val": 0}) != render(dropdown)
+
+    def test_roller_shows_rows_around_the_selected_option(self):
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.roller import HaspRollerItem
+
+        roller = HaspRollerItem({"obj": "roller", "w": 100, "h": 1, "options": "a\nb\nc\nd", "val": 0})
+        assert roller.visible_entries() == [None, "a", "b"]
+        roller.obj_data["mode"] = 1
+        assert roller.visible_entries() == ["d", "a", "b"]
+        roller.obj_data["rows"] = 5
+        assert roller.visible_entries() == ["c", "d", "a", "b", "c"]
+        assert roller.obj_h == 5 * roller.row_height
+        assert (
+            painted(render({"page": 1, "id": 1, "obj": "roller", "x": 5, "y": 5, "w": 100, "options": "a\nb", "val": 1})) > 0
+        )

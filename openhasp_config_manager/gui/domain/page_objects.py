@@ -17,6 +17,7 @@ class OpenHASPWidgetType(StrEnum):
     IMAGE = "img"
     BAR = "bar"
     SLIDER = "slider"
+    DROPDOWN = "dropdown"
     ARC = "arc"
     CHECKBOX = "checkbox"
 
@@ -77,6 +78,12 @@ WIDGET_TYPES: Dict[OpenHASPWidgetType, WidgetTypeInfo] = {
         description="Round slider",
         icon="circle-slice-5",
         defaults={"w": 150, "h": 150, "min": 0, "max": 100, "val": 50},
+    ),
+    OpenHASPWidgetType.DROPDOWN: WidgetTypeInfo(
+        title="Dropdown",
+        description="Pick one of a list",
+        icon="arrow-down-drop-circle-outline",
+        defaults={"w": 150, "h": 30, "options": "Apple\nBanana\nOrange", "val": 0},
     ),
 }
 
