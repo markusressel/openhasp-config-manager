@@ -181,6 +181,30 @@ class TestDraftFiles(TestBase):
         session.remove_object(button)
         assert label["text"] == "{{ p9b2.text }}"
 
+    def test_objects_that_build_the_name_of_the_object_they_refer_to_follow_it(self, cfg_root):
+        # GIVEN
+        session = _load(cfg_root)
+        [component] = session.components
+        label, button = session.working_objects[component.key]
+        session.set_source_value(button, "w", 50)
+        session.set_source_value(label, "w", "{{ p{{ 9 }}b2.w }}")
+        assert int(label["w"]) == 50
+
+        # WHEN
+        session.set_source_value(button, "w", 70)
+
+        # THEN
+        assert int(label["w"]) == 70
+        assert session._renderer.referenced_objects(component.key, session.source_of(label)) == {"p9b2"}
+
+    def test_objects_with_a_name_that_can_not_be_resolved_follow_every_change(self, cfg_root):
+        # GIVEN
+        session = _load(cfg_root)
+        [component] = session.components
+
+        # THEN
+        assert session._renderer.referenced_objects(component.key, {"w": "{{ p{{ 1 + }}b2.w }}"}) == {"*"}
+
     def test_flatten_template_variables(self):
         assert flatten_template_variables({"a": {"b": 1, "not-an-identifier": 2, "c": [1]}, "d": "x"}) == [
             ("{{ a.b }}", 1),

@@ -74,16 +74,25 @@ def _has_template(source: Dict[str, Any]) -> bool:
     return any(isinstance(value, str) and "{{" in value for value in source.values())
 
 
-_OBJECT_REFERENCE = re.compile(r"\bp\d+b\d+\b")
+OBJECT_REFERENCE = re.compile(r"\bp\d+b\d+\b")
+# a name that is built by a template inside of the template: `{{ p{{ page.index }}b2.x }}`, `{{ p3b{{ id }}.x }}`
+_BUILT_REFERENCE = re.compile(r"\bp(?:\d+b\{\{|\{\{)|\}\}b(?:\d|\{\{)")
+
+# stands for every object: the template builds the name of the object it refers to
+ANY_OBJECT = "*"
 
 
-def _referenced_objects(source: Dict[str, Any]) -> Set[str]:
-    """:return: the objects (`p1b2`) the templates of a source object refer to"""
+def _has_built_reference(source: Dict[str, Any]) -> bool:
+    return any(isinstance(value, str) and "{{" in value and _BUILT_REFERENCE.search(value) for value in source.values())
+
+
+def _written_references(source: Dict[str, Any]) -> Set[str]:
+    """:return: the objects (`p1b2`) the templates of a source object name"""
     return {
         name
         for value in source.values()
         if isinstance(value, str) and ("{{" in value or "{%" in value)
-        for name in _OBJECT_REFERENCE.findall(value)
+        for name in OBJECT_REFERENCE.findall(value)
     }
 
 
@@ -375,13 +384,21 @@ class PlateSession:
             {key: [self._entry(obj).source for obj in objects] for key, objects in self._working_objects.items()}
         )
         names = {object_name(changed)} | ({name_before} if name_before else set())
+        names_or_any = names | {ANY_OBJECT}
         for objects in self._working_objects.values():
             for obj in objects:
                 entry = self._entry(obj)
-                if obj is not changed and _referenced_objects(entry.source) & names:
+                if obj is not changed and self._references_of(entry) & names_or_any:
                     rendered = self._renderer.render_object(entry.component, entry.source)
                     if rendered != obj:
                         self._apply(obj, rendered)
+
+    def _references_of(self, entry: _Entry) -> Set[str]:
+        """:return: the objects the templates of an object refer to (`ANY_OBJECT` if that can't be told)"""
+        if not _has_built_reference(entry.source):
+            return _written_references(entry.source)
+        resolve = getattr(self._renderer, "referenced_objects", None)
+        return resolve(entry.component, entry.source) if resolve else {ANY_OBJECT}
 
     def _render_with(self, obj: Dict, key: str, value: Any) -> Dict:
         """:return: the object rendered with a different source value, without changing it"""

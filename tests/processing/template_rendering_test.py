@@ -10,6 +10,7 @@ from openhasp_config_manager.processing.template_rendering import (
     render_dict_recursive,
     render_template,
     render_template_collecting_unknown,
+    render_nested_templates,
     render_template_or_keep,
 )
 from tests import TestBase
@@ -17,7 +18,7 @@ from tests import TestBase
 
 class TestRenderTemplate(TestBase):
     def test_text_without_templates_is_unchanged(self):
-        for text in ["", "x", "plain text", "run L:/page.jsonl", "100%", "it's \"quoted\"", "a } b { c"]:
+        for text in ["", "x", "plain text", "run L:/page.jsonl", "100%", 'it\'s "quoted"', "a } b { c"]:
             assert render_template(text, {}) == text
 
     def test_variables_and_expressions(self):
@@ -303,7 +304,11 @@ class TestReferencedVariables(TestBase):
     def test_variables_of_templates(self):
         # THEN
         assert referenced_variables("{{ about.title }}") == {"about"}
-        assert referenced_variables('{"text": "{{ about.title }}", "x": "{{ p1b1.x + offset }}"}') == {"about", "p1b1", "offset"}
+        assert referenced_variables('{"text": "{{ about.title }}", "x": "{{ p1b1.x + offset }}"}') == {
+            "about",
+            "p1b1",
+            "offset",
+        }
         assert referenced_variables("{% if night %}{{ a }}{% endif %}") == {"night", "a"}
         assert referenced_variables("no templates") == set()
         assert referenced_variables("") == set()
@@ -575,3 +580,11 @@ class TestRenderTemplateOrKeep(TestBase):
             render_template_or_keep("{{ a +", {})
         with pytest.raises(ZeroDivisionError):
             render_template_or_keep("{{ 1 // 0 }}", {})
+
+
+class TestRenderNestedTemplates(TestBase):
+    def test_only_the_inner_templates_are_rendered(self):
+        assert render_nested_templates("{{ p{{ page }}b2.x }}", {"page": 3}) == "{{ p3b2.x }}"
+
+    def test_text_without_nested_templates_stays(self):
+        assert render_nested_templates("{{ a }} and {{ b }}", {"a": 1}) == "{{ a }} and {{ b }}"

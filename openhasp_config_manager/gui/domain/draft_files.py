@@ -1,18 +1,21 @@
 import copy
 import dataclasses
+import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
+
+from jinja2 import TemplateError
 
 from openhasp_config_manager.const import DEVICES_FOLDER_NAME, COMMON_FOLDER_NAME
 from openhasp_config_manager.gui.domain.file_tree import FileNode, scan_file_tree, used_files, used_variable_files
-from openhasp_config_manager.gui.domain.plate_session import PlateSession, ComponentSource
+from openhasp_config_manager.gui.domain.plate_session import ANY_OBJECT, OBJECT_REFERENCE, PlateSession, ComponentSource
 from openhasp_config_manager.manager import ConfigManager
 from openhasp_config_manager.openhasp_client.model.component import CmdComponent, JsonlComponent
 from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.processing.device_processor import DeviceProcessor
 from openhasp_config_manager.processing.jsonl.source_editor import JsonlSourceEditor, verify_jsonl_source
-from openhasp_config_manager.processing.template_rendering import check_template
+from openhasp_config_manager.processing.template_rendering import check_template, render_nested_templates
 
 # how deep nested variables are offered as suggestions
 _MAX_SUGGESTION_DEPTH = 6
@@ -35,6 +38,7 @@ class ProcessorDraftRenderer:
         # component path -> its source objects in the draft, None while the objects are those on disk
         self._draft_objects: Optional[Dict[Path, List[Dict[str, Any]]]] = None
         self._suggestions: Dict[str, List[Tuple[str, Any]]] = {}
+        self._references: Dict[Tuple[str, str], Set[str]] = {}
 
     def set_draft_sources(self, sources: Dict[str, List[Dict[str, Any]]]):
         # templates like `{{ p1b2.x }}` refer to the objects as they are in the draft
@@ -51,6 +55,25 @@ class ProcessorDraftRenderer:
 
     def render_object(self, component: str, source: Dict[str, Any]) -> Dict[str, Any]:
         return self._processor.render_jsonl_object(source, self._vars_of(component), keep_unresolved=True)
+
+    def referenced_objects(self, component: str, source: Dict[str, Any]) -> Set[str]:
+        """
+        :return: the objects (`p1b2`) the templates of a source object refer to, also when the name is built by a template inside
+            of the template (`{{ p{{ page.index }}b2.x }}`), which is resolved with the variables of the component.
+            `ANY_OBJECT` if that is not possible. Remembered for the whole session: the inner templates are the same for as long
+            as the source is (they are about the layout of the pages, not about the objects).
+        """
+        key = (component, json.dumps(source, sort_keys=True, default=str))
+        if key not in self._references:
+            names: Set[str] = set()
+            try:
+                for value in source.values():
+                    if isinstance(value, str) and ("{{" in value or "{%" in value):
+                        names.update(OBJECT_REFERENCE.findall(render_nested_templates(value, self._vars_of(component))))
+            except TemplateError:
+                names = {ANY_OBJECT}
+            self._references[key] = names
+        return self._references[key]
 
     def check_template(self, component: str, template: str) -> Optional[str]:
         return check_template(template, self._vars_of(component))

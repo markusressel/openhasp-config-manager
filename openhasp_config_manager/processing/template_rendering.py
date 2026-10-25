@@ -107,12 +107,10 @@ def _find_nested_template(content: str) -> Optional[Tuple[int, int]]:
     return None
 
 
-def render_template(content: str, template_vars: Dict[str, Any], strict: bool = False) -> str:
+def render_nested_templates(content: str, template_vars: Dict[str, Any], strict: bool = False) -> str:
     """
-    Render a text with templates. Templates inside of templates are rendered first.
-    :param strict: raise for unknown variables instead of leaving them as they are written
-    :raises jinja2.TemplateSyntaxError: for an invalid template
-    :raises jinja2.UndefinedError: for an unknown variable, if `strict`
+    Render only the templates that are inside of other templates (`{{ p{{ page }}b2.x }}` becomes `{{ p3b2.x }}`), which is
+    the first step of `render_template`.
     """
     # a rendered template that is again inside of another one is not rendered again: at most one round for each "{{"
     for _ in range(content.count("{{")):
@@ -121,7 +119,17 @@ def render_template(content: str, template_vars: Dict[str, Any], strict: bool = 
             break
         start, end = nested
         content = content[:start] + _compile(content[start:end], strict).render(template_vars) + content[end:]
-    return _compile(content, strict).render(template_vars)
+    return content
+
+
+def render_template(content: str, template_vars: Dict[str, Any], strict: bool = False) -> str:
+    """
+    Render a text with templates. Templates inside of templates are rendered first.
+    :param strict: raise for unknown variables instead of leaving them as they are written
+    :raises jinja2.TemplateSyntaxError: for an invalid template
+    :raises jinja2.UndefinedError: for an unknown variable, if `strict`
+    """
+    return _compile(render_nested_templates(content, template_vars, strict), strict).render(template_vars)
 
 
 def render_template_collecting_unknown(content: str, template_vars: Dict[str, Any]) -> Tuple[str, Set[str]]:
