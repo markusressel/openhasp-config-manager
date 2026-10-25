@@ -114,7 +114,7 @@ WIDGET_TYPES: Dict[OpenHASPWidgetType, WidgetTypeInfo] = {
         title="Spinner",
         description="Busy indicator",
         icon="timer-sand",
-        defaults={"w": 60, "h": 60, "angle": 60},
+        defaults={"w": 60, "h": 60, "angle": 60, "line_width": 6},
     ),
     OpenHASPWidgetType.LINEMETER: WidgetTypeInfo(
         title="Line meter",
