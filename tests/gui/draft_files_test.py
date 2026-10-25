@@ -140,6 +140,47 @@ class TestDraftFiles(TestBase):
         assert session.check_template(label, "{{ p9b2.w }}") is None
         assert dict(session.template_suggestions(label))["{{ p9b2.w }}"] == 70
 
+    def test_only_objects_that_refer_to_a_changed_object_are_rendered_again(self, cfg_root, monkeypatch):
+        # GIVEN
+        session = _load(cfg_root)
+        [component] = session.components
+        label, button = session.working_objects[component.key]
+        session.set_source_value(button, "w", 50)
+        session.set_source_value(label, "w", "{{ p9b2.w }}")
+        session.set_source_value(button, "text", "{{ 1 + 1 }}")
+        rendered = []
+        original = session._renderer.render_object
+        monkeypatch.setattr(
+            session._renderer, "render_object", lambda c, source: rendered.append(source) or original(c, source)
+        )
+
+        # WHEN: the label refers to the button, the button to nothing
+        session.set_source_value(button, "w", 33)
+        session.set_source_value(label, "x", 5)
+
+        # THEN: the button itself, the label that refers to it, and the label itself; the button is not rendered for the label's change
+        assert [source["id"] for source in rendered] == [2, 1, 1]
+        assert int(label["w"]) == 33
+
+    def test_objects_that_refer_to_an_object_follow_its_removal_and_new_id(self, cfg_root):
+        # GIVEN
+        session = _load(cfg_root)
+        [component] = session.components
+        label, button = session.working_objects[component.key]
+        session.set_source_value(label, "text", "{{ p9b2.text }}")
+        assert label["text"] == "B"
+
+        # WHEN the button gets another id
+        session.set_source_value(button, "id", 7)
+        # THEN the label can't find it any more and keeps the template as written
+        assert label["text"] == "{{ p9b2.text }}"
+
+        # WHEN it is back and then removed
+        session.set_source_value(button, "id", 2)
+        assert label["text"] == "B"
+        session.remove_object(button)
+        assert label["text"] == "{{ p9b2.text }}"
+
     def test_flatten_template_variables(self):
         assert flatten_template_variables({"a": {"b": 1, "not-an-identifier": 2, "c": [1]}, "d": "x"}) == [
             ("{{ a.b }}", 1),

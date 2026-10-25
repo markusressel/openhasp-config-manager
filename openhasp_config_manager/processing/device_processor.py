@@ -21,7 +21,7 @@ from openhasp_config_manager.processing.template_rendering import (
     render_template_or_keep,
 )
 from openhasp_config_manager.processing.variables import VariableManager
-from openhasp_config_manager.util import merge_dict_recursive
+from openhasp_config_manager.util import add_missing_keys, merge_dict_into, merge_dict_recursive, merge_dict_shared
 
 
 class DeviceProcessor:
@@ -160,15 +160,11 @@ class DeviceProcessor:
                 c_result = self._object_map(draft_objects[c.path])
             else:
                 c_result = self._object_map(self.parse_jsonl_objects(c))
-            merged_template_variables = merge_dict_recursive(result, component_template_vars)
-            merged_template_variables = merge_dict_recursive(merged_template_variables, component_template_vars)
-
-            rendered_template_vars = render_dict_recursive(
-                input=c_result, template_vars=merge_dict_recursive(merged_template_variables, c_result)
-            )
-            rendered_template_vars = merge_dict_recursive(rendered_template_vars, merged_template_variables)
-
-            result = merge_dict_recursive(result, rendered_template_vars)
+            # `result` becomes what the variables of this component start with: everything before it, and its own variables
+            merge_dict_into(result, component_template_vars)
+            rendered_template_vars = render_dict_recursive(input=c_result, template_vars=merge_dict_shared(result, c_result))
+            # what the objects add, without overriding anything
+            add_missing_keys(result, rendered_template_vars)
 
         if result is None:
             raise AssertionError("Unexpected None value")

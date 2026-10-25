@@ -8,6 +8,7 @@ from typing import List, Dict, Optional, Any, Protocol, Set, Tuple
 from jinja2 import TemplateError
 
 from openhasp_config_manager.gui.domain.page_objects import next_free_id
+from openhasp_config_manager.gui.domain.problems import object_name
 from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.processing.jsonl.jsonl import ObjectDimensionsProcessor, NUMERIC_PROPERTY_NAMES
 
@@ -71,6 +72,19 @@ class ComponentChanges:
 
 def _has_template(source: Dict[str, Any]) -> bool:
     return any(isinstance(value, str) and "{{" in value for value in source.values())
+
+
+_OBJECT_REFERENCE = re.compile(r"\bp\d+b\d+\b")
+
+
+def _referenced_objects(source: Dict[str, Any]) -> Set[str]:
+    """:return: the objects (`p1b2`) the templates of a source object refer to"""
+    return {
+        name
+        for value in source.values()
+        if isinstance(value, str) and ("{{" in value or "{%" in value)
+        for name in _OBJECT_REFERENCE.findall(value)
+    }
 
 
 class PlateSession:
@@ -190,10 +204,11 @@ class PlateSession:
         Set a property as it is written in the source, a literal or a template, and render the object again.
         Nothing changes if the object can't be rendered with it (see check_value).
         """
+        before = object_name(obj)
         rendered = self._render_with(obj, key, value)
         self._entry(obj).source[key] = value
         self._apply(obj, rendered)
-        self._render_dependents(obj)
+        self._render_dependents(obj, before)
 
     def computed_position_reasons(self, obj: Dict, max_length: int = 40) -> List[str]:
         """:return: why the position is computed, e.g. ["x is a template: {{ nav.x }}", "y is a percentage: 15%"]"""
@@ -219,9 +234,10 @@ class PlateSession:
         Remove a property the draft added to the source (e.g. resetting a theme default that was changed),
         and render the object again.
         """
+        before = object_name(obj)
         self._entry(obj).source.pop(key)
         self._render(obj)
-        self._render_dependents(obj)
+        self._render_dependents(obj, before)
 
     def add_object(self, component: str, source: Dict[str, Any]) -> Dict:
         """
@@ -348,18 +364,21 @@ class PlateSession:
         entry = self._entry(obj)
         self._apply(obj, self._renderer.render_object(entry.component, entry.source))
 
-    def _render_dependents(self, changed: Dict):
+    def _render_dependents(self, changed: Dict, name_before: Optional[str] = None):
         """
         Render the objects with templates again, after the source of `changed` changed (or it was added or removed):
-        templates can refer to other objects (`{{ p1b2.x }}`).
+        templates can refer to other objects (`{{ p1b2.x }}`). Only the objects that refer to `changed` are rendered, which
+        matters: the variables of a component are expensive to compute.
+        :param name_before: the name of `changed` (`p1b2`) before the change, if the change could rename it
         """
         self._renderer.set_draft_sources(
             {key: [self._entry(obj).source for obj in objects] for key, objects in self._working_objects.items()}
         )
+        names = {object_name(changed)} | ({name_before} if name_before else set())
         for objects in self._working_objects.values():
             for obj in objects:
                 entry = self._entry(obj)
-                if obj is not changed and _has_template(entry.source):
+                if obj is not changed and _referenced_objects(entry.source) & names:
                     rendered = self._renderer.render_object(entry.component, entry.source)
                     if rendered != obj:
                         self._apply(obj, rendered)
