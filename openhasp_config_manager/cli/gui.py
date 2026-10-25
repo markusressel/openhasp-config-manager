@@ -42,9 +42,24 @@ def c_gui(config_dir: Path, output_dir: Path):
     window = MainWindow(config_manager)
     window.show()
     _quit_on_signals(app, window)
+    install_exception_hook(window)
 
     # 3. Standard Qt Execution (No qasync!)
     sys.exit(app.exec())
+
+
+def install_exception_hook(window: "MainWindow"):
+    """
+    An exception in a slot would abort the whole app (PyQt6 does that when `sys.excepthook` is the default), and with it the
+    drafts that are not saved. Print it with its traceback and show it in the status bar instead.
+    """
+    previous = sys.excepthook
+
+    def _hook(exc_type, exc_value, exc_traceback):
+        previous(exc_type, exc_value, exc_traceback)
+        window.status.failed.emit("Unexpected error (see the console)", f"{exc_type.__name__}: {exc_value}")
+
+    sys.excepthook = _hook
 
 
 def _quit_on_signals(app: QApplication, window: "MainWindow"):

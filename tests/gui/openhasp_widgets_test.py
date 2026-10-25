@@ -45,6 +45,17 @@ class TestOpenHaspWidgets(TestBase):
         assert switch._val == 1
         assert switch.pos().x() == 25
 
+    def test_style_reads_the_property_of_a_part(self):
+        from openhasp_config_manager.gui.domain.style_parts import Part
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.switch import HaspSwitchItem
+
+        switch = HaspSwitchItem(obj_data={"obj": "switch", "radius": 3, "bg_color20": "red", "bg_color": "blue"})
+
+        assert switch.style("radius") == 3
+        assert switch.style("bg_color", part=Part.KNOB) == "red"
+        assert switch.style("bg_color") == "blue"
+        assert switch.style("bg_color", "x", Part.INDICATOR) == "x"
+
 
 @pytest.mark.usefixtures("qapp")
 class TestTemplateCompleter(TestBase):

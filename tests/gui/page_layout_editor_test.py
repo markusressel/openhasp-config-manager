@@ -11,6 +11,7 @@ from openhasp_config_manager.gui.domain.draft_files import load_device
 from openhasp_config_manager.gui.domain.plate_session import PlateSession
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 from tests import TestBase
+from tests.gui.helpers import wait_until
 
 EDITOR_JSONL = """{"page": 9, "id": 1, "obj": "label", "text": "A", "x": 10}
 {"page": 9, "id": 2, "obj": "btn", "text": "B"}
@@ -82,16 +83,6 @@ def editor(qapp, async_loop, plate, tmp_path, monkeypatch):
     return widget
 
 
-def _wait_until(condition, timeout_ms: int = 2000):
-    from PyQt6.QtTest import QTest
-
-    for _ in range(timeout_ms // 10):
-        if condition():
-            return
-        QTest.qWait(10)
-    raise AssertionError("timed out")
-
-
 def _sent_objects(plate: _Plate):
     return [(call[1].get("page"), call[1].get("id")) for call in plate.calls if call[0] == "jsonl"]
 
@@ -103,7 +94,7 @@ def _object(editor, obj_id: int):
 class TestLivePreview(TestBase):
     def _start(self, editor, plate):
         editor.action_live_preview.setChecked(True)
-        _wait_until(lambda: plate.calls and plate.calls[-1] == ("set_page", 9))
+        wait_until(lambda: plate.calls and plate.calls[-1] == ("set_page", 9))
 
     def test_turning_it_on_sends_the_page_and_shows_it(self, editor, plate):
         # WHEN
@@ -125,7 +116,7 @@ class TestLivePreview(TestBase):
         editor._mark_dirty()
 
         # THEN
-        _wait_until(lambda: plate.calls)
+        wait_until(lambda: plate.calls)
         assert plate.calls == [("jsonl", {"page": 9, "id": 1, "x": 20})]
 
     def test_fast_edits_are_coalesced_and_the_last_one_is_sent(self, editor, plate):
@@ -140,7 +131,7 @@ class TestLivePreview(TestBase):
             editor._mark_dirty()
 
         # THEN
-        _wait_until(lambda: plate.calls and plate.calls[-1] == ("jsonl", {"page": 9, "id": 1, "x": 29}))
+        wait_until(lambda: plate.calls and plate.calls[-1] == ("jsonl", {"page": 9, "id": 1, "x": 29}))
         assert len(plate.calls) == 2
 
     def test_removing_an_object_deletes_it(self, editor, plate):
@@ -153,7 +144,7 @@ class TestLivePreview(TestBase):
         editor._mark_dirty()
 
         # THEN
-        _wait_until(lambda: plate.calls)
+        wait_until(lambda: plate.calls)
         assert plate.calls == [("delete_object_id", 9, 2)]
 
     def test_clear_page_is_disabled_while_it_is_on(self, editor, plate):
@@ -187,14 +178,14 @@ class TestRestorePlate(TestBase):
         restored = []
         editor.plateRestored.connect(lambda: restored.append(True))
         editor.action_live_preview.setChecked(True)
-        _wait_until(lambda: plate.calls and plate.calls[-1] == ("set_page", 9))
+        wait_until(lambda: plate.calls and plate.calls[-1] == ("set_page", 9))
         plate.clear()
 
         # WHEN
         editor.restore_plate()
 
         # THEN
-        _wait_until(lambda: restored)
+        wait_until(lambda: restored)
         assert plate.calls == [("restore_from_files",)]
         assert editor.live_preview is False
 
@@ -218,6 +209,69 @@ class TestFiles(TestBase):
         added = editor.working_objects[home][-1]
         assert (added["page"], added["obj"]) == (9, "label")
         assert editor.target_component == home
+
+    def test_a_new_tab_goes_into_the_tabview_of_the_page(self, editor):
+        # GIVEN
+        from openhasp_config_manager.gui.domain.page_objects import OpenHASPWidgetType
+
+        home = _key(editor, "page.jsonl")
+        editor.set_target_component(home)
+        editor.add_object(OpenHASPWidgetType.TABVIEW)
+        tabview = editor.working_objects[home][-1]
+
+        # WHEN
+        editor.add_object(OpenHASPWidgetType.TAB)
+
+        # THEN
+        assert editor.working_objects[home][-1]["parentid"] == tabview["id"]
+
+    def test_a_tab_needs_a_tabview_on_the_page(self, editor):
+        # GIVEN
+        from openhasp_config_manager.gui.domain.page_objects import OpenHASPWidgetType
+
+        home = _key(editor, "page.jsonl")
+        editor.set_target_component(home)
+        count = len(editor.working_objects[home])
+
+        # WHEN
+        editor.add_object(OpenHASPWidgetType.TAB)
+
+        # THEN
+        assert len(editor.working_objects[home]) == count
+
+    def test_removing_an_object_rebuilds_the_properties_once(self, editor, monkeypatch):
+        # GIVEN
+        from PyQt6.QtWidgets import QMessageBox
+
+        editor.set_edit_mode(True)
+        item = editor.page_preview_widget.editable_items()[0]
+        item.setSelected(True)
+        monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *args: QMessageBox.StandardButton.Yes))
+        rebuilds = []
+        original = editor.property_editor._create_content
+        monkeypatch.setattr(editor.property_editor, "_create_content", lambda: rebuilds.append(1) or original())
+
+        # WHEN
+        editor.remove_selected_objects()
+
+        # THEN
+        assert len(rebuilds) == 1
+        assert len(editor.page_preview_widget.editable_items()) == 1
+
+    def test_removing_an_object_while_its_file_is_highlighted(self, editor, monkeypatch):
+        # GIVEN
+        from PyQt6.QtWidgets import QMessageBox
+
+        editor.set_edit_mode(True)
+        editor.highlight_component(_key(editor, "editor.jsonl"))
+        editor.page_preview_widget.editable_items()[0].setSelected(True)
+        monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *args: QMessageBox.StandardButton.Yes))
+
+        # WHEN
+        editor.remove_selected_objects()
+
+        # THEN
+        assert len(editor.page_preview_widget.editable_items()) == 1
 
     def test_the_chosen_file_is_remembered_for_the_next_start(self, editor, settings):
         # GIVEN
@@ -456,6 +510,42 @@ class TestLockedPosition(TestBase):
         assert offered() is True
 
 
+class TestWidgetPicker(TestBase):
+    def test_the_list_of_object_types_scrolls_instead_of_growing_the_preview(self, editor):
+        from openhasp_config_manager.gui.domain.page_objects import WIDGET_TYPES
+
+        # THEN: all types are offered, but they don't make the editor taller than a small window
+        assert len(WIDGET_TYPES) > 20
+        assert editor.widget_picker.minimumSizeHint().height() < 300
+        assert editor.minimumSizeHint().height() < 600
+
+
+class TestNavigationButtons(TestBase):
+    def test_a_click_on_prev_changes_the_page_after_the_click_is_handled(self, editor):
+        from PyQt6.QtCore import QPointF, Qt
+        from PyQt6.QtTest import QTest
+
+        # GIVEN
+        editor.resize(900, 700)
+        editor.show()
+        editor.set_edit_mode(False)
+        key = _key(editor, "editor.jsonl")
+        button = editor.session.add_object(
+            key, {"page": 9, "id": 50, "obj": "btn", "text": "prev", "x": 300, "y": 200, "w": 80, "h": 40, "action": "prev"}
+        )
+        editor.set_page_index(9)
+        preview = editor.page_preview_widget
+        [item] = [item for item in preview.editable_items() if item.obj_data is button]
+
+        # WHEN
+        QTest.mouseClick(preview.viewport(), Qt.MouseButton.LeftButton, pos=preview.mapFromScene(QPointF(320, 220)))
+
+        # THEN the button outlives the click: changing the page clears the scene, which deleted it while it handled the
+        # click (a crash)
+        assert item.scene() is preview.scene()
+        wait_until(lambda: editor.current_index != 9)
+
+
 class TestPropertyEditor(TestBase):
     def _template_field(self, editor):
         from PyQt6.QtWidgets import QLineEdit
@@ -485,7 +575,9 @@ class TestPropertyEditor(TestBase):
 class TestHighlightComponent(TestBase):
     def _dimmed_ids(self, editor):
         return [
-            orjson.loads(selection.cursor.block().text())["id"] for selection in editor.jsonl_preview.extraSelections()
+            orjson.loads(selection.cursor.block().text())["id"]
+            for selection in editor.jsonl_preview.extraSelections()
+            if selection.format.foreground().color().alpha() < 255
         ]
 
     def test_the_jsonl_dims_the_objects_of_other_files(self, editor):
@@ -503,6 +595,30 @@ class TestHighlightComponent(TestBase):
         assert other_file == ids
         assert same_file == set()
         assert editor.jsonl_preview.extraSelections() == []
+
+    def test_selecting_an_object_dims_the_lines_of_other_files_but_not_the_preview(self, editor):
+        # GIVEN: an object of another file on page 9
+        other = editor.session.add_object(
+            _key(editor, "page.jsonl"), {"page": 9, "id": 60, "obj": "label", "text": "other", "x": 0, "y": 0}
+        )
+        editor.set_edit_mode(True)
+        editor.set_page_index(9)
+        preview = editor.page_preview_widget
+        own = _object(editor, 1)
+
+        # WHEN
+        preview.select_object(own)
+        dimmed_while_selected = set(self._dimmed_ids(editor))
+        dimmed_items = [item.obj_data["id"] for item in preview.editable_items() if item.opacity() < 1]
+        preview.select_object(other)
+        dimmed_for_other = set(self._dimmed_ids(editor))
+        preview.scene().clearSelection()
+
+        # THEN
+        assert dimmed_while_selected == {60}
+        assert dimmed_items == []
+        assert dimmed_for_other == {obj["id"] for obj in editor.page_objects} - {60}
+        assert self._dimmed_ids(editor) == []
 
 
 class TestScreenBrightness(TestBase):
@@ -558,7 +674,16 @@ class TestOutsideTheScreen(TestBase):
         component = editor.session.components[0].key
         editor.session.add_object(
             component,
-            {"page": 9, "id": 99, "obj": "btn", "x": int(plate.width()) - 50, "y": 0, "w": 100, "h": 100, "bg_color": "#FFFFFF"},
+            {
+                "page": 9,
+                "id": 99,
+                "obj": "btn",
+                "x": int(plate.width()) - 50,
+                "y": 0,
+                "w": 100,
+                "h": 100,
+                "bg_color": "#FFFFFF",
+            },
         )
         editor.set_page_index(9)
         editor.page_preview_widget.fit_to_view()

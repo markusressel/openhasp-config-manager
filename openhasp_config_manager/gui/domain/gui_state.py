@@ -2,14 +2,15 @@ import json
 import logging
 import os
 import tempfile
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 from openhasp_config_manager.gui.domain.connection import ConnectionStatus
 from openhasp_config_manager.gui.domain.plate_session import ComponentSource, PlateSession
 from openhasp_config_manager.gui.domain.problems import Problem, object_name
-from openhasp_config_manager.processing.jsonl.source_editor import JsonlSourceEditor
+from openhasp_config_manager.openhasp_client.model.device import Device
 
 LOGGER = logging.getLogger(__name__)
 
@@ -20,6 +21,8 @@ README_FILE_NAME = "README.md"
 SCHEMA_VERSION = 1
 
 _MAX_ERROR_LENGTH = 500
+# the properties of an object that say where it is drawn
+_GEOMETRY_KEYS = ("x", "y", "w", "h")
 
 README = """\
 # GUI state
@@ -34,11 +37,12 @@ Read the file before and after you edit, and trust it only while it is current:
 - `running` is `true` while the GUI runs. After a crash it stays `true`: check that the process `pid` exists, and that `updated` is
   recent (it changes whenever anything else does).
 - Without the GUI, `openhasp-config-manager check -c <config dir> [--json]` reports the same problems for all devices and pages, and
-  what a deployment would fail on (exit code 1 on errors). Run it after your edits too.
+  what a deployment would fail on (exit code 1 on errors). Run it after your edits too (`check_command` is that command).
 - All paths are relative to the config directory (the parent of this folder). Lines start at 1.
 
 ## Format (`schema` 1)
 
+- `check_command`: the command that checks this config directory without the GUI (all devices and pages).
 - `devices`: names of the devices in the config directory.
 - `device`: the device that is open, or `null`.
   - `name`, `folder`, `cmd` (the script whose pages are shown), `screen` (`width`, `height`).
@@ -46,12 +50,21 @@ Read the file before and after you edit, and trust it only while it is current:
     it is `shared` (in `common/`, used by other devices too). Later files are drawn on top.
   - `page`, `pages`: the page in the preview, and all pages that have objects.
   - `edit_mode`: whether the user edits objects. `live_preview`: whether the draft is sent to the plate while editing.
-  - `selection`: the selected objects: `name` (`p<page>b<id>`), `id`, `page`, `type`, `file`, `line` (`null` if only in the draft).
+  - `selection`: the selected objects: `name` (`p<page>b<id>`), `id`, `page`, `type`, `file`, `line` (`null` if only in the draft),
+    and where it is drawn: `rendered` and `source` (see `problems`).
   - `new_objects_file`: the file new objects of the user go into.
   - `draft`: `modified` is `true` if the user has unsaved changes in the GUI. They are not in the files yet, and a file the user
     changed on disk meanwhile can't be saved over. `files` lists, per file, the `changed`, `added` and `deleted` objects.
+- `editor`: the text editor of the GUI, where files are edited as text. `mode` (`source`, `split`, `rendered`: which of the text editor and the
+  rendered JSONL are shown), `current` (the file of the tab that is shown, or `null`), and `files`, the open tabs:
+  `file`, `dirty` (the text has changes that are not saved: the file on disk is the older version), `conflict` (the file changed on
+  disk while it has unsaved changes, the user chooses which to keep), `line` and `column` of the cursor.
 - `problems`: warnings and errors of the objects on the open page (same as the GUI shows): `severity`, `message`, `object`, `file`,
-  `line`. Only the open page is checked.
+  `line`, `rendered` and `source`, `devices`. Only the open page is checked.
+  - `rendered`: the `x`, `y`, `w`, `h` the object has after rendering (what the plate gets); only those it has.
+  - `source`: the same properties as written in the file, with their templates, e.g. `"w": "33%"` or `"x": "{{ ... }}"`. Shows
+    which are templates (don't replace one by a number just to fix a position that depends on the screen size).
+  - `devices`: the devices that load the file. More than one if the file is shared: a change there affects all of them.
 - `load_error`: why the device could not be loaded (e.g. invalid JSON in a file), or `null`. The GUI keeps showing the last good
   state until the files can be loaded again.
 - `files_changed_on_disk`: files that changed while the draft has unsaved changes (the GUI asks the user what to do), else `[]`.
@@ -79,23 +92,29 @@ def _short(text: Optional[str]) -> Optional[str]:
 
 
 def describe_object(session: PlateSession, obj: Dict[str, Any], config_dir: Path) -> Dict[str, Any]:
-    """:return: where an object is: its name, type, file and line"""
+    """:return: where an object is: its name, type, file and line, and where it is drawn (rendered and as written)"""
     component = session.component_of(obj)
-    index = session.source_index(obj)
+    source = session.source_of(obj)
     return {
         "name": object_name(obj),
         "id": obj.get("id"),
         "page": obj.get("page"),
         "type": obj.get("obj"),
         "file": relative(component.path, config_dir),
-        "line": None if index is None else JsonlSourceEditor(component.content).line_of(index),
+        "line": session.line_of(obj),
+        "rendered": {key: obj[key] for key in _GEOMETRY_KEYS if key in obj},
+        "source": {key: source[key] for key in _GEOMETRY_KEYS if key in source},
     }
 
 
-def describe_problems(session: PlateSession, problems: List[Problem], config_dir: Path) -> List[Dict[str, Any]]:
+def describe_problems(
+    session: PlateSession, problems: List[Problem], config_dir: Path, devices: Sequence[Device] = ()
+) -> List[Dict[str, Any]]:
+    """:param devices: all devices of the config directory, to tell which of them load the file of a problem"""
     result = []
     for problem in problems:
         location = describe_object(session, problem.obj, config_dir)
+        path = session.component_of(problem.obj).path
         result.append(
             {
                 "severity": problem.severity.value,
@@ -103,6 +122,9 @@ def describe_problems(session: PlateSession, problems: List[Problem], config_dir
                 "object": location["name"],
                 "file": location["file"],
                 "line": location["line"],
+                "rendered": location["rendered"],
+                "source": location["source"],
+                "devices": sorted(device.name for device in devices if any(c.path == path for c in device.jsonl)),
             }
         )
     return result
@@ -133,6 +155,35 @@ def describe_files(components: List[ComponentSource], working_objects: Dict[str,
         }
         for component in components
     ]
+
+
+@dataclass(frozen=True)
+class EditorTab:
+    path: Path
+    dirty: bool
+    # the file changed on disk while the tab has changes
+    conflict: bool
+    # the cursor, both starting at 1
+    line: int
+    column: int
+
+
+def describe_editor(mode: str, tabs: List[EditorTab], current: Optional[Path], config_dir: Path) -> Dict[str, Any]:
+    """:return: what the text editor shows: which files are open, which have unsaved text, and where the cursor is"""
+    return {
+        "mode": mode,
+        "current": None if current is None else relative(current, config_dir),
+        "files": [
+            {
+                "file": relative(tab.path, config_dir),
+                "dirty": tab.dirty,
+                "conflict": tab.conflict,
+                "line": tab.line,
+                "column": tab.column,
+            }
+            for tab in tabs
+        ],
+    }
 
 
 def describe_connection(status: ConnectionStatus) -> Dict[str, Any]:

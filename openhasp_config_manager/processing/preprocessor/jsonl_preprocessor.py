@@ -2,6 +2,10 @@ import re
 from typing import List
 
 
+# where an object of a .jsonl file starts: a line that starts with "{"
+OBJECT_START = re.compile(r"^(?!\n)\s*(?=\{)", re.RegexFlag.MULTILINE)
+
+
 class JsonlPreProcessor:
     def __init__(self):
         pass
@@ -11,8 +15,7 @@ class JsonlPreProcessor:
         :return: the text of every object, without the text around the objects
         :raises ValueError: if an object is not closed
         """
-        pattern_to_find_beginning_of_objects = re.compile(r"^(?!\n)\s*(?=\{)", re.RegexFlag.MULTILINE)
-        parts = pattern_to_find_beginning_of_objects.split(original_content)
+        parts = OBJECT_START.split(original_content)
 
         result = []
         for index, part in enumerate(parts):

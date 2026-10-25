@@ -78,8 +78,18 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
   watchdog, debounced) reports changed paths to `MainWindow._on_config_changed`. A draft without changes reloads quietly (same page and
   zoom; a failing reload keeps what is shown and reports it in the status bar). A draft with changes is never replaced: a banner offers
   *Reload from disk* or *Keep my changes*. Writes of the app itself (Save) are recognized by content (`OwnWrites`), so they don't count.
+- **Text editor** (the *Code* dock: `CodeView` with Source / Split / Rendered): every open file is a `SourceBuffer`
+  (`gui/domain/source_buffers.py`, Qt-free) in a tab of `SourceEditorWidget`, independent of the object draft. The syntax (highlighting,
+  templates) is `gui/domain/source_syntax.py`, issues while typing `source_issues.py`, edits `source_edit.py`, completion
+  `source_completion.py`, objects of a text (folding, the object at the cursor) `source_objects.py`, `source_rename.py`,
+  `source_format.py`, hover texts `source_docs.py`, references between files `source_links.py`; `CodeEditor` (`gui/qt/widgets/code_editor.py`) only wires them to Qt. Keep that split: logic goes into the
+  domain modules with tests, the widget stays thin. Tabs follow disk changes through `MainWindow._on_config_changed`
+  (`external_changes`: clean tabs reload, tabs with changes show a banner). Saving a tab goes through `_on_source_saved`, which treats
+  it like an external change for the draft (reload, or the *Reload from disk* banner if the draft has changes). `SourceEditorSync`
+  (`gui/qt/source_sync.py`) connects the editor with the draft: selecting an object shows its line, the cursor selects its object,
+  the problems of the page are marked in their files, open tabs are remembered in `UiSession.open_files`. A new editor feature needs a test in `tests/gui/code_editor_test.py` or `source_editor_test.py`.
 - **State file**: the GUI writes `<config dir>/.openhasp-config-manager/gui-state.json` for tools that edit the config files next to it
-  (what is open, selection, draft, problems, load errors, connection). The format is documented in `README` in `gui/domain/gui_state.py`
+  (what is open, the text editor tabs, selection, draft, problems, load errors, connection). The format is documented in `README` in `gui/domain/gui_state.py`
   (written into that folder). `MainWindow._collect_gui_state` builds it, `GuiStatePublisher` writes it debounced. When you add state
   worth knowing for such tools, add it there, bump `SCHEMA_VERSION` only for breaking changes, and keep that README current. Never put
   credentials or plate configuration in it.

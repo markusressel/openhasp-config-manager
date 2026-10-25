@@ -10,13 +10,19 @@ from openhasp_config_manager.processing.template_rendering import (
     render_dict_recursive,
     render_template,
     render_template_collecting_unknown,
+    has_nested_templates,
+    referenced_objects,
+    render_nested_templates,
+    render_template_or_keep,
+    template_spans,
+    template_syntax_error,
 )
 from tests import TestBase
 
 
 class TestRenderTemplate(TestBase):
     def test_text_without_templates_is_unchanged(self):
-        for text in ["", "x", "plain text", "run L:/page.jsonl", "100%", "it's \"quoted\"", "a } b { c"]:
+        for text in ["", "x", "plain text", "run L:/page.jsonl", "100%", 'it\'s "quoted"', "a } b { c"]:
             assert render_template(text, {}) == text
 
     def test_variables_and_expressions(self):
@@ -298,11 +304,60 @@ class TestCheckTemplate(TestBase):
         assert check_template("{{ a }}", {}) == "Can't render: it broke"
 
 
+class TestTemplateSyntaxError(TestBase):
+    def test_valid_templates(self):
+        # THEN
+        assert template_syntax_error("plain") is None
+        assert template_syntax_error("{{ nope }}") is None
+        assert template_syntax_error("{{ p{{ page }}b1.x }}") is None
+        assert template_syntax_error("{{ {{ a }} + {{ b }} }}") is None
+        assert template_syntax_error("{% if a %}x{% endif %}") is None
+
+    def test_invalid_templates(self):
+        # THEN
+        assert template_syntax_error("{{ unclosed").startswith("Invalid template: ")
+        assert template_syntax_error("{{ 5 | no_such_filter }}").startswith("Invalid template: ")
+        assert template_syntax_error("{% if a %}").startswith("Invalid template: ")
+
+    def test_nested_templates_are_checked_on_their_own(self):
+        # THEN
+        assert template_syntax_error("{{ p{{ page + }}b1.x }}").startswith("Invalid template: ")
+        assert template_syntax_error("{{ p{{ page }}b1.x + }}").startswith("Invalid template: ")
+
+
+class TestTemplateSpans(TestBase):
+    def test_nested_templates_are_one(self):
+        # THEN
+        assert template_spans("{{ p{{ page }}b1.x }}") == [(0, 21)]
+
+    def test_statement_and_comment_templates(self):
+        # GIVEN
+        text = "a {% if x %}b{% endif %} {# c #}"
+
+        # THEN
+        assert [text[start:end] for start, end in template_spans(text)] == ["{% if x %}", "{% endif %}", "{# c #}"]
+
+    def test_unclosed_templates_reach_the_end(self):
+        # THEN
+        assert template_spans("a {{ b") == [(2, 6)]
+        assert template_spans("a {% b") == [(2, 6)]
+        assert template_spans("a {# b") == [(2, 6)]
+        assert template_spans("a {{ {{ b }}") == [(2, 12)]
+
+    def test_text_without_templates(self):
+        # THEN
+        assert template_spans("a } b {") == []
+
+
 class TestReferencedVariables(TestBase):
     def test_variables_of_templates(self):
         # THEN
         assert referenced_variables("{{ about.title }}") == {"about"}
-        assert referenced_variables('{"text": "{{ about.title }}", "x": "{{ p1b1.x + offset }}"}') == {"about", "p1b1", "offset"}
+        assert referenced_variables('{"text": "{{ about.title }}", "x": "{{ p1b1.x + offset }}"}') == {
+            "about",
+            "p1b1",
+            "offset",
+        }
         assert referenced_variables("{% if night %}{{ a }}{% endif %}") == {"night", "a"}
         assert referenced_variables("no templates") == set()
         assert referenced_variables("") == set()
@@ -559,3 +614,41 @@ class TestRenderDictRecursive(TestBase):
         # THEN
         assert result["p1b2"] == {"page": 1, "id": 2, "x": "30", "text": "T"}
         assert result["p1b3"]["y"] == "30"
+
+
+class TestRenderTemplateOrKeep(TestBase):
+    def test_renders_like_render_template(self):
+        assert render_template_or_keep("{{ a + 1 }}", {"a": 1}) == "2"
+        assert render_template_or_keep("{{ nope }}", {}) == "{{ nope }}"
+
+    def test_keeps_text_that_cannot_use_an_unknown_variable(self):
+        assert render_template_or_keep("{{ p3b20.y + 5 }}", {}) == "{{ p3b20.y + 5 }}"
+
+    def test_other_errors_are_raised(self):
+        with pytest.raises(TemplateSyntaxError):
+            render_template_or_keep("{{ a +", {})
+        with pytest.raises(ZeroDivisionError):
+            render_template_or_keep("{{ 1 // 0 }}", {})
+
+
+class TestRenderNestedTemplates(TestBase):
+    def test_only_the_inner_templates_are_rendered(self):
+        assert render_nested_templates("{{ p{{ page }}b2.x }}", {"page": 3}) == "{{ p3b2.x }}"
+
+    def test_text_without_nested_templates_stays(self):
+        assert render_nested_templates("{{ a }} and {{ b }}", {"a": 1}) == "{{ a }} and {{ b }}"
+
+
+class TestReferencedObjects(TestBase):
+    def test_names_written_in_templates(self):
+        assert referenced_objects("{{ p1b2.x + p3b4.w }} and p5b6", {}) == {"p1b2", "p3b4", "p5b6"}
+
+    def test_text_without_templates_refers_to_nothing(self):
+        assert referenced_objects("p1b2", {}) == set()
+
+    def test_names_built_by_nested_templates(self):
+        assert has_nested_templates("{{ p{{ page }}b2.x }}") and not has_nested_templates("{{ p1b2.x }}")
+        assert referenced_objects("{{ p{{ page }}b2.x }}", {"page": 3}) == {"p3b2"}
+
+    def test_none_if_a_nested_template_is_not_valid(self):
+        assert referenced_objects("{{ p{{ 1 + }}b2.x }}", {}) is None

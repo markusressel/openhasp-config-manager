@@ -89,7 +89,9 @@ class ProblemsPanel(QFrame):
         self._list.setFixedHeight(min(MAX_LIST_HEIGHT, rows + 2 * self._list.frameWidth()))
         errors = sum(problem.severity == Severity.ERROR for problem in problems)
         warnings = len(problems) - errors
-        parts = [f"{count} {name}{'' if count == 1 else 's'}" for count, name in ((errors, "error"), (warnings, "warning")) if count]
+        parts = [
+            f"{count} {name}{'' if count == 1 else 's'}" for count, name in ((errors, "error"), (warnings, "warning")) if count
+        ]
         self._header.setText(", ".join(parts))
         self._header.setIcon(self._icon(Severity.ERROR if errors else Severity.WARNING))
         self.setVisible(bool(problems))

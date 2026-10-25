@@ -1,6 +1,6 @@
 """
 All Jinja2 handling of the config files lives here: rendering a template, resolving the templates of a dict that refer to
-each other (`render_dict_recursive`), and asking what a template needs or is missing. Everything else (deployment, GUI,
+each other (`render_dict_recursive`), asking what a template needs or is missing, and where the templates of a text are. Everything else (deployment, GUI,
 `check`) calls these functions instead of using Jinja2 directly, so they all agree on what a template means.
 
 Templates in the config files are Jinja2 with some differences:
@@ -107,12 +107,10 @@ def _find_nested_template(content: str) -> Optional[Tuple[int, int]]:
     return None
 
 
-def render_template(content: str, template_vars: Dict[str, Any], strict: bool = False) -> str:
+def render_nested_templates(content: str, template_vars: Dict[str, Any], strict: bool = False) -> str:
     """
-    Render a text with templates. Templates inside of templates are rendered first.
-    :param strict: raise for unknown variables instead of leaving them as they are written
-    :raises jinja2.TemplateSyntaxError: for an invalid template
-    :raises jinja2.UndefinedError: for an unknown variable, if `strict`
+    Render only the templates that are inside of other templates (`{{ p{{ page }}b2.x }}` becomes `{{ p3b2.x }}`), which is
+    the first step of `render_template`.
     """
     # a rendered template that is again inside of another one is not rendered again: at most one round for each "{{"
     for _ in range(content.count("{{")):
@@ -121,7 +119,17 @@ def render_template(content: str, template_vars: Dict[str, Any], strict: bool = 
             break
         start, end = nested
         content = content[:start] + _compile(content[start:end], strict).render(template_vars) + content[end:]
-    return _compile(content, strict).render(template_vars)
+    return content
+
+
+def render_template(content: str, template_vars: Dict[str, Any], strict: bool = False) -> str:
+    """
+    Render a text with templates. Templates inside of templates are rendered first.
+    :param strict: raise for unknown variables instead of leaving them as they are written
+    :raises jinja2.TemplateSyntaxError: for an invalid template
+    :raises jinja2.UndefinedError: for an unknown variable, if `strict`
+    """
+    return _compile(render_nested_templates(content, template_vars, strict), strict).render(template_vars)
 
 
 def render_template_collecting_unknown(content: str, template_vars: Dict[str, Any]) -> Tuple[str, Set[str]]:
@@ -133,6 +141,21 @@ def render_template_collecting_unknown(content: str, template_vars: Dict[str, An
     if error is not None:
         raise error
     return rendered, unknown
+
+
+def render_template_or_keep(content: str, template_vars: Dict[str, Any]) -> str:
+    """
+    Render a text, but keep it as written if an unknown variable can't be used the way the text uses it (`{{ p3b20.y + 5 }}`
+    when `p3b20` doesn't exist, e.g. because its object got another id). Unknown variables that can simply be written back stay
+    as they are, like in `render_template`.
+    :raises jinja2.TemplateSyntaxError: for an invalid template
+    """
+    rendered, _, error = _render_collecting(content, template_vars)
+    if error is None:
+        return rendered
+    if isinstance(error, UndefinedError):
+        return content
+    raise error
 
 
 def _render_collecting(content: str, template_vars: Dict[str, Any]) -> Tuple[str, Set[str], Optional[Exception]]:
@@ -161,6 +184,88 @@ def check_template(content: str, template_vars: Dict[str, Any]) -> Optional[str]
     except TemplateError as ex:
         return f"Can't render: {ex.message}"
     return None
+
+
+def template_syntax_error(content: str) -> Optional[str]:
+    """
+    Check only the syntax of the templates in a text, without variables (e.g. while it is typed). Templates inside of templates
+    are checked on their own, and stand for a name in the template around them (`{{ p{{ page }}b1.x }}` is valid).
+    :return: why the text can't be parsed, or None if it can
+    """
+    try:
+        for _ in range(content.count("{{")):
+            nested = _find_nested_template(content)
+            if nested is None:
+                break
+            start, end = nested
+            _compile(content[start:end], False)
+            content = content[:start] + "_" + content[end:]
+        _compile(content, False)
+    except TemplateSyntaxError as ex:
+        return f"Invalid template: {ex.message}"
+    return None
+
+
+def template_spans(text: str) -> List[Tuple[int, int]]:
+    """
+    :return: where the templates of a text are, as (start, end) with their delimiters, in order. A template inside of a
+        template belongs to the outer one (`{{ p{{ page }}b1.x }}` is one). A template that is not closed reaches to the end.
+    """
+    result = []
+    i = 0
+    while i < len(text):
+        if text.startswith("{{", i):
+            end = _end_of_expression(text, i)
+        elif text.startswith(("{%", "{#"), i):
+            closing = "%}" if text[i + 1] == "%" else "#}"
+            found = text.find(closing, i + 2)
+            end = len(text) if found < 0 else found + 2
+        else:
+            i += 1
+            continue
+        result.append((i, end))
+        i = end
+    return result
+
+
+def _end_of_expression(text: str, start: int) -> int:
+    """:return: the index after the `}}` that closes the `{{` at `start` (counting nested ones), the end of the text if none"""
+    depth = 0
+    i = start
+    while i < len(text):
+        if text.startswith("{{", i):
+            depth += 1
+            i += 2
+        elif text.startswith("}}", i):
+            depth -= 1
+            i += 2
+            if depth == 0:
+                return i
+        else:
+            i += 1
+    return len(text)
+
+
+_OBJECT_NAME = re.compile(r"\bp\d+b\d+\b")
+
+
+def has_nested_templates(content: str) -> bool:
+    """:return: whether a template is inside of another one (`{{ p{{ page }}b2.x }}`)"""
+    return _find_nested_template(content) is not None
+
+
+def referenced_objects(content: str, template_vars: Dict[str, Any]) -> Optional[Set[str]]:
+    """
+    :param template_vars: the variables for the templates inside of templates, which are rendered first (see `render_template`)
+    :return: the objects (`p1b2`) that the templates in a text name, also when a template builds the name
+        (`{{ p{{ page }}b2.x }}` names `p3b2` if `page` is 3). None if that can't be told because a nested template is not valid.
+    """
+    if "{{" not in content and "{%" not in content:
+        return set()
+    try:
+        return set(_OBJECT_NAME.findall(render_nested_templates(content, template_vars)))
+    except TemplateError:
+        return None
 
 
 def referenced_variables(text: str) -> Set[str]:

@@ -17,6 +17,22 @@ class OpenHASPWidgetType(StrEnum):
     IMAGE = "img"
     BAR = "bar"
     SLIDER = "slider"
+    COLOR_PICKER = "cpicker"
+    MESSAGE_BOX = "msgbox"
+    BUTTON_MATRIX = "btnmatrix"
+    TAB = "tab"
+    TABVIEW = "tabview"
+    BASE_OBJECT = "obj"
+    QRCODE = "qrcode"
+    LINE = "line"
+    GAUGE = "gauge"
+    LINEMETER = "linemeter"
+    SPINNER = "spinner"
+    LED = "led"
+    ROLLER = "roller"
+    DROPDOWN = "dropdown"
+    ARC = "arc"
+    CHECKBOX = "checkbox"
 
 
 @dataclass(frozen=True)
@@ -63,6 +79,102 @@ WIDGET_TYPES: Dict[OpenHASPWidgetType, WidgetTypeInfo] = {
         description="Drag to set a value",
         icon="tune-variant",
         defaults={"w": 200, "h": 30, "min": 0, "max": 100, "val": 50},
+    ),
+    OpenHASPWidgetType.CHECKBOX: WidgetTypeInfo(
+        title="Checkbox",
+        description="Tick box with a text",
+        icon="checkbox-marked-outline",
+        defaults={"w": 150, "h": 30, "text": "Checkbox", "val": 0},
+    ),
+    OpenHASPWidgetType.ARC: WidgetTypeInfo(
+        title="Arc",
+        description="Round slider",
+        icon="circle-slice-5",
+        defaults={"w": 150, "h": 150, "min": 0, "max": 100, "val": 50},
+    ),
+    OpenHASPWidgetType.DROPDOWN: WidgetTypeInfo(
+        title="Dropdown",
+        description="Pick one of a list",
+        icon="arrow-down-drop-circle-outline",
+        defaults={"w": 150, "h": 30, "options": "Apple\nBanana\nOrange", "val": 0},
+    ),
+    OpenHASPWidgetType.ROLLER: WidgetTypeInfo(
+        title="Roller",
+        description="Scroll to pick an entry",
+        icon="reload",
+        defaults={"w": 150, "h": 100, "rows": 3, "options": "Apple\nBanana\nOrange", "val": 0},
+    ),
+    OpenHASPWidgetType.LED: WidgetTypeInfo(
+        title="LED",
+        description="Light with a brightness",
+        icon="led-on",
+        defaults={"w": 30, "h": 30, "val": 255},
+    ),
+    OpenHASPWidgetType.SPINNER: WidgetTypeInfo(
+        title="Spinner",
+        description="Busy indicator",
+        icon="timer-sand",
+        defaults={"w": 60, "h": 60, "angle": 60, "line_width": 6},
+    ),
+    OpenHASPWidgetType.LINEMETER: WidgetTypeInfo(
+        title="Line meter",
+        description="Round scale of lines",
+        icon="speedometer",
+        defaults={"w": 150, "h": 150, "min": 0, "max": 100, "val": 50},
+    ),
+    OpenHASPWidgetType.GAUGE: WidgetTypeInfo(
+        title="Gauge",
+        description="Dial with a needle",
+        icon="gauge",
+        defaults={"w": 200, "h": 200, "min": 0, "max": 100, "val": 40},
+    ),
+    OpenHASPWidgetType.LINE: WidgetTypeInfo(
+        title="Line",
+        description="Line through points",
+        icon="vector-polyline",
+        defaults={"w": 100, "h": 25, "points": [[0, 25], [50, 0], [100, 25]]},
+    ),
+    OpenHASPWidgetType.QRCODE: WidgetTypeInfo(
+        title="QR code",
+        description="Square code for a text",
+        icon="qrcode",
+        defaults={"w": 140, "h": 140, "size": 140, "text": "https://www.openhasp.com"},
+    ),
+    OpenHASPWidgetType.BASE_OBJECT: WidgetTypeInfo(
+        title="Base object",
+        description="Rectangle, e.g. a background",
+        icon="crop-square",
+        defaults={"w": 200, "h": 100, "click": 0},
+    ),
+    OpenHASPWidgetType.TABVIEW: WidgetTypeInfo(
+        title="Tabview",
+        description="Container with tab buttons",
+        icon="tab",
+        defaults={"w": 300, "h": 200, "val": 0, "btn_pos": 1},
+    ),
+    OpenHASPWidgetType.TAB: WidgetTypeInfo(
+        title="Tab",
+        description="A page of a tabview",
+        icon="tab",
+        defaults={"text": "Tab"},
+    ),
+    OpenHASPWidgetType.BUTTON_MATRIX: WidgetTypeInfo(
+        title="Button matrix",
+        description="Grid of buttons",
+        icon="dialpad",
+        defaults={"w": 220, "h": 150, "options": ["1", "2", "3", "\n", "4", "5", "6"], "toggle": False},
+    ),
+    OpenHASPWidgetType.MESSAGE_BOX: WidgetTypeInfo(
+        title="Message box",
+        description="Pop-up with buttons",
+        icon="message-text",
+        defaults={"w": 300, "h": 140, "text": "Message", "options": ["OK"]},
+    ),
+    OpenHASPWidgetType.COLOR_PICKER: WidgetTypeInfo(
+        title="Color picker",
+        description="Pick a color",
+        icon="palette",
+        defaults={"w": 150, "h": 150, "color": "#FF0000"},
     ),
 }
 
@@ -153,11 +265,16 @@ def create_object(
     obj_id: int,
     screen_width: int,
     screen_height: int,
+    parent_id: Optional[int] = None,
 ) -> Dict:
     """
-    Create a new object with sensible defaults, centered on the screen.
+    Create a new object with sensible defaults, centered on the screen (if it has a size).
+    :param parent_id: the object that contains the new one (the tabview of a tab)
     """
     obj = {"page": page, "id": obj_id, "obj": str(widget_type), **copy.deepcopy(WIDGET_TYPES[widget_type].defaults)}
-    obj["x"] = max(0, (screen_width - obj["w"]) // 2)
-    obj["y"] = max(0, (screen_height - obj["h"]) // 2)
+    if parent_id is not None:
+        obj["parentid"] = parent_id
+    if "w" in obj and "h" in obj:
+        obj["x"] = max(0, (screen_width - obj["w"]) // 2)
+        obj["y"] = max(0, (screen_height - obj["h"]) // 2)
     return obj

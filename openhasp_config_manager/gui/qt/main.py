@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import shlex
 from importlib import metadata
 from pathlib import Path
 from typing import Any, Optional, List, Dict, Callable, Set, Tuple
@@ -39,7 +40,9 @@ from openhasp_config_manager.gui.domain.gui_state import (
     SCHEMA_VERSION,
     GuiStateFile,
     describe_connection,
+    EditorTab,
     describe_draft,
+    describe_editor,
     describe_files,
     describe_object,
     describe_problems,
@@ -51,16 +54,19 @@ from openhasp_config_manager.gui.domain.plate_session import PlateSession
 from openhasp_config_manager.gui.qt.components import UiComponents, ThemedIcons
 from openhasp_config_manager.gui.qt.config_watcher import ConfigWatcher
 from openhasp_config_manager.gui.qt.gui_state_publisher import GuiStatePublisher
+from openhasp_config_manager.gui.qt.source_sync import SourceEditorSync
 from openhasp_config_manager.gui.qt.connection import ConnectionController
 from openhasp_config_manager.gui.qt.operations import OperationStatus, error_text, run_busy
 from openhasp_config_manager.gui.qt.ui_session_store import UiSessionStore
 from openhasp_config_manager.gui.qt.theme import ThemeMode, apply_theme, current_mode, current_colors
 from openhasp_config_manager.gui.qt.async_bridge import run_async
+from openhasp_config_manager.gui.qt.widgets.code_view import CodeView
 from openhasp_config_manager.gui.qt.widgets.device_list import DeviceListWidget
 from openhasp_config_manager.gui.qt.widgets.file_tree import FileTreeWidget
-from openhasp_config_manager.gui.qt.widgets.message_panel import MessagePanel, DiskChangesBanner
+from openhasp_config_manager.gui.qt.widgets.message_panel import MessagePanel, DiskConflictBanner, file_list_text
 from openhasp_config_manager.gui.qt.widgets.pagelayout import OpenHaspDevicePagesData
 from openhasp_config_manager.gui.qt.widgets.pagelayout.page_layout_editor import PageLayoutEditorWidget
+from openhasp_config_manager.gui.qt.widgets.source_editor import SourceEditorWidget
 from openhasp_config_manager.manager import ConfigManager
 from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.processing.variables import VariableManager
@@ -222,6 +228,7 @@ class MainWindow(QMainWindow):
         self.page_layout_editor_widget.action_edit_mode.toggled.connect(self._on_edit_mode_toggled)
         self.load_plates()
         self._start_watching_config_dir()
+        self.source_sync.restore_open_files()
         self._state_publisher.request()
 
     # --- layout ---
@@ -247,7 +254,11 @@ class MainWindow(QMainWindow):
         self.center_stack.addWidget(self.message_panel)
         self.center_stack.addWidget(self.page_layout_editor_widget)
         # files changed on disk while the draft has changes of its own
-        self.disk_changes_banner = DiskChangesBanner()
+        self.disk_changes_banner = DiskConflictBanner(
+            reload_tooltip="Discard the changes of the draft and load the files as they are on disk now",
+            keep_title="Keep my changes",
+            keep_tooltip="Keep the draft. Save fails for files that changed on disk, until the draft is reverted.",
+        )
         self.disk_changes_banner.reloadRequested.connect(self._reload_draft)
         self.disk_changes_banner.visibilityChanged.connect(self._state_publisher.request)
         center = QWidget()
@@ -285,13 +296,27 @@ class MainWindow(QMainWindow):
         self.splitDockWidget(self.devices_dock, self.preview_dock, Qt.Orientation.Horizontal)
 
         # right: the properties of the selected object
-        self.properties_dock = self._add_dock(
-            "Properties", "properties_dock", self.page_layout_editor_widget.property_editor
-        )
+        self.properties_dock = self._add_dock("Properties", "properties_dock", self.page_layout_editor_widget.property_editor)
         self.splitDockWidget(self.preview_dock, self.properties_dock, Qt.Orientation.Horizontal)
 
-        # below the preview: the JSONL of the page
-        self.jsonl_dock = self._add_dock("JSONL", "jsonl_dock", self.page_layout_editor_widget.jsonl_preview)
+        # below the preview: the files as text (source), and the JSONL of the page (rendered)
+        self.source_editor = SourceEditorWidget(self._cfg_root)
+        self.source_editor.saved.connect(self._on_source_saved)
+        self.source_editor.stateChanged.connect(self._state_publisher.request)
+        self.source_editor.openFailed.connect(lambda path, message: self.status.failed.emit(f"Opening {path.name}", message))
+        self.code_view = CodeView(self.source_editor, self.page_layout_editor_widget.jsonl_preview)
+        self.code_view.modeChanged.connect(lambda _mode: self._state_publisher.request())
+        self.source_sync = SourceEditorSync(
+            self.source_editor,
+            self.code_view,
+            self.page_layout_editor_widget,
+            lambda: self.session,
+            self.ui_session,
+            self._cfg_root,
+            parent=self,
+        )
+        self.file_tree_widget.openRequested.connect(self.source_sync.open_file)
+        self.jsonl_dock = self._add_dock("Code", "jsonl_dock", self.code_view)
         self.splitDockWidget(self.preview_dock, self.jsonl_dock, Qt.Orientation.Vertical)
         self._size_docks()
 
@@ -314,8 +339,10 @@ class MainWindow(QMainWindow):
             self.properties_dock.show()
 
     def _size_docks(self):
-        self.resizeDocks([self.preview_dock, self.jsonl_dock], [600, 200], Qt.Orientation.Vertical)
-        self.resizeDocks([self.devices_dock, self.preview_dock, self.properties_dock], [280, 700, 360], Qt.Orientation.Horizontal)
+        self.resizeDocks([self.preview_dock, self.jsonl_dock], [520, 280], Qt.Orientation.Vertical)
+        self.resizeDocks(
+            [self.devices_dock, self.preview_dock, self.properties_dock], [280, 700, 360], Qt.Orientation.Horizontal
+        )
 
     def _add_dock(self, title: str, name: str, widget: QWidget, closable: bool = True) -> QDockWidget:
         dock = QDockWidget(title, self)
@@ -438,6 +465,7 @@ class MainWindow(QMainWindow):
         self.status_bar.refresh_theme()
         self.file_tree_widget.refresh_theme()
         self.page_layout_editor_widget.jsonl_preview.refresh_theme()
+        self.source_editor.refresh_theme()
         self.page_layout_editor_widget.problems_panel.refresh_theme()
         self.page_layout_editor_widget.page_preview_widget.viewport().update()
 
@@ -482,7 +510,7 @@ class MainWindow(QMainWindow):
         return [f"{device} ({cmd})" for (device, cmd), session in self.sessions.items() if session.is_dirty]
 
     def closeEvent(self, event):
-        dirty = self._dirty_draft_names()
+        dirty = self._dirty_draft_names() + [f"{path.name} (text editor)" for path in self.source_editor.dirty_files()]
         if dirty and not self._discard_drafts_on_close:
             answer = QMessageBox.question(
                 self,
@@ -497,6 +525,7 @@ class MainWindow(QMainWindow):
         self.connection.stop()
         self._watcher.stop()
         self._state_publisher.stop()
+        self.code_view.save_state()
         settings = QSettings()
         settings.setValue("window/geometry", self.saveGeometry())
         settings.setValue("window/state", self.saveState(DOCK_STATE_VERSION))
@@ -624,6 +653,11 @@ class MainWindow(QMainWindow):
         if not paths:
             return
         LOGGER.info(f"Changed on disk: {', '.join(sorted(str(path) for path in paths))}")
+        self.source_editor.external_changes(paths)
+        self._apply_changes_to_draft(paths)
+
+    def _apply_changes_to_draft(self, paths: Set[Path]):
+        """Files changed that the pages are made of: reload them, or offer to if the draft has changes of its own."""
         if self._reloading_changes is not None:
             self._changes_during_reload |= paths
             return
@@ -638,6 +672,15 @@ class MainWindow(QMainWindow):
         else:
             self._reload_changed_files(paths)
 
+    # --- text editor ---
+
+    def _on_source_saved(self, path: Path, text: str):
+        """A file was saved in the text editor: the pages follow it, like after a change on disk by someone else."""
+        self._own_writes.written(path.resolve(), text)
+        self.status.succeeded.emit(f"Saved {path.name}")
+        if self.device is not None:
+            self._apply_changes_to_draft({path.resolve()})
+
     def _show_disk_changes(self, paths: Set[Path]):
         """Offer to reload, if the changes can affect the device of the draft."""
         devices_dir = self._cfg_root / DEVICES_FOLDER_NAME
@@ -646,7 +689,9 @@ class MainWindow(QMainWindow):
         )
         if affecting:
             self._disk_changes = [str(path.relative_to(self._cfg_root)) for path in affecting]
-            self.disk_changes_banner.show_changes([str(path.relative_to(self._cfg_root)) for path in affecting])
+            self.disk_changes_banner.show_message(
+                f"Changed on disk since this draft was loaded: {file_list_text(self._disk_changes)}"
+            )
 
     def _reload_changed_files(self, paths: Set[Path]):
         """Load the device again, in the background and without leaving the editor: the page and zoom stay."""
@@ -726,7 +771,7 @@ class MainWindow(QMainWindow):
                 else relative(next(c.path for c in session.components if c.key == editor.target_component), root),
                 "draft": describe_draft(session, root),
             }
-            problems = describe_problems(session, editor.problems, root)
+            problems = describe_problems(session, editor.problems, root, self.devices)
         return {
             "schema": SCHEMA_VERSION,
             "app": "openhasp-config-manager",
@@ -735,14 +780,24 @@ class MainWindow(QMainWindow):
             "pid": os.getpid(),
             "updated": now(),
             "config_dir": str(root),
+            "check_command": f"openhasp-config-manager check -c {shlex.quote(str(root))} --json",
             "devices": [device.name for device in self.devices],
             "device": device,
+            "editor": describe_editor(self.code_view.mode.value, self._editor_tabs(), self.source_editor.current_file, root),
             "problems": problems,
             "load_error": self._load_error,
             "files_changed_on_disk": [] if self.disk_changes_banner.isHidden() else self._disk_changes,
             "connection": describe_connection(self.connection.status),
             "last_operation": self._last_operation,
         }
+
+    def _editor_tabs(self) -> List[EditorTab]:
+        tabs = []
+        for path in self.source_editor.open_files:
+            buffer = self.source_editor.buffer_of(path)
+            line, column = self.source_editor.editor_of(path).cursor_line_column
+            tabs.append(EditorTab(path, buffer.is_dirty, buffer.conflict, line, column))
+        return tabs
 
     # --- draft ---
 

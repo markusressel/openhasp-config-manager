@@ -29,14 +29,30 @@ DEFAULT_OBJECT_WIDTH = 80
 DEFAULT_OBJECT_HEIGHT = 40
 
 
+_GEOMETRY_DEFAULTS = {"x": 0, "y": 0, "w": DEFAULT_OBJECT_WIDTH, "h": DEFAULT_OBJECT_HEIGHT}
+
+
+def geometry_value(obj: Dict, key: str) -> float:
+    """
+    :param key: x, y, w or h
+    :return: the value as it is drawn: a number, or the default if the object has none or it is not a number (a template that
+        can't be rendered, e.g. because the object it refers to is gone, see `find_problems`)
+    """
+    return number_or(obj.get(key), _GEOMETRY_DEFAULTS[key])
+
+
+def _is_number(value) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def number_or(value, default: float) -> float:
+    """:return: the value if it is a number, otherwise the default (e.g. a template that can't be rendered stays a string)"""
+    return value if _is_number(value) else default
+
+
 def object_rect(obj: Dict) -> Rect:
     """:return: where an object is drawn"""
-    return (
-        obj.get("x", 0),
-        obj.get("y", 0),
-        obj.get("w", DEFAULT_OBJECT_WIDTH),
-        obj.get("h", DEFAULT_OBJECT_HEIGHT),
-    )
+    return geometry_value(obj, "x"), geometry_value(obj, "y"), geometry_value(obj, "w"), geometry_value(obj, "h")
 
 
 def find_problems(objects: List[Dict], screen_width: int, screen_height: int) -> List[Problem]:
@@ -52,6 +68,10 @@ def find_problems(objects: List[Dict], screen_width: int, screen_height: int) ->
             # once per id, for its first object
             reported_ids.add(obj.get("id"))
             result.append(Problem(Severity.ERROR, obj, f"{object_name(obj)}: the id is used by {ids[obj.get('id')]} objects"))
+
+        for key in _GEOMETRY_DEFAULTS:
+            if key in obj and not _is_number(obj[key]):
+                result.append(Problem(Severity.ERROR, obj, f"{object_name(obj)}: {key} is not a number: {obj[key]}"))
 
         sides = _sides_outside(object_rect(obj), screen_width, screen_height)
         if sides:

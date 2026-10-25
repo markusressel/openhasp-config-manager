@@ -1,6 +1,7 @@
 from PyQt6 import QtCore, QtGui
 from PyQt6.QtGui import QColor, QBrush
 
+from openhasp_config_manager.gui.domain.style_parts import Part
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
 
 
@@ -26,7 +27,7 @@ class HaspSliderItem(EditableWidget):
 
     @property
     def knob_radius(self) -> int:
-        return self.obj_data.get("radius20", 10)
+        return self.style("radius", 10, Part.KNOB)
 
     @property
     def track_color(self) -> str:
@@ -34,11 +35,10 @@ class HaspSliderItem(EditableWidget):
 
     @property
     def knob_color(self) -> str:
-        return self.obj_data.get("bg_color20", "lightgray")
+        return self.style("bg_color", "lightgray", Part.KNOB)
 
     def __init__(self, obj_data, parent_widget=None):
-        super().__init__(obj_data)
-        self.parent_widget = parent_widget
+        super().__init__(obj_data, parent_widget)
 
         self._val = self.val  # Internal value to track changes
 

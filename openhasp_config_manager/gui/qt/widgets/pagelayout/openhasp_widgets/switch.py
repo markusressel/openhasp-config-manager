@@ -1,5 +1,6 @@
 from PyQt6 import QtCore, QtGui
 
+from openhasp_config_manager.gui.domain.style_parts import Part
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
 
 
@@ -16,11 +17,11 @@ class HaspSwitchItem(EditableWidget):
 
     @property
     def corner_radius(self):
-        return self.obj_data.get("radius00", 0)
+        return self.style("radius", 0)
 
     @property
     def knob_radius(self) -> int:
-        return self.obj_data.get("radius20", 0)
+        return self.style("radius", 0, Part.KNOB)
 
     @property
     def text_font(self) -> str:
@@ -32,10 +33,10 @@ class HaspSwitchItem(EditableWidget):
 
     @property
     def knob_color(self) -> str:
-        return self.obj_data.get("bg_color20", "lightgray")
+        return self.style("bg_color", "lightgray", Part.KNOB)
 
     def __init__(self, obj_data, parent_widget=None):
-        super().__init__(obj_data)
+        super().__init__(obj_data, parent_widget)
 
         self._val = self.val  # Store the current state for toggling
 

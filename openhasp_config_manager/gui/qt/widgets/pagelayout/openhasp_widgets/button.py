@@ -46,8 +46,7 @@ class HaspButtonItem(EditableWidget):
         on_click: Callable[[Dict], None] = None,
         parent_widget=None,
     ):
-        super().__init__(obj_data)
-        self.parent_widget = parent_widget
+        super().__init__(obj_data, parent_widget)
         self._on_click = on_click
 
         # Set position in the native scene coordinate system

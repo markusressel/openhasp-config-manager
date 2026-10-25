@@ -4,7 +4,8 @@ from PyQt6 import QtGui, QtCore, QtWidgets
 from PyQt6.QtWidgets import QGraphicsObject, QGraphicsItem
 
 from openhasp_config_manager.gui.domain.page_objects import is_hidden
-from openhasp_config_manager.gui.domain.problems import DEFAULT_OBJECT_HEIGHT, DEFAULT_OBJECT_WIDTH
+from openhasp_config_manager.gui.domain.problems import geometry_value
+from openhasp_config_manager.gui.domain.style_parts import Part, State, style_key
 from openhasp_config_manager.gui.qt.theme import current_colors
 
 # the opacity of objects that are hidden on the plate
@@ -24,24 +25,41 @@ class EditableWidget(QGraphicsObject):
 
     @property
     def obj_x(self) -> int:
-        return self.obj_data.get("x", 0)
+        return geometry_value(self.obj_data, "x")
 
     @property
     def obj_y(self) -> int:
-        return self.obj_data.get("y", 0)
+        return geometry_value(self.obj_data, "y")
 
     @property
     def obj_w(self) -> int:
-        return self.obj_data.get("w", DEFAULT_OBJECT_WIDTH)
+        return geometry_value(self.obj_data, "w")
 
     @property
     def obj_h(self) -> int:
-        return self.obj_data.get("h", DEFAULT_OBJECT_HEIGHT)
+        return geometry_value(self.obj_data, "h")
 
-    def __init__(self, object_data: Dict, *args, **kwargs):
-        self._object_data = object_data
+    def style(self, name: str, default=None, part: Part = Part.MAIN, state: State = State.DEFAULT):
+        """
+        :param name: a style property without suffix, e.g. `bg_color`
+        :param part: the part of the object the style is for: the key is `<name><part><state>`, e.g. `bg_color20` is the color of
+            the knob (`Part.KNOB`) in the default state. `radius` and `radius00` are the same, see `style_parts.py`.
+        :return: the value of the property for a part and state, `default` if the object has none
+        """
+        data = self.obj_data
+        if part == Part.MAIN and state == State.DEFAULT and name in data:
+            return data[name]
+        return data.get(style_key(name, part, state), default)
+
+    def __init__(self, obj_data: Dict, parent_widget=None):
+        """
+        :param obj_data: the rendered object (it belongs to the draft, see PlateSession)
+        :param parent_widget: the preview the item is drawn in (`PagePreviewWidget`), for icons and the other objects of the page
+        """
+        self._object_data = obj_data
         self._dimmed = False
-        super().__init__(*args, **kwargs)
+        self.parent_widget = parent_widget
+        super().__init__()
 
         # itemChange() is only called for position changes with this flag, it is needed for snapping
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges, True)

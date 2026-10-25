@@ -12,6 +12,7 @@ from PyQt6.QtGui import QAction, QKeySequence
 from PyQt6.QtWidgets import QApplication, QSlider, QWidget, QToolBar, QComboBox, QMessageBox, QToolButton, QFrame, QHBoxLayout
 
 from openhasp_config_manager.gui.domain.problems import Problem, find_problems
+from openhasp_config_manager.gui.domain.tabs import last_tabview_id
 from openhasp_config_manager.gui.domain.page_objects import (
     OpenHASPWidgetType,
     get_page_objects,
@@ -28,6 +29,7 @@ from openhasp_config_manager.gui.domain.live_preview import LivePage
 from openhasp_config_manager.gui.domain.plate_session import PlateSession
 from openhasp_config_manager.gui.domain.ui_session import DeviceSession
 from openhasp_config_manager.gui.qt.components import UiComponents
+from openhasp_config_manager.gui.qt.layouts import frozen
 from openhasp_config_manager.gui.qt.operations import BusyState, OperationStatus, run_busy, error_text
 from openhasp_config_manager.gui.qt.async_bridge import qBridge, run_async
 from openhasp_config_manager.gui.qt.throttle import LatestValueThrottle
@@ -106,6 +108,10 @@ class PageLayoutEditorWidget(QWidget):
         self._ui_session = ui_session or UiSessionStore.in_memory()
         # the component whose objects are highlighted (the others are dimmed)
         self._highlighted_component: Optional[str] = None
+        # the component of the selected object, None unless exactly one is selected: the JSONL dims the other files
+        self._selected_component: Optional[str] = None
+        # the component the JSONL shows undimmed (the others are dimmed), None if it dims nothing
+        self._jsonl_dimmed_component: Optional[str] = None
         # what is wrong with the objects on the page
         self.problems: List[Problem] = []
         self._paste_cascade = PasteCascade()
@@ -501,11 +507,12 @@ class PageLayoutEditorWidget(QWidget):
 
     def _reload_page(self, select: List[Dict] = ()):
         """Rebuilds the preview from the draft after objects were added or removed, and selects the given objects."""
-        self.set_page_index(self.current_index)
-        for obj in select:
-            for item in self.page_preview_widget.editable_items():
-                if item.obj_data is obj:
-                    item.setSelected(True)
+        with frozen(self):
+            self.set_page_index(self.current_index)
+            for obj in select:
+                for item in self.page_preview_widget.editable_items():
+                    if item.obj_data is obj:
+                        item.setSelected(True)
         self.page_preview_widget.setFocus()
 
     # --- page navigation ---
@@ -566,16 +573,18 @@ class PageLayoutEditorWidget(QWidget):
     @qBridge(list)
     def _on_openhasp_widget_selection_changed(self, editable_widgets: List[EditableWidget]):
         self.property_editor.set_editable_widgets(editable_widgets)
+        self.jsonl_preview.set_selected_objects([widget.obj_data for widget in editable_widgets])
         self._update_actions()
         self.stateChanged.emit()
-        if len(editable_widgets) == 1:
-            key = self.session.component_of(editable_widgets[0].obj_data).key
-            if self._highlighted_component not in (None, key):
-                # the object of another file was selected: the highlight would not match the file tree anymore
-                self.highlight_component(None)
-            self.selectedObjectComponentChanged.emit(key)
+        # the file of a single selected object is selected in the file tree (see `selectedObjectComponentChanged`)
+        key = self.session.component_of(editable_widgets[0].obj_data).key if len(editable_widgets) == 1 else None
+        self._selected_component = key
+        if self._highlighted_component not in (None, key) and key is not None:
+            # the object of another file was selected: the highlight would not match the file tree anymore
+            self.highlight_component(None)
         else:
-            self.selectedObjectComponentChanged.emit(None)
+            self._update_jsonl_dimming()
+        self.selectedObjectComponentChanged.emit(key)
 
     def _update_page_views(self):
         """Update what is derived from the objects of the page: the JSONL and the problems."""
@@ -677,12 +686,22 @@ class PageLayoutEditorWidget(QWidget):
     def highlight_component(self, key: Optional[str]):
         """Dim all objects that are not in the given component, or none (None)."""
         self._highlighted_component = key
+        self.page_preview_widget.set_dimmed_predicate(self._outside_of(key))
+        self._update_jsonl_dimming()
 
-        def is_dimmed(obj) -> bool:
-            return key is not None and self.session.component_of(obj).key != key
+    def _update_jsonl_dimming(self):
+        """
+        The JSONL dims the lines of the other files: of the highlighted file, or else of the file of the selected objects. The
+        preview dims nothing for a selection, the objects around the selected ones are needed to edit them.
+        """
+        key = self._highlighted_component or self._selected_component
+        if key != self._jsonl_dimmed_component:
+            self._jsonl_dimmed_component = key
+            self.jsonl_preview.set_dimmed_predicate(self._outside_of(key))
 
-        self.page_preview_widget.set_dimmed_predicate(is_dimmed)
-        self.jsonl_preview.set_dimmed_predicate(is_dimmed)
+    def _outside_of(self, key: Optional[str]) -> Callable[[Dict], bool]:
+        """:return: whether an object is not in the component (False for all objects if None)"""
+        return lambda obj: key is not None and self.session.component_of(obj).key != key
 
     def add_object(self, widget_type: OpenHASPWidgetType):
         component = self.target_component
@@ -691,6 +710,10 @@ class PageLayoutEditorWidget(QWidget):
         if not self.edit_mode:
             self.action_edit_mode.setChecked(True)
 
+        parent_id = self._parent_for(widget_type)
+        if widget_type == OpenHASPWidgetType.TAB and parent_id is None:
+            self.status.failed.emit("Adding a tab", "A tab belongs to a tabview: add a tabview to this page first")
+            return
         try:
             obj_id = next_free_id(self.working_objects, self.current_index)
         except ValueError as ex:
@@ -703,10 +726,18 @@ class PageLayoutEditorWidget(QWidget):
             obj_id=obj_id,
             screen_width=screen.width,
             screen_height=screen.height,
+            parent_id=parent_id,
         )
         obj = self.session.add_object(component, obj)
         self._mark_dirty()
         self._reload_page(select=[obj])
+
+    def _parent_for(self, widget_type: OpenHASPWidgetType) -> Optional[int]:
+        """The object a new object belongs to: a tab goes into the last tabview of the page."""
+        if widget_type != OpenHASPWidgetType.TAB:
+            return None
+        objects = [obj for objects in self.working_objects.values() for obj in objects]
+        return last_tabview_id(objects, self.current_index)
 
     def duplicate_selected_objects(self):
         items = self.page_preview_widget.selected_items()

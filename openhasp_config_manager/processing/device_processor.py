@@ -15,9 +15,13 @@ from openhasp_config_manager.openhasp_client.model.configuration.config import C
 from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.processing.jsonl import JsonlObjectProcessor
 from openhasp_config_manager.processing.preprocessor.jsonl_preprocessor import JsonlPreProcessor
-from openhasp_config_manager.processing.template_rendering import render_dict_recursive, render_template
+from openhasp_config_manager.processing.template_rendering import (
+    render_dict_recursive,
+    render_template,
+    render_template_or_keep,
+)
 from openhasp_config_manager.processing.variables import VariableManager
-from openhasp_config_manager.util import merge_dict_recursive
+from openhasp_config_manager.util import add_missing_keys, merge_dict_into, merge_dict_recursive, merge_dict_shared
 
 
 class DeviceProcessor:
@@ -96,18 +100,23 @@ class DeviceProcessor:
         """
         return self._compute_jsonl_template_variables(self._device, component, draft_objects)
 
-    def render_jsonl_object(self, source_object: Dict[str, Any], template_vars: Dict[str, Any]) -> Dict[str, Any]:
+    def render_jsonl_object(
+        self, source_object: Dict[str, Any], template_vars: Dict[str, Any], keep_unresolved: bool = False
+    ) -> Dict[str, Any]:
         """
         Renders one source object like a deployment does: its templates, then the object processors
         (percentages, value types, theme defaults).
         :param source_object: the object as written in the file (see parse_jsonl_objects), it is not modified
         :param template_vars: the variables of its component (see jsonl_template_variables)
+        :param keep_unresolved: keep a value as written if it uses a variable that doesn't exist, instead of failing (for the
+            editor, which shows objects with mistakes; a deployment fails)
         :return: the rendered object
         """
+        render = render_template_or_keep if keep_unresolved else render_template
         normalized_object = {}
         for key, value in source_object.items():
             if isinstance(value, str):
-                normalized_object[key] = render_template(value, template_vars)
+                normalized_object[key] = render(value, template_vars)
             else:
                 normalized_object[key] = value
 
@@ -140,7 +149,6 @@ class DeviceProcessor:
         sorted_components = list(sorted(self._jsonl_components, key=lambda x: x == component))
         assert sorted_components[-1] == component
         for c in sorted_components:
-
             component_template_vars = self._variable_manager.get_vars(c.path)
             component_template_vars["device"] = self._device.config.openhasp_config_manager.device
             if "/common/" in str(c.path):
@@ -152,15 +160,11 @@ class DeviceProcessor:
                 c_result = self._object_map(draft_objects[c.path])
             else:
                 c_result = self._object_map(self.parse_jsonl_objects(c))
-            merged_template_variables = merge_dict_recursive(result, component_template_vars)
-            merged_template_variables = merge_dict_recursive(merged_template_variables, component_template_vars)
-
-            rendered_template_vars = render_dict_recursive(
-                input=c_result, template_vars=merge_dict_recursive(merged_template_variables, c_result)
-            )
-            rendered_template_vars = merge_dict_recursive(rendered_template_vars, merged_template_variables)
-
-            result = merge_dict_recursive(result, rendered_template_vars)
+            # `result` becomes what the variables of this component start with: everything before it, and its own variables
+            merge_dict_into(result, component_template_vars)
+            rendered_template_vars = render_dict_recursive(input=c_result, template_vars=merge_dict_shared(result, c_result))
+            # what the objects add, without overriding anything
+            add_missing_keys(result, rendered_template_vars)
 
         if result is None:
             raise AssertionError("Unexpected None value")

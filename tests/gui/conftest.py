@@ -41,3 +41,45 @@ def settings(qapp, tmp_path):
     QCoreApplication.setApplicationName("openhasp-config-manager-test")
     QSettings.setPath(QSettings.Format.NativeFormat, QSettings.Scope.UserScope, str(tmp_path / "settings"))
     return QSettings()
+
+
+class _FakeConnectionClient:
+    """No MQTT connection: the tests must not reach the broker of the test config."""
+
+    def __init__(self, device):
+        pass
+
+    def add_connection_listener(self, listener):
+        pass
+
+    def remove_connection_listener(self, listener):
+        pass
+
+    async def listen_event(self, path, callback):
+        pass
+
+    async def cancel_callback(self, callback):
+        pass
+
+
+@pytest.fixture
+def create_window(settings, async_loop, cfg_root, tmp_path, monkeypatch):
+    """
+    Creates main windows for the config directory of the `cfg_root` fixture (which the test module defines), without a
+    connection to a plate. The windows are closed after the test, discarding their drafts.
+    """
+    from openhasp_config_manager.cli.common import _create_config_manager
+    from openhasp_config_manager.gui.qt import connection
+    from openhasp_config_manager.gui.qt.main import MainWindow
+
+    monkeypatch.setattr(connection, "OpenHaspClient", _FakeConnectionClient)
+    windows = []
+
+    def create():
+        window = MainWindow(_create_config_manager(cfg_root, tmp_path / "output"))
+        windows.append(window)
+        return window
+
+    yield create
+    for window in windows:
+        window.quit_discarding_drafts()

@@ -412,6 +412,41 @@ To deploy your configurations to the already connected openHASP devices, simply 
 > to be able to deploy files to the device. To enable the webservice
 > try: `openhasp-config-manager cmd -d plate35 -C service -p "start http"`
 
+## Editing the files as text in the GUI
+
+The **Code** panel below the preview shows the files in three ways, like the code/design views of an IDE: **Source** (the text
+editor), **Rendered** (the JSONL of the page the way the plate gets it) and **Split** (both side by side or above each other, with a
+splitter). Double-click a file in the Files tree to open it (JSONL, `.cmd` and variable files), or select an object in the preview
+while the source is shown: the editor jumps to the line of the object. It works the other way too: moving the cursor into an
+object (typing, clicking, arrow keys) selects that object in the preview, on its page.
+
+The editor knows the JSONL dialect of this project: comments, trailing commas, objects over several lines and `{{ templates }}`
+(also nested ones) are highlighted. It marks what is wrong while you type (an object that is not closed, invalid JSON, an invalid
+template, invalid YAML), and the problems the preview shows (e.g. an object outside of the screen) at the line of their object.
+Other features: line numbers, matching brackets, auto-closing of brackets and quotes, smart indentation, `Ctrl+/` to comment lines,
+`Ctrl+D` to duplicate lines, `Ctrl+Space` completion (object properties, and the template variables a file can use), search and
+replace (`Ctrl+F`, with match case, whole words and regular expressions), `Ctrl+wheel` to zoom, word wrap and whitespace display
+(menu of the Code panel). `Ctrl+S` saves the file, then the pages follow it.
+
+More features for the objects of a `.jsonl` file:
+
+- **Folding**: click the arrow in the gutter, or `Ctrl+-` / `Ctrl+=` for the object at the cursor, `Ctrl+Shift+-` / `Ctrl+Alt+=`
+  for all objects. A fold opens by itself when the cursor moves into it (e.g. by a search).
+- **Hover**: rest the mouse on a property name to see what it does. A style property with a two digit suffix (`bg_color12`) is
+  explained by part and state (10 is the indicator, 20 the knob, ...; 02 is pressed), with the names the object type uses, e.g.
+  the colored track of a `switch`.
+- **Format document** (`Ctrl+Alt+L`): indents the lines by the depth of the brackets and removes spaces at the end of lines. Comments,
+  blank lines and the order of properties stay as they are.
+- **Rename id** (`Shift+F6`): changes the `id` of the object at the cursor and the `parentid` of the objects on the same page that
+  have it as their parent. It refuses an id the page already uses. References in other files or in strings (`p1b2`) are not changed.
+- **Ctrl+click** on `run L:/pages.jsonl` in a `.cmd` file opens the file that has that name on the plate.
+
+All of these are also in the context menu.
+
+Every file is edited on its own, separate from the unsaved changes of the visual editor. If a file changes on disk (an LLM, another
+editor) while its tab has no changes, the tab follows quietly. If it has changes, the tab offers to reload from disk or to keep
+your version.
+
 ## Working with an LLM next to the GUI
 
 The config files are plain text, so an LLM (or any tool) can edit them while the GUI is open: the GUI reloads when files change. A

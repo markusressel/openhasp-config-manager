@@ -5,10 +5,10 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from openhasp_config_manager.gui.domain.draft_files import BOOT_CMD, load_analyzed_device
-from openhasp_config_manager.gui.domain.gui_state import describe_object, describe_problems, relative
+from openhasp_config_manager.gui.domain.gui_state import relative
 from openhasp_config_manager.gui.domain.page_objects import get_page_objects
 from openhasp_config_manager.gui.domain.plate_session import PlateSession
-from openhasp_config_manager.gui.domain.problems import Severity, find_problems
+from openhasp_config_manager.gui.domain.problems import Severity, find_problems, object_name
 from openhasp_config_manager.manager import ConfigManager
 from openhasp_config_manager.openhasp_client.model.device import Device
 
@@ -104,17 +104,8 @@ def _check_pages(config_manager: ConfigManager, config_dir: Path, devices: List[
     pages = sorted({obj["page"] for objects in session.working_objects.values() for obj in objects if "page" in obj})
     for page in pages:
         problems = find_problems(get_page_objects(session.working_objects, index=page), screen.width, screen.height)
-        for problem in describe_problems(session, problems, config_dir):
-            issues.append(
-                Issue(
-                    Severity(problem["severity"]),
-                    problem["message"],
-                    device=device.name,
-                    file=problem["file"],
-                    line=problem["line"],
-                    object=problem["object"],
-                )
-            )
+        for problem in problems:
+            issues.append(_object_issue(session, problem.obj, problem.severity, problem.message, device, config_dir))
 
     for objects in session.working_objects.values():
         for obj in objects:
@@ -122,15 +113,19 @@ def _check_pages(config_manager: ConfigManager, config_dir: Path, devices: List[
             for key, value in session.source_of(obj).items():
                 error = session.check_template(obj, value) if isinstance(value, str) and "{{" in value else None
                 if error:
-                    location = describe_object(session, obj, config_dir)
-                    issues.append(
-                        Issue(
-                            Severity.WARNING,
-                            f"{location['name']}: {key}: {error}",
-                            device=device.name,
-                            file=location["file"],
-                            line=location["line"],
-                            object=location["name"],
-                        )
-                    )
+                    message = f"{object_name(obj)}: {key}: {error}"
+                    issues.append(_object_issue(session, obj, Severity.WARNING, message, device, config_dir))
     return issues
+
+
+def _object_issue(
+    session: PlateSession, obj: Dict, severity: Severity, message: str, device: Device, config_dir: Path
+) -> Issue:
+    return Issue(
+        severity,
+        message,
+        device=device.name,
+        file=relative(session.component_of(obj).path, config_dir),
+        line=session.line_of(obj),
+        object=object_name(obj),
+    )

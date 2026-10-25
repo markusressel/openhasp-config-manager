@@ -1,6 +1,7 @@
 import json
 import shutil
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -12,7 +13,9 @@ from openhasp_config_manager.gui.domain.gui_state import (
     STATE_DIR_NAME,
     GuiStateFile,
     describe_connection,
+    EditorTab,
     describe_draft,
+    describe_editor,
     describe_files,
     describe_object,
     describe_problems,
@@ -64,8 +67,22 @@ class TestDescribe(TestBase):
             "type": "btn",
             "file": "devices/test_device/editor.jsonl",
             "line": 4,
+            "rendered": {},
+            "source": {},
         }
         assert describe_object(session, label, cfg_root)["line"] == 3
+
+    def test_object_has_rendered_and_written_geometry(self, session, cfg_root):
+        # GIVEN
+        [component] = session.components
+        label = session.working_objects[component.key][0]
+        added = session.add_object(component.key, {"page": 9, "id": 3, "obj": "btn", "x": 1, "w": "{{ 2 * 5 }}"})
+
+        # THEN
+        assert describe_object(session, label, cfg_root)["rendered"] == {"x": 10}
+        location = describe_object(session, added, cfg_root)
+        assert location["rendered"] == {"x": 1, "w": 10}
+        assert location["source"] == {"x": 1, "w": "{{ 2 * 5 }}"}
 
     def test_object_added_in_the_draft_has_no_line(self, session, cfg_root):
         # GIVEN
@@ -81,7 +98,15 @@ class TestDescribe(TestBase):
         button = session.working_objects[component.key][1]
 
         # WHEN
-        result = describe_problems(session, [Problem(Severity.WARNING, button, "p9b2 is outside of the screen")], cfg_root)
+        [component] = session.components
+        devices = [
+            SimpleNamespace(name="b", jsonl=[SimpleNamespace(path=component.path)]),
+            SimpleNamespace(name="a", jsonl=[SimpleNamespace(path=component.path)]),
+            SimpleNamespace(name="c", jsonl=[SimpleNamespace(path=component.path.parent / "other.jsonl")]),
+        ]
+        result = describe_problems(
+            session, [Problem(Severity.WARNING, button, "p9b2 is outside of the screen")], cfg_root, devices
+        )
 
         # THEN
         assert result == [
@@ -91,6 +116,9 @@ class TestDescribe(TestBase):
                 "object": "p9b2",
                 "file": "devices/test_device/editor.jsonl",
                 "line": 4,
+                "rendered": {},
+                "source": {},
+                "devices": ["a", "b"],
             }
         ]
 
@@ -123,6 +151,22 @@ class TestDescribe(TestBase):
         assert describe_files(session.components, session.working_objects, cfg_root) == [
             {"file": "devices/test_device/editor.jsonl", "shared": False, "pages": [9]}
         ]
+
+    def test_editor_tabs(self, cfg_root):
+        tabs = [
+            EditorTab(cfg_root / "a.jsonl", dirty=True, conflict=False, line=3, column=7),
+            EditorTab(cfg_root / "devices" / "b.yaml", dirty=False, conflict=True, line=1, column=1),
+        ]
+
+        assert describe_editor("split", tabs, cfg_root / "a.jsonl", cfg_root) == {
+            "mode": "split",
+            "current": "a.jsonl",
+            "files": [
+                {"file": "a.jsonl", "dirty": True, "conflict": False, "line": 3, "column": 7},
+                {"file": "devices/b.yaml", "dirty": False, "conflict": True, "line": 1, "column": 1},
+            ],
+        }
+        assert describe_editor("rendered", [], None, cfg_root) == {"mode": "rendered", "current": None, "files": []}
 
     def test_connection(self):
         # WHEN

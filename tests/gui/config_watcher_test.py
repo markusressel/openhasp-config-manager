@@ -1,7 +1,7 @@
 import pytest
 
 from tests import TestBase
-from tests.gui.main_window_test import _wait_until
+from tests.gui.helpers import wait_until
 
 
 @pytest.fixture
@@ -30,7 +30,7 @@ class TestConfigWatcher(TestBase):
             (root / "devices" / "a" / f"page{i}.jsonl").write_text("{}")
 
         # THEN
-        _wait_until(lambda: watcher.reported)
+        wait_until(lambda: watcher.reported)
         from PyQt6.QtTest import QTest
 
         QTest.qWait(300)
@@ -44,14 +44,14 @@ class TestConfigWatcher(TestBase):
         # WHEN
         folder.mkdir(parents=True)
         (folder / "x.jsonl").write_text("{}")
-        _wait_until(lambda: any(path.name == "x.jsonl" for paths in watcher.reported for path in paths))
+        wait_until(lambda: any(path.name == "x.jsonl" for paths in watcher.reported for path in paths))
 
         # AND
         watcher.reported.clear()
         (folder / "x.jsonl").write_text("{ }")
 
         # THEN
-        _wait_until(lambda: watcher.reported)
+        wait_until(lambda: watcher.reported)
         assert {path.name for path in watcher.reported[0]} == {"x.jsonl"}
 
     def test_temporary_files_and_the_output_are_not_reported(self, watcher):
@@ -65,14 +65,14 @@ class TestConfigWatcher(TestBase):
         (root / "devices" / "a" / "real.jsonl").write_text("{}")
 
         # THEN
-        _wait_until(lambda: watcher.reported)
+        wait_until(lambda: watcher.reported)
         assert {path.name for paths in watcher.reported for path in paths} == {"real.jsonl"}
 
     def test_reading_a_file_is_not_a_change(self, watcher):
         # GIVEN
         file = watcher._root / "devices" / "a" / "page.jsonl"
         file.write_text("{}")
-        _wait_until(lambda: watcher.reported)
+        wait_until(lambda: watcher.reported)
         watcher.reported.clear()
 
         # WHEN

@@ -109,3 +109,11 @@ class TestPageObjects(TestBase):
         assert (obj["page"], obj["id"]) == (3, 5)
         assert obj["x"] == (480 - obj["w"]) // 2
         assert obj["y"] == (320 - obj["h"]) // 2
+
+    def test_object_without_size_is_not_positioned_and_can_have_a_parent(self):
+        # WHEN
+        tab = create_object(OpenHASPWidgetType.TAB, page=3, obj_id=5, screen_width=480, screen_height=320, parent_id=2)
+
+        # THEN
+        assert (tab["obj"], tab["parentid"]) == ("tab", 2)
+        assert "x" not in tab and "y" not in tab

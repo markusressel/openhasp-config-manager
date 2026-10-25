@@ -2,7 +2,7 @@ import dataclasses
 import types
 import typing
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional, Type, TypeVar, Union
+from typing import Any, Dict, List, Optional, Type, TypeVar, Union
 
 T = TypeVar("T")
 
@@ -25,6 +25,9 @@ class UiSession:
     """
 
     selected_device: Optional[str] = None
+    # the files open in the text editor and the one shown, relative to the config directory
+    open_files: List[str] = field(default_factory=list)
+    current_file: Optional[str] = None
     devices: Dict[str, DeviceSession] = field(default_factory=dict)
 
     def device(self, name: str) -> DeviceSession:

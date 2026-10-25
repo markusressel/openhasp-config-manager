@@ -30,7 +30,7 @@ from openhasp_config_manager.gui.domain.properties import (
 from openhasp_config_manager.gui.domain.file_tree import relative_config_path
 from openhasp_config_manager.gui.domain.plate_session import PlateSession
 from openhasp_config_manager.gui.qt.components import UiComponents, ThemedIcons
-from openhasp_config_manager.gui.qt.layouts import clear_layout
+from openhasp_config_manager.gui.qt.layouts import clear_layout, frozen
 from openhasp_config_manager.gui.qt.widgets.pagelayout.icon_picker import IconPickerDialog
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
 from openhasp_config_manager.gui.qt.widgets.pagelayout.template_completer import TemplateCompleter
@@ -64,6 +64,8 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         # property -> the text typed so far ("" if none), for those switched to a template that is not valid yet
         self._pending_templates: Dict[str, str] = {}
         self._validator: Optional[PropertyValidator] = None
+        # whether the content was built for the current selection (it is built when the editor is created)
+        self._shows_content = False
 
         self.outer_layout = QVBoxLayout(self)
         self.outer_layout.setContentsMargins(0, 0, 0, 0)
@@ -88,6 +90,7 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         self.outer_layout.addWidget(self.scroll_area)
 
         self._create_content()
+        self._shows_content = True
 
     def set_validator(self, validator: PropertyValidator):
         self._validator = validator
@@ -104,6 +107,9 @@ class OpenHASPWidgetPropertyEditor(QWidget):
 
     def set_editable_widgets(self, editable_widgets: List[EditableWidget]):
         """Updates the editor with new widget data."""
+        if not editable_widgets and not self._editable_widgets and self._shows_content:
+            # nothing is selected and nothing was: e.g. a page reloaded after an object was removed
+            return
         self._editable_widgets = editable_widgets
 
         # Take a snapshot of the source the moment the widget is selected
@@ -129,8 +135,10 @@ class OpenHASPWidgetPropertyEditor(QWidget):
 
     def refresh(self):
         """Rebuilds the editor from the current data, e.g. after the object was moved in the preview."""
-        clear_layout(self.main_layout)
-        self._create_content()
+        with frozen(self.content_container):
+            clear_layout(self.main_layout)
+            self._create_content()
+            self._shows_content = True
 
     def _create_content(self):
         if not self._editable_widgets:

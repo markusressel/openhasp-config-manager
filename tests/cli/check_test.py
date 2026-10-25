@@ -151,5 +151,7 @@ class TestCheckCommand:
 
         # THEN
         assert result.exit_code == 0
-        assert f"{DEVICE}/editor.jsonl:1: warning: p9b1 is outside of the screen: right by 70 px [test_device]" in result.stdout
+        assert (
+            f"{DEVICE}/editor.jsonl:1: warning: p9b1 is outside of the screen: right by 70 px [test_device]" in result.stdout
+        )
         assert "Checked 1 device: 0 errors, 1 warning" in result.stdout
