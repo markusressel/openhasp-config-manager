@@ -17,6 +17,7 @@ class OpenHASPWidgetType(StrEnum):
     IMAGE = "img"
     BAR = "bar"
     SLIDER = "slider"
+    LINEMETER = "linemeter"
     SPINNER = "spinner"
     LED = "led"
     ROLLER = "roller"
@@ -105,6 +106,12 @@ WIDGET_TYPES: Dict[OpenHASPWidgetType, WidgetTypeInfo] = {
         description="Busy indicator",
         icon="timer-sand",
         defaults={"w": 60, "h": 60, "angle": 60},
+    ),
+    OpenHASPWidgetType.LINEMETER: WidgetTypeInfo(
+        title="Line meter",
+        description="Round scale of lines",
+        icon="speedometer",
+        defaults={"w": 150, "h": 150, "min": 0, "max": 100, "val": 50},
     ),
 }
 

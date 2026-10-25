@@ -1,5 +1,7 @@
 """What the preview items share: the colors of the default theme and how text is drawn."""
 
+import math
+
 from PyQt6 import QtCore, QtGui
 
 DEFAULT_ACCENT = "#558B2F"
@@ -49,3 +51,14 @@ def fraction(value, minimum, maximum) -> float:
 def option_lines(options) -> list:
     """:return: the entries of an `options` property (separated by a line break, written `\\n` in the file)"""
     return str(options).split("\n") if options else []
+
+
+def polar(center: QtCore.QPointF, radius: float, degrees: float) -> QtCore.QPointF:
+    """:return: the point at a distance from the center, in degrees clockwise from 3 o'clock (like the angles of openHASP)"""
+    angle = math.radians(degrees)
+    return QtCore.QPointF(center.x() + math.cos(angle) * radius, center.y() + math.sin(angle) * radius)
+
+
+def scale_start(angle: float, rotation: float) -> float:
+    """:return: where a scale of `angle` degrees starts (clockwise from 3 o'clock): centered at the top, plus the rotation"""
+    return 90 + (360 - angle) / 2 + rotation

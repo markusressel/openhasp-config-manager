@@ -104,3 +104,12 @@ class TestPreviewItems(TestBase):
         ring_only = painted(render({**spinner, "angle": 0, "line_color10": "#000000"}))
         assert ring_only > 0
         assert render({**spinner, "angle": 120, "line_color10": "#00ff00"}) != render({**spinner, "angle": 0})
+
+    def test_linemeter_activates_lines_up_to_its_value(self):
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.linemeter import HaspLineMeterItem
+
+        meter = {"page": 1, "id": 1, "obj": "linemeter", "x": 10, "y": 10, "w": 150, "h": 150, "line_count": 20}
+        assert HaspLineMeterItem({**meter, "val": 50}).active_lines() == 10
+        assert HaspLineMeterItem({**meter, "val": 500}).active_lines() == 20
+        assert painted(render(meter)) > 0
+        assert render({**meter, "val": 50}) != render({**meter, "val": 50, "type": 1})
