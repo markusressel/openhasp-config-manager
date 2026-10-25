@@ -18,10 +18,6 @@ class HaspTabItem(EditableWidget):
     def obj_h(self) -> int:
         return 0
 
-    def __init__(self, obj_data, parent_widget=None):
-        super().__init__(obj_data)
-        self.parent_widget = parent_widget
-
     def boundingRect(self) -> QtCore.QRectF:
         return QtCore.QRectF()
 

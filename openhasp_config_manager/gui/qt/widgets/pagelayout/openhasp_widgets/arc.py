@@ -1,3 +1,5 @@
+import math
+
 from PyQt6 import QtCore, QtGui
 
 from openhasp_config_manager.gui.domain.style_parts import Part
@@ -27,10 +29,6 @@ class HaspArcItem(EditableWidget):
     `type` 0 fills from the start, 1 from the middle (symmetrical), 2 from the end (reverse). With `adjustable` it has a knob.
     See https://www.openhasp.com/0.7.0/design/objects/arc/
     """
-
-    def __init__(self, obj_data, parent_widget=None):
-        super().__init__(obj_data)
-        self.parent_widget = parent_widget
 
     def angles(self):
         """:return: (start, sweep) of the background arc and (start, sweep) of the indicator, in degrees clockwise from 3 o'clock"""
@@ -79,8 +77,6 @@ class HaspArcItem(EditableWidget):
             )
 
         if knob_radius:
-            import math
-
             angle = math.radians(ind_start + ind_sweep if self.obj_data.get("type") != 2 else ind_start)
             center = rect.center()
             point = QtCore.QPointF(

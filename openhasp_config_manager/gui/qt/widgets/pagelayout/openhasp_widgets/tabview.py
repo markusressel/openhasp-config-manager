@@ -26,10 +26,6 @@ class HaspTabviewItem(EditableWidget):
     See https://www.openhasp.com/0.7.0/design/objects/tabview/
     """
 
-    def __init__(self, obj_data, parent_widget=None):
-        super().__init__(obj_data)
-        self.parent_widget = parent_widget
-
     def tabs(self):
         return tab_texts(getattr(self.parent_widget, "objects", []), self.obj_data)
 

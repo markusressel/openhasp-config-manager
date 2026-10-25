@@ -36,7 +36,7 @@ class HaspSwitchItem(EditableWidget):
         return self.style("bg_color", "lightgray", Part.KNOB)
 
     def __init__(self, obj_data, parent_widget=None):
-        super().__init__(obj_data)
+        super().__init__(obj_data, parent_widget)
 
         self._val = self.val  # Store the current state for toggling
 

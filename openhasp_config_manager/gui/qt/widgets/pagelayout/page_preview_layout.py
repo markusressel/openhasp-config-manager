@@ -13,14 +13,9 @@ from openhasp_config_manager.gui.domain.ripple import Ripple, active_ripples
 from openhasp_config_manager.gui.qt.components import UiComponents
 from openhasp_config_manager.gui.qt.theme import current_colors
 from openhasp_config_manager.gui.qt.async_bridge import qBridge
-from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.bar import HaspBarItem
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.registry import ITEM_CLASSES
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.button import HaspButtonItem
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
-from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.image import HaspImageItem
-from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.label import HaspLabelItem
-from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.slider import HaspSliderItem
-from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.switch import HaspSwitchItem
 from openhasp_config_manager.gui.qt.widgets.pagelayout.plate_scene import PlateScene
 from openhasp_config_manager.openhasp_client.icons import IntegratedIcon
 
@@ -219,17 +214,7 @@ class PagePreviewWidget(QGraphicsView):
 
             item = None
             if obj_type == "btn":
-                item = self._create_button_widget(obj_data)
-            elif obj_type == "switch":
-                item = self._create_switch_widget(obj_data)
-            elif obj_type == "bar":
-                item = self._create_bar_widget(obj_data)
-            elif obj_type == "slider":
-                item = self._create_slider_widget(obj_data)
-            elif obj_type == "label":
-                item = self._create_label_widget(obj_data)
-            elif obj_type == "img":
-                item = self._create_img_widget(obj_data)
+                item = HaspButtonItem(obj_data=obj_data, on_click=self._on_button_clicked, parent_widget=self)
             elif obj_type in ITEM_CLASSES:
                 item = ITEM_CLASSES[obj_type](obj_data=obj_data, parent_widget=self)
 
@@ -636,44 +621,3 @@ class PagePreviewWidget(QGraphicsView):
                 processed_text = processed_text.replace(unicode_char, replacement)
 
         return f"<span>{processed_text}</span>"
-
-    def _create_button_widget(self, obj_data: Dict) -> HaspButtonItem:
-        return HaspButtonItem(
-            obj_data=obj_data,
-            on_click=self._on_button_clicked,
-            parent_widget=self,
-        )
-
-    def _create_switch_widget(self, obj_data: Dict) -> HaspSwitchItem:
-        widget = HaspSwitchItem(
-            obj_data=obj_data,
-            parent_widget=self,
-        )
-        widget.toggled.connect(lambda obj_id, val: LOGGER.debug(f"Switch {obj_id} toggled to {val}"))
-        return widget
-
-    def _create_bar_widget(self, obj_data: Dict) -> HaspBarItem:
-        return HaspBarItem(
-            obj_data=obj_data,
-            parent_widget=self,
-        )
-
-    def _create_slider_widget(self, obj_data) -> HaspSliderItem:
-        widget = HaspSliderItem(
-            obj_data=obj_data,
-            parent_widget=self,
-        )
-        widget.valueChanged.connect(lambda obj_id, val: LOGGER.debug(f"Slider {obj_id} changed to {val}"))
-        return widget
-
-    def _create_label_widget(self, obj_data: Dict) -> HaspLabelItem:
-        return HaspLabelItem(
-            obj_data=obj_data,
-            parent_widget=self,
-        )
-
-    def _create_img_widget(self, obj_data: Dict) -> HaspImageItem:
-        return HaspImageItem(
-            obj_data=obj_data,
-            parent_widget=self,
-        )

@@ -31,10 +31,6 @@ class HaspLineItem(EditableWidget):
     def obj_h(self) -> int:
         return bounds(self.points)[1] if self.auto_size else geometry_value(self.obj_data, "h")
 
-    def __init__(self, obj_data, parent_widget=None):
-        super().__init__(obj_data)
-        self.parent_widget = parent_widget
-
     def boundingRect(self) -> QtCore.QRectF:
         # the line is wider than the object by its width
         margin = number(self.style("line_width", _DEFAULT_LINE_WIDTH), _DEFAULT_LINE_WIDTH) / 2 + 3

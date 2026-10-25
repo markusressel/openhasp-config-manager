@@ -33,6 +33,19 @@ class TestPreviewItems(TestBase):
         image = render({"page": 1, "id": 1, "obj": "bar", "x": 10, "y": 10, "w": 100, "h": 20, "val": 50})
         assert painted(image) > 0
 
+    def test_every_type_gets_its_item(self):
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.button import HaspButtonItem
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.registry import ITEM_CLASSES
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.page_preview_layout import PagePreviewWidget
+
+        view = PagePreviewWidget()
+        types = ["btn", *ITEM_CLASSES]
+        view.set_objects([{"page": 1, "id": index, "obj": kind} for index, kind in enumerate(types, start=1)])
+        items = {item.obj_data["obj"]: item for item in view.editable_items()}
+        assert isinstance(items["btn"], HaspButtonItem)
+        assert all(type(items[kind]) is ITEM_CLASSES[kind] for kind in ITEM_CLASSES)
+        assert all(item.parent_widget is view for item in items.values())
+
     def test_checkbox_ignores_w_and_h_and_shows_the_check_mark_when_checked(self):
         from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.checkbox import HaspCheckboxItem
 

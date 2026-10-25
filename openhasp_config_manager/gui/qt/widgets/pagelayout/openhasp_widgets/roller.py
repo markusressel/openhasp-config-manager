@@ -54,10 +54,6 @@ class HaspRollerItem(EditableWidget):
             entries.append(options[index] if 0 <= index < len(options) else None)
         return entries
 
-    def __init__(self, obj_data, parent_widget=None):
-        super().__init__(obj_data)
-        self.parent_widget = parent_widget
-
     def paint(self, painter, option, widget=None):
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
         radius = number(self.style("radius", 4), 4)

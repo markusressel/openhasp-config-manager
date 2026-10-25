@@ -40,10 +40,6 @@ class HaspGaugeItem(EditableWidget):
         divider = 10 ** int(number(self.obj_data.get("format"), 0))
         return [str(int((low + (high - low) * index / max(count - 1, 1)) / divider)) for index in range(count)]
 
-    def __init__(self, obj_data, parent_widget=None):
-        super().__init__(obj_data)
-        self.parent_widget = parent_widget
-
     def paint(self, painter, option, widget=None):
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
         angle = number(self.obj_data.get("angle"), _DEFAULT_ANGLE)

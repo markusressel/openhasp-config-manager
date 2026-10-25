@@ -35,10 +35,6 @@ class HaspColorPickerItem(EditableWidget):
             stops.append((position, color))
         return stops
 
-    def __init__(self, obj_data, parent_widget=None):
-        super().__init__(obj_data)
-        self.parent_widget = parent_widget
-
     def paint(self, painter, option, widget=None):
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
         rect = self.obj_rect

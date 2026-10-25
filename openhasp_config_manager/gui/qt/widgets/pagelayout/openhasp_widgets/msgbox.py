@@ -30,10 +30,6 @@ class HaspMessageBoxItem(EditableWidget):
         options = self.obj_data.get("options", ["OK"])
         return [button.text for row in matrix_rows(options) for button in row]
 
-    def __init__(self, obj_data, parent_widget=None):
-        super().__init__(obj_data)
-        self.parent_widget = parent_widget
-
     def paint(self, painter, option, widget=None):
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
         radius = number(self.style("radius", 6), 6)

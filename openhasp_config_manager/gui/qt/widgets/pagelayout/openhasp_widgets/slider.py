@@ -38,8 +38,7 @@ class HaspSliderItem(EditableWidget):
         return self.style("bg_color", "lightgray", Part.KNOB)
 
     def __init__(self, obj_data, parent_widget=None):
-        super().__init__(obj_data)
-        self.parent_widget = parent_widget
+        super().__init__(obj_data, parent_widget)
 
         self._val = self.val  # Internal value to track changes
 

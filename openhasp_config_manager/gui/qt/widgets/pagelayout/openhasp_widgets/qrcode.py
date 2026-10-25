@@ -22,10 +22,6 @@ class HaspQrCodeItem(EditableWidget):
     def obj_h(self) -> int:
         return self.obj_w
 
-    def __init__(self, obj_data, parent_widget=None):
-        super().__init__(obj_data)
-        self.parent_widget = parent_widget
-
     def paint(self, painter, option, widget=None):
         painter.setPen(QtCore.Qt.PenStyle.NoPen)
         painter.setBrush(QtGui.QColor("white"))

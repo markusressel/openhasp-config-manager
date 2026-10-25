@@ -27,10 +27,6 @@ class HaspDropdownItem(EditableWidget):
         index = int(number(self.obj_data.get("val"), 0))
         return options[index] if 0 <= index < len(options) else ""
 
-    def __init__(self, obj_data, parent_widget=None):
-        super().__init__(obj_data)
-        self.parent_widget = parent_widget
-
     def paint(self, painter, option, widget=None):
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
         radius = number(self.style("radius", 4), 4)

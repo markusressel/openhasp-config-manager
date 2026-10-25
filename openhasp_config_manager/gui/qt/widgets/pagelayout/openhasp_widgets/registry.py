@@ -1,8 +1,13 @@
-"""The preview items of the openHASP object types that only need `(obj_data, parent_widget)`, by their `obj` value."""
+"""The preview items of the openHASP object types that only need `(obj_data, parent_widget)`, by their `obj` value (`btn` needs more)."""
 
 from typing import Dict, Type
 
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.bar import HaspBarItem
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.checkbox import HaspCheckboxItem
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.image import HaspImageItem
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.label import HaspLabelItem
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.slider import HaspSliderItem
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.switch import HaspSwitchItem
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.arc import HaspArcItem
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.dropdown import HaspDropdownItem
@@ -21,6 +26,11 @@ from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.msgbox i
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.cpicker import HaspColorPickerItem
 
 ITEM_CLASSES: Dict[str, Type[EditableWidget]] = {
+    "switch": HaspSwitchItem,
+    "bar": HaspBarItem,
+    "slider": HaspSliderItem,
+    "label": HaspLabelItem,
+    "img": HaspImageItem,
     "checkbox": HaspCheckboxItem,
     "arc": HaspArcItem,
     "dropdown": HaspDropdownItem,
