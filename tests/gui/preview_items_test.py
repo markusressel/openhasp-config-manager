@@ -122,3 +122,16 @@ class TestPreviewItems(TestBase):
         assert HaspGaugeItem({**gauge, "format": 2, "label_count": 3}).labels() == ["0", "5", "10"]
         assert painted(render(gauge)) > 0
         assert render({**gauge, "val": 900}) != render({**gauge, "val": 100})
+
+    def test_line_is_as_large_as_its_points_and_ignores_broken_ones(self):
+        from openhasp_config_manager.gui.domain.line_points import parse_points
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.line import HaspLineItem
+
+        line = {"page": 1, "id": 1, "obj": "line", "x": 10, "y": 10, "points": [[10, 25], [100, 25], [100, 0]]}
+        item = HaspLineItem(line)
+        assert (item.obj_w, item.obj_h) == (100, 25)
+        assert HaspLineItem({**line, "auto_size": False, "w": 7, "h": 8}).obj_w == 7
+        assert parse_points("[[1, 2], [3, 4]]") == [(1, 2), (3, 4)]
+        assert parse_points("{{ points }}") == [] and parse_points([[1], "x", [1, "2"]]) == []
+        assert painted(render(line)) > 0
+        assert render({**line, "y_invert": True}) != render(line)

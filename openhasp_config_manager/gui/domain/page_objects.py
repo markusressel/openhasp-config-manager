@@ -17,6 +17,7 @@ class OpenHASPWidgetType(StrEnum):
     IMAGE = "img"
     BAR = "bar"
     SLIDER = "slider"
+    LINE = "line"
     GAUGE = "gauge"
     LINEMETER = "linemeter"
     SPINNER = "spinner"
@@ -119,6 +120,12 @@ WIDGET_TYPES: Dict[OpenHASPWidgetType, WidgetTypeInfo] = {
         description="Dial with a needle",
         icon="gauge",
         defaults={"w": 200, "h": 200, "min": 0, "max": 100, "val": 40},
+    ),
+    OpenHASPWidgetType.LINE: WidgetTypeInfo(
+        title="Line",
+        description="Line through points",
+        icon="vector-polyline",
+        defaults={"w": 100, "h": 25, "points": [[0, 25], [50, 0], [100, 25]]},
     ),
 }
 
