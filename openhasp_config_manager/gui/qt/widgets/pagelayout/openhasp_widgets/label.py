@@ -42,6 +42,8 @@ class HaspLabelItem(EditableWidget):
 
         # Child item for text rendering
         self.text_item = QGraphicsTextItem(parent=self)
+        # without the default margin of 4px around the text, it starts exactly at the top and left of the label
+        self.text_item.document().setDocumentMargin(0)
         self._setup_text()
 
     def _setup_text(self):
@@ -75,8 +77,8 @@ class HaspLabelItem(EditableWidget):
         align = self.align
         t_rect = self.text_item.boundingRect()
 
-        # Vertical center is standard for HASP labels
-        y_pos = (self.obj_h - t_rect.height()) / 2
+        # the text of a label starts at its top, whatever its height (like in LVGL)
+        y_pos = 0
 
         if align == "center":
             x_pos = (self.obj_w - t_rect.width()) / 2

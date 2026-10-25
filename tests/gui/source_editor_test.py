@@ -385,6 +385,8 @@ class TestCodeView(TestBase):
         widget.current_editor.zoom(3)
         view._reset_zoom()
         assert widget.current_editor.font().pointSize() == 10
+        # the view owns the widget and is deleted when the test ends, before the fixture closes the tabs
+        widget.setParent(None)
 
 
 class TestEditorFeatures(TestBase):
