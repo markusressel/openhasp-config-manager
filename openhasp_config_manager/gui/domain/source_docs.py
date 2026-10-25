@@ -34,7 +34,6 @@ PROPERTY_DOCS = {
     "radius": "Corner radius in pixels.",
     "opacity": "Opacity of the whole object, 0 to 255.",
     "bg_color": 'Background color, e.g. `"#ff8800"` or a color name.',
-    "bg_color02": "Background color of the second part or state of the object (pressed, checked, the indicator, ...).",
     "bg_opa": "Opacity of the background, 0 to 255.",
     "bg_grad_color": "End color of the background gradient.",
     "bg_grad_dir": "Direction of the background gradient: 0 none, 1 vertical, 2 horizontal.",
@@ -74,19 +73,60 @@ PROPERTY_DOCS = {
     "start_angle": "Where an arc starts, in degrees.",
     "end_angle": "Where an arc ends, in degrees.",
     "rotation": "Rotation of the arc in degrees.",
+    "tag": "Any data. It is sent with every event of the object.",
+    "ext_click_h": "Makes the clickable area wider by this many pixels on both sides.",
+    "ext_click_v": "Makes the clickable area taller by this many pixels on both sides.",
     "prev": "Page of the page settings (id 0): the page to go to when navigating back from the first page.",
     "next": "Page of the page settings (id 0): the page to go to when navigating forward from the last page.",
     "back": "Page of the page settings (id 0): the page the `back` action goes to.",
 }
 
-_VARIANT = re.compile(r"^(?P<base>.+?)(?P<variant>\d{2})$")
+# https://www.openhasp.com/0.7.0/design/styling/: a style property can end in two digits, the part and the state of the object
+_PARTS = {
+    0: "the main part of the object (the background)",
+    1: "the indicator or needle, highlighting the current value",
+    2: "the knob which can be used to change the value",
+    3: "the background of the items/buttons",
+    4: "the items/buttons",
+    5: "the selected item",
+    6: "the major ticks of the gauge",
+    7: "the text cursor",
+    8: "the scrollbar",
+    9: "another special part",
+}
+_STATES = {
+    0: "default",
+    1: "toggled",
+    2: "pressed, not toggled",
+    3: "pressed and toggled",
+    4: "disabled, not toggled",
+    5: "disabled and toggled",
+}
+# what the parts are for the objects that say so in their documentation (https://www.openhasp.com/0.7.0/design/objects/)
+_OBJECT_PARTS = {
+    "switch": {1: "the indicator (the colored track)", 2: "the knob"},
+    "arc": {1: "the indicator arc", 2: "the knob"},
+    "spinner": {0: "the background circle", 1: "the spinning segment"},
+    "tabview": {4: "the tab buttons"},
+}
+
+_SUFFIXED = re.compile(r"^(?P<base>.+?)(?P<part>\d)(?P<state>\d)$")
 
 
-def describe_property(name: str) -> Optional[str]:
-    """:return: what a property is, None if it is not known. `bg_color02` is the variant of `bg_color` for another part."""
+def describe_property(name: str, object_type: Optional[str] = None) -> Optional[str]:
+    """
+    :param object_type: the `obj` of the object the property is in, for what its parts are
+    :return: what a property is, None if it is not known. A style property can end in two digits for the part and the state of
+        the object (`bg_color12` is the background color of the indicator while pressed), which are explained as well.
+    """
     if name in PROPERTY_DOCS:
         return PROPERTY_DOCS[name]
-    match = _VARIANT.match(name)
-    if match and match["base"] in PROPERTY_DOCS:
-        return f"{PROPERTY_DOCS[match['base']]}\n(`{match['variant']}`: the same for another part or state of the object.)"
-    return None
+    match = _SUFFIXED.match(name)
+    if not match or match["base"] not in PROPERTY_DOCS:
+        return None
+    part, state = int(match["part"]), int(match["state"])
+    part_text = _OBJECT_PARTS.get(object_type or "", {}).get(part) or _PARTS[part]
+    lines = [PROPERTY_DOCS[match["base"]], f"Suffix `{match['part']}{match['state']}`: part {part} is {part_text}"]
+    if state in _STATES:
+        lines[-1] += f"; state {state} is {_STATES[state]}"
+    return "\n".join(lines) + "."

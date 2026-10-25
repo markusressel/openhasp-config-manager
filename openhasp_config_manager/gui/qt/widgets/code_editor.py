@@ -610,7 +610,9 @@ class CodeEditor(QPlainTextEdit):
         for token in tokenize_line(line, self.language):
             if token.kind == TokenKind.KEY and token.start <= column <= token.end and self.language == Language.JSONL:
                 name = token.text(line).strip('"')
-                text = describe_property(name)
+                found = object_at_line(self.objects(), cursor.blockNumber() + 1)
+                kind = None if found is None or found.get("obj") is None else (found.get("obj").value or "").strip('"')
+                text = describe_property(name, kind)
                 if text is not None:
                     return f"<b>{html.escape(name)}</b><br>" + _CODE.sub(r"<code>\1</code>", html.escape(text)).replace(
                         "\n", "<br>"

@@ -432,7 +432,9 @@ More features for the objects of a `.jsonl` file:
 
 - **Folding**: click the arrow in the gutter, or `Ctrl+-` / `Ctrl+=` for the object at the cursor, `Ctrl+Shift+-` / `Ctrl+Alt+=`
   for all objects. A fold opens by itself when the cursor moves into it (e.g. by a search).
-- **Hover**: rest the mouse on a property name to see what it does (also `bg_color02`, the variants for other parts).
+- **Hover**: rest the mouse on a property name to see what it does. A style property with a two digit suffix (`bg_color12`) is
+  explained by part and state (10 is the indicator, 20 the knob, ...; 02 is pressed), with the names the object type uses, e.g.
+  the colored track of a `switch`.
 - **Format document** (`Ctrl+Alt+L`): indents the lines by the depth of the brackets and removes spaces at the end of lines. Comments,
   blank lines and the order of properties stay as they are.
 - **Rename id** (`Shift+F6`): changes the `id` of the object at the cursor and the `parentid` of the objects on the same page that

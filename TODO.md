@@ -9,6 +9,10 @@ None known.
 ## 2. Editor
 
 - [ ] Insert template variables inside longer texts (the suggestions replace the whole value today).
+- [ ] Object types: the editor can add and draw 6 of the 22 openHASP objects (`label`, `btn`, `switch`, `img`, `bar`, `slider`). Missing:
+  `checkbox`, `arc`, `dropdown`, `roller`, `linemeter`, `gauge`, `tabview`, `tab`, `cpicker`, `spinner`, `led`, `btnmatrix`, `msgbox`,
+  `line`, `qrcode`, `obj`. Objects of these types are not drawn in the preview today. Each needs a widget in the preview and an entry
+  in `page_objects.WIDGET_TYPES` (the picker).
 - [ ] Files tree: "New .jsonl file here" on a folder (adds the `run L:/<flattened name>` line to the right .cmd and checks the 30
   character limit of file names on the plate), and "Move to file" for an object.
 - [ ] **One edit model.** Make the editor emit small edit operations (`add(obj)`, `remove(id)`, `set(id, property, value)`,

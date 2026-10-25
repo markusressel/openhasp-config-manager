@@ -15,7 +15,11 @@ from openhasp_config_manager.openhasp_client.model.configuration.config import C
 from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.processing.jsonl import JsonlObjectProcessor
 from openhasp_config_manager.processing.preprocessor.jsonl_preprocessor import JsonlPreProcessor
-from openhasp_config_manager.processing.template_rendering import render_dict_recursive, render_template
+from openhasp_config_manager.processing.template_rendering import (
+    render_dict_recursive,
+    render_template,
+    render_template_or_keep,
+)
 from openhasp_config_manager.processing.variables import VariableManager
 from openhasp_config_manager.util import merge_dict_recursive
 
@@ -96,18 +100,23 @@ class DeviceProcessor:
         """
         return self._compute_jsonl_template_variables(self._device, component, draft_objects)
 
-    def render_jsonl_object(self, source_object: Dict[str, Any], template_vars: Dict[str, Any]) -> Dict[str, Any]:
+    def render_jsonl_object(
+        self, source_object: Dict[str, Any], template_vars: Dict[str, Any], keep_unresolved: bool = False
+    ) -> Dict[str, Any]:
         """
         Renders one source object like a deployment does: its templates, then the object processors
         (percentages, value types, theme defaults).
         :param source_object: the object as written in the file (see parse_jsonl_objects), it is not modified
         :param template_vars: the variables of its component (see jsonl_template_variables)
+        :param keep_unresolved: keep a value as written if it uses a variable that doesn't exist, instead of failing (for the
+            editor, which shows objects with mistakes; a deployment fails)
         :return: the rendered object
         """
+        render = render_template_or_keep if keep_unresolved else render_template
         normalized_object = {}
         for key, value in source_object.items():
             if isinstance(value, str):
-                normalized_object[key] = render_template(value, template_vars)
+                normalized_object[key] = render(value, template_vars)
             else:
                 normalized_object[key] = value
 
@@ -140,7 +149,6 @@ class DeviceProcessor:
         sorted_components = list(sorted(self._jsonl_components, key=lambda x: x == component))
         assert sorted_components[-1] == component
         for c in sorted_components:
-
             component_template_vars = self._variable_manager.get_vars(c.path)
             component_template_vars["device"] = self._device.config.openhasp_config_manager.device
             if "/common/" in str(c.path):

@@ -4,6 +4,7 @@ from PyQt6.QtGui import QTextCharFormat, QFont, QTextCursor
 from PyQt6.QtWidgets import QSizePolicy, QTextEdit
 from orjson import orjson
 
+from openhasp_config_manager.gui.domain.problems import geometry_value, number_or
 from openhasp_config_manager.gui.domain.source_syntax import Language
 from openhasp_config_manager.gui.qt.source_highlighter import SourceHighlighter
 
@@ -59,11 +60,12 @@ class PageJsonlPreviewWidget(QTextEdit):
         """
         sorted_page_objects = sorted(
             page_objects,
+            # values that are not numbers (templates that can't be rendered) sort like 0, they can't be compared with numbers
             key=lambda obj: (
-                obj.get("page", 0),
-                obj.get("id", 0),
-                obj.get("y", 0),
-                obj.get("x", 0),
+                number_or(obj.get("page"), 0),
+                number_or(obj.get("id"), 0),
+                geometry_value(obj, "y"),
+                geometry_value(obj, "x"),
             ),
         )
 

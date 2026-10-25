@@ -436,6 +436,10 @@ class TestLinksAndDocs(TestBase):
         assert doc_at('{"w": "33%') is None  # a value
         editor.set_text('{"src": "x", "text_color02": 1}')
         assert "<code>L:/image.png</code>" in doc_at('{"sr')
-        assert "<b>text_color02</b>" in doc_at('{"src": "x", "text_c') and "another part" in doc_at('{"src": "x", "text_c')
+        assert "<b>text_color02</b>" in doc_at('{"src": "x", "text_c') and "state 2 is pressed" in doc_at(
+            '{"src": "x", "text_c'
+        )
+        editor.set_text('{"obj": "switch", "bg_color10": 1}')
+        assert "the colored track" in doc_at('{"obj": "switch", "bg_c')
         editor.set_text("run x")
         assert doc_at("ru") is None

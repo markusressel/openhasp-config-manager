@@ -11,10 +11,28 @@ class TestDocs(TestBase):
         assert "pixels" in describe_property("x")
         assert describe_property("nope") is None
 
-    def test_variant_of_a_property(self):
-        text = describe_property("text_color02")
-        assert text.startswith(describe_property("text_color")) and "`02`" in text
+    def test_suffix_is_part_and_state(self):
+        text = describe_property("bg_color12")
+        assert text.startswith(describe_property("bg_color"))
+        assert "part 1 is the indicator or needle" in text and "state 2 is pressed, not toggled" in text
+        assert "part 0 is the main part" in describe_property("text_color00")
+        assert "state 0 is default" in describe_property("text_color00")
+
+    def test_parts_depend_on_the_object(self):
+        assert "part 2 is the knob;" in describe_property("bg_color20", "switch")
+        assert "the colored track" in describe_property("bg_color10", "switch")
+        assert "the spinning segment" in describe_property("line_width10", "spinner")
+        assert "the tab buttons" in describe_property("text_font40", "tabview")
+        assert "the indicator or needle" in describe_property("bg_color10", "btn")
+        assert "the items/buttons" in describe_property("bg_color40", "unknown")
+
+    def test_state_beyond_the_known_ones(self):
+        text = describe_property("bg_color09")
+        assert "part 0" in text and "state 9" not in text
+
+    def test_not_a_property(self):
         assert describe_property("nope02") is None
+        assert describe_property("12") is None
 
 
 class TestLinks(TestBase):

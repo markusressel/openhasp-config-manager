@@ -287,3 +287,18 @@ class TestCursorSelectsObject(TestBase):
         selected = window.page_layout_editor_widget.page_preview_widget.selected_items()
         assert [item.obj_data["text"] for item in selected] == ["C"]
         assert component is not None
+
+
+class TestMistakesDoNotCrash(TestBase):
+    def test_a_template_that_uses_a_renamed_object_is_kept_as_written(self, window, editor_file):
+        # GIVEN: object 2 positions itself relative to object 1
+        content = EDITOR_JSONL.replace('"text": "B"', '"text": "B", "x": "{{ p9b1.x + 5 }}"')
+        editor_file.write_text(content)
+        _wait_until(lambda: window.session.working_objects[window.session.components[0].key][1].get("x") == 15)
+
+        # WHEN: object 1 gets another id, so p9b1 is gone
+        editor_file.write_text(content.replace('"id": 1,', '"id": 7,'))
+
+        # THEN: the reload works, the template stays as written and is reported
+        _wait_until(lambda: window.session.working_objects[window.session.components[0].key][1].get("x") == "{{ p9b1.x + 5 }}")
+        _wait_until(lambda: any("x is not a number" in p.message for p in window.page_layout_editor_widget.problems))

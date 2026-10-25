@@ -10,6 +10,7 @@ from openhasp_config_manager.processing.template_rendering import (
     render_dict_recursive,
     render_template,
     render_template_collecting_unknown,
+    render_template_or_keep,
 )
 from tests import TestBase
 
@@ -559,3 +560,18 @@ class TestRenderDictRecursive(TestBase):
         # THEN
         assert result["p1b2"] == {"page": 1, "id": 2, "x": "30", "text": "T"}
         assert result["p1b3"]["y"] == "30"
+
+
+class TestRenderTemplateOrKeep(TestBase):
+    def test_renders_like_render_template(self):
+        assert render_template_or_keep("{{ a + 1 }}", {"a": 1}) == "2"
+        assert render_template_or_keep("{{ nope }}", {}) == "{{ nope }}"
+
+    def test_keeps_text_that_cannot_use_an_unknown_variable(self):
+        assert render_template_or_keep("{{ p3b20.y + 5 }}", {}) == "{{ p3b20.y + 5 }}"
+
+    def test_other_errors_are_raised(self):
+        with pytest.raises(TemplateSyntaxError):
+            render_template_or_keep("{{ a +", {})
+        with pytest.raises(ZeroDivisionError):
+            render_template_or_keep("{{ 1 // 0 }}", {})

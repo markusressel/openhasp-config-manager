@@ -50,7 +50,7 @@ class ProcessorDraftRenderer:
         return self._template_var_cache[key]
 
     def render_object(self, component: str, source: Dict[str, Any]) -> Dict[str, Any]:
-        return self._processor.render_jsonl_object(source, self._vars_of(component))
+        return self._processor.render_jsonl_object(source, self._vars_of(component), keep_unresolved=True)
 
     def check_template(self, component: str, template: str) -> Optional[str]:
         return check_template(template, self._vars_of(component))

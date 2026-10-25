@@ -135,6 +135,21 @@ def render_template_collecting_unknown(content: str, template_vars: Dict[str, An
     return rendered, unknown
 
 
+def render_template_or_keep(content: str, template_vars: Dict[str, Any]) -> str:
+    """
+    Render a text, but keep it as written if an unknown variable can't be used the way the text uses it (`{{ p3b20.y + 5 }}`
+    when `p3b20` doesn't exist, e.g. because its object got another id). Unknown variables that can simply be written back stay
+    as they are, like in `render_template`.
+    :raises jinja2.TemplateSyntaxError: for an invalid template
+    """
+    rendered, _, error = _render_collecting(content, template_vars)
+    if error is None:
+        return rendered
+    if isinstance(error, UndefinedError):
+        return content
+    raise error
+
+
 def _render_collecting(content: str, template_vars: Dict[str, Any]) -> Tuple[str, Set[str], Optional[Exception]]:
     """:return: the text (None if it failed), the unknown variables written into it so far, and why it failed"""
     unknown: Set[str] = set()

@@ -1,4 +1,4 @@
-from openhasp_config_manager.gui.domain.problems import Severity, find_problems
+from openhasp_config_manager.gui.domain.problems import Severity, find_problems, geometry_value
 
 
 def _find(objects):
@@ -38,3 +38,56 @@ def test_an_object_without_a_size_is_checked_with_the_size_it_is_drawn_with():
 
 def test_an_object_without_position_and_size_is_on_the_screen():
     assert find_problems([{"page": 1, "id": 1}], 480, 320) == []
+
+
+def test_a_position_that_is_not_a_number_is_an_error_and_drawn_with_the_default():
+    # e.g. `{{ p3b20.y + 5 }}` while p3b20 doesn't exist
+    broken = {"page": 1, "id": 2, "x": "{{ p1b1.x + 5 }}", "y": 10, "w": 20, "h": 20}
+
+    problems = find_problems([broken], 480, 320)
+
+    assert [(p.severity, p.message) for p in problems] == [(Severity.ERROR, "p1b2: x is not a number: {{ p1b1.x + 5 }}")]
+    assert geometry_value(broken, "x") == 0
+    assert geometry_value(broken, "y") == 10
+    assert geometry_value({"w": True}, "w") == 80
+
+
+def test_the_json_view_sorts_objects_with_values_that_are_not_numbers(qapp, settings):
+    from openhasp_config_manager.gui.qt.widgets.pagelayout.jsonl_preview import PageJsonlPreviewWidget
+
+    # two objects with the same id, one of them with a position that can't be rendered
+    objects = [
+        {"page": 1, "id": 2, "y": "{{ p1b9.y }}", "x": 1},
+        {"page": 1, "id": 2, "y": 5, "x": 1},
+        {"page": "{{ nope }}", "id": 1},
+    ]
+
+    widget = PageJsonlPreviewWidget()
+    widget.set_objects(objects)
+    assert [obj["id"] for obj in widget._objects] == [1, 2, 2]
+
+
+def test_an_exception_in_a_slot_is_reported_instead_of_aborting(monkeypatch):
+    import sys
+
+    from openhasp_config_manager.cli.gui import install_exception_hook
+
+    reported = []
+
+    class _Failed:
+        def emit(self, description, error):
+            reported.append((description, error))
+
+    class _Window:
+        status = type("Status", (), {"failed": _Failed()})()
+
+    printed = []
+    monkeypatch.setattr(sys, "excepthook", lambda *args: printed.append(args))
+    install_exception_hook(_Window())
+
+    try:
+        raise ValueError("boom")
+    except ValueError:
+        sys.excepthook(*sys.exc_info())
+
+    assert printed and reported == [("Unexpected error (see the console)", "ValueError: boom")]
