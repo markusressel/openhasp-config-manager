@@ -569,6 +569,7 @@ class PageLayoutEditorWidget(QWidget):
     @qBridge(list)
     def _on_openhasp_widget_selection_changed(self, editable_widgets: List[EditableWidget]):
         self.property_editor.set_editable_widgets(editable_widgets)
+        self.jsonl_preview.set_selected_objects([widget.obj_data for widget in editable_widgets])
         self._update_actions()
         self.stateChanged.emit()
         if len(editable_widgets) == 1:

@@ -50,6 +50,22 @@ class TestOpening(TestBase):
         # THEN
         assert window.source_editor.current_file == editor_file
         assert window.source_editor.current_editor.cursor_line_column[0] == 2
+        assert window.source_editor.current_editor.flashed_lines == (2, 2)
+
+    def test_selecting_an_object_highlights_its_lines_in_the_rendered_jsonl(self, window):
+        # GIVEN
+        [component] = window.session.components
+        label, button = window.session.working_objects[component.key]
+        preview = window.page_layout_editor_widget.jsonl_preview
+
+        # WHEN
+        window.page_layout_editor_widget.page_preview_widget.select_object(button)
+        selected = [preview.document().findBlockByNumber(line).text() for line in preview.selected_lines]
+        window.page_layout_editor_widget.page_preview_widget.scene().clearSelection()
+
+        # THEN
+        assert [json.loads(text)["id"] for text in selected] == [2]
+        assert preview.selected_lines == []
 
     def test_nothing_opens_while_the_source_is_hidden_or_the_draft_has_changes(self, window):
         # GIVEN

@@ -38,6 +38,10 @@ _ISSUE_DELAY_MS = 300
 _MAX_SEARCH_MATCHES = 1000
 _PAIRS = {"{": "}", "[": "]", '"': '"'}
 _FOLD_WIDTH = 14
+# how long `flash_lines` highlights lines
+FLASH_MS = 3000
+# the opacity of the background of flashed lines, 0..255
+_FLASH_ALPHA = 80
 _CODE = re.compile(r"`([^`]+)`")
 
 
@@ -99,6 +103,11 @@ class CodeEditor(QPlainTextEdit):
         self._object_index = -1
         # the reference under the mouse while Ctrl is pressed: (block number, link)
         self._hover_link: Optional[Tuple[int, Link]] = None
+        # the lines (first, last, starting at 1) highlighted for a moment, see `flash_lines`
+        self._flash: Optional[Tuple[int, int]] = None
+        self._flash_timer = QtCore.QTimer(self)
+        self._flash_timer.setSingleShot(True)
+        self._flash_timer.timeout.connect(self.end_flash)
 
         self.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
         self.setTabStopDistance(self.fontMetrics().horizontalAdvance(" ") * len(INDENT))
@@ -134,6 +143,8 @@ class CodeEditor(QPlainTextEdit):
         """Replace the text without it counting as an edit of the user. Cursor and scroll position stay where they were."""
         if text == self.toPlainText():
             return
+        # the lines may be others now
+        self.end_flash()
         cursor = self.textCursor()
         line, column = cursor.blockNumber(), cursor.positionInBlock()
         scroll = self.verticalScrollBar().value()
@@ -323,6 +334,7 @@ class CodeEditor(QPlainTextEdit):
         selections += self._marker_selections()
         selections += self._search_selections()
         selections += self._link_selections()
+        selections += self._flash_selections()
         self.setExtraSelections(selections)
         self._reveal_cursor()
         self._notify_object()
@@ -382,6 +394,51 @@ class CodeEditor(QPlainTextEdit):
                 QToolTip.hideText()
             return True
         return super().event(event)
+
+    # --- flash ---
+
+    @property
+    def flashed_lines(self) -> Optional[Tuple[int, int]]:
+        """:return: the lines (first, last, starting at 1) that are highlighted for a moment, None if none are"""
+        return self._flash
+
+    def flash_lines(self, first: int, last: int, duration_ms: int = FLASH_MS):
+        """
+        Highlight lines (starting at 1) for a moment, e.g. those of the object selected in the preview, so they are easy to find.
+        The highlight ends after `duration_ms`, or as soon as the user types or clicks in the editor: it would be in the way.
+        """
+        self._flash = (first, last)
+        self._flash_timer.start(duration_ms)
+        self._update_selections()
+
+    def end_flash(self):
+        if self._flash is None:
+            return
+        self._flash = None
+        self._flash_timer.stop()
+        self._update_selections()
+
+    def _flash_selections(self) -> List[QTextEdit.ExtraSelection]:
+        if self._flash is None:
+            return []
+        first, last = self._flash
+        color = self.palette().color(QPalette.ColorRole.Highlight)
+        color.setAlpha(_FLASH_ALPHA)
+        result = []
+        for number in range(first, last + 1):
+            block = self.document().findBlockByNumber(number - 1)
+            if not block.isValid():
+                break
+            selection = QTextEdit.ExtraSelection()
+            selection.format.setBackground(color)
+            selection.format.setProperty(QTextFormat.Property.FullWidthSelection, True)
+            selection.cursor = QTextCursor(block)
+            result.append(selection)
+        return result
+
+    def mousePressEvent(self, event):
+        self.end_flash()
+        super().mousePressEvent(event)
 
     # --- objects, folding ---
 
@@ -721,6 +778,7 @@ class CodeEditor(QPlainTextEdit):
     # --- keys ---
 
     def keyPressEvent(self, event: QKeyEvent):
+        self.end_flash()
         popup = self._completer.popup()
         key = event.key()
         modifiers = event.modifiers()

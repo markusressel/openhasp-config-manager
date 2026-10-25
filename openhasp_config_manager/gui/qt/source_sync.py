@@ -101,8 +101,23 @@ class SourceEditorSync(QtCore.QObject):
             return
         obj = selected[0].obj_data
         line = session.line_of(obj)
-        if line is not None and not self._cursor_is_in_object(session, obj):
-            self._source_editor.open_file(session.component_of(obj).path, line, focus=False, preview=True)
+        if line is None or self._cursor_is_in_object(session, obj):
+            return
+        component = session.component_of(obj)
+        self._source_editor.open_file(component.path, line, focus=False, preview=True)
+        self._flash_object(session, obj)
+
+    def _flash_object(self, session: PlateSession, obj: Dict):
+        """Highlight the lines of an object in its tab for a moment, if the text is the one the draft was loaded from."""
+        component = session.component_of(obj)
+        editor = self._source_editor.editor_of(component.path)
+        buffer = self._source_editor.buffer_of(component.path)
+        if editor is None or buffer is None or buffer.text != component.content:
+            return
+        index = session.source_index(obj)
+        found = next((source for source in editor.objects() if source.index == index), None)
+        if found is not None:
+            editor.flash_lines(found.start_line, found.end_line)
 
     def _cursor_is_in_object(self, session: PlateSession, obj: Dict) -> bool:
         """Whether the cursor of the text editor is already in the lines of an object (so it doesn't jump to its first line)."""

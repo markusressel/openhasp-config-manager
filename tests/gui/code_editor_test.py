@@ -444,3 +444,35 @@ class TestLinksAndDocs(TestBase):
         assert "the colored track" in doc_at('{"obj": "switch", "bg_c')
         editor.set_text("run x")
         assert doc_at("ru") is None
+
+
+class TestFlash(TestBase):
+    def test_lines_are_highlighted_for_a_moment(self, editor):
+        # GIVEN
+        editor.set_text('{\n  "page": 1,\n  "id": 2\n}\n')
+
+        # WHEN
+        editor.flash_lines(1, 4, duration_ms=50)
+
+        # THEN
+        assert editor.flashed_lines == (1, 4)
+        assert sum(s.format.background().color().alpha() > 0 for s in editor.extraSelections()) >= 4
+        QTest.qWait(150)
+        assert editor.flashed_lines is None
+
+    def test_typing_clicking_or_a_reload_end_the_highlight(self, editor):
+        # GIVEN
+        editor.set_text('{"page": 1}\n')
+
+        # WHEN / THEN
+        editor.flash_lines(1, 1)
+        _type(editor, "x")
+        assert editor.flashed_lines is None
+
+        editor.flash_lines(1, 1)
+        QTest.mouseClick(editor.viewport(), Qt.MouseButton.LeftButton, pos=QPoint(5, 5))
+        assert editor.flashed_lines is None
+
+        editor.flash_lines(1, 1)
+        editor.set_text('{"page": 2}\n')
+        assert editor.flashed_lines is None
