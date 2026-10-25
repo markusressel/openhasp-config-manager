@@ -206,6 +206,9 @@ class PagePreviewWidget(QGraphicsView):
         self.viewport().update()
 
     def load_objects(self):
+        # first, in one go: clearing the scene deselects the items one by one, and the selection would report items whose
+        # objects are not in the draft anymore (e.g. after removing several objects)
+        self.scene().clearSelection()
         self.scene().clear()
         for obj_data in self.objects:
             obj_type = obj_data.get("obj")

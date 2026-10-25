@@ -12,10 +12,6 @@ None known.
 - [ ] Preview of the new object types: objects inside a `tab` (`parentid`) and the open list of a `dropdown` are not drawn.
 - [ ] Files tree: "New .jsonl file here" on a folder (adds the `run L:/<flattened name>` line to the right .cmd and checks the 30
   character limit of file names on the plate), and "Move to file" for an object.
-- [ ] **One edit model.** Make the editor emit small edit operations (`add(obj)`, `remove(id)`, `set(id, property, value)`,
-  `move/resize(id, rect)`) on the `PlateSession` draft. The preview, the JSONL view, the dirty state and Live preview all subscribe to
-  the same operations.
-- [ ] Undo/redo, built on the edit model.
 - [ ] Changes on disk (LLM edits): merge them into a draft with changes (the draft keeps only its changed properties, so objects and
   properties that changed on only one side can combine), instead of the "Reload or Keep" banner. Show which objects changed after a reload.
 - [ ] **Ordering and ids.** Z-order follows creation order on the plate, so reordering objects needs a delete and re-add of the objects

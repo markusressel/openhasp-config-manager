@@ -412,6 +412,14 @@ To deploy your configurations to the already connected openHASP devices, simply 
 > to be able to deploy files to the device. To enable the webservice
 > try: `openhasp-config-manager cmd -d plate35 -C service -p "start http"`
 
+## Undo and redo in the GUI
+
+`Ctrl+Z` undoes an edit of the draft in the preview (moving, adding, removing, pasting objects, changing their properties) and
+`Ctrl+Shift+Z` redoes it, also in the *Edit* menu and on the preview. Undo goes to the page of the change and selects the changed
+objects. Typing into a property, or nudging with the arrow keys, is one step. Saved changes can be undone too (the draft has changes
+again then). Revert, *Reload from disk* and changes of the files by someone else start a new history. While a text field has the
+focus, `Ctrl+Z` undoes its text instead.
+
 ## Editing the files as text in the GUI
 
 The **Code** panel below the preview shows the files in three ways, like the code/design views of an IDE: **Source** (the text

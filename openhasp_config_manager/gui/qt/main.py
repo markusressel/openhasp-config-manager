@@ -192,6 +192,8 @@ class MainWindow(QMainWindow):
         self._session_key: Optional[Tuple[str, str]] = None
         # the page to show after a draft was reloaded (saved or reverted), per session key
         self._page_after_reload: Dict[Tuple[str, str], int] = {}
+        # drafts that were saved and are loaded again, per session key: the new draft continues their undo history
+        self._saved_drafts: Dict[Tuple[str, str], PlateSession] = {}
         self._discard_drafts_on_close = False
         # what the app wrote itself (Save), to tell its own file changes from those of others
         self._own_writes = OwnWrites()
@@ -392,6 +394,9 @@ class MainWindow(QMainWindow):
 
         edit_menu = self.menuBar().addMenu("&Edit")
         for action in [
+            editor.action_undo,
+            editor.action_redo,
+            None,
             editor.action_edit_mode,
             editor.action_snap,
             None,
@@ -854,6 +859,7 @@ class MainWindow(QMainWindow):
         for change in changes:
             self._own_writes.written(change.path.resolve(), change.content)
         self.status.succeeded.emit(f"Saved {len(changes)} file{'' if len(changes) == 1 else 's'}")
+        self._saved_drafts[self._session_key] = session
         self._reload_draft()
         return True
 
@@ -947,6 +953,9 @@ class MainWindow(QMainWindow):
         # a draft without changes follows the files on disk, one with changes is kept (Save detects conflicts)
         if not session.is_loaded or not session.is_dirty:
             session.load(loaded.components, loaded.renderer)
+            saved = self._saved_drafts.pop(key, None)
+            if saved is not None and not session.adopt_history(saved):
+                LOGGER.info(f"The files of {loaded.device.name} changed after saving: the undo history starts anew")
         self._session_key = key
         self.file_tree_widget.set_files(
             loaded.files,

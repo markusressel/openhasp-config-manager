@@ -11,7 +11,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QAction, QKeySequence
 from PyQt6.QtWidgets import QApplication, QSlider, QWidget, QToolBar, QComboBox, QMessageBox, QToolButton, QFrame, QHBoxLayout
 
-from openhasp_config_manager.gui.domain.problems import Problem, find_problems
+from openhasp_config_manager.gui.domain.problems import Problem, find_problems, object_name
 from openhasp_config_manager.gui.domain.tabs import last_tabview_id
 from openhasp_config_manager.gui.domain.page_objects import (
     OpenHASPWidgetType,
@@ -26,7 +26,7 @@ from openhasp_config_manager.gui.domain.page_objects import (
 from openhasp_config_manager.gui.domain.clipboard import PasteCascade, objects_from_text, objects_to_text, with_descendants
 from openhasp_config_manager.gui.domain.file_tree import default_target_component, relative_config_path
 from openhasp_config_manager.gui.domain.live_preview import LivePage
-from openhasp_config_manager.gui.domain.plate_session import PlateSession
+from openhasp_config_manager.gui.domain.plate_session import PlateSession, Restored
 from openhasp_config_manager.gui.domain.ui_session import DeviceSession
 from openhasp_config_manager.gui.qt.components import UiComponents
 from openhasp_config_manager.gui.qt.layouts import frozen
@@ -217,6 +217,9 @@ class PageLayoutEditorWidget(QWidget):
         self.action_snap.setChecked(True)
         self.action_snap.toggled.connect(self.page_preview_widget.set_snap_enabled)
 
+        # in the whole window: text fields handle the keys themselves while they have the focus
+        self.action_undo = create(self, "Undo", "undo", self.undo, shortcut=QKeySequence.StandardKey.Undo)
+        self.action_redo = create(self, "Redo", "redo", self.redo, shortcut=QKeySequence.StandardKey.Redo)
         self.action_duplicate = create(
             self, "Duplicate", "content-duplicate", self.duplicate_selected_objects, shortcut="Ctrl+D", context=canvas
         )
@@ -322,7 +325,16 @@ class PageLayoutEditorWidget(QWidget):
         preview.add_overlay(self.problems_panel, OverlayAnchor.BOTTOM_LEFT)
         preview.add_overlay(
             self._floating_bar(
-                [self.action_edit_mode, self.action_snap, None, self.action_duplicate, self.action_delete],
+                [
+                    self.action_edit_mode,
+                    self.action_snap,
+                    None,
+                    self.action_undo,
+                    self.action_redo,
+                    None,
+                    self.action_duplicate,
+                    self.action_delete,
+                ],
                 with_text=[self.action_edit_mode, self.action_snap],
             ),
             OverlayAnchor.TOP_RIGHT,
@@ -422,10 +434,22 @@ class PageLayoutEditorWidget(QWidget):
         self.action_delete.setEnabled(self.edit_mode and has_selection)
         self.action_copy.setEnabled(self.edit_mode and has_selection)
         self.action_paste.setEnabled(has_data)
+        self._update_undo_actions()
         # while Live preview is on, the page on the plate follows the draft
         self.action_clear.setEnabled(has_data and not busy and not self.live_preview)
         self.action_restore_plate.setEnabled(has_data and not busy)
         self.widget_picker.setEnabled(has_data and len(self.working_objects) > 0)
+
+    def _update_undo_actions(self):
+        history = None if self.session is None else self.session.history
+        for action, title, description in [
+            (self.action_undo, "Undo", history and history.undo_description),
+            (self.action_redo, "Redo", history and history.redo_description),
+        ]:
+            text = title if description is None else f"{title} {description}"
+            action.setEnabled(description is not None)
+            action.setText(text)
+            action.setToolTip(f"{text} ({action.shortcut().toString()})")
 
     # --- data ---
 
@@ -503,6 +527,7 @@ class PageLayoutEditorWidget(QWidget):
         """Report a change of the draft (the session marks itself dirty)."""
         self.dirtyChanged.emit(self.session.is_dirty)
         self.fileStateChanged.emit()
+        self._update_undo_actions()
         self._schedule_live_changes()
 
     def _reload_page(self, select: List[Dict] = ()):
@@ -553,6 +578,38 @@ class PageLayoutEditorWidget(QWidget):
         elif action == "back":
             self.go_to_home_page()
 
+    # --- undo ---
+
+    def undo(self):
+        if self.session is not None:
+            self._show_restored(self.session.undo(), "Undone")
+
+    def redo(self):
+        if self.session is not None:
+            self._show_restored(self.session.redo(), "Redone")
+
+    def _show_restored(self, restored: Optional[Restored], done: str):
+        """Show what an undo or redo changed: on its page, with the changed objects selected."""
+        if restored is None:
+            return
+        pages = get_navigable_page_indices(self.working_objects)
+        # the objects of page 0 are on every page
+        shown = {self.current_index, 0}
+        candidates = sorted(page for page in restored.pages if isinstance(page, int) and page in pages)
+        if not restored.pages & shown and candidates:
+            self._go_to_page(candidates[0])
+            shown = {self.current_index, 0}
+        self._mark_dirty()
+        self._reload_page(select=[obj for obj in restored.objects if obj.get("page") in shown])
+        self.status.succeeded.emit(f"{done}: {restored.description}")
+
+    @staticmethod
+    def _describe(action: str, items: List[EditableWidget]) -> str:
+        """:return: e.g. "Move p1b2" or "Move 3 objects", for the undo history"""
+        if len(items) == 1:
+            return f"{action} {object_name(items[0].obj_data)}"
+        return f"{action} {len(items)} objects"
+
     # --- editing ---
 
     def set_edit_mode(self, enabled: bool):
@@ -574,6 +631,9 @@ class PageLayoutEditorWidget(QWidget):
     def _on_openhasp_widget_selection_changed(self, editable_widgets: List[EditableWidget]):
         self.property_editor.set_editable_widgets(editable_widgets)
         self.jsonl_preview.set_selected_objects([widget.obj_data for widget in editable_widgets])
+        if self.session is not None:
+            # e.g. typing into the same property of another object is another step
+            self.session.history.seal()
         self._update_actions()
         self.stateChanged.emit()
         # the file of a single selected object is selected in the file tree (see `selectedObjectComponentChanged`)
@@ -622,14 +682,16 @@ class PageLayoutEditorWidget(QWidget):
         items = self.page_preview_widget.selected_items()
         if not self.edit_mode or not items:
             return
-        for item in items:
-            self.session.use_pixel_position(item.obj_data)
+        with self.session.edit(self._describe("Use pixels for x/y of", items)):
+            for item in items:
+                self.session.use_pixel_position(item.obj_data)
         self.page_preview_widget.refresh_movable()
         self._after_geometry_edit()
 
     def _on_items_moved(self, items: List[EditableWidget]):
-        for item in items:
-            self._move(item, item.live_x, item.live_y)
+        with self.session.edit(self._describe("Move", items)):
+            for item in items:
+                self._move(item, item.live_x, item.live_y)
         self._after_geometry_edit()
 
     def nudge_selected_objects(self, dx: int, dy: int):
@@ -639,8 +701,11 @@ class PageLayoutEditorWidget(QWidget):
         locked = [item for item in items if not self._is_movable(item.obj_data)]
         if locked:
             self._report_locked(locked)
-        for item in items:
-            if item not in locked:
+        movable = [item for item in items if item not in locked]
+        # pressing the keys again and again is one step
+        nudged = ("nudge", tuple(sorted(self.session.object_uid(item.obj_data) for item in movable)))
+        with self.session.edit(self._describe("Move", movable), merge_key=nudged):
+            for item in movable:
                 self._move(item, item.obj_x + dx, item.obj_y + dy)
         self._after_geometry_edit()
 
@@ -744,12 +809,13 @@ class PageLayoutEditorWidget(QWidget):
         if not self.edit_mode or not items:
             return
         duplicates = []
-        for item in items:
-            try:
-                duplicates.append(self.session.duplicate_object(item.obj_data))
-            except ValueError as ex:
-                self.status.failed.emit(f"Duplicating p{item.obj_data.get('page')}b{item.obj_id}", error_text(ex))
-                break
+        with self.session.edit(self._describe("Duplicate", items)):
+            for item in items:
+                try:
+                    duplicates.append(self.session.duplicate_object(item.obj_data))
+                except ValueError as ex:
+                    self.status.failed.emit(f"Duplicating p{item.obj_data.get('page')}b{item.obj_id}", error_text(ex))
+                    break
         self._mark_dirty()
         self._reload_page(select=duplicates)
 
@@ -810,8 +876,9 @@ class PageLayoutEditorWidget(QWidget):
         if answer != QMessageBox.StandardButton.Yes:
             return
 
-        for item in items:
-            self.session.remove_object(item.obj_data)
+        with self.session.edit(self._describe("Remove", items)):
+            for item in items:
+                self.session.remove_object(item.obj_data)
         self._mark_dirty()
         self._reload_page()
 

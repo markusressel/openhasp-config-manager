@@ -29,6 +29,7 @@ from openhasp_config_manager.gui.domain.properties import (
 )
 from openhasp_config_manager.gui.domain.file_tree import relative_config_path
 from openhasp_config_manager.gui.domain.plate_session import PlateSession
+from openhasp_config_manager.gui.domain.problems import object_name
 from openhasp_config_manager.gui.qt.components import UiComponents, ThemedIcons
 from openhasp_config_manager.gui.qt.layouts import clear_layout, frozen
 from openhasp_config_manager.gui.qt.widgets.pagelayout.icon_picker import IconPickerDialog
@@ -291,19 +292,34 @@ class OpenHASPWidgetPropertyEditor(QWidget):
 
         widget = self._editable_widgets[0]
         source = self._session.source_of(widget.obj_data)
-        for key in set(source) | set(self._original_snapshot):
-            if source.get(key, _MISSING) != self._original_snapshot.get(key, _MISSING):
-                self._restore(widget, key)
+        keys = [
+            key
+            for key in set(source) | set(self._original_snapshot)
+            if source.get(key, _MISSING) != self._original_snapshot.get(key, _MISSING)
+        ]
+        with self._session.edit(f"Reset {object_name(widget.obj_data)}"):
+            for key in keys:
+                self._restore_value(widget, key)
+        # after the edit: the draft reports its changes when the edit is done
+        for key in keys:
+            self._report_change(widget, key)
         self._pending_templates.clear()
         self.refresh()
 
     def _restore(self, widget: EditableWidget, key: str):
+        with self._session.edit(f"Reset {key} of {object_name(widget.obj_data)}"):
+            self._restore_value(widget, key)
+        self._report_change(widget, key)
+
+    def _restore_value(self, widget: EditableWidget, key: str):
         # before the size changes, so the scene updates its index
         widget.prepareGeometryChange()
         if key in self._original_snapshot:
             self._session.set_source_value(widget.obj_data, key, copy.deepcopy(self._original_snapshot[key]))
         else:
             self._session.remove_source_value(widget.obj_data, key)
+
+    def _report_change(self, widget: EditableWidget, key: str):
         widget.refresh()
         self.propertyChanged.emit(widget, key, widget.obj_data.get(key))
 
@@ -503,7 +519,10 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         """
         # before the size changes, so the scene updates its index
         widget.prepareGeometryChange()
-        self._session.set_source_value(widget.obj_data, key, value)
+        # typing into the field is one step
+        typing = ("property", self._session.object_uid(widget.obj_data), key)
+        with self._session.edit(f"Change {key} of {object_name(widget.obj_data)}", merge_key=typing):
+            self._session.set_source_value(widget.obj_data, key, value)
         widget.refresh()
         self.propertyChanged.emit(widget, key, value)
 

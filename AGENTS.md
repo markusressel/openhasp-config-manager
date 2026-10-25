@@ -69,6 +69,11 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
 - **Draft**: `PlateSession` (`gui/domain/plate_session.py`) keeps every object twice: rendered (shown in the preview) and as written in its
   file, with its templates. Change objects through the session (`set_source_value`, `add_object`, `paste_objects`, ...), never by
   mutating the rendered dicts: Save patches only the changed source properties back into the files.
+- **Undo/redo**: every change through the session is a step of `PlateSession.history` (`gui/domain/edit_history.py`, whole states of
+  the sources, so undo doesn't depend on how an edit was made). Group the changes of one user action with
+  `with session.edit("Move 3 objects"):`, and pass a `merge_key` for actions repeated in a row (typing into a property, nudging). An
+  edit operation of the editor needs no undo code of its own, only the grouping. The history continues after Save
+  (`adopt_history`) and starts anew when the draft is loaded from changed files or reverted.
 - **Templates are never replaced implicitly.** Objects whose `x`/`y` is a template or a percentage can't be dragged or nudged; the
   editor explains why, and "Use pixels for x/y" replaces them only when the user asks. Keep this for new edit operations.
 - **Files**: new objects go into the target file chosen in the Files tree (`gui/domain/file_tree.py` follows the folder structure of
@@ -95,7 +100,7 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
   credentials or plate configuration in it.
 - **Plate actions** (names and tooltips agreed with the user): *Live preview* sends the draft to the plate while editing (nothing is stored
   on it), *Restore plate* rebuilds the pages from the files on the plate like a restart, *Deploy* uploads the saved files. *Revert*
-  discards the draft; *Undo* is reserved for undo/redo.
+  discards the draft; *Undo*/*Redo* step through the edits of the draft.
 - **Remembered state**: what should survive a restart for a config directory or a device goes into `UiSession`/`DeviceSession`
   (`gui/domain/ui_session.py`) as a dataclass field with a default, then `ui_session.save()` (`gui/qt/ui_session_store.py`). App-wide
   preferences (window geometry, theme, view toggles) are plain `QSettings` keys.
