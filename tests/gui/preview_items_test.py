@@ -1,14 +1,13 @@
 """Every object type of the preview draws something: one test per type, in the order they were added."""
 
 import pytest
-from PyQt6 import QtGui
 
 from tests import TestBase
 
 
-def render(obj: dict, *others: dict) -> "QtGui.QImage":
+def render(obj: dict, *others: dict):
     """Draw the objects (of one page) the way the preview does, on a black image."""
-    from PyQt6 import QtCore
+    from PyQt6 import QtCore, QtGui
     from openhasp_config_manager.gui.qt.widgets.pagelayout.page_preview_layout import PagePreviewWidget
 
     view = PagePreviewWidget()
