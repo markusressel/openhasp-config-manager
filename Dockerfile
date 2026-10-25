@@ -7,9 +7,8 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=on
 ENV VENV_HOME=/opt/poetry
 WORKDIR /app
 
-COPY README.md README.md
-COPY openhasp_config_manager openhasp_config_manager
-COPY poetry.lock pyproject.toml ./
+# the dependencies first: their layer is cached until the lock file changes, not rebuilt for every change of the code
+COPY README.md poetry.lock pyproject.toml ./
 
 RUN apt-get update \
  && apt-get -y install python3-pip \
@@ -18,12 +17,13 @@ RUN apt-get update \
  && ${VENV_HOME}/bin/pip install --upgrade pip \
  && ${VENV_HOME}/bin/pip install "poetry==${POETRY_VERSION}" \
  && ${VENV_HOME}/bin/poetry check \
- && POETRY_VIRTUALENVS_CREATE=false ${VENV_HOME}/bin/poetry install --no-interaction --no-cache --without dev \
+ && POETRY_VIRTUALENVS_CREATE=false ${VENV_HOME}/bin/poetry install --no-interaction --no-cache --without dev --no-root \
  && ${VENV_HOME}/bin/pip uninstall -y poetry
 
 # Add Poetry to PATH
 ENV PATH="${VENV_HOME}/bin:${PATH}"
 
+COPY openhasp_config_manager openhasp_config_manager
 RUN ${VENV_HOME}/bin/pip install .
 
 ENTRYPOINT [ "openhasp-config-manager" ]
