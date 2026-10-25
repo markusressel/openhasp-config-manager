@@ -42,3 +42,18 @@ class TestPreviewItems(TestBase):
         unchecked = painted(render(box))
         assert unchecked > 0
         assert render({**box, "val": 1}) != render(box)
+
+    def test_arc_indicator_follows_its_value(self):
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.arc import HaspArcItem
+
+        arc = {"page": 1, "id": 1, "obj": "arc", "x": 10, "y": 10, "w": 150, "h": 150}
+        empty, full = painted(render({**arc, "val": 0})), painted(render({**arc, "val": 100}))
+        assert 0 < empty < full
+
+        item = HaspArcItem({**arc, "val": 50, "start_angle": 0, "end_angle": 180})
+        assert item.angles() == ((0, 180), (0, 90))
+        item.obj_data["type"] = 2
+        assert item.angles()[1] == (90, 90)
+        item.obj_data["type"] = 1
+        item.obj_data["val"] = 25
+        assert item.angles()[1] == (45, 45)

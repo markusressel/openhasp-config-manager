@@ -17,6 +17,7 @@ class OpenHASPWidgetType(StrEnum):
     IMAGE = "img"
     BAR = "bar"
     SLIDER = "slider"
+    ARC = "arc"
     CHECKBOX = "checkbox"
 
 
@@ -70,6 +71,12 @@ WIDGET_TYPES: Dict[OpenHASPWidgetType, WidgetTypeInfo] = {
         description="Tick box with a text",
         icon="checkbox-marked-outline",
         defaults={"w": 150, "h": 30, "text": "Checkbox", "val": 0},
+    ),
+    OpenHASPWidgetType.ARC: WidgetTypeInfo(
+        title="Arc",
+        description="Round slider",
+        icon="circle-slice-5",
+        defaults={"w": 150, "h": 150, "min": 0, "max": 100, "val": 50},
     ),
 }
 

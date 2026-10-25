@@ -30,3 +30,17 @@ def draw_text(painter: QtGui.QPainter, rect: QtCore.QRectF, text: str, color: Qt
     painter.setFont(font)
     painter.setPen(color)
     painter.drawText(rect, int(flags | QtCore.Qt.AlignmentFlag.AlignVCenter), text)
+
+
+def number(value, default: float) -> float:
+    """:return: the value of a property as a number, the default if it is none (e.g. a template that is not rendered)"""
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def fraction(value, minimum, maximum) -> float:
+    """:return: where a value is between the minimum and the maximum (0 to 1), 0 if the range is empty"""
+    low, high = number(minimum, 0), number(maximum, 100)
+    return 0.0 if high <= low else max(0.0, min((number(value, low) - low) / (high - low), 1.0))
