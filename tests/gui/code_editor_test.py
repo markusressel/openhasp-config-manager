@@ -11,6 +11,7 @@ from openhasp_config_manager.gui.domain.source_syntax import Language  # noqa: E
 from openhasp_config_manager.gui.domain.source_issues import SourceIssue  # noqa: E402
 from openhasp_config_manager.gui.qt.widgets.code_editor import CodeEditor  # noqa: E402
 from tests import TestBase  # noqa: E402
+from tests.gui.helpers import wait_until  # noqa: E402
 
 
 @pytest.fixture
@@ -457,8 +458,8 @@ class TestFlash(TestBase):
         # THEN
         assert editor.flashed_lines == (1, 4)
         assert sum(s.format.background().color().alpha() > 0 for s in editor.extraSelections()) >= 4
-        QTest.qWait(150)
-        assert editor.flashed_lines is None
+        # a slow machine (CI) may need longer than the duration
+        wait_until(lambda: editor.flashed_lines is None)
 
     def test_typing_clicking_or_a_reload_end_the_highlight(self, editor):
         # GIVEN

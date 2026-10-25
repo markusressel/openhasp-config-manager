@@ -58,10 +58,10 @@ def plate(monkeypatch) -> _Plate:
 @pytest.fixture
 def editor(qapp, async_loop, plate, tmp_path, monkeypatch):
     from openhasp_config_manager.gui.qt.operations import OperationStatus
-    from openhasp_config_manager.gui.qt.widgets.pagelayout import OpenHaspDevicePagesData, page_layout_editor
+    from openhasp_config_manager.gui.qt.widgets.pagelayout import OpenHaspDevicePagesData, plate_link
     from openhasp_config_manager.gui.qt.widgets.pagelayout.page_layout_editor import PageLayoutEditorWidget
 
-    monkeypatch.setattr(page_layout_editor, "SEND_DELAY_SECONDS", 0)
+    monkeypatch.setattr(plate_link, "SEND_DELAY_SECONDS", 0)
 
     root = tmp_path / "cfg"
     shutil.copytree(Path(__file__).parent.parent / "_test_cfg_root", root)
@@ -93,7 +93,7 @@ def _object(editor, obj_id: int):
 
 class TestLivePreview(TestBase):
     def _start(self, editor, plate):
-        editor.action_live_preview.setChecked(True)
+        editor.plate.action_live_preview.setChecked(True)
         wait_until(lambda: plate.calls and plate.calls[-1] == ("set_page", 9))
 
     def test_turning_it_on_sends_the_page_and_shows_it(self, editor, plate):
@@ -113,7 +113,6 @@ class TestLivePreview(TestBase):
 
         # WHEN
         editor.session.set_source_value(_object(editor, 1), "x", 20)
-        editor._mark_dirty()
 
         # THEN
         wait_until(lambda: plate.calls)
@@ -128,7 +127,6 @@ class TestLivePreview(TestBase):
         # WHEN
         for x in range(20, 30):
             editor.session.set_source_value(label, "x", x)
-            editor._mark_dirty()
 
         # THEN
         wait_until(lambda: plate.calls and plate.calls[-1] == ("jsonl", {"page": 9, "id": 1, "x": 29}))
@@ -141,7 +139,6 @@ class TestLivePreview(TestBase):
 
         # WHEN
         editor.session.remove_object(_object(editor, 2))
-        editor._mark_dirty()
 
         # THEN
         wait_until(lambda: plate.calls)
@@ -152,7 +149,7 @@ class TestLivePreview(TestBase):
         self._start(editor, plate)
 
         # THEN
-        assert editor.action_clear.isEnabled() is False
+        assert editor.plate.action_clear.isEnabled() is False
 
     def test_stopping_silently_sends_nothing_more(self, editor, plate):
         # GIVEN
@@ -160,34 +157,33 @@ class TestLivePreview(TestBase):
         plate.clear()
 
         # WHEN
-        editor.stop_live_preview()
+        editor.plate.stop_live_preview()
         editor.session.set_source_value(_object(editor, 1), "x", 20)
-        editor._mark_dirty()
 
         # THEN
         from PyQt6.QtTest import QTest
 
         QTest.qWait(150)
         assert plate.calls == []
-        assert editor.live_preview is False
+        assert editor.plate.live is False
 
 
 class TestRestorePlate(TestBase):
     def test_restore_ends_live_preview_and_rebuilds_the_plate_from_its_files(self, editor, plate):
         # GIVEN
         restored = []
-        editor.plateRestored.connect(lambda: restored.append(True))
-        editor.action_live_preview.setChecked(True)
+        editor.plate.plateRestored.connect(lambda: restored.append(True))
+        editor.plate.action_live_preview.setChecked(True)
         wait_until(lambda: plate.calls and plate.calls[-1] == ("set_page", 9))
         plate.clear()
 
         # WHEN
-        editor.restore_plate()
+        editor.plate.restore_plate()
 
         # THEN
         wait_until(lambda: restored)
         assert plate.calls == [("restore_from_files",)]
-        assert editor.live_preview is False
+        assert editor.plate.live is False
 
 
 def _key(editor, file_name: str) -> str:
@@ -257,6 +253,22 @@ class TestFiles(TestBase):
         # THEN
         assert len(rebuilds) == 1
         assert len(editor.page_preview_widget.editable_items()) == 1
+
+    def test_removing_several_selected_objects(self, editor, monkeypatch):
+        # GIVEN
+        from PyQt6.QtWidgets import QMessageBox
+
+        editor.set_edit_mode(True)
+        for item in editor.page_preview_widget.editable_items():
+            item.setSelected(True)
+        monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *args: QMessageBox.StandardButton.Yes))
+
+        # WHEN (this crashed: clearing the scene reported the selection of objects that were removed already)
+        editor.remove_selected_objects()
+
+        # THEN
+        assert editor.page_preview_widget.editable_items() == []
+        assert editor.property_editor._editable_widgets == []
 
     def test_removing_an_object_while_its_file_is_highlighted(self, editor, monkeypatch):
         # GIVEN
@@ -510,6 +522,140 @@ class TestLockedPosition(TestBase):
         assert offered() is True
 
 
+class TestUndo(TestBase):
+    def _select(self, editor, obj_id: int):
+        editor.set_edit_mode(True)
+        editor.page_preview_widget.select_object(_object(editor, obj_id))
+
+    def _selected_ids(self, editor):
+        return [item.obj_data.get("id") for item in editor.page_preview_widget.selected_items()]
+
+    def test_nothing_to_undo_at_first(self, editor):
+        assert not editor.action_undo.isEnabled()
+        assert not editor.action_redo.isEnabled()
+        assert editor.action_undo.text() == "Undo"
+
+    def test_nudging_again_and_again_is_one_step(self, editor):
+        # GIVEN
+        self._select(editor, 1)
+        label = _object(editor, 1)
+
+        # WHEN
+        for _ in range(3):
+            editor.nudge_selected_objects(1, 0)
+
+        # THEN
+        assert label["x"] == 13
+        assert editor.action_undo.isEnabled()
+        assert editor.action_undo.text() == "Undo Move p9b1"
+
+        # WHEN
+        editor.undo()
+
+        # THEN
+        assert _object(editor, 1)["x"] == 10
+        assert editor.session.is_dirty is False
+        assert not editor.action_undo.isEnabled()
+        assert editor.action_redo.text() == "Redo Move p9b1"
+        assert self._selected_ids(editor) == [1]
+
+        # WHEN
+        editor.redo()
+
+        # THEN
+        assert _object(editor, 1)["x"] == 13
+        assert editor.session.is_dirty is True
+
+    def test_undoing_a_removal_brings_the_objects_back_selected(self, editor, monkeypatch):
+        # GIVEN
+        from PyQt6.QtWidgets import QMessageBox
+
+        monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *args: QMessageBox.StandardButton.Yes))
+        self._select(editor, 1)
+        _item = next(item for item in editor.page_preview_widget.editable_items() if item.obj_data.get("id") == 2)
+        _item.setSelected(True)
+        editor.remove_selected_objects()
+        assert len(editor.page_preview_widget.editable_items()) == 0
+        assert editor.action_undo.text() == "Undo Remove 2 objects"
+
+        # WHEN
+        editor.undo()
+
+        # THEN
+        assert sorted(self._selected_ids(editor)) == [1, 2]
+        assert editor.session.is_dirty is False
+
+    def test_undo_shows_the_page_of_the_change(self, editor):
+        # GIVEN
+        editor.set_page_index(1)
+        other = next(obj for obj in editor.page_objects if obj.get("id") == 50)
+        editor.session.set_source_value(other, "text", "F")
+        editor.set_page_index(9)
+
+        # WHEN
+        editor.undo()
+
+        # THEN
+        assert editor.current_index == 1
+        assert next(obj for obj in editor.page_objects if obj.get("id") == 50)["text"] == "E"
+
+    def test_typing_into_a_property_is_one_step_until_another_object_is_selected(self, editor):
+        # GIVEN
+        self._select(editor, 1)
+        properties = editor.property_editor
+
+        # WHEN typing
+        for text in ["Ab", "Abc"]:
+            properties._on_property_edited("text", text, properties._editable_widgets[0])
+        # and again after another object was selected
+        self._select(editor, 2)
+        self._select(editor, 1)
+        properties._on_property_edited("text", "Abcd", properties._editable_widgets[0])
+
+        # THEN
+        assert editor.action_undo.text() == "Undo Change text of p9b1"
+        editor.undo()
+        assert _object(editor, 1)["text"] == "Abc"
+        editor.undo()
+        assert _object(editor, 1)["text"] == "A"
+        assert not editor.action_undo.isEnabled()
+
+    def test_resetting_all_properties_is_one_step(self, editor):
+        # GIVEN
+        self._select(editor, 1)
+        properties = editor.property_editor
+        properties._on_property_edited("text", "B", properties._editable_widgets[0])
+        properties._on_property_edited("x", 50, properties._editable_widgets[0])
+
+        # WHEN
+        properties._reset_all_to_snapshot()
+
+        # THEN
+        label = _object(editor, 1)
+        assert (label["text"], label["x"]) == ("A", 10)
+        assert editor.session.is_dirty is False
+        assert editor.action_undo.text() == "Undo Reset p9b1"
+        editor.undo()
+        assert (_object(editor, 1)["text"], _object(editor, 1)["x"]) == ("B", 50)
+
+    def test_live_preview_follows_an_undo(self, editor, plate):
+        # GIVEN
+        editor.plate.action_live_preview.setChecked(True)
+        wait_until(lambda: plate.calls and plate.calls[-1] == ("set_page", 9))
+        self._select(editor, 1)
+        editor.nudge_selected_objects(5, 0)
+        editor.nudge_selected_objects(5, 0)
+        wait_until(lambda: plate.calls[-1] == ("jsonl", {"page": 9, "id": 1, "x": 20}))
+        plate.clear()
+
+        # WHEN
+        editor.undo()
+
+        # THEN the move set y too, which the plate can't unset: it gets the page again
+        wait_until(lambda: ("jsonl", {"page": 9, "id": 1, "obj": "label", "text": "A", "x": 10}) in plate.calls)
+        assert plate.calls[0] == ("clear_page", 9)
+
+
 class TestWidgetPicker(TestBase):
     def test_the_list_of_object_types_scrolls_instead_of_growing_the_preview(self, editor):
         from openhasp_config_manager.gui.domain.page_objects import WIDGET_TYPES
@@ -570,6 +716,28 @@ class TestPropertyEditor(TestBase):
         # THEN
         assert self._template_field(editor).text() == "{{ nope"
         assert editor.session.is_template(obj, "text") is False
+
+    def test_typing_does_not_rebuild_the_panel_but_a_move_does(self, editor, monkeypatch):
+        # GIVEN
+        editor.set_edit_mode(True)
+        editor.page_preview_widget.select_object(_object(editor, 1))
+        properties = editor.property_editor
+        rebuilds = []
+        original = properties._create_content
+        monkeypatch.setattr(properties, "_create_content", lambda: rebuilds.append(1) or original())
+
+        # WHEN typing
+        properties._on_property_edited("text", "Ab", properties._editable_widgets[0])
+
+        # THEN the field keeps its focus and cursor, the preview shows the text
+        assert rebuilds == []
+        assert _object(editor, 1)["text"] == "Ab"
+
+        # WHEN the object is moved in the preview
+        editor.nudge_selected_objects(1, 0)
+
+        # THEN the panel shows the new x
+        assert rebuilds == [1]
 
 
 class TestHighlightComponent(TestBase):

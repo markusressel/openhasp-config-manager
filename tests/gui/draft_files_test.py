@@ -205,6 +205,91 @@ class TestDraftFiles(TestBase):
         # THEN
         assert session._renderer.referenced_objects(component.key, {"w": "{{ p{{ 1 + }}b2.w }}"}) == {"*"}
 
+    def test_undo_renders_the_objects_that_refer_to_the_restored_ones(self, cfg_root):
+        # GIVEN
+        session = _load(cfg_root)
+        [component] = session.components
+        label, button = session.working_objects[component.key]
+        session.set_source_value(label, "text", "{{ p9b2.text }}")
+        session.remove_object(button)
+        assert label["text"] == "{{ p9b2.text }}"
+
+        # WHEN the removal is undone
+        session.undo()
+        # THEN
+        assert label["text"] == "B"
+
+        # WHEN the button gets another text, and that is undone
+        again = session.working_objects[component.key][1]
+        session.set_source_value(again, "text", "C")
+        assert label["text"] == "C"
+        session.undo()
+        # THEN
+        assert label["text"] == "B"
+
+    def test_after_saving_the_draft_is_the_files_and_the_history_goes_on(self, cfg_root):
+        # GIVEN
+        session = _load(cfg_root)
+        [component] = session.components
+        label, button = session.working_objects[component.key]
+        session.set_source_value(label, "x", 42)
+        session.remove_object(button)
+        session.add_object(component.key, {"page": 9, "id": 3, "obj": "label", "text": "new"})
+        changes = plan_save(session)
+        write_save(changes)
+
+        # WHEN
+        session.mark_saved({change.path: change.content for change in changes})
+
+        # THEN the draft is what loading the files gives
+        assert session.is_dirty is False
+        assert session.changes() == []
+        [saved] = session.components
+        loaded = _load(cfg_root)
+        [reloaded] = loaded.components
+        assert (saved.content, saved.sources) == (reloaded.content, reloaded.sources)
+        # the lines of the objects are those of the saved file, also of the added one
+        assert [session.line_of(obj) for obj in session.working_objects[saved.key]] == [
+            loaded.line_of(obj) for obj in loaded.working_objects[reloaded.key]
+        ]
+
+        # WHEN the saved edits are undone
+        session.undo()
+        assert [obj["id"] for obj in session.working_objects[saved.key]] == [1]
+        assert session.is_dirty is True
+        session.undo()
+        # THEN the removed button comes back at the end of the file
+        assert [obj["id"] for obj in session.working_objects[saved.key]] == [1, 2]
+        assert {c.component.key: c for c in session.changes()}[saved.key].additions == [
+            {"page": 9, "id": 2, "obj": "btn", "text": "B"}
+        ]
+        session.undo()
+        assert session.working_objects[saved.key][0]["x"] == 10
+        assert session.undo() is None
+
+        # WHEN everything is redone
+        while session.redo() is not None:
+            pass
+        # THEN the draft is the saved files again
+        assert session.is_dirty is False
+
+    def test_saving_again_after_saving(self, cfg_root):
+        # GIVEN
+        session = _load(cfg_root)
+        [component] = session.components
+        label = session.working_objects[component.key][0]
+        session.set_source_value(label, "x", 42)
+        changes = plan_save(session)
+        write_save(changes)
+        session.mark_saved({change.path: change.content for change in changes})
+
+        # WHEN
+        session.set_source_value(label, "x", 43)
+        write_save(plan_save(session))
+
+        # THEN
+        assert '"x": 43' in (cfg_root / "devices" / "test_device" / "editor.jsonl").read_text()
+
     def test_flatten_template_variables(self):
         assert flatten_template_variables({"a": {"b": 1, "not-an-identifier": 2, "c": [1]}, "d": "x"}) == [
             ("{{ a.b }}", 1),

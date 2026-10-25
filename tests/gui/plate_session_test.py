@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import pytest
 from jinja2 import TemplateSyntaxError
 
-from openhasp_config_manager.gui.domain.plate_session import ComponentSource, PlateSession
+from openhasp_config_manager.gui.domain.plate_session import ChangeKind, ComponentSource, PlateSession
 from tests import TestBase
 
 
@@ -308,3 +308,252 @@ class TestPlateSession(TestBase):
         assert session.check_value(label, "hidden", "{{ name }}") is None
         # the check does not change the object
         assert label["text"] == "B" and session.is_dirty is False
+
+
+class TestUndo(TestBase):
+    def test_undo_and_redo_a_value_in_the_same_rendered_object(self):
+        # GIVEN
+        session = _session()
+        label = session.working_objects["a.jsonl"][1]
+        session.set_source_value(label, "text", "C")
+
+        # WHEN
+        undone = session.undo()
+
+        # THEN the preview keeps showing the same dict
+        assert label["text"] == "B"
+        assert undone.description == "Change text of p1b2"
+        assert undone.objects == [label] and undone.pages == {1}
+        assert session.is_dirty is False
+
+        # WHEN
+        redone = session.redo()
+
+        # THEN
+        assert label["text"] == "C"
+        assert session.source_of(label)["text"] == "C"
+        assert redone.objects == [label]
+        assert session.is_dirty is True
+
+    def test_nothing_to_undo_or_redo(self):
+        session = _session()
+        assert session.undo() is None
+        assert session.redo() is None
+
+    def test_undo_a_removal_brings_the_object_back_in_its_place(self):
+        # GIVEN
+        session = _session()
+        button, label = session.working_objects["a.jsonl"]
+        session.remove_object(button)
+
+        # WHEN
+        restored = session.undo()
+
+        # THEN
+        [again] = restored.objects
+        assert session.working_objects["a.jsonl"] == [again, label]
+        assert again == button
+        assert session.source_of(again)["x"] == "{{ left }}"
+        assert session.source_index(again) == 0
+        assert session.is_dirty is False
+        assert session.changes() == []
+
+    def test_undo_an_addition(self):
+        # GIVEN
+        session = _session()
+        session.add_object("b.jsonl", {"page": 2, "id": 3, "obj": "label"})
+
+        # WHEN
+        restored = session.undo()
+
+        # THEN
+        assert session.working_objects["b.jsonl"] == []
+        assert restored.objects == [] and restored.pages == {2}
+        assert session.is_dirty is False
+
+    def test_an_edit_groups_changes_into_one_step(self):
+        # GIVEN
+        session = _session()
+        button, label = session.working_objects["a.jsonl"]
+
+        # WHEN
+        with session.edit("Move 2 objects"):
+            session.set_source_value(button, "x", 50)
+            session.set_source_value(label, "y", 60)
+
+        # THEN
+        assert session.undo_description == "Move 2 objects"
+        session.undo()
+        assert (button["x"], label["y"]) == (10, "15%")
+        assert session.undo() is None
+
+    def test_paste_and_duplicate_are_one_step_each(self):
+        # GIVEN
+        session = _session()
+        button, label = session.working_objects["a.jsonl"]
+
+        # WHEN
+        session.paste_objects("b.jsonl", [session.source_of(button), session.source_of(button)], 1, (480, 320))
+        session.duplicate_object(button)
+
+        # THEN
+        assert session.undo_description == "Duplicate p1b1"
+        session.undo()
+        assert session.undo_description == "Paste 2 objects"
+        session.undo()
+        assert session.working_objects["a.jsonl"] == [button, label]
+        assert session.working_objects["b.jsonl"] == []
+
+    def test_an_edit_that_changes_nothing_is_no_step(self):
+        # GIVEN
+        session = _session()
+        label = session.working_objects["a.jsonl"][1]
+
+        # WHEN
+        session.set_source_value(label, "text", "B")
+
+        # THEN
+        assert session.undo() is None
+        assert session.is_dirty is False
+
+    def test_edits_with_a_merge_key_are_one_step(self):
+        # GIVEN
+        session = _session()
+        label = session.working_objects["a.jsonl"][1]
+        key = ("text", session.object_uid(label))
+
+        # WHEN typing
+        for text in ["B", "Bo", "Bob"]:
+            with session.edit("Change text", merge_key=key):
+                session.set_source_value(label, "text", text)
+
+        # THEN
+        session.undo()
+        assert label["text"] == "B"
+        assert session.undo() is None
+
+    def test_changing_a_value_back_is_not_dirty(self):
+        # GIVEN
+        session = _session()
+        label = session.working_objects["a.jsonl"][1]
+        session.set_source_value(label, "text", "C")
+
+        # WHEN
+        session.set_source_value(label, "text", "B")
+
+        # THEN
+        assert session.is_dirty is False
+
+    def test_the_uid_of_an_object_stays_after_undoing_its_removal(self):
+        # GIVEN
+        session = _session()
+        label = session.working_objects["a.jsonl"][1]
+        uid = session.object_uid(label)
+        session.remove_object(label)
+
+        # WHEN
+        [again] = session.undo().objects
+
+        # THEN
+        assert session.object_uid(again) == uid
+
+    def test_reset_to_disk_clears_the_history(self):
+        # GIVEN
+        session = _session()
+        session.set_source_value(session.working_objects["a.jsonl"][1], "text", "C")
+
+        # WHEN
+        session.reset_to_disk()
+
+        # THEN
+        assert session.undo() is None
+
+    def test_the_states_of_the_history_share_the_sources_that_did_not_change(self):
+        # GIVEN
+        session = _session()
+        button, label = session.working_objects["a.jsonl"]
+        before = session._state()
+
+        # WHEN
+        session.set_source_value(label, "text", "C")
+
+        # THEN only the changed source is a new copy
+        after = session._state()
+        assert after["a.jsonl"][0][2] is before["a.jsonl"][0][2]
+        assert after["a.jsonl"][1][2] is not before["a.jsonl"][1][2]
+        assert before["a.jsonl"][1][2]["text"] == "B"
+
+
+class TestListeners(TestBase):
+    def _listened(self):
+        session = _session()
+        changes = []
+        session.add_listener(changes.append)
+        return session, changes
+
+    def test_an_edit_reports_the_objects_whose_source_changed(self):
+        # GIVEN
+        session, changes = self._listened()
+        button, label = session.working_objects["a.jsonl"]
+
+        # WHEN
+        with session.edit("Move 2 objects"):
+            session.set_source_value(button, "x", 50)
+            session.set_source_value(label, "x", 60)
+
+        # THEN one change, after the edit
+        [change] = changes
+        assert (change.kind, change.description) == (ChangeKind.EDIT, "Move 2 objects")
+        assert change.objects == [button, label]
+        assert change.added == [] and change.removed is False and change.adds_or_removes is False
+        assert change.pages == {1}
+
+    def test_added_and_removed_objects(self):
+        # GIVEN
+        session, changes = self._listened()
+        button = session.working_objects["a.jsonl"][0]
+
+        # WHEN
+        added = session.add_object("b.jsonl", {"page": 2, "id": 3, "obj": "label"})
+        session.remove_object(button)
+
+        # THEN
+        assert changes[0].added == [added] and changes[0].objects == [added] and changes[0].pages == {2}
+        assert changes[1].objects == [] and changes[1].removed is True and changes[1].adds_or_removes is True
+
+    def test_undo_and_redo_are_reported(self):
+        # GIVEN
+        session, changes = self._listened()
+        label = session.working_objects["a.jsonl"][1]
+        session.set_source_value(label, "text", "C")
+
+        # WHEN
+        undone = session.undo()
+        session.redo()
+
+        # THEN
+        assert [change.kind for change in changes] == [ChangeKind.EDIT, ChangeKind.UNDO, ChangeKind.REDO]
+        assert changes[1] is undone
+        assert changes[2].objects == [label]
+
+    def test_no_change_no_report(self):
+        # GIVEN
+        session, changes = self._listened()
+
+        # WHEN
+        session.set_source_value(session.working_objects["a.jsonl"][1], "text", "B")
+        session.undo()
+
+        # THEN
+        assert changes == []
+
+    def test_a_removed_listener_is_not_called(self):
+        # GIVEN
+        session, changes = self._listened()
+        session.remove_listener(changes.append)
+
+        # WHEN
+        session.set_source_value(session.working_objects["a.jsonl"][1], "text", "C")
+
+        # THEN
+        assert changes == []

@@ -111,6 +111,19 @@ class TestSaving(TestBase):
         assert window.source_editor.dirty_files() == []
         assert editor_file.read_text().count('"x": 55') == 1
 
+    def test_saving_the_draft_updates_its_open_files(self, window, editor_file):
+        # GIVEN
+        window.file_tree_widget.openRequested.emit(editor_file)
+        [component] = window.session.components
+        window.session.set_source_value(window.session.working_objects[component.key][0], "x", 20)
+
+        # WHEN
+        assert window.save_draft()
+
+        # THEN
+        wait_until(lambda: window.source_editor.current_editor.toPlainText() == editor_file.read_text())
+        assert '"x": 20' in window.source_editor.current_editor.toPlainText()
+
     def test_the_own_save_is_no_change_on_disk(self, window, editor_file):
         window.file_tree_widget.openRequested.emit(editor_file)
         window.source_editor.current_editor.set_text("{}\n")
@@ -201,7 +214,8 @@ class TestSessionAndState(TestBase):
         window.source_editor.current_editor.textEdited.emit()
         window.source_editor.current_editor.go_to(1, 1)
 
-        wait_until(lambda: (gui_state(window._cfg_root).get("editor") or {}).get("files", [{}])[0].get("dirty"))
+        # the state file may be written before the tab is in it ("files": [])
+        wait_until(lambda: ((gui_state(window._cfg_root).get("editor") or {}).get("files") or [{}])[0].get("dirty"))
 
         state = gui_state(window._cfg_root)
         assert state["editor"]["mode"] == "split"

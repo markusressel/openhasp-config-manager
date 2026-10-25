@@ -86,6 +86,41 @@ class TestChangesOnDisk(TestBase):
         assert window.disk_changes_banner.isHidden()
         assert x_of_label(window) == 20
 
+    def test_saved_edits_can_be_undone(self, window, cfg_root):
+        # GIVEN
+        editor = window.page_layout_editor_widget
+        [component] = window.session.components
+        window.session.set_source_value(window.session.working_objects[component.key][0], "x", 20)
+
+        session = window.session
+
+        # WHEN
+        assert window.save_draft()
+
+        # THEN the draft is kept (not loaded again) and has no changes
+        assert window.session is session and editor.session is session
+        assert not window.session.is_dirty and not window.action_save.isEnabled()
+        assert editor.action_undo.text() == "Undo Change x of p9b1"
+        editor.undo()
+        assert x_of_label(window) == 10
+        assert window.session.is_dirty
+        assert window.action_save.isEnabled()
+
+    def test_a_change_on_disk_after_saving_starts_a_new_history(self, window, cfg_root):
+        # GIVEN
+        editor = window.page_layout_editor_widget
+        [component] = window.session.components
+        window.session.set_source_value(window.session.working_objects[component.key][0], "x", 20)
+        assert window.save_draft()
+        wait_until(lambda: window.session is not None and window.session.is_loaded)
+
+        # WHEN
+        (cfg_root / "devices" / "test_device" / "editor.jsonl").write_text(EDITOR_JSONL.replace('"x": 10', '"x": 77'))
+
+        # THEN
+        wait_until(lambda: x_of_label(window) == 77)
+        assert not editor.action_undo.isEnabled()
+
     def test_a_file_that_can_not_be_loaded_keeps_what_is_shown(self, window, cfg_root):
         # GIVEN
         failures = []

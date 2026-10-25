@@ -327,9 +327,9 @@ class MainWindow(QMainWindow):
         self.connection.changed.connect(self.status_bar.set_connection)
         self.connection.changed.connect(lambda _: self._state_publisher.request())
         self.status_bar.set_connection(self.connection.status)
-        self.page_layout_editor_widget.pageOutOfSync.connect(self.connection.page_out_of_sync)
-        self.page_layout_editor_widget.pageDeployed.connect(self.connection.page_deployed)
-        self.page_layout_editor_widget.plateRestored.connect(self.connection.plate_restored)
+        self.page_layout_editor_widget.plate.pageOutOfSync.connect(self.connection.page_out_of_sync)
+        self.page_layout_editor_widget.plate.pageDeployed.connect(self.connection.page_deployed)
+        self.page_layout_editor_widget.plate.plateRestored.connect(self.connection.plate_restored)
         for busy in [self.page_layout_editor_widget.busy, self.page_layout_editor_widget.device_controls.busy]:
             busy.changed.connect(lambda _: self._update_sending())
             busy.changed.connect(lambda _: self._update_draft_actions())
@@ -392,6 +392,9 @@ class MainWindow(QMainWindow):
 
         edit_menu = self.menuBar().addMenu("&Edit")
         for action in [
+            editor.action_undo,
+            editor.action_redo,
+            None,
             editor.action_edit_mode,
             editor.action_snap,
             None,
@@ -410,7 +413,7 @@ class MainWindow(QMainWindow):
             editor.action_previous_page,
             editor.action_next_page,
             None,
-            editor.action_clear,
+            editor.plate.action_clear,
         ]:
             if action is None:
                 page_menu.addSeparator()
@@ -418,7 +421,7 @@ class MainWindow(QMainWindow):
                 page_menu.addAction(action)
 
         plate_menu = self.menuBar().addMenu("P&late")
-        for action in [editor.action_live_preview, editor.action_restore_plate, None, self.action_deploy]:
+        for action in [editor.plate.action_live_preview, editor.plate.action_restore_plate, None, self.action_deploy]:
             if action is None:
                 plate_menu.addSeparator()
             else:
@@ -601,7 +604,7 @@ class MainWindow(QMainWindow):
             # another device: start without a connection and in interaction mode, not editing its objects by accident
             self.connection.set_device(None)
             self.page_layout_editor_widget.set_edit_mode(False)
-            self.page_layout_editor_widget.stop_live_preview()
+            self.page_layout_editor_widget.plate.stop_live_preview()
         self.device = None
         self.page_layout_editor_widget.device_controls.set_device(None)
         self.page_layout_editor_widget.clear()
@@ -762,7 +765,7 @@ class MainWindow(QMainWindow):
                 "page": editor.current_index,
                 "pages": get_navigable_page_indices(session.working_objects),
                 "edit_mode": editor.action_edit_mode.isChecked(),
-                "live_preview": editor.live_preview,
+                "live_preview": editor.plate.live,
                 "selection": [
                     describe_object(session, item.obj_data, root) for item in editor.page_preview_widget.selected_items()
                 ],
@@ -813,7 +816,7 @@ class MainWindow(QMainWindow):
 
     def save_draft(self) -> bool:
         """
-        Write the changes of the draft into the source files, then load them again.
+        Write the changes of the draft into the source files.
         :return: whether the draft was saved
         """
         session = self.session
@@ -853,8 +856,11 @@ class MainWindow(QMainWindow):
             return False
         for change in changes:
             self._own_writes.written(change.path.resolve(), change.content)
+        # own writes are no change on disk for the watcher, but open tabs of the files must follow them
+        self.source_editor.external_changes({change.path.resolve() for change in changes})
+        # the files are what the draft holds now: no need to load them again
+        session.mark_saved({change.path: change.content for change in changes})
         self.status.succeeded.emit(f"Saved {len(changes)} file{'' if len(changes) == 1 else 's'}")
-        self._reload_draft()
         return True
 
     def deploy_saved_files(self):
@@ -881,7 +887,7 @@ class MainWindow(QMainWindow):
                 return
 
         # the plate shows its files after the deploy, not the draft
-        self.page_layout_editor_widget.stop_live_preview()
+        self.page_layout_editor_widget.plate.stop_live_preview()
         # its own ConfigManager: the editor may analyze the config directory at the same time (after Save)
         config_manager = ConfigManager(
             cfg_root=self.config_manager.cfg_root,

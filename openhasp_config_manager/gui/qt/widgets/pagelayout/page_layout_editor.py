@@ -1,5 +1,3 @@
-import asyncio
-import copy
 import logging
 import math
 from collections import OrderedDict
@@ -11,7 +9,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QAction, QKeySequence
 from PyQt6.QtWidgets import QApplication, QSlider, QWidget, QToolBar, QComboBox, QMessageBox, QToolButton, QFrame, QHBoxLayout
 
-from openhasp_config_manager.gui.domain.problems import Problem, find_problems
+from openhasp_config_manager.gui.domain.problems import Problem, find_problems, object_name
 from openhasp_config_manager.gui.domain.tabs import last_tabview_id
 from openhasp_config_manager.gui.domain.page_objects import (
     OpenHASPWidgetType,
@@ -25,14 +23,12 @@ from openhasp_config_manager.gui.domain.page_objects import (
 )
 from openhasp_config_manager.gui.domain.clipboard import PasteCascade, objects_from_text, objects_to_text, with_descendants
 from openhasp_config_manager.gui.domain.file_tree import default_target_component, relative_config_path
-from openhasp_config_manager.gui.domain.live_preview import LivePage
-from openhasp_config_manager.gui.domain.plate_session import PlateSession
+from openhasp_config_manager.gui.domain.plate_session import ChangeKind, DraftChange, PlateSession
 from openhasp_config_manager.gui.domain.ui_session import DeviceSession
 from openhasp_config_manager.gui.qt.components import UiComponents
 from openhasp_config_manager.gui.qt.layouts import frozen
-from openhasp_config_manager.gui.qt.operations import BusyState, OperationStatus, run_busy, error_text
-from openhasp_config_manager.gui.qt.async_bridge import qBridge, run_async
-from openhasp_config_manager.gui.qt.throttle import LatestValueThrottle
+from openhasp_config_manager.gui.qt.operations import BusyState, OperationStatus, error_text
+from openhasp_config_manager.gui.qt.async_bridge import qBridge
 from openhasp_config_manager.gui.qt.ui_session_store import UiSessionStore
 from openhasp_config_manager.gui.qt.widgets.device_controls import DeviceControlsWidget
 from openhasp_config_manager.gui.qt.widgets.message_panel import ErrorBanner
@@ -42,6 +38,7 @@ from openhasp_config_manager.gui.qt.widgets.pagelayout.problems_panel import Pro
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widget_picker import OpenHASPWidgetPicker
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widget_property_editor import OpenHASPWidgetPropertyEditor
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
+from openhasp_config_manager.gui.qt.widgets.pagelayout.plate_link import PlateLink
 from openhasp_config_manager.gui.dimensions import UiDimensions
 from openhasp_config_manager.gui.qt.widgets.pagelayout.page_preview_layout import (
     MAX_ZOOM,
@@ -50,19 +47,11 @@ from openhasp_config_manager.gui.qt.widgets.pagelayout.page_preview_layout impor
     PagePreviewWidget,
     PreviewMode,
 )
-from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 
 LOGGER = logging.getLogger(__name__)
 
-# delay between two objects when sending a whole page, to avoid overwhelming the device
-SEND_DELAY_SECONDS = 0.1
-# Live preview sends the changes of the draft at most this often, e.g. while dragging an object
-LIVE_PREVIEW_INTERVAL_MS = 50
-
 LOCKED_POSITION_HINT = "the position is a template or a percentage: use pixels for x/y in the properties to move it"
 LOCKED_POSITION_FIX = "To move it, use pixels for x/y in the properties: this replaces the template or percentage."
-
-RESTORE_PLATE_HINT = "Values sent by haad or Home Assistant appear again with their next update."
 
 NUDGE_STEP = 1
 NUDGE_STEP_LARGE = 10
@@ -82,11 +71,6 @@ class PageLayoutEditorWidget(QWidget):
     # (current page index, number of navigable pages)
     pageChanged = QtCore.pyqtSignal(int, int)
     dirtyChanged = QtCore.pyqtSignal(bool)
-    # a page on the device may differ from what it should show: sending it failed, or it was cleared
-    pageOutOfSync = QtCore.pyqtSignal(int)
-    pageDeployed = QtCore.pyqtSignal(int)
-    # the plate shows its own files again
-    plateRestored = QtCore.pyqtSignal()
     # the pages of the files of the draft, the page or the target file changed (see `file_state`)
     fileStateChanged = QtCore.pyqtSignal()
     # the key of the component of the selected object, None if not exactly one object is selected
@@ -116,15 +100,6 @@ class PageLayoutEditorWidget(QWidget):
         self.problems: List[Problem] = []
         self._paste_cascade = PasteCascade()
 
-        # Live preview: what the plate shows of the current page, and the changes of the draft that wait to be sent
-        self._live_page = LivePage()
-        self._live_throttle = LatestValueThrottle(
-            lambda _: self._send_live_changes(), interval_ms=LIVE_PREVIEW_INTERVAL_MS, parent=self
-        )
-        self._stopping_live_preview_silently = False
-        # keeps what is sent to the plate in order: a page that is sent in full, then the changes after it
-        self._send_lock = asyncio.Lock()
-
         # remote control of the selected plate; the preview shows its brightness
         self.device_controls = DeviceControlsWidget(status=status)
         # what is wrong with the objects of the page
@@ -134,7 +109,6 @@ class PageLayoutEditorWidget(QWidget):
         self.property_editor.removeObjectClicked.connect(self.remove_selected_objects)
         self.property_editor.duplicateObjectClicked.connect(self.duplicate_selected_objects)
         self.property_editor.usePixelPositionClicked.connect(self.use_pixel_positions)
-        self.property_editor.propertyChanged.connect(self._on_property_changed)
         self.property_editor.set_validator(self._validate_property)
 
         self.jsonl_preview = PageJsonlPreviewWidget()
@@ -217,6 +191,9 @@ class PageLayoutEditorWidget(QWidget):
         self.action_snap.setChecked(True)
         self.action_snap.toggled.connect(self.page_preview_widget.set_snap_enabled)
 
+        # in the whole window: text fields handle the keys themselves while they have the focus
+        self.action_undo = create(self, "Undo", "undo", self.undo, shortcut=QKeySequence.StandardKey.Undo)
+        self.action_redo = create(self, "Redo", "redo", self.redo, shortcut=QKeySequence.StandardKey.Redo)
         self.action_duplicate = create(
             self, "Duplicate", "content-duplicate", self.duplicate_selected_objects, shortcut="Ctrl+D", context=canvas
         )
@@ -253,29 +230,19 @@ class PageLayoutEditorWidget(QWidget):
         self.action_zoom_fit.toggled.connect(self.page_preview_widget.set_fit)
         self.page_preview_widget.fitChanged.connect(self._on_fit_changed)
 
-        self.action_live_preview = create(
+        # Live preview, Clear page and Restore plate
+        self.plate = PlateLink(
             self,
-            "Live preview",
-            "broadcast",
-            tooltip="Show the draft on the plate while you edit it: the page of the editor and every change are sent "
-            "right away.\nNothing is stored on the plate: Restore plate or a restart brings back its files.",
-            checkable=True,
+            status=self.status,
+            busy=self.busy,
+            error_banner=self.error_banner,
+            device=lambda: None if self.session is None else self.device_pages_data.device,
+            page_objects=lambda index: get_page_objects(self.working_objects, index=index, include_global=True),
+            current_page=lambda: self.current_index,
+            resync=self.resync_page,
         )
-        self.action_live_preview.toggled.connect(self._on_live_preview_toggled)
-        self.action_clear = create(
-            self,
-            "Clear page",
-            "eraser",
-            self._on_clear_page_clicked,
-            tooltip="Remove all objects of the page from the plate, until Restore plate or Live preview fills it again",
-        )
-        self.action_restore_plate = create(
-            self,
-            "Restore plate",
-            "backup-restore",
-            self._on_restore_plate_clicked,
-            tooltip="Show what the files on the plate define, like after a restart.\n" + RESTORE_PLATE_HINT,
-        )
+        self.plate.liveChanged.connect(lambda _: self._update_actions())
+        self.plate.liveChanged.connect(lambda _: self.stateChanged.emit())
 
         # keyboard only, while the preview has the focus
         canvas_actions = [
@@ -313,16 +280,25 @@ class PageLayoutEditorWidget(QWidget):
         spacer.setSizePolicy(spacer.sizePolicy().Policy.Expanding, spacer.sizePolicy().Policy.Preferred)
         self.toolbar.addWidget(spacer)
 
-        self.toolbar.addAction(self.action_live_preview)
-        self.toolbar.addAction(self.action_clear)
-        self.toolbar.addAction(self.action_restore_plate)
+        self.toolbar.addAction(self.plate.action_live_preview)
+        self.toolbar.addAction(self.plate.action_clear)
+        self.toolbar.addAction(self.plate.action_restore_plate)
 
         preview = self.page_preview_widget
         preview.add_overlay(self._floating_bar([self.device_controls]), OverlayAnchor.TOP_LEFT)
         preview.add_overlay(self.problems_panel, OverlayAnchor.BOTTOM_LEFT)
         preview.add_overlay(
             self._floating_bar(
-                [self.action_edit_mode, self.action_snap, None, self.action_duplicate, self.action_delete],
+                [
+                    self.action_edit_mode,
+                    self.action_snap,
+                    None,
+                    self.action_undo,
+                    self.action_redo,
+                    None,
+                    self.action_duplicate,
+                    self.action_delete,
+                ],
                 with_text=[self.action_edit_mode, self.action_snap],
             ),
             OverlayAnchor.TOP_RIGHT,
@@ -403,7 +379,6 @@ class PageLayoutEditorWidget(QWidget):
         pages = get_navigable_page_indices(self.working_objects) if has_data else []
         can_navigate = len(pages) > 1 or (len(pages) == 1 and self.current_index not in pages)
         has_selection = bool(self.page_preview_widget.selected_items())
-        busy = self.busy.busy
 
         for action in [
             self.action_edit_mode,
@@ -411,7 +386,6 @@ class PageLayoutEditorWidget(QWidget):
             self.action_zoom_in,
             self.action_zoom_out,
             self.action_zoom_fit,
-            self.action_live_preview,
         ]:
             action.setEnabled(has_data)
         self.zoom_slider.setEnabled(has_data)
@@ -422,14 +396,26 @@ class PageLayoutEditorWidget(QWidget):
         self.action_delete.setEnabled(self.edit_mode and has_selection)
         self.action_copy.setEnabled(self.edit_mode and has_selection)
         self.action_paste.setEnabled(has_data)
-        # while Live preview is on, the page on the plate follows the draft
-        self.action_clear.setEnabled(has_data and not busy and not self.live_preview)
-        self.action_restore_plate.setEnabled(has_data and not busy)
+        self._update_undo_actions()
+        self.plate.update_actions(has_data)
         self.widget_picker.setEnabled(has_data and len(self.working_objects) > 0)
+
+    def _update_undo_actions(self):
+        session = self.session
+        for action, title, description in [
+            (self.action_undo, "Undo", session and session.undo_description),
+            (self.action_redo, "Redo", session and session.redo_description),
+        ]:
+            text = title if description is None else f"{title} {description}"
+            action.setEnabled(description is not None)
+            action.setText(text)
+            action.setToolTip(f"{text} ({action.shortcut().toString()})")
 
     # --- data ---
 
     def clear(self):
+        if self.session is not None:
+            self.session.remove_listener(self._on_draft_changed)
         self.session = None
         self.device_pages_data = None
         self.current_index = 1
@@ -447,7 +433,10 @@ class PageLayoutEditorWidget(QWidget):
         :param session: the draft, loaded
         :param page: the page to show, defaults to the first one (also if the draft has no such page anymore)
         """
+        if self.session is not None and self.session is not session:
+            self.session.remove_listener(self._on_draft_changed)
         self.session = session
+        session.add_listener(self._on_draft_changed)
         self.device_pages_data = device_pages_data
         self.error_banner.hide()
         self.highlight_component(None)
@@ -462,7 +451,7 @@ class PageLayoutEditorWidget(QWidget):
         self.set_page_index(page)
         self.dirtyChanged.emit(self.session.is_dirty)
         # e.g. the draft was reverted: show the reloaded objects
-        self._schedule_live_changes()
+        self.plate.draft_changed()
 
     def set_page_index(self, index: int):
         LOGGER.debug(f"Setting page index {index}")
@@ -499,11 +488,23 @@ class PageLayoutEditorWidget(QWidget):
         else:
             self.page_preview_widget.set_empty_hint(None)
 
-    def _mark_dirty(self):
-        """Report a change of the draft (the session marks itself dirty)."""
+    def _on_draft_changed(self, change: DraftChange):
+        """Show a change of the draft: every edit, undo and redo ends here, wherever it was made."""
+        if change.kind in (ChangeKind.UNDO, ChangeKind.REDO):
+            self._show_undone(change)
+        elif change.kind == ChangeKind.SAVE:
+            pass
+        elif change.adds_or_removes:
+            self._reload_page(select=change.added)
+        else:
+            # objects with templates that refer to the changed ones may have changed too
+            self.page_preview_widget.refresh_items()
+            self._update_page_views()
+            self.property_editor.refresh_after_change()
         self.dirtyChanged.emit(self.session.is_dirty)
         self.fileStateChanged.emit()
-        self._schedule_live_changes()
+        self._update_undo_actions()
+        self.plate.draft_changed()
 
     def _reload_page(self, select: List[Dict] = ()):
         """Rebuilds the preview from the draft after objects were added or removed, and selects the given objects."""
@@ -519,8 +520,7 @@ class PageLayoutEditorWidget(QWidget):
 
     def _go_to_page(self, index: int):
         self.set_page_index(index)
-        if self.live_preview:
-            self._start_live_page(index)
+        self.plate.show_page(index)
 
     def _step_page(self, step: int):
         new_index = step_page(get_navigable_page_indices(self.working_objects), self.current_index, step)
@@ -553,6 +553,36 @@ class PageLayoutEditorWidget(QWidget):
         elif action == "back":
             self.go_to_home_page()
 
+    # --- undo ---
+
+    def undo(self):
+        if self.session is not None:
+            self.session.undo()
+
+    def redo(self):
+        if self.session is not None:
+            self.session.redo()
+
+    def _show_undone(self, change: DraftChange):
+        """Show what an undo or redo changed: on its page, with the changed objects selected."""
+        pages = get_navigable_page_indices(self.working_objects)
+        # the objects of page 0 are on every page
+        shown = {self.current_index, 0}
+        candidates = sorted(page for page in change.pages if isinstance(page, int) and page in pages)
+        if not change.pages & shown and candidates:
+            self._go_to_page(candidates[0])
+            shown = {self.current_index, 0}
+        self._reload_page(select=[obj for obj in change.objects if obj.get("page") in shown])
+        done = "Undone" if change.kind == ChangeKind.UNDO else "Redone"
+        self.status.succeeded.emit(f"{done}: {change.description}")
+
+    @staticmethod
+    def _describe(action: str, items: List[EditableWidget]) -> str:
+        """:return: e.g. "Move p1b2" or "Move 3 objects", for the undo history"""
+        if len(items) == 1:
+            return f"{action} {object_name(items[0].obj_data)}"
+        return f"{action} {len(items)} objects"
+
     # --- editing ---
 
     def set_edit_mode(self, enabled: bool):
@@ -574,6 +604,9 @@ class PageLayoutEditorWidget(QWidget):
     def _on_openhasp_widget_selection_changed(self, editable_widgets: List[EditableWidget]):
         self.property_editor.set_editable_widgets(editable_widgets)
         self.jsonl_preview.set_selected_objects([widget.obj_data for widget in editable_widgets])
+        if self.session is not None:
+            # e.g. typing into the same property of another object is another step
+            self.session.end_merging()
         self._update_actions()
         self.stateChanged.emit()
         # the file of a single selected object is selected in the file tree (see `selectedObjectComponentChanged`)
@@ -593,11 +626,6 @@ class PageLayoutEditorWidget(QWidget):
         self.problems = find_problems(self.page_objects, screen.width, screen.height)
         self.problems_panel.set_problems(self.problems)
         self.stateChanged.emit()
-
-    def _on_property_changed(self, _widget: EditableWidget, _key: str, _value: Any):
-        self.page_preview_widget.refresh_items()
-        self._mark_dirty()
-        self._update_page_views()
 
     def _validate_property(self, obj: Dict, key: str, value: Any) -> Optional[str]:
         if key == "id" and is_id_used(self.working_objects, obj.get("page"), value, ignore=obj):
@@ -622,15 +650,14 @@ class PageLayoutEditorWidget(QWidget):
         items = self.page_preview_widget.selected_items()
         if not self.edit_mode or not items:
             return
-        for item in items:
-            self.session.use_pixel_position(item.obj_data)
-        self.page_preview_widget.refresh_movable()
-        self._after_geometry_edit()
+        with self.session.edit(self._describe("Use pixels for x/y of", items)):
+            for item in items:
+                self.session.use_pixel_position(item.obj_data)
 
     def _on_items_moved(self, items: List[EditableWidget]):
-        for item in items:
-            self._move(item, item.live_x, item.live_y)
-        self._after_geometry_edit()
+        with self.session.edit(self._describe("Move", items)):
+            for item in items:
+                self._move(item, item.live_x, item.live_y)
 
     def nudge_selected_objects(self, dx: int, dy: int):
         items = self.page_preview_widget.selected_items()
@@ -639,21 +666,16 @@ class PageLayoutEditorWidget(QWidget):
         locked = [item for item in items if not self._is_movable(item.obj_data)]
         if locked:
             self._report_locked(locked)
-        for item in items:
-            if item not in locked:
+        movable = [item for item in items if item not in locked]
+        # pressing the keys again and again is one step
+        nudged = ("nudge", tuple(sorted(self.session.object_uid(item.obj_data) for item in movable)))
+        with self.session.edit(self._describe("Move", movable), merge_key=nudged):
+            for item in movable:
                 self._move(item, item.obj_x + dx, item.obj_y + dy)
-        self._after_geometry_edit()
 
     def _move(self, item: EditableWidget, x: int, y: int):
         self.session.set_source_value(item.obj_data, "x", x)
         self.session.set_source_value(item.obj_data, "y", y)
-        item.refresh()
-
-    def _after_geometry_edit(self):
-        self.page_preview_widget.refresh_items()
-        self._mark_dirty()
-        self._update_page_views()
-        self.property_editor.refresh()
 
     # --- files ---
 
@@ -728,9 +750,7 @@ class PageLayoutEditorWidget(QWidget):
             screen_height=screen.height,
             parent_id=parent_id,
         )
-        obj = self.session.add_object(component, obj)
-        self._mark_dirty()
-        self._reload_page(select=[obj])
+        self.session.add_object(component, obj)
 
     def _parent_for(self, widget_type: OpenHASPWidgetType) -> Optional[int]:
         """The object a new object belongs to: a tab goes into the last tabview of the page."""
@@ -743,15 +763,13 @@ class PageLayoutEditorWidget(QWidget):
         items = self.page_preview_widget.selected_items()
         if not self.edit_mode or not items:
             return
-        duplicates = []
-        for item in items:
-            try:
-                duplicates.append(self.session.duplicate_object(item.obj_data))
-            except ValueError as ex:
-                self.status.failed.emit(f"Duplicating p{item.obj_data.get('page')}b{item.obj_id}", error_text(ex))
-                break
-        self._mark_dirty()
-        self._reload_page(select=duplicates)
+        with self.session.edit(self._describe("Duplicate", items)):
+            for item in items:
+                try:
+                    self.session.duplicate_object(item.obj_data)
+                except ValueError as ex:
+                    self.status.failed.emit(f"Duplicating p{item.obj_data.get('page')}b{item.obj_id}", error_text(ex))
+                    break
 
     def copy_selected_objects(self):
         """Copy the selected objects (with the objects inside of them) to the clipboard, as JSONL with their templates."""
@@ -781,7 +799,7 @@ class PageLayoutEditorWidget(QWidget):
         screen = self.device_pages_data.device.config.openhasp_config_manager.device.screen
         position = self.page_preview_widget.cursor_plate_position()
         try:
-            pasted = self.session.paste_objects(
+            self.session.paste_objects(
                 component,
                 sources,
                 page=self.current_index,
@@ -791,9 +809,6 @@ class PageLayoutEditorWidget(QWidget):
             )
         except (ValueError, TemplateError) as ex:
             self.status.failed.emit("Pasting", error_text(ex))
-            return
-        self._mark_dirty()
-        self._reload_page(select=pasted)
 
     def remove_selected_objects(self):
         items = self.page_preview_widget.selected_items()
@@ -810,198 +825,11 @@ class PageLayoutEditorWidget(QWidget):
         if answer != QMessageBox.StandardButton.Yes:
             return
 
-        for item in items:
-            self.session.remove_object(item.obj_data)
-        self._mark_dirty()
-        self._reload_page()
+        with self.session.edit(self._describe("Remove", items)):
+            for item in items:
+                self.session.remove_object(item.obj_data)
 
     # --- plate ---
-
-    @property
-    def live_preview(self) -> bool:
-        return self.action_live_preview.isChecked()
-
-    def stop_live_preview(self):
-        """Turn Live preview off without offering to restore the plate, e.g. when another device is selected."""
-        self._stopping_live_preview_silently = True
-        try:
-            self.action_live_preview.setChecked(False)
-        finally:
-            self._stopping_live_preview_silently = False
-
-    @qBridge(bool)
-    def _on_live_preview_toggled(self, enabled: bool):
-        self._update_actions()
-        self.stateChanged.emit()
-        if self.session is None:
-            return
-        if enabled:
-            self._start_live_page(self.current_index)
-            return
-        self._live_throttle.cancel()
-        if self._stopping_live_preview_silently:
-            return
-
-        device = self.device_pages_data.device
-        box = QMessageBox(
-            QMessageBox.Icon.Question,
-            "Live preview off",
-            f"{device.name} still shows the draft of the editor.\n\n"
-            f"Restore the plate, to show what its files define, like after a restart? {RESTORE_PLATE_HINT}",
-            parent=self,
-        )
-        restore = box.addButton("Restore plate", QMessageBox.ButtonRole.AcceptRole)
-        box.addButton("Keep the draft", QMessageBox.ButtonRole.RejectRole)
-        box.setDefaultButton(restore)
-        box.exec()
-        if box.clickedButton() is restore:
-            self.restore_plate()
-
-    def _start_live_page(self, index: int):
-        """Show the page on the plate with the objects of the draft."""
-        objects = get_page_objects(self.working_objects, index=index, include_global=True)
-        self._live_page.reset(objects)
-        self._send_page(index, objects, show=True)
-
-    def _schedule_live_changes(self):
-        if self.live_preview:
-            self._live_throttle.push(None)
-
-    def _send_live_changes(self):
-        """Send what changed in the draft since the page was last sent."""
-        if self.session is None or not self.live_preview:
-            return
-        index = self.current_index
-        objects = get_page_objects(self.working_objects, index=index, include_global=True)
-        update = self._live_page.update(objects)
-        if update is None:
-            return
-        if update.resend_page:
-            self._send_page(index, objects, show=False)
-            return
-
-        device = self.device_pages_data.device
-        client = OpenHaspClient(device)
-        description = f"Sending the changes of page {index} to {device.name}"
-
-        async def __async_work():
-            async with self._send_lock:
-                for page, obj_id in update.deletions:
-                    await client.delete_object_id(page, obj_id)
-                for obj in update.objects:
-                    await client.jsonl(obj)
-
-        # not run_busy: disabling the editor would interrupt dragging
-        run_async(
-            __async_work(),
-            on_error=lambda ex: self._on_send_failed(index, description, ex, retry=lambda: self.resync_page(index)),
-        )
-
-    def _send_page(self, index: int, objects: List[Dict], show: bool):
-        """
-        Clear the page on the plate and send the given objects (including the global ones of page 0).
-        :param show: switch the plate to the page afterwards
-        """
-        device = self.device_pages_data.device
-        # the editor changes the objects in place, while they are being sent
-        objects = copy.deepcopy(objects)
-        client = OpenHaspClient(device)
-        status = self.status
-        description = f"Sending page {index} to {device.name}"
-        self.error_banner.hide()
-
-        async def __async_work():
-            async with self._send_lock:
-                await client.clear_page(index)
-                for sent, obj in enumerate(objects, start=1):
-                    await client.jsonl(obj)
-                    status.report_progress(sent, len(objects))
-                    await asyncio.sleep(SEND_DELAY_SECONDS)
-                if show:
-                    await client.set_page(index)
-
-        run_busy(
-            __async_work(),
-            busy=self.busy,
-            status=status,
-            description=description,
-            success_message=f"{device.name} shows page {index} of the draft ({len(objects)} objects)",
-            on_success=lambda _: self.pageDeployed.emit(index),
-            on_error=lambda ex: self._on_send_failed(index, description, ex, retry=lambda: self.resync_page(index)),
-        )
-
-    @qBridge()
-    def _on_clear_page_clicked(self):
-        device = self.device_pages_data.device
-        index = self.current_index
-        answer = QMessageBox.question(
-            self,
-            "Clear page",
-            f"Clear page {index} on {device.name}?\n\nThis removes all objects of the page from the plate, "
-            f"until Restore plate or Live preview fills it again. The draft in the editor is not changed.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
-            QMessageBox.StandardButton.Cancel,
-        )
-        if answer == QMessageBox.StandardButton.Yes:
-            self._clear_page(index)
-
-    def _clear_page(self, index: int):
-        device = self.device_pages_data.device
-        client = OpenHaspClient(device)
-        description = f"Clearing page {index} on {device.name}"
-        self.error_banner.hide()
-        run_busy(
-            client.clear_page(index),
-            busy=self.busy,
-            status=self.status,
-            description=description,
-            success_message=f"Cleared page {index} on {device.name}",
-            # the page on the plate is empty now, its files are not
-            on_success=lambda _: self.pageOutOfSync.emit(index),
-            on_error=lambda ex: self._on_send_failed(index, description, ex, retry=lambda: self._clear_page(index)),
-        )
-
-    @qBridge()
-    def _on_restore_plate_clicked(self):
-        device = self.device_pages_data.device
-        answer = QMessageBox.question(
-            self,
-            "Restore plate",
-            f"Restore {device.name}?\n\nAll pages are cleared and built again from the files on the plate, "
-            f"like after a restart. {RESTORE_PLATE_HINT}",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
-            QMessageBox.StandardButton.Cancel,
-        )
-        if answer == QMessageBox.StandardButton.Yes:
-            self.restore_plate()
-
-    def restore_plate(self):
-        """Rebuild all pages of the plate from its own files, like after a restart (Live preview ends)."""
-        self.stop_live_preview()
-        device = self.device_pages_data.device
-        client = OpenHaspClient(device)
-        description = f"Restoring {device.name} from its files"
-        self.error_banner.hide()
-
-        async def __async_work():
-            async with self._send_lock:
-                await client.restore_from_files()
-
-        run_busy(
-            __async_work(),
-            busy=self.busy,
-            status=self.status,
-            description=description,
-            success_message=f"{device.name} shows its files again",
-            on_success=lambda _: self.plateRestored.emit(),
-            on_error=lambda ex: self.error_banner.show_error(
-                f"{description} failed: {error_text(ex)}", retry=self.restore_plate
-            ),
-        )
-
-    def _on_send_failed(self, index: int, description: str, ex: Exception, retry: Callable[[], None]):
-        self.pageOutOfSync.emit(index)
-        self.error_banner.show_error(f"{description} failed: {error_text(ex)}", retry=retry)
 
     def resync_page(self, index: int):
         """
@@ -1009,7 +837,7 @@ class PageLayoutEditorWidget(QWidget):
         """
         if self.session is None:
             return
-        if self.live_preview:
+        if self.plate.live:
             self._go_to_page(index)
         else:
-            self.restore_plate()
+            self.plate.restore_plate()
