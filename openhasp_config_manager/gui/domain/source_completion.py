@@ -1,9 +1,15 @@
 """What can be completed at the cursor in a file: property names of an object, and the variables inside of a template. Qt-free."""
 
+import re
 from dataclasses import dataclass
 from typing import Iterable, List, Optional
 
-from openhasp_config_manager.gui.domain.object_type_docs import COMMON_PROPERTIES, STYLE_PROPERTIES, TYPE_DOCS
+from openhasp_config_manager.gui.domain.object_type_docs import (
+    COMMON_PROPERTIES,
+    STYLE_PROPERTIES,
+    TYPE_DOCS,
+    is_text_property,
+)
 from openhasp_config_manager.gui.domain.source_docs import PROPERTY_DOCS
 from openhasp_config_manager.gui.domain.source_syntax import Language, TokenKind, tokenize_line
 from openhasp_config_manager.gui.domain.style_parts import OBJECT_PARTS, Part, State, style_key
@@ -48,10 +54,27 @@ class CompletionContext:
     prefix: str
     # where the word starts in the line
     start: int
+    # whether the key has its opening quote already (a property is also completed before it is typed)
+    quoted: bool = True
 
 
-def completion_context(line_before_cursor: str, language: Language) -> Optional[CompletionContext]:
-    """:return: what the text before the cursor asks to complete, None if nothing"""
+@dataclass(frozen=True)
+class Insertion:
+    """What replaces the typed key when a property is chosen: columns of the line, and where the cursor goes."""
+
+    start: int
+    end: int
+    text: str
+    cursor: int
+
+
+def completion_context(
+    line_before_cursor: str, language: Language, inside_object: bool = False
+) -> Optional[CompletionContext]:
+    """
+    :param inside_object: whether the cursor is in an object, only then a key is completed before its opening quote
+    :return: what the text before the cursor asks to complete, None if nothing
+    """
     line = line_before_cursor
     if language == Language.TEXT:
         return None
@@ -65,6 +88,8 @@ def completion_context(line_before_cursor: str, language: Language) -> Optional[
         quote = _open_key_quote(line)
         if quote is not None:
             return CompletionContext("property", line[quote + 1 :], quote + 1)
+        if inside_object and (start := _bare_key_start(line)) is not None:
+            return CompletionContext("property", line[start:], start, quoted=False)
     return None
 
 
@@ -88,6 +113,44 @@ def _open_key_quote(line: str) -> Optional[int]:
         return None
     before = line[:last_quote].rstrip()
     return last_quote if before == "" or before.endswith(("{", ",")) else None
+
+
+_BARE_WORD = re.compile(r"[A-Za-z_][A-Za-z0-9_]*$")
+_NO_KEY_IN = (TokenKind.STRING, TokenKind.KEY, TokenKind.COLOR, TokenKind.TEMPLATE, TokenKind.COMMENT)
+
+
+def _bare_key_start(line: str) -> Optional[int]:
+    """:return: where a word without quotes starts that stands where a key goes (an empty word at the cursor), None if there is none"""
+    match = _BARE_WORD.search(line)
+    start = match.start() if match else len(line)
+    before = line[:start].rstrip()
+    if before and not before.endswith(("{", ",")):
+        return None
+    if any(token.kind in _NO_KEY_IN and token.start < start < token.end for token in tokenize_line(line, Language.JSONL)):
+        return None
+    return start
+
+
+def property_insertion(
+    line: str, column: int, context: CompletionContext, word: str, object_type: Optional[str] = None
+) -> Insertion:
+    """
+    What to write when a property is chosen from the list: the key with its quotes, and unless the key has a value already the colon
+    and the start of the value, so it can be typed right away (`"align": "|"` for text, `"x": |` for the rest).
+    :param line: the text of the line, `column` the position of the cursor in it
+    """
+    end = column + len(re.match(r"[A-Za-z0-9_]*", line[column:])[0])
+    if context.quoted and line[end : end + 1] == '"':
+        end += 1
+    has_value = line[end:].lstrip().startswith(":")
+    text = ("" if context.quoted else '"') + word + '"'
+    if has_value:
+        return Insertion(context.start, end, text, context.start + len(text))
+    if is_text_property(word, object_type):
+        text += ': ""'
+        return Insertion(context.start, end, text, context.start + len(text) - 1)
+    text += ": "
+    return Insertion(context.start, end, text, context.start + len(text))
 
 
 def properties_for(object_type: Optional[str], prefix: str = "", present: Iterable[str] = ()) -> List[str]:

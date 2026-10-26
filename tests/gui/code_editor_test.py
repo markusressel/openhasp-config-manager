@@ -153,6 +153,38 @@ class TestCompletion(TestBase):
         QTest.keyClick(editor._completer.popup(), Qt.Key.Key_Return)
         assert editor.toPlainText().startswith('{"bg_color')
 
+    def test_a_key_is_completed_before_its_quote(self, editor):
+        editor.set_text('{\n  "obj": "slider",\n  ')
+        editor.go_to(3, 3)
+        _type(editor, "va")
+        assert editor._completer.popup().isVisible()
+        assert "val" in editor._completer.model().stringList()
+        QTest.keyClick(editor._completer.popup(), Qt.Key.Key_Return)
+        assert editor.toPlainText().endswith('  "val": ')
+        assert editor.textCursor().position() == len(editor.toPlainText())
+
+    def test_text_values_start_inside_their_quotes(self, editor):
+        editor.set_text("{\n  ")
+        editor.go_to(2, 3)
+        _type(editor, "alig")
+        QTest.keyClick(editor._completer.popup(), Qt.Key.Key_Return)
+        assert editor.toPlainText() == '{\n  "align": ""'
+        _type(editor, "left")
+        assert editor.toPlainText() == '{\n  "align": "left"'
+
+    def test_the_quote_that_was_closed_for_us_is_not_doubled(self, editor):
+        _type(editor, '{"alig')
+        assert editor.toPlainText() == '{"alig"}'
+        QTest.keyClick(editor._completer.popup(), Qt.Key.Key_Return)
+        assert editor.toPlainText() == '{"align": ""}'
+        _type(editor, "left")
+        assert editor.toPlainText() == '{"align": "left"}'
+
+    def test_nothing_before_the_quote_outside_of_objects(self, editor):
+        editor.set_text("")
+        _type(editor, "alig")
+        assert not editor._completer.popup().isVisible()
+
     def test_variables(self, editor):
         editor.set_variables(lambda: ["theme.navbar.height", "theme.name", "other"])
         editor.set_text('{"text": "{{ ')

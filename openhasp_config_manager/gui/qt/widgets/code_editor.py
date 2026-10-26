@@ -19,7 +19,13 @@ from PyQt6.QtGui import (
 from PyQt6.QtWidgets import QCompleter, QMenu, QPlainTextEdit, QTextEdit, QWidget
 
 from openhasp_config_manager.gui.domain.problems import Severity
-from openhasp_config_manager.gui.domain.source_completion import complete, completion_context, properties_for
+from openhasp_config_manager.gui.domain.source_completion import (
+    CompletionContext,
+    complete,
+    completion_context,
+    properties_for,
+    property_insertion,
+)
 from openhasp_config_manager.gui.domain.source_docs import help_at, object_type_at_line, property_help
 from openhasp_config_manager.gui.domain.source_edit import INDENT, indent_for_new_line, matching_bracket, toggle_comment
 from openhasp_config_manager.gui.domain.source_format import format_text
@@ -113,7 +119,6 @@ class CodeEditor(QPlainTextEdit):
         self._search: Optional[QRegularExpression] = None
         self._search_flags = QTextDocument.FindFlag(0)
         self._variables: Callable[[], List[str]] = lambda: []
-        self._completion_start = 0
         # the first lines of the folded objects
         self._folded: Set[int] = set()
         self._objects: List[SourceObject] = []
@@ -143,6 +148,7 @@ class CodeEditor(QPlainTextEdit):
         self._completer.activated.connect(self._insert_completion)
         # what is completed, for the explanation of the highlighted entry: "property" or "variable", and the `obj` of the object
         self._completion_kind = "property"
+        self._completion_context: Optional[CompletionContext] = None
         self._completion_object_type: Optional[str] = None
         self._completion_card = HoverCard(self, interactive=False)
         self._watched_popup: Optional[QWidget] = None
@@ -1048,20 +1054,21 @@ class CodeEditor(QPlainTextEdit):
 
     def _show_completion(self, force: bool = False):
         before, _ = self._block_text_around_cursor()
-        context = completion_context(before, self.language)
+        line_number = self.textCursor().blockNumber() + 1
+        found = object_at_line(self.objects(), line_number)
+        context = completion_context(before, self.language, inside_object=found is not None)
         if context is None:
             self._completer.popup().hide()
             return
         self._completion_kind = context.kind
-        found = object_at_line(self.objects(), self.textCursor().blockNumber() + 1)
-        self._completion_object_type = object_type_at_line(self.objects(), self.textCursor().blockNumber() + 1)
+        self._completion_context = context
+        self._completion_object_type = object_type_at_line(self.objects(), line_number)
         present = [prop.key for prop in found.properties] if found is not None else []
         properties = properties_for(self._completion_object_type, context.prefix, present)
         words = complete(context, properties, self._variables())
         if not words or (not force and not context.prefix):
             self._completer.popup().hide()
             return
-        self._completion_start = context.start
         self._completer.model().setStringList(words)
         self._completer.setCompletionPrefix(context.prefix)
         popup = self._completer.popup()
@@ -1086,6 +1093,19 @@ class CodeEditor(QPlainTextEdit):
 
     def _insert_completion(self, word: str):
         cursor = self.textCursor()
-        cursor.setPosition(cursor.block().position() + self._completion_start, QTextCursor.MoveMode.KeepAnchor)
-        cursor.insertText(word)
+        block = cursor.block()
+        context = self._completion_context
+        if self._completion_kind == "property":
+            line, column = block.text(), cursor.positionInBlock()
+            insertion = property_insertion(line, column, context, word, self._completion_object_type)
+            start, end, text, after = insertion.start, insertion.end, insertion.text, insertion.cursor
+        else:
+            start, end, text = context.start, cursor.positionInBlock(), word
+            after = start + len(text)
+        cursor.beginEditBlock()
+        cursor.setPosition(block.position() + start)
+        cursor.setPosition(block.position() + end, QTextCursor.MoveMode.KeepAnchor)
+        cursor.insertText(text)
+        cursor.setPosition(block.position() + after)
+        cursor.endEditBlock()
         self.setTextCursor(cursor)

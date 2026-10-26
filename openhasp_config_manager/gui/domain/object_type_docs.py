@@ -7,7 +7,7 @@ https://www.openhasp.com/0.7.0/design/styling/. A property that means something 
 `angle`, ...) is explained here per type, the generic explanations are in `source_docs.PROPERTY_DOCS`.
 """
 
-from typing import Dict
+from typing import Dict, Optional
 
 # the properties every object type has (https://www.openhasp.com/0.7.0/design/objects/)
 COMMON_PROPERTIES = (
@@ -175,3 +175,17 @@ TYPE_DOCS: Dict[str, Dict[str, str]] = {
     },
     "obj": {},
 }
+
+
+# properties whose value is text. The style properties with `color` in their name are as well.
+_TEXT_PROPERTIES = frozenset({"text", "align", "mode", "obj", "src", "value_str", "action", "options"})
+# what is text for most types, but not for these: the options of a roller or dropdown are text, those of a button matrix a list
+_NOT_TEXT = {("options", "btnmatrix"), ("options", "msgbox"), ("mode", "roller")}
+
+
+def is_text_property(name: str, object_type: Optional[str] = None) -> bool:
+    """:return: whether the value of a property is written as a string (`"align": "left"`), not as a number, a bool or a list"""
+    base = name[:-2] if len(name) > 2 and name[-2:].isdigit() else name
+    if (base, object_type) in _NOT_TEXT:
+        return False
+    return "color" in base or base in _TEXT_PROPERTIES

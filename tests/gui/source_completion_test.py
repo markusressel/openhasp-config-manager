@@ -1,9 +1,12 @@
 from openhasp_config_manager.gui.domain.source_completion import (
     CompletionContext,
+    Insertion,
     complete,
     completion_context,
     properties_for,
+    property_insertion,
 )
+from openhasp_config_manager.gui.domain.object_type_docs import is_text_property
 from openhasp_config_manager.gui.domain.source_docs import property_help
 from openhasp_config_manager.gui.domain.source_syntax import Language
 from tests import TestBase
@@ -87,3 +90,72 @@ class TestPropertiesOfType(TestBase):
         for object_type in ("btn", "slider", "arc", "gauge", "tabview", "img", None):
             for name in properties_for(object_type):
                 assert property_help(name, object_type) is not None, (object_type, name)
+
+
+class TestKeyWithoutQuotes(TestBase):
+    def test_a_key_is_completed_before_its_quote(self):
+        def at(line: str):
+            return completion_context(line, Language.JSONL, inside_object=True)
+
+        assert at("{al") == CompletionContext("property", "al", 1, quoted=False)
+        assert at("  te") == CompletionContext("property", "te", 2, quoted=False)
+        assert at('{"a": 1, x') == CompletionContext("property", "x", 9, quoted=False)
+        assert at("  ") == CompletionContext("property", "", 2, quoted=False)
+
+    def test_only_inside_of_objects(self):
+        assert completion_context("  te", Language.JSONL) is None
+        assert completion_context("  te", Language.JSONL, inside_object=False) is None
+
+    def test_not_where_a_value_or_a_comment_is(self):
+        def at(line: str):
+            return completion_context(line, Language.JSONL, inside_object=True)
+
+        assert at('{"text": al') is None
+        assert at('{"text": "a, b') is None
+        assert at("// say, al") is None
+        assert at('{"src": "http://x", al') == CompletionContext("property", "al", 20, quoted=False)
+        assert completion_context("run al", Language.CMD, inside_object=True) is None
+
+    def test_text_values_start_with_their_quotes(self):
+        assert is_text_property("align") and is_text_property("text") and is_text_property("src")
+        assert is_text_property("bg_color") and is_text_property("bg_color10") and is_text_property("text_color02")
+        assert is_text_property("options", "dropdown") and not is_text_property("options", "btnmatrix")
+        assert not is_text_property("mode", "roller") and is_text_property("mode", "label")
+        assert not is_text_property("x") and not is_text_property("val") and not is_text_property("enabled")
+
+
+class TestInsertion(TestBase):
+    def _insert(self, line: str, column: int, word: str, object_type=None, **context):
+        found = completion_context(line[:column], Language.JSONL, inside_object=True)
+        insertion = property_insertion(line, column, found, word, object_type)
+        return line[: insertion.start] + insertion.text + line[insertion.end :], insertion
+
+    def test_text_gets_the_colon_and_the_quotes_of_the_value(self):
+        result, insertion = self._insert('  "al', 5, "align")
+        assert result == '  "align": ""'
+        assert result[: insertion.cursor] == '  "align": "'
+
+    def test_other_values_get_the_colon(self):
+        result, insertion = self._insert('  "va', 5, "val", "slider")
+        assert result == '  "val": ' and insertion.cursor == len(result)
+
+    def test_the_quotes_of_the_key_come_with_it(self):
+        result, insertion = self._insert("  al", 4, "align")
+        assert result == '  "align": ""' and result[: insertion.cursor] == '  "align": "'
+        assert self._insert("  va", 4, "val")[0] == '  "val": '
+
+    def test_the_closing_quote_that_is_there_is_not_doubled(self):
+        result, insertion = self._insert('{"al"}', 4, "align")
+        assert result == '{"align": ""}'
+        assert result[: insertion.cursor] == '{"align": "'
+
+    def test_the_rest_of_the_word_is_replaced(self):
+        assert self._insert('  "al|ign": "left"'.replace("|", ""), 5, "align")[0] == '  "align": "left"'
+
+    def test_a_key_with_a_value_keeps_it(self):
+        result, insertion = self._insert('  "te": 1', 5, "text")
+        assert result == '  "text": 1' and insertion == Insertion(3, 6, 'text"', 8)
+        assert self._insert("  te : 1", 4, "text")[0] == '  "text" : 1'
+
+    def test_part_and_state_variants_are_text_for_colors(self):
+        assert self._insert('  "bg_color1', 12, "bg_color10", "slider")[0] == '  "bg_color10": ""'

@@ -443,7 +443,9 @@ More features for the objects of a `.jsonl` file:
 - **Completion** (`Ctrl+Space`, or while typing): offers the properties that make sense for the `obj` type of the object (a `slider`
   gets `val`, `min`, `max`, but no `text`), without those the object has already. Once you type a style property
   (`bg_color`), the suffixes for the part and state of the object type are offered (`bg_color10`, `bg_color12`, ...). A card
-  next to the list explains the highlighted entry. Objects without a known `obj` get every property.
+  next to the list explains the highlighted entry. The key can be completed before its opening quote is typed. Choosing a
+  property writes the key with its quotes and the colon, and for text values (`align`, `text`, colors, ...) the quotes of the value
+  with the cursor between them: `"align": "|"`. Objects without a known `obj` get every property.
 - **Hover**: rest the mouse on a property name for a card with what it does for this object type, the problems of the line, and a
   link to the openHASP documentation. A style property with a two digit suffix (`bg_color12`) is explained by part and state (10 is
   the indicator, 20 the knob, ...; 02 is pressed), with the names the object type uses, e.g. the colored track of a `switch`. The card
