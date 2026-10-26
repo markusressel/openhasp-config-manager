@@ -25,6 +25,8 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
 )
 from openhasp_config_manager.const import DEVICES_FOLDER_NAME, COMMON_FOLDER_NAME
+from openhasp_config_manager.gui.domain.device_config_text import set_debug_ansi
+from openhasp_config_manager.manager import CONFIG_FILE_NAME
 from openhasp_config_manager.deployment import deploy_device
 from openhasp_config_manager.gui.domain.draft_files import (
     LoadedDevice,
@@ -56,13 +58,15 @@ from openhasp_config_manager.gui.qt.config_watcher import ConfigWatcher
 from openhasp_config_manager.gui.qt.gui_state_publisher import GuiStatePublisher
 from openhasp_config_manager.gui.qt.source_sync import SourceEditorSync
 from openhasp_config_manager.gui.qt.connection import ConnectionController
-from openhasp_config_manager.gui.qt.operations import OperationStatus, error_text, run_busy
+from openhasp_config_manager.gui.qt.log_stream import LogStreamController
+from openhasp_config_manager.gui.qt.operations import BusyState, OperationStatus, error_text, run_busy
 from openhasp_config_manager.gui.qt.ui_session_store import UiSessionStore
 from openhasp_config_manager.gui.qt.theme import ThemeMode, apply_theme, current_mode, current_colors
 from openhasp_config_manager.gui.qt.async_bridge import run_async
 from openhasp_config_manager.gui.qt.widgets.code_view import CodeView
 from openhasp_config_manager.gui.qt.widgets.device_list import DeviceListWidget
 from openhasp_config_manager.gui.qt.widgets.file_tree import FileTreeWidget
+from openhasp_config_manager.gui.qt.widgets.log_view import LogView
 from openhasp_config_manager.gui.qt.widgets.message_panel import MessagePanel, DiskConflictBanner, file_list_text
 from openhasp_config_manager.gui.qt.widgets.pagelayout import OpenHaspDevicePagesData
 from openhasp_config_manager.gui.qt.widgets.pagelayout.page_layout_editor import PageLayoutEditorWidget
@@ -318,6 +322,21 @@ class MainWindow(QMainWindow):
         self.file_tree_widget.openRequested.connect(self.source_sync.open_file)
         self.jsonl_dock = self._add_dock("Code", "jsonl_dock", self.code_view)
         self.splitDockWidget(self.preview_dock, self.jsonl_dock, Qt.Orientation.Vertical)
+
+        # the log of the plate, next to the code. Hidden at first: it holds the only telnet connection the plate allows while shown.
+        self.log_view = LogView()
+        self.logs_dock = self._add_dock("Logs", "logs_dock", self.log_view)
+        self.tabifyDockWidget(self.jsonl_dock, self.logs_dock)
+        self.jsonl_dock.raise_()
+        self.logs_dock.hide()
+        self.log_stream = LogStreamController(self)
+        self._log_colors_busy = BusyState(self)
+        self.log_stream.deviceChanged.connect(self.log_view.clear)
+        self.log_stream.entriesReceived.connect(self.log_view.add_entries)
+        self.log_stream.stateChanged.connect(lambda state, error: self.log_view.set_link(state, error))
+        self.log_stream.colorsMissingChanged.connect(self.log_view.set_colors_missing)
+        self.log_view.enableColorsRequested.connect(self._ask_to_enable_log_colors)
+        self.logs_dock.visibilityChanged.connect(self.log_stream.set_active)
         self._size_docks()
 
         self.status_bar = StatusBarController(self, self.status, on_resync=self.page_layout_editor_widget.resync_page)
@@ -431,7 +450,7 @@ class MainWindow(QMainWindow):
         for action in [editor.action_zoom_in, editor.action_zoom_out, editor.action_zoom_fit]:
             view_menu.addAction(action)
         view_menu.addSeparator()
-        for dock in [self.devices_dock, self.properties_dock, self.jsonl_dock]:
+        for dock in [self.devices_dock, self.properties_dock, self.jsonl_dock, self.logs_dock]:
             view_menu.addAction(dock.toggleViewAction())
         view_menu.addSeparator()
         view_menu.addAction(
@@ -469,6 +488,7 @@ class MainWindow(QMainWindow):
         self.file_tree_widget.refresh_theme()
         self.page_layout_editor_widget.jsonl_preview.refresh_theme()
         self.source_editor.refresh_theme()
+        self.log_view.refresh_theme()
         self.page_layout_editor_widget.problems_panel.refresh_theme()
         self.page_layout_editor_widget.page_preview_widget.viewport().update()
 
@@ -490,7 +510,7 @@ class MainWindow(QMainWindow):
             QtCore.QTimer.singleShot(0, self._size_sidebar)
 
     def restore_default_layout(self):
-        for dock in [self.devices_dock, self.preview_dock, self.properties_dock, self.jsonl_dock]:
+        for dock in [self.devices_dock, self.preview_dock, self.properties_dock, self.jsonl_dock, self.logs_dock]:
             dock.setFloating(False)
         self.restoreState(self._default_dock_state, DOCK_STATE_VERSION)
         self._size_docks()
@@ -526,6 +546,7 @@ class MainWindow(QMainWindow):
                 event.ignore()
                 return
         self.connection.stop()
+        self.log_stream.stop()
         self._watcher.stop()
         self._state_publisher.stop()
         self.code_view.save_state()
@@ -534,6 +555,58 @@ class MainWindow(QMainWindow):
         settings.setValue("window/state", self.saveState(DOCK_STATE_VERSION))
         settings.setValue("window/sidebar", self.sidebar.saveState())
         super().closeEvent(event)
+
+    # --- log colors ---
+
+    def _ask_to_enable_log_colors(self):
+        device = self.device
+        if device is None:
+            return
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Question)
+        box.setWindowTitle("Enable colors in the log?")
+        box.setText(f"Ask {device.name} to send colors in its log?")
+        box.setInformativeText(
+            "openHASP tells the level of a log line (error, warning, ...) only with the color of the line. Without colors the "
+            "level is guessed from the words of the line.\n\n"
+            'This turns on "debug.ansi" of the plate, which also puts the colors into its serial output. It takes effect at once. '
+            "A deploy sends the config.json again, so the setting is lost there unless config.json has it too."
+        )
+        both = box.addButton("Enable and update config.json", QMessageBox.ButtonRole.AcceptRole)
+        plate_only = box.addButton("Enable on the plate only", QMessageBox.ButtonRole.ActionRole)
+        box.addButton(QMessageBox.StandardButton.Cancel)
+        box.setDefaultButton(both)
+        box.exec()
+        if box.clickedButton() in (both, plate_only):
+            self.enable_log_colors(update_config=box.clickedButton() is both)
+
+    def enable_log_colors(self, update_config: bool):
+        """
+        Turns on the colors of the log at the selected plate.
+        :param update_config: also set it in the `config.json` of the device, so the next deploy keeps it
+        """
+        device = self.device
+        name = device.name
+        if update_config:
+            try:
+                self._set_ansi_in_config_file(Path(device.path, CONFIG_FILE_NAME))
+            except (OSError, ValueError) as ex:
+                self.status.failed.emit(f"Updating config.json of {name}", error_text(ex))
+                return
+        run_busy(
+            self.log_stream.set_colors(True),
+            self._log_colors_busy,
+            self.status,
+            f"Enabling colors in the log of {name}",
+            success_message=f"{name} sends colors in its log now",
+        )
+
+    def _set_ansi_in_config_file(self, path: Path):
+        text = path.read_text()
+        changed = set_debug_ansi(text, True)
+        if changed != text:
+            path.write_text(changed)
+            self._own_writes.written(path, changed)
 
     # --- devices ---
 
@@ -603,6 +676,7 @@ class MainWindow(QMainWindow):
         if self.device is None or self.device.name != name:
             # another device: start without a connection and in interaction mode, not editing its objects by accident
             self.connection.set_device(None)
+            self.log_stream.set_device(None)
             self.page_layout_editor_widget.set_edit_mode(False)
             self.page_layout_editor_widget.plate.stop_live_preview()
         self.device = None
@@ -963,6 +1037,7 @@ class MainWindow(QMainWindow):
         )
         self.page_layout_editor_widget.device_controls.set_device(self.device)
         self.connection.set_device(self.device)
+        self.log_stream.set_device(self.device)
         self.page_layout_editor_widget.set_data(
             session=session, device_pages_data=pages_data, page=self._page_after_reload.pop(key, None)
         )

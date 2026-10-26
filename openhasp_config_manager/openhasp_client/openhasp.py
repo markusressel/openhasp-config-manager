@@ -1,11 +1,12 @@
 import asyncio
 import logging
-from typing import Dict, List, Any, Callable, Tuple, Optional, Awaitable
+from typing import AsyncIterator, Dict, List, Any, Callable, Tuple, Optional, Awaitable
 
 import orjson
 
 from openhasp_config_manager.console import info
 from openhasp_config_manager.openhasp_client.image_processor import OpenHaspImageProcessor
+from openhasp_config_manager.openhasp_client.logs import LogItem, follow_logs
 from openhasp_config_manager.openhasp_client.model.configuration.gui_config import GuiConfig
 from openhasp_config_manager.openhasp_client.model.configuration.hasp_config import HaspConfig
 from openhasp_config_manager.openhasp_client.model.configuration.http_config import HttpConfig
@@ -574,8 +575,19 @@ class OpenHaspClient:
     async def shell(self):
         await self._telnet_client.shell()
 
-    async def logs(self):
-        await self._telnet_client.logs()
+    async def set_ansi_colors(self, enabled: bool):
+        """
+        Turns the colors of the log lines (`debug.ansi`) on or off, which is how the plate tells the level of a log line. Takes effect at once.
+        See: https://www.openhasp.com/0.7.0/commands/mqtt/#configuration
+        """
+        await self.command(keyword="config/debug", params=orjson.dumps({"ansi": int(enabled)}).decode())
+
+    def follow_logs(self, reconnect: bool = True) -> AsyncIterator[LogItem]:
+        """
+        Streams the log of the plate (over its telnet server, which only allows one connection at a time).
+        :param reconnect: connect again when the connection is lost or can't be made, see `logs.follow_logs`
+        """
+        return follow_logs(self._telnet_client.log_connection, reconnect=reconnect)
 
     @staticmethod
     def compute_object_id(page: int, obj: int) -> str:

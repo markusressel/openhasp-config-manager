@@ -1,5 +1,8 @@
 import asyncio
+import os
+import sys
 from pathlib import Path
+from typing import Optional
 
 import click
 
@@ -253,11 +256,32 @@ def upload(config_dir: Path, output_dir: Path, device: str, purge: bool, diff: b
     help=get_option_help(PARAM_CFG_DIR),
 )
 @click.option(*get_option_names(PARAM_DEVICE), required=True, default=None, help=get_option_help(PARAM_DEVICE))
-def logs(config_dir: Path, device: str):
+@click.option(
+    "--output",
+    "-o",
+    required=False,
+    default=None,
+    type=click.Path(dir_okay=False, path_type=Path),
+    help="Also append the log to this file (without colors).",
+)
+@click.option("--reconnect", is_flag=True, default=False, help="Connect again when the connection to the device is lost.")
+@click.option(
+    "--color/--no-color",
+    default=None,
+    help="Highlight the log. By default only if the output is a terminal.",
+)
+def logs(config_dir: Path, device: str, output: Optional[Path], reconnect: bool, color: Optional[bool]):
     """
-    Prints the logs of a device.
+    Prints the logs of a device until interrupted (Ctrl+C).
+    The status of the connection is printed to stderr, so the output can be piped, e.g. into lnav.
     """
-    asyncio.run(c_logs(config_dir, device))
+    try:
+        asyncio.run(c_logs(config_dir, device, output, reconnect, color))
+    except KeyboardInterrupt:
+        pass
+    except BrokenPipeError:
+        # the reader of the pipe (head, ...) is gone: don't let Python complain again while closing stdout
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
 
 
 @cli.command(name="shell")
