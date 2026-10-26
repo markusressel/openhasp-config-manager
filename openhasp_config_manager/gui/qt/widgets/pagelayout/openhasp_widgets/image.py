@@ -5,6 +5,7 @@ from PyQt6 import QtCore, QtGui
 from PyQt6.QtGui import QColor, QBrush, QImage
 
 from openhasp_config_manager.gui.domain.preview_images import decode_binary_image
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import number, to_color
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
 
 
@@ -59,6 +60,38 @@ class HaspImageItem(EditableWidget):
     def _on_data_changed(self):
         self._load_image()
 
+    @property
+    def radius(self) -> float:
+        return max(number(self.style("radius", 0), 0), 0)
+
+    @property
+    def outline_width(self) -> float:
+        return max(number(self.style("outline_width", 0), 0), 0)
+
+    @property
+    def outline_pad(self) -> float:
+        return max(number(self.style("outline_pad", 0), 0), 0)
+
+    def boundingRect(self):
+        # the outline is drawn outside of the object
+        reach = self.outline_width + self.outline_pad if self.outline_width > 0 else 0
+        return super().boundingRect().adjusted(-reach, -reach, reach, reach)
+
+    def _paint_outline(self, painter):
+        """Like LVGL: a ring around the object, `outline_pad` away from it, with the corners rounded further out."""
+        width, pad = self.outline_width, self.outline_pad
+        if width <= 0:
+            return
+        color = to_color(self.style("outline_color"), "#000000")
+        color.setAlphaF(max(0.0, min(number(self.style("outline_opa", 255), 255) / 255, 1.0)))
+        # a pen is centered on the line it draws
+        offset = pad + width / 2
+        painter.setBrush(QtCore.Qt.BrushStyle.NoBrush)
+        painter.setPen(QtGui.QPen(color, width))
+        painter.drawRoundedRect(
+            self.obj_rect.adjusted(-offset, -offset, offset, offset), self.radius + offset, self.radius + offset
+        )
+
     def paint(self, painter, option, widget=None):
         local_rect = self.obj_rect
 
@@ -76,10 +109,12 @@ class HaspImageItem(EditableWidget):
             bg_color = self.bg_color
             painter.setBrush(QBrush(QColor(bg_color)))
             painter.setPen(QtCore.Qt.PenStyle.NoPen)
-            painter.drawRect(local_rect)
+            painter.drawRoundedRect(local_rect, self.radius, self.radius)
 
             painter.setPen(QtGui.QPen(QColor("black"), 1))
             painter.drawText(local_rect, QtCore.Qt.AlignmentFlag.AlignCenter, "IMG")
+
+        self._paint_outline(painter)
 
         super().paint(painter, option, widget)
 

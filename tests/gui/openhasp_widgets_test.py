@@ -205,12 +205,13 @@ class TestPagePreviewWidget(TestBase):
 @pytest.mark.usefixtures("qapp")
 class TestImageItem(TestBase):
     @staticmethod
-    def _paint(item, width, height):
+    def _paint(item, width, height, offset=0):
         from PyQt6.QtGui import QImage, QPainter
 
         canvas = QImage(width, height, QImage.Format.Format_ARGB32)
         canvas.fill(0xFF000000)
         painter = QPainter(canvas)
+        painter.translate(offset, offset)
         item.paint(painter, None)
         painter.end()
         return canvas
@@ -227,6 +228,42 @@ class TestImageItem(TestBase):
         return HaspImageItem(
             obj_data={"obj": "img", "x": 0, "y": 0, "w": 4, "h": 4, "src": f"L:/{name}", **props}, parent_widget=Preview()
         )
+
+    def test_outline_is_drawn_outside_of_the_object(self, tmp_path):
+        from tests.png import png
+
+        item = self._item(
+            tmp_path, "a.png", png((4, 4), [(0, 255, 0)] * 16), outline_width=2, outline_pad=1, outline_color="#ff0000"
+        )
+
+        canvas = self._paint(item, 14, 14, offset=5)
+
+        # the image is inside, then 1 px gap, then the ring of 2 px
+        assert canvas.pixelColor(6, 6).green() == 255
+        assert canvas.pixelColor(4, 6).red() == 0
+        assert canvas.pixelColor(3, 6).red() == 255
+        assert canvas.pixelColor(2, 6).red() == 255
+        assert canvas.pixelColor(1, 6).red() == 0
+        assert item.boundingRect().left() <= -5
+
+    def test_no_outline_without_a_width(self, tmp_path):
+        from tests.png import png
+
+        item = self._item(tmp_path, "a.png", png((4, 4), [(0, 255, 0)] * 16), outline_color="#ff0000")
+
+        canvas = self._paint(item, 14, 14, offset=5)
+
+        assert canvas.pixelColor(4, 6).red() == 0
+
+    def test_placeholder_has_the_radius_of_the_object(self):
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.image import HaspImageItem
+
+        item = HaspImageItem(obj_data={"obj": "img", "x": 0, "y": 0, "w": 20, "h": 20, "src": "http://x/a.png", "radius": 10})
+
+        canvas = self._paint(item, 20, 20)
+
+        assert canvas.pixelColor(0, 0).red() == 0
+        assert canvas.pixelColor(10, 3).red() == 255
 
     def test_png_is_drawn_in_its_size_and_cut_off_by_the_object(self, tmp_path):
         from tests.png import png
