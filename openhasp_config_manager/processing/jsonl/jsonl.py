@@ -1,5 +1,6 @@
 import logging
 import re
+from contextlib import suppress
 from typing import Dict
 
 from openhasp_config_manager.openhasp_client.model.configuration.config import Config
@@ -10,7 +11,9 @@ LOGGER.setLevel(logging.DEBUG)
 
 
 # the properties whose values are converted to int (e.g. after rendering a template), as a regex alternation
-NUMERIC_PROPERTY_NAMES = "page|id|x|y|w|h|text_font|value_font|radius|pad_.+|margin_.+|border_width|min|max|prev|next"
+NUMERIC_PROPERTY_NAMES = "page|id|x|y|w|h|radius|pad_.+|margin_.+|border_width|min|max|prev|next"
+# the font properties (`text_font`, `value_font10`, ...): a number for a built-in font, or the name of a font file on the plate
+FONT_PROPERTY = re.compile(r"^\w*_font\d*$")
 
 
 class ObjectDimensionsProcessor(JsonlObjectProcessor):
@@ -45,6 +48,11 @@ class ObjectDimensionsProcessor(JsonlObjectProcessor):
 
         # normalize value types, in case of templates
         for key, value in result.items():
+            if isinstance(value, str) and FONT_PROPERTY.match(key):
+                # a font name stays as it is
+                with suppress(ValueError):
+                    result[key] = int(float(value))
+                continue
             if isinstance(value, str) and re.match(f"^({NUMERIC_PROPERTY_NAMES}).*$", string=key):
                 try:
                     result[key] = int(float(value))

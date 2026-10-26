@@ -198,3 +198,13 @@ class TestPagePreviewWidget(TestBase):
         x, y = at(101, 53)
         # off the grid, up to the rounding of the zoomed view
         assert abs(x - 101) <= 1 and abs(y - 53) <= 1
+
+
+def test_font_size_of_built_in_fonts_and_font_files():
+    from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import font_size
+
+    assert font_size(24) == 24
+    assert font_size("fonts_roboto24") == 24
+    assert font_size("arial_20") == 20
+    assert font_size("no_size") == 25
+    assert font_size(None, default=17) == 17

@@ -3,6 +3,7 @@ from PyQt6.QtGui import QColor, QBrush, QPen, QFont
 from PyQt6.QtWidgets import QGraphicsTextItem
 
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import font_size
 
 
 class HaspBarItem(EditableWidget):
@@ -27,8 +28,8 @@ class HaspBarItem(EditableWidget):
         return self.obj_data.get("text_color", "#FFFFFF")
 
     @property
-    def text_font(self) -> int:
-        return self.obj_data.get("text_font", 25)
+    def text_font(self) -> float:
+        return font_size(self.obj_data.get("text_font"))
 
     @property
     def bg_color(self) -> str:

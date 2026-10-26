@@ -2,6 +2,7 @@ from PyQt6 import QtCore, QtGui
 
 from openhasp_config_manager.gui.domain.style_parts import Part
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import font_size
 
 
 class HaspSwitchItem(EditableWidget):
@@ -24,8 +25,8 @@ class HaspSwitchItem(EditableWidget):
         return self.style("radius", 0, Part.KNOB)
 
     @property
-    def text_font(self) -> str:
-        return self.obj_data.get("text_font", 25)
+    def text_font(self) -> float:
+        return font_size(self.obj_data.get("text_font"))
 
     @property
     def text_color(self) -> str:

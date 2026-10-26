@@ -1,6 +1,7 @@
 """What the preview items share: the colors of the default theme and how text is drawn."""
 
 import math
+import re
 
 from PyQt6 import QtCore, QtGui
 
@@ -18,9 +19,21 @@ def to_color(value, default: str) -> QtGui.QColor:
     return color if color.isValid() else QtGui.QColor(default)
 
 
+def font_size(value, default: int = 25) -> float:
+    """
+    :param value: the `text_font` of an object: the size of a built-in font, or the name of a font file, which ends with its size
+        (`arial20`, `arial_20`)
+    :return: the size, the default if there is none (e.g. a template that is not rendered)
+    """
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return value
+    match = re.search(r"(\d+)$", value) if isinstance(value, str) else None
+    return int(match[1]) if match else default
+
+
 def plate_font(size) -> QtGui.QFont:
-    """:return: the font for a `text_font` size of the plate"""
-    pixel_size = int(float(size) * FONT_SCALE) if isinstance(size, (int, float)) else 17
+    """:return: the font for a `text_font` of the plate, see `font_size`"""
+    pixel_size = int(float(font_size(size, 17)) * FONT_SCALE)
     return QtGui.QFont("Roboto Condensed", max(pixel_size, 1))
 
 

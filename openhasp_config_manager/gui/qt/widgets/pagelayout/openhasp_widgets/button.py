@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import QGraphicsTextItem
 
 from openhasp_config_manager.gui.qt.async_bridge import qBridge
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import font_size
 
 
 class HaspButtonItem(EditableWidget):
@@ -21,8 +22,8 @@ class HaspButtonItem(EditableWidget):
         return self.obj_data.get("text", "")
 
     @property
-    def text_font(self) -> int:
-        return self.obj_data.get("text_font", 25)
+    def text_font(self) -> float:
+        return font_size(self.obj_data.get("text_font"))
 
     @property
     def text_color(self) -> str:
