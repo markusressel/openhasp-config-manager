@@ -1,6 +1,7 @@
 import logging
 import time
 from enum import Enum, StrEnum
+from pathlib import Path
 from typing import List, Optional, Dict, Callable, Tuple
 
 from PyQt6 import QtCore
@@ -9,6 +10,7 @@ from PyQt6.QtGui import QBrush, QCursor, QPainter, QPainterPath, QColor, QPen, Q
 from PyQt6.QtWidgets import QApplication, QGraphicsView, QWidget
 
 from openhasp_config_manager.gui.dimensions import UiDimensions
+from openhasp_config_manager.gui.domain.preview_images import find_image_file
 from openhasp_config_manager.gui.domain.ripple import Ripple, active_ripples
 from openhasp_config_manager.gui.qt.components import UiComponents
 from openhasp_config_manager.gui.qt.theme import current_colors
@@ -83,6 +85,7 @@ class PagePreviewWidget(QGraphicsView):
         self.mode = PreviewMode.Interact
         self.objects: List[dict] = []
         self._fit_to_view = True
+        self._image_files: Dict[str, Path] = {}
         # how much of the plate is darkened to simulate a lower backlight, 0..255
         self._darkness = 0
         self._empty_hint: Optional[str] = None
@@ -142,6 +145,14 @@ class PagePreviewWidget(QGraphicsView):
         """
         self._darkness = round(MAX_DARKNESS * (100 - brightness) / 100) if on else MAX_DARKNESS
         self.viewport().update()
+
+    def set_image_files(self, files: Dict[str, Path]):
+        """:param files: the image files of the device: their name on the plate -> the file, see `image_file`"""
+        self._image_files = files
+
+    def image_file(self, src: str) -> Optional[Path]:
+        """:return: the file the `src` of an object means, if the device has it"""
+        return find_image_file(src, self._image_files)
 
     def set_screen_size(self, width: int, height: int):
         self.scene().setSceneRect(0, 0, width, height)
