@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from tests import TestBase
@@ -198,3 +200,129 @@ class TestPagePreviewWidget(TestBase):
         x, y = at(101, 53)
         # off the grid, up to the rounding of the zoomed view
         assert abs(x - 101) <= 1 and abs(y - 53) <= 1
+
+
+@pytest.mark.usefixtures("qapp")
+class TestImageItem(TestBase):
+    @staticmethod
+    def _paint(item, width, height, offset=0):
+        from PyQt6.QtGui import QImage, QPainter
+
+        canvas = QImage(width, height, QImage.Format.Format_ARGB32)
+        canvas.fill(0xFF000000)
+        painter = QPainter(canvas)
+        painter.translate(offset, offset)
+        item.paint(painter, None)
+        painter.end()
+        return canvas
+
+    @staticmethod
+    def _item(tmp_path, name, content: bytes, **props):
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.image import HaspImageItem
+
+        class Preview:
+            def image_file(self, src):
+                return Path(tmp_path, name) if src.endswith(name) else None
+
+        Path(tmp_path, name).write_bytes(content)
+        return HaspImageItem(
+            obj_data={"obj": "img", "x": 0, "y": 0, "w": 4, "h": 4, "src": f"L:/{name}", **props}, parent_widget=Preview()
+        )
+
+    def test_outline_is_drawn_outside_of_the_object(self, tmp_path):
+        from tests.png import png
+
+        item = self._item(
+            tmp_path, "a.png", png((4, 4), [(0, 255, 0)] * 16), outline_width=2, outline_pad=1, outline_color="#ff0000"
+        )
+
+        canvas = self._paint(item, 14, 14, offset=5)
+
+        # the image is inside, then 1 px gap, then the ring of 2 px
+        assert canvas.pixelColor(6, 6).green() == 255
+        assert canvas.pixelColor(4, 6).red() == 0
+        assert canvas.pixelColor(3, 6).red() == 255
+        assert canvas.pixelColor(2, 6).red() == 255
+        assert canvas.pixelColor(1, 6).red() == 0
+        assert item.boundingRect().left() <= -5
+
+    def test_no_outline_without_a_width(self, tmp_path):
+        from tests.png import png
+
+        item = self._item(tmp_path, "a.png", png((4, 4), [(0, 255, 0)] * 16), outline_color="#ff0000")
+
+        canvas = self._paint(item, 14, 14, offset=5)
+
+        assert canvas.pixelColor(4, 6).red() == 0
+
+    def test_placeholder_has_the_radius_of_the_object(self):
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.image import HaspImageItem
+
+        item = HaspImageItem(obj_data={"obj": "img", "x": 0, "y": 0, "w": 20, "h": 20, "src": "http://x/a.png", "radius": 10})
+
+        canvas = self._paint(item, 20, 20)
+
+        assert canvas.pixelColor(0, 0).red() == 0
+        assert canvas.pixelColor(10, 3).red() == 255
+
+    def test_png_is_drawn_in_its_size_and_cut_off_by_the_object(self, tmp_path):
+        from tests.png import png
+
+        item = self._item(tmp_path, "a.png", png((6, 2), [(255, 0, 0)] * 12), w=4, h=4)
+
+        canvas = self._paint(item, 8, 8)
+
+        assert canvas.pixelColor(3, 1).red() == 255
+        # below the image and right of the object
+        assert canvas.pixelColor(3, 3).red() == 0
+        assert canvas.pixelColor(5, 1).red() == 0
+
+    def test_binary_image_keeps_transparent_pixels_and_ignores_zoom(self, tmp_path):
+        from openhasp_config_manager.processing.image_conversion import png_to_binary
+        from tests.png import png
+
+        content = png_to_binary(png((2, 1), [(0, 0, 255, 255), (255, 255, 255, 0)], mode="RGBA"))
+        item = self._item(tmp_path, "a.bin", content, zoom=512)
+
+        canvas = self._paint(item, 8, 8)
+
+        assert canvas.pixelColor(0, 0).blue() == 255
+        # transparent: the canvas shows through
+        assert canvas.pixelColor(1, 0).blue() == 0
+        assert canvas.pixelColor(2, 0).blue() == 0
+
+    def test_png_follows_its_zoom(self, tmp_path):
+        from tests.png import png
+
+        item = self._item(tmp_path, "a.png", png((1, 1), [(255, 0, 0)]), zoom=512)
+
+        canvas = self._paint(item, 8, 8)
+
+        assert canvas.pixelColor(1, 1).red() == 255
+        assert canvas.pixelColor(2, 2).red() == 0
+
+    def test_file_that_can_not_be_read_shows_the_placeholder(self, tmp_path):
+        # big and without a radius, so the corner is the color and the "IMG" text in the middle is not in the way
+        item = self._item(tmp_path, "a.bin", b"not an image", bg_color="#00ff00", w=20, h=20, radius=0)
+
+        assert item.image is None
+        assert self._paint(item, 24, 24).pixelColor(1, 1).green() == 255
+
+    def test_image_from_a_url_shows_the_placeholder(self):
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.image import HaspImageItem
+
+        item = HaspImageItem(
+            obj_data={"obj": "img", "x": 0, "y": 0, "w": 4, "h": 4, "src": "http://host/a"}, parent_widget=None
+        )
+
+        assert item.image is None
+
+    def test_data_change_reloads_the_image(self, tmp_path):
+        from tests.png import png
+
+        item = self._item(tmp_path, "a.png", png((1, 1), [(255, 0, 0)]))
+        assert item.image is not None
+        item.obj_data["src"] = "L:/missing.png"
+        item.refresh()
+
+        assert item.image is None
