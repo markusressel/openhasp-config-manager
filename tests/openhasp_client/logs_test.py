@@ -142,14 +142,14 @@ class TestLogLineAssembler(TestBase):
         assembler = LogLineAssembler()
 
         # WHEN
-        first = assembler.feed("[   1.000][1/2  3][4/5  6] HASP: Hel")
-        second = assembler.feed("lo\r\n[   2.000][1/2  3][4/5  6] HASP: Wor")
-        third = assembler.feed("ld\r\n")
+        first = assembler.feed("[   1.000][1/2  3][4/5  6] HASP: line 1")
+        second = assembler.feed("2\r\n[   2.000][1/2  3][4/5  6] HASP: line 3")
+        third = assembler.feed("4\r\n")
 
         # THEN
         assert first == []
-        assert [entry.message for entry in second] == ["Hello"]
-        assert [entry.message for entry in third] == ["World"]
+        assert [entry.message for entry in second] == ["line 12"]
+        assert [entry.message for entry in third] == ["line 34"]
 
     def test_a_control_code_split_between_two_chunks(self):
         # GIVEN

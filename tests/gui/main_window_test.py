@@ -4,7 +4,6 @@ from pathlib import Path
 import pytest
 
 from openhasp_config_manager.gui.domain.log_history import LogLinkState
-from openhasp_config_manager.gui.qt import main as window_module
 from tests import TestBase
 from tests.gui.helpers import qwait, wait_until
 
@@ -72,6 +71,8 @@ class TestLogsPanel(TestBase):
 
     def test_connects_only_while_it_is_visible(self, create_window, monkeypatch):
         # GIVEN
+        from openhasp_config_manager.gui.qt import main as window_module
+
         started = []
         monkeypatch.setattr(window_module.LogStreamController, "_restart", lambda self: started.append(self._active))
         window = create_window()
