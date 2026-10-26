@@ -565,6 +565,24 @@ Try the `logs` command (this does require network access to the device):
 > openhasp-config-manager logs -d plate35
 ```
 
+It prints the log until you press Ctrl+C, with the parts of a line (time, tag, message) and the errors and warnings highlighted. Useful options:
+
+- `--reconnect` connects again when the connection to the device is lost, e.g. while it restarts.
+- `-o plate35.log` also appends the log to a file (without colors).
+- `--no-color` turns the highlighting off. It is off anyway if the output is not a terminal.
+
+The status of the connection is printed to stderr, so the log itself can be piped into other tools, e.g. [lnav](https://lnav.org):
+
+```shell
+> openhasp-config-manager logs -d plate35 --reconnect | lnav
+```
+
+The log is read from the telnet server of the device, which only allows one connection at a time. A second `logs` or `shell`
+(or the Logs panel of the GUI) has to wait until the first one is closed.
+
+openHASP doesn't write the level of a message as text, only as the color of the line, and only if the device sends colors
+(`"debug": {"ansi": 1}` in its `config.json`). Without it the level is guessed from the tag and words like "failed" or "timeout".
+
 If that doesn't work, open a terminal and run the following command with the device connected via USB cable:
 
 ```shell
