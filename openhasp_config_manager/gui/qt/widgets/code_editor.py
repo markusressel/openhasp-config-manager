@@ -464,7 +464,7 @@ class CodeEditor(QPlainTextEdit):
         if self._hover_card.isVisible() and self._hover_card.key == key:
             return
         self._tip_area = area
-        anchor = QRect(self.viewport().mapToGlobal(area.topLeft()), area.size())
+        anchor = QRect(self.viewport().mapTo(self, area.topLeft()), area.size())
         self._hover_card.show_content(content, anchor, key)
 
     def _hide_hover_card(self):

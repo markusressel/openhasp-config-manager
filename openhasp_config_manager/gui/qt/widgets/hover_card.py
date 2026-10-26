@@ -9,8 +9,7 @@ import re
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
 
-from PyQt6 import QtCore
-from PyQt6.QtCore import QEvent, QPoint, QRect, Qt, pyqtSignal
+from PyQt6.QtCore import QPoint, QRect, Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QFontDatabase, QPalette
 from PyQt6.QtWidgets import QApplication, QFrame, QHBoxLayout, QLabel, QTextBrowser, QVBoxLayout, QWidget
 
@@ -22,6 +21,8 @@ _WIDTH = 360
 _BODY_WIDTH = _WIDTH - 26  # without the margins and the border of the card
 _MAX_BODY_HEIGHT = 240
 _GAP = 6  # between the card and what it is about
+_MARGIN = 4  # between the card and the edge of the editor
+_MIN_BODY_HEIGHT = 48
 _CODE = re.compile(r"`([^`]+)`")
 
 
@@ -41,7 +42,10 @@ def _with_alpha(color: QColor, alpha: int) -> str:
 
 
 class HoverCard(QFrame):
-    """A frameless window next to the text. The mouse can enter it (`interactive`), then the text is selectable."""
+    """
+    A card on top of the text editor (its child, not a window of its own: a window gets placed by the window manager, which often
+    puts it where the mouse is). The mouse can enter it (`interactive`), then its text is selectable.
+    """
 
     mouseEntered = pyqtSignal()
     mouseLeft = pyqtSignal()
@@ -49,9 +53,6 @@ class HoverCard(QFrame):
     def __init__(self, parent: QWidget, interactive: bool = True):
         super().__init__(parent)
         self._interactive = interactive
-        self.setWindowFlags(Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
-        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, not interactive)
         self.setFocusPolicy(Qt.FocusPolicy.ClickFocus if interactive else Qt.FocusPolicy.NoFocus)
 
@@ -113,6 +114,9 @@ class HoverCard(QFrame):
 
         self.setFixedWidth(_WIDTH)
         self._key: object = None
+        # the height of the text of the explanation without a limit by the room there is
+        self._body_height = 0
+        self.hide()
 
     # --- content ---
 
@@ -123,7 +127,8 @@ class HoverCard(QFrame):
 
     def show_content(self, content: CardContent, anchor: QRect, key: object = None):
         """
-        :param anchor: what the card is about, in global coordinates: it is shown above it, or below it if there is no room
+        :param anchor: what the card is about, in the coordinates of the parent: the card is shown above it, never on it. Below it
+            if there is no room above, and with a shorter text if there is no room at all.
         :param key: any value that says what the content is about, see `key`
         """
         self._key = key
@@ -173,10 +178,22 @@ class HoverCard(QFrame):
         measured.setTextWidth(_BODY_WIDTH)
         height = int(measured.size().height()) + 2
         measured.deleteLater()
-        self._body.setFixedHeight(min(height, _MAX_BODY_HEIGHT))
+        self._set_body_height(min(height, _MAX_BODY_HEIGHT), height)
+
+    def _set_body_height(self, shown: int, needed: int):
+        self._body_height = shown
+        self._body.setFixedHeight(shown)
         self._body.setVerticalScrollBarPolicy(
-            Qt.ScrollBarPolicy.ScrollBarAsNeeded if height > _MAX_BODY_HEIGHT else Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded if needed > shown else Qt.ScrollBarPolicy.ScrollBarAlwaysOff
         )
+
+    def _limit_height(self, room: int):
+        """Shortens the text, which then scrolls, if the card is higher than the room there is."""
+        overflow = self.height() - room
+        if overflow > 0 and self._body.isVisibleTo(self):
+            needed = int(self._body.document().size().height())
+            self._set_body_height(max(_MIN_BODY_HEIGHT, self._body.height() - overflow), max(needed, self._body.height()))
+            self.adjustSize()
 
     def _inline(self, text: str) -> str:
         """Escapes a text, `code` in backticks gets the look of code, a line break stays one."""
@@ -212,24 +229,33 @@ class HoverCard(QFrame):
         )
 
     def _position(self, anchor: QRect) -> QPoint:
-        screen = (QApplication.screenAt(anchor.center()) or QApplication.primaryScreen()).availableGeometry()
-        x = min(max(anchor.left(), screen.left() + _GAP), screen.right() - self.width() - _GAP)
-        y = anchor.top() - self.height() - _GAP
-        if y < screen.top():
-            y = anchor.bottom() + _GAP
+        bounds = self.parentWidget().rect()
+        above = anchor.top() - _GAP - _MARGIN
+        below = bounds.height() - anchor.bottom() - _GAP - _MARGIN
+        is_above = self.height() <= above or (self.height() > below and above >= below)
+        if self.height() > (above if is_above else below):
+            self._limit_height(above if is_above else below)
+        x = min(max(anchor.left(), _MARGIN), max(_MARGIN, bounds.width() - self.width() - _MARGIN))
+        y = anchor.top() - self.height() - _GAP if is_above else anchor.bottom() + _GAP
         return QPoint(x, y)
 
     def show_beside(self, popup: QWidget, content: CardContent):
-        """Shows the card right of a list (left of it if there is no room), at its top."""
+        """Shows the card right of a list (left of it if there is no room), at its top. Nothing if there is no room at all."""
+        parent = self.parentWidget()
         self._style()
         self._fill(content)
         self.adjustSize()
-        screen = popup.screen().availableGeometry()
-        origin = popup.mapToGlobal(QPoint(popup.width() + _GAP, 0))
-        if origin.x() + self.width() > screen.right():
-            origin = popup.mapToGlobal(QPoint(-self.width() - _GAP, 0))
-        self.move(origin)
+        self._limit_height(parent.height() - 2 * _MARGIN)
+        left = parent.mapFromGlobal(popup.mapToGlobal(QPoint(0, 0)))
+        x = left.x() + popup.width() + _GAP
+        if x + self.width() > parent.width() - _MARGIN:
+            x = left.x() - self.width() - _GAP
+        if x < _MARGIN:
+            self.hide()
+            return
+        self.move(x, min(max(left.y(), _MARGIN), max(_MARGIN, parent.height() - self.height() - _MARGIN)))
         self.show()
+        self.raise_()
 
     # --- the mouse ---
 
@@ -246,13 +272,3 @@ class HoverCard(QFrame):
             self.hide()
             return
         super().keyPressEvent(event)
-
-    def event(self, event):
-        if event.type() == QEvent.Type.WindowDeactivate and self._interactive and self.isVisible():
-            # clicked elsewhere, e.g. into the editor
-            QtCore.QTimer.singleShot(0, self._hide_if_inactive)
-        return super().event(event)
-
-    def _hide_if_inactive(self):
-        if self.isVisible() and not self.isActiveWindow():
-            self.hide()
