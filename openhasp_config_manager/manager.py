@@ -1,7 +1,7 @@
 import re
 import shutil
 from pathlib import Path
-from typing import List, Set, Optional
+from typing import Dict, List, Set, Optional
 
 import orjson
 
@@ -30,12 +30,19 @@ from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.openhasp_client.model.openhasp_config_manager_config import OpenhaspConfigManagerConfig
 from openhasp_config_manager.processing.device_processor import DeviceProcessor
 from openhasp_config_manager.processing.jsonl.jsonl import ObjectDimensionsProcessor, ObjectThemeProcessor
+from openhasp_config_manager.processing.references import (
+    find_font_references,
+    find_image_references,
+    font_file_name,
+    matching_names,
+)
 from openhasp_config_manager.processing.variables import VariableManager
 from openhasp_config_manager.validation.cmd import CmdFileValidator
 from openhasp_config_manager.validation.device_validator import DeviceValidator
 from openhasp_config_manager.validation.jsonl import JsonlObjectValidator
 
 CONFIG_FILE_NAME = "config.json"
+INCLUDE_FILES_VARIABLE = "include_files"
 
 
 def parse_cmd_commands(content) -> List[str]:
@@ -154,6 +161,7 @@ class ConfigManager:
         result.extend(self._read_jsonl_components(path, prefix))
         result.extend(self._read_cmd_components(path, prefix))
         result.extend(self._read_image_components(path, prefix))
+        result.extend(self._read_font_components(path, prefix))
 
         return result
 
@@ -214,6 +222,21 @@ class ConfigManager:
                         content=component.content,
                     )
                     result.append(image_component)
+        return result
+
+    def _read_font_components(self, path, prefix) -> List[FontComponent]:
+        # openHASP only loads `.ttf` in lowercase. Binary fonts (`.bin`) are read with the images, see `_find_referenced_raw_components`
+        result = []
+        for file in path.rglob("*.ttf"):
+            component = self._create_raw_component_from_path(
+                device_cfg_dir_root=path,
+                path=file.relative_to(path),
+                prefix=prefix,
+            )
+            if component is not None:
+                result.append(
+                    FontComponent(name=component.name, type=component.type, path=component.path, content=component.content)
+                )
         return result
 
     @staticmethod
@@ -448,11 +471,9 @@ class ConfigManager:
 
     def find_relevant_components(self, device: Device) -> List[Component]:
         """
-        Find all components that are relevant for the given device.
-        This includes all components that are referenced in the CMD files,
-        as well as all components that are referenced in the JSONL files.
-
-        TODO: allow the user to explicitly include specific components
+        Find all components that are relevant for the given device: the CMD and JSONL files that are loaded from a CMD file
+        (or are the `hasp.pages` file), the images and fonts that the rendered text of those files refers to, and the files
+        matched by the `include_files` patterns of the variables of the device (for files that are only used by MQTT commands).
 
         :param device: the device to find components for
         :return: a list of relevant components
@@ -460,17 +481,11 @@ class ConfigManager:
         result: List[Component] = []
         cmd_components = device.cmd
         jsonl_components = device.jsonl
-        image_components = device.images
 
         referenced_cmd_components = self._find_referenced_cmd_components(cmd_components)
 
         # find jsonl files referenced in CMD files
         referenced_jsonl_components: Set[Component] = self._find_referenced_jsonl_components(cmd_components, jsonl_components)
-
-        # find image files referenced in CMD files and JSONL files
-        referenced_image_components = self._find_referenced_image_components(
-            cmd_components, jsonl_components, image_components
-        )
 
         # compute component for jsonl file referenced in config.hasp.pages
         pages_jsonl_component_path = self._compute_component_path_of_pages_config_value(device.path, device.config)
@@ -481,9 +496,14 @@ class ConfigManager:
             )
             referenced_jsonl_components.add(pages_jsonl_component)
 
+        # find image and font files referenced in the texts that are deployed
+        referenced_raw_components = self._find_referenced_raw_components(
+            device, [*referenced_cmd_components, *referenced_jsonl_components]
+        )
+
         result.extend(referenced_jsonl_components)
         result.extend(referenced_cmd_components)
-        result.extend(referenced_image_components)
+        result.extend(referenced_raw_components)
         return result
 
     def _find_referenced_cmd_components(self, cmd_components: List[CmdComponent]) -> Set[CmdComponent]:
@@ -541,57 +561,61 @@ class ConfigManager:
             result.update(matches)
         return result
 
-    def _find_referenced_image_components(
-        self,
-        cmd_components: List[CmdComponent],
-        jsonl_components: List[JsonlComponent],
-        image_components: List[ImageComponent],
-    ) -> Set[ImageComponent]:
+    def _find_referenced_raw_components(self, device: Device, text_components: List[TextComponent]) -> List[RawComponent]:
         """
-        Find all image components that are referenced in the given cmd and jsonl components.
-        :param cmd_components:
-        :param jsonl_components:
-        :param image_components:
-        :return: set of referenced image components
+        Find the images and fonts that the given cmd and jsonl components refer to, and the files that the device includes
+        explicitly. Templates are rendered first, so a file name that comes from a variable is found as well.
+
+        An image that doesn't exist is an error. A font that doesn't exist is only a warning, since it could be on the plate already.
         """
-        referenced_image_components = set()
-        for component in cmd_components:
-            image_references = self._find_image_references_in_cmd_component(component)
-            for match in image_references:
-                matching_components = list(filter(lambda x: x.name == match, image_components))
-                if len(matching_components) <= 0:
-                    found_component_names = ",".join([c.name for c in image_components])
-                    raise AssertionError(f"Referenced image component not found: {match}, only found: {found_component_names}")
-                referenced_image_components.update(matching_components)
+        processor = self.create_device_processor(device)
+        images: Dict[str, RawComponent] = {c.name: c for c in device.images}
+        fonts: Dict[str, RawComponent] = {c.name: c for c in device.fonts}
+        # a `.bin` file is an image or a font, what it is only shows in the property that refers to it
+        raw_components: Dict[str, RawComponent] = {**images, **fonts}
 
-        for component in jsonl_components:
-            image_references = self._find_image_references_in_jsonl_component(component)
-            for match in image_references:
-                matching_components = list(filter(lambda x: x.name == match, image_components))
-                if len(matching_components) <= 0:
-                    found_component_names = ",".join([c.name for c in image_components])
-                    raise AssertionError(f"Referenced image component not found: {match}, only found: {found_component_names}")
-                referenced_image_components.update(matching_components)
+        result: Dict[str, RawComponent] = {}
+        for component in text_components:
+            try:
+                text = processor.normalize(device, component)
+            except Exception:
+                # the error is reported when the file is processed, the references of the source are the best guess here
+                text = component.content
+            for name in find_image_references(text):
+                if name not in images:
+                    found_component_names = ",".join(images)
+                    raise AssertionError(
+                        f"Image '{name}' referenced in {component.name} not found, only found: {found_component_names}"
+                    )
+                result[name] = images[name]
+            for reference in find_font_references(text):
+                name = font_file_name(reference, raw_components)
+                if name is None:
+                    warn(
+                        f"Font '{reference}' referenced in {component.name} has no file in the config, "
+                        f"expected '{reference}.bin' or '<name>.ttf' with the size at the end of the reference"
+                    )
+                    continue
+                result[name] = raw_components[name]
 
-        return referenced_image_components
+        hasp_font = device.config.hasp.font
+        if hasp_font:
+            name = font_file_name(hasp_font, raw_components)
+            if name is not None:
+                result[name] = raw_components[name]
 
-    @staticmethod
-    def _find_image_references_in_cmd_component(component: TextComponent) -> Set[str]:
-        result = set()
-        pattern = re.compile(r"L:/(.*\.(?:png|bin))")
-        for line in component.content.splitlines():
-            matches = re.findall(pattern, line)
-            result.update(matches)
-        return result
+        for name in matching_names(self._included_file_patterns(device), raw_components):
+            result[name] = raw_components[name]
+        return list(result.values())
 
-    @staticmethod
-    def _find_image_references_in_jsonl_component(component: TextComponent) -> Set[str]:
-        result = set()
-        pattern = re.compile(r"L:/(.*\.(?:png|bin))")
-        for line in component.content.splitlines():
-            matches = re.findall(pattern, line)
-            result.update(matches)
-        return result
+    def _included_file_patterns(self, device: Device) -> List[str]:
+        """:return: the patterns of the `include_files` variable: names of files on the plate (`common_images_*.png`) to always copy"""
+        patterns = self._variable_manager.get_vars(device.path).get(INCLUDE_FILES_VARIABLE, [])
+        if isinstance(patterns, str):
+            patterns = [patterns]
+        if not isinstance(patterns, list) or not all(isinstance(pattern, str) for pattern in patterns):
+            raise ValueError(f"'{INCLUDE_FILES_VARIABLE}' must be a list of file name patterns, found: {patterns}")
+        return patterns
 
     def determine_device_jsonl_component_order_for_cmd(
         self,
