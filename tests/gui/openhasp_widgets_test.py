@@ -302,10 +302,11 @@ class TestImageItem(TestBase):
         assert canvas.pixelColor(2, 2).red() == 0
 
     def test_file_that_can_not_be_read_shows_the_placeholder(self, tmp_path):
-        item = self._item(tmp_path, "a.bin", b"not an image", bg_color="#00ff00")
+        # big and without a radius, so the corner is the color and the "IMG" text in the middle is not in the way
+        item = self._item(tmp_path, "a.bin", b"not an image", bg_color="#00ff00", w=20, h=20, radius=0)
 
         assert item.image is None
-        assert self._paint(item, 8, 8).pixelColor(4, 4).green() == 255
+        assert self._paint(item, 24, 24).pixelColor(1, 1).green() == 255
 
     def test_image_from_a_url_shows_the_placeholder(self):
         from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.image import HaspImageItem
