@@ -1,9 +1,8 @@
-import html
 import re
 from typing import Callable, List, Optional, Set, Tuple
 
 from PyQt6 import QtCore
-from PyQt6.QtCore import QRect, QRegularExpression, QSettings, QSize, QStringListModel, Qt
+from PyQt6.QtCore import QEvent, QObject, QPoint, QRect, QRegularExpression, QSettings, QSize, QStringListModel, Qt
 from PyQt6.QtGui import (
     QAction,
     QColor,
@@ -17,11 +16,11 @@ from PyQt6.QtGui import (
     QTextFormat,
     QTextOption,
 )
-from PyQt6.QtWidgets import QCompleter, QMenu, QPlainTextEdit, QTextEdit, QToolTip, QWidget
+from PyQt6.QtWidgets import QCompleter, QMenu, QPlainTextEdit, QTextEdit, QWidget
 
 from openhasp_config_manager.gui.domain.problems import Severity
-from openhasp_config_manager.gui.domain.source_completion import OBJECT_PROPERTIES, complete, completion_context
-from openhasp_config_manager.gui.domain.source_docs import documentation_at
+from openhasp_config_manager.gui.domain.source_completion import complete, completion_context, properties_for
+from openhasp_config_manager.gui.domain.source_docs import help_at, object_type_at_line, property_help
 from openhasp_config_manager.gui.domain.source_edit import INDENT, indent_for_new_line, matching_bracket, toggle_comment
 from openhasp_config_manager.gui.domain.source_format import format_text
 from openhasp_config_manager.gui.domain.source_issues import SourceIssue, find_source_issues
@@ -30,11 +29,16 @@ from openhasp_config_manager.gui.domain.source_objects import SourceObject, fold
 from openhasp_config_manager.gui.domain.source_rename import id_at_line, rename_object_id
 from openhasp_config_manager.gui.domain.source_syntax import Language
 from openhasp_config_manager.gui.qt.source_highlighter import SourceHighlighter
+from openhasp_config_manager.gui.qt.widgets.hover_card import CardContent, HoverCard
 from openhasp_config_manager.gui.qt.theme import current_colors
 
 _FONT_SIZE_KEY = "editor/font_size"
 _DEFAULT_FONT_SIZE = 10
 _ISSUE_DELAY_MS = 300
+# how long the mouse has to rest on a property before its explanation shows (the default of Qt is about 700 ms)
+_HOVER_DELAY_MS = 120
+# how long the card stays when the mouse left the property and did not reach the card yet
+_HOVER_GRACE_MS = 300
 _MAX_SEARCH_MATCHES = 1000
 _PAIRS = {"{": "}", "[": "]", '"': '"'}
 _FOLD_WIDTH = 14
@@ -43,6 +47,20 @@ FLASH_MS = 3000
 # the opacity of the background of flashed lines, 0..255
 _FLASH_ALPHA = 80
 _CODE = re.compile(r"`([^`]+)`")
+
+
+class _HideWith(QObject):
+    """Hides a widget whenever the watched widget is hidden."""
+
+    def __init__(self, watched: QWidget, follower: QWidget):
+        super().__init__(watched)
+        self._follower = follower
+        watched.installEventFilter(self)
+
+    def eventFilter(self, watched, event):
+        if event.type() == QEvent.Type.Hide:
+            self._follower.hide()
+        return False
 
 
 def _marker_color(severity: Severity) -> QColor:
@@ -123,6 +141,31 @@ class CodeEditor(QPlainTextEdit):
         self._completer.setCompletionMode(QCompleter.CompletionMode.PopupCompletion)
         self._completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
         self._completer.activated.connect(self._insert_completion)
+        # what is completed, for the explanation of the highlighted entry: "property" or "variable", and the `obj` of the object
+        self._completion_kind = "property"
+        self._completion_object_type: Optional[str] = None
+        self._completion_card = HoverCard(self, interactive=False)
+        self._watched_popup: Optional[QWidget] = None
+        self._completer.highlighted[str].connect(self._show_completion_docs)
+
+        # shows the explanation under the mouse soon after it came to rest, not only after the (long) delay of Qt
+        self._hover_timer = QtCore.QTimer(self)
+        self._hover_timer.setSingleShot(True)
+        self._hover_timer.setInterval(_HOVER_DELAY_MS)
+        self._hover_timer.timeout.connect(self._show_hover_card)
+        self._hover_position = QPoint()
+        # the card of the property under the mouse: it stays while the mouse is on the property or on the card, so its text can be
+        # selected and copied
+        self._hover_card = HoverCard(self, interactive=True)
+        self._hover_card.mouseEntered.connect(lambda: self._hover_grace_timer.stop())
+        self._hover_card.mouseLeft.connect(lambda: self._hover_grace_timer.start())
+        self._hover_grace_timer = QtCore.QTimer(self)
+        self._hover_grace_timer.setSingleShot(True)
+        self._hover_grace_timer.setInterval(_HOVER_GRACE_MS)
+        self._hover_grace_timer.timeout.connect(self._hide_hover_card)
+        # what the card is about, in the coordinates of the viewport: moving inside of it keeps the card
+        self._tip_area = QRect()
+        self.verticalScrollBar().valueChanged.connect(lambda _value: self._hide_hover_card())
 
         self._issue_timer = QtCore.QTimer(self)
         self._issue_timer.setSingleShot(True)
@@ -383,17 +426,52 @@ class CodeEditor(QPlainTextEdit):
 
     def event(self, event):
         if event.type() == QtCore.QEvent.Type.ToolTip:
-            cursor = self.cursorForPosition(event.pos())
-            markers = self._markers_at(cursor.blockNumber() + 1)
-            documentation = self._documentation_at(event.pos())
-            if markers:
-                QToolTip.showText(event.globalPos(), "\n".join(marker.message for marker in markers), self)
-            elif documentation is not None:
-                QToolTip.showText(event.globalPos(), documentation, self)
-            else:
-                QToolTip.hideText()
+            # the card of the hover replaces the tool tip, which comes late and goes away when the mouse moves
             return True
         return super().event(event)
+
+    def _card_content_at(self, position: QPoint) -> CardContent:
+        """:return: the problems of the line and the explanation of the property, at a position of the viewport"""
+        cursor = self.cursorForPosition(position)
+        issues = [(marker.severity, marker.message) for marker in self._markers_at(cursor.blockNumber() + 1)]
+        found = None
+        if self.language == Language.JSONL:
+            found = help_at(self.objects(), cursor.block().text(), cursor.blockNumber() + 1, cursor.positionInBlock())
+        return CardContent(issues, found)
+
+    def _tip_area_at(self, position: QPoint) -> QRect:
+        """:return: the area of the viewport the card at a position is about (a word, or the line for an issue)"""
+        cursor = self.cursorForPosition(position)
+        if self._markers_at(cursor.blockNumber() + 1) and not self._card_content_at(position).help:
+            return self.blockBoundingGeometry(cursor.block()).translated(self.contentOffset()).toRect()
+        cursor.select(QTextCursor.SelectionType.WordUnderCursor)
+        first, last = QTextCursor(cursor), QTextCursor(cursor)
+        first.setPosition(cursor.selectionStart())
+        last.setPosition(cursor.selectionEnd())
+        return self.cursorRect(first).united(self.cursorRect(last))
+
+    def _show_hover_card(self):
+        position = self._hover_position
+        if not self.viewport().underMouse():
+            return
+        content = self._card_content_at(position)
+        if content.is_empty():
+            self._hover_grace_timer.start()
+            return
+        area = self._tip_area_at(position)
+        key = (self.cursorForPosition(position).blockNumber(), area.left(), area.right())
+        self._hover_grace_timer.stop()
+        if self._hover_card.isVisible() and self._hover_card.key == key:
+            return
+        self._tip_area = area
+        anchor = QRect(self.viewport().mapToGlobal(area.topLeft()), area.size())
+        self._hover_card.show_content(content, anchor, key)
+
+    def _hide_hover_card(self):
+        self._hover_timer.stop()
+        self._hover_grace_timer.stop()
+        self._tip_area = QRect()
+        self._hover_card.hide()
 
     # --- flash ---
 
@@ -438,6 +516,7 @@ class CodeEditor(QPlainTextEdit):
 
     def mousePressEvent(self, event):
         self.end_flash()
+        self._hide_hover_card()
         super().mousePressEvent(event)
 
     # --- objects, folding ---
@@ -626,7 +705,20 @@ class CodeEditor(QPlainTextEdit):
     def mouseMoveEvent(self, event):
         control = bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier)
         self._set_hover_link(self._link_at(event.position().toPoint()) if control else None)
+        self._hover_position = event.position().toPoint()
+        if self._hover_card.isVisible() and self._tip_area.contains(self._hover_position):
+            self._hover_grace_timer.stop()
+        else:
+            self._hover_timer.start()
+            if self._hover_card.isVisible():
+                self._hover_grace_timer.start()
         super().mouseMoveEvent(event)
+
+    def leaveEvent(self, event):
+        self._hover_timer.stop()
+        if self._hover_card.isVisible():
+            self._hover_grace_timer.start()
+        super().leaveEvent(event)
 
     def mouseReleaseEvent(self, event):
         found = self._link_at(event.position().toPoint())
@@ -644,17 +736,6 @@ class CodeEditor(QPlainTextEdit):
         if event.key() == Qt.Key.Key_Control:
             self._set_hover_link(None)
         super().keyReleaseEvent(event)
-
-    def _documentation_at(self, position) -> Optional[str]:
-        """:return: the explanation of the property under the mouse, as rich text"""
-        if self.language != Language.JSONL:
-            return None
-        cursor = self.cursorForPosition(position)
-        found = documentation_at(self.objects(), cursor.block().text(), cursor.blockNumber() + 1, cursor.positionInBlock())
-        if found is None:
-            return None
-        name, text = found
-        return f"<b>{html.escape(name)}</b><br>" + _CODE.sub(r"<code>\1</code>", html.escape(text)).replace("\n", "<br>")
 
     def contextMenuEvent(self, event):
         menu: QMenu = self.createStandardContextMenu()
@@ -779,6 +860,7 @@ class CodeEditor(QPlainTextEdit):
 
     def keyPressEvent(self, event: QKeyEvent):
         self.end_flash()
+        self._hide_hover_card()
         popup = self._completer.popup()
         key = event.key()
         modifiers = event.modifiers()
@@ -970,7 +1052,12 @@ class CodeEditor(QPlainTextEdit):
         if context is None:
             self._completer.popup().hide()
             return
-        words = complete(context, OBJECT_PROPERTIES, self._variables())
+        self._completion_kind = context.kind
+        found = object_at_line(self.objects(), self.textCursor().blockNumber() + 1)
+        self._completion_object_type = object_type_at_line(self.objects(), self.textCursor().blockNumber() + 1)
+        present = [prop.key for prop in found.properties] if found is not None else []
+        properties = properties_for(self._completion_object_type, context.prefix, present)
+        words = complete(context, properties, self._variables())
         if not words or (not force and not context.prefix):
             self._completer.popup().hide()
             return
@@ -982,6 +1069,20 @@ class CodeEditor(QPlainTextEdit):
         rect = self.cursorRect()
         rect.setWidth(popup.sizeHintForColumn(0) + popup.verticalScrollBar().sizeHint().width() + 8)
         self._completer.complete(rect)
+        self._show_completion_docs(words[0] if words else "")
+
+    def _show_completion_docs(self, word: str):
+        """Shows what the highlighted entry of the completion list is, next to the list."""
+        popup = self._completer.popup()
+        found = property_help(word, self._completion_object_type) if self._completion_kind == "property" else None
+        if found is None or not popup.isVisible():
+            self._completion_card.hide()
+            return
+        if popup is not self._watched_popup:
+            # the completer makes its list when it needs it, so it can only be watched once it shows
+            self._watched_popup = popup
+            _HideWith(popup, self._completion_card)
+        self._completion_card.show_beside(popup, CardContent(help=found))
 
     def _insert_completion(self, word: str):
         cursor = self.textCursor()
