@@ -30,11 +30,13 @@ from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.openhasp_client.model.openhasp_config_manager_config import OpenhaspConfigManagerConfig
 from openhasp_config_manager.processing.device_processor import DeviceProcessor
 from openhasp_config_manager.processing.jsonl.jsonl import ObjectDimensionsProcessor, ObjectThemeProcessor
+from openhasp_config_manager.processing.image_conversion import png_to_binary
 from openhasp_config_manager.processing.references import (
     find_font_references,
     find_image_references,
     font_file_name,
     matching_names,
+    use_binary_images,
 )
 from openhasp_config_manager.processing.variables import VariableManager
 from openhasp_config_manager.validation.cmd import CmdFileValidator
@@ -43,6 +45,7 @@ from openhasp_config_manager.validation.jsonl import JsonlObjectValidator
 
 CONFIG_FILE_NAME = "config.json"
 INCLUDE_FILES_VARIABLE = "include_files"
+BINARY_IMAGES_VARIABLE = "binary_images"
 
 
 def parse_cmd_commands(content) -> List[str]:
@@ -425,6 +428,8 @@ class ConfigManager:
         # only include files which are referenced in a cmd file
         relevant_components = self.find_relevant_components(device)
 
+        binary_images = self._binary_image_names(device, relevant_components)
+
         # let the processor manage each component
         for component in relevant_components:
             try:
@@ -432,12 +437,22 @@ class ConfigManager:
             except Exception as ex:
                 raise Exception(f"Error normalizing {component.path}: {ex}")
 
+            output_name = component.name
+            if component.name in binary_images:
+                try:
+                    output_content = png_to_binary(output_content)
+                except Exception as ex:
+                    raise Exception(f"Error converting {component.path} to a binary image: {ex}")
+                output_name = f"{component.name[:-4]}.bin"
+            elif isinstance(output_content, str):
+                output_content = use_binary_images(output_content, binary_images)
+
             try:
                 device_validator.validate(component, output_content)
             except Exception as ex:
                 raise Exception(f"Validation for {component.path} failed: {ex}")
 
-            self._write_output(device, component, output_content)
+            self._write_output(device, output_name, output_content)
 
     def create_device_processor(self, device: Device):
         """
@@ -610,12 +625,27 @@ class ConfigManager:
 
     def _included_file_patterns(self, device: Device) -> List[str]:
         """:return: the patterns of the `include_files` variable: names of files on the plate (`common_images_*.png`) to always copy"""
-        patterns = self._variable_manager.get_vars(device.path).get(INCLUDE_FILES_VARIABLE, [])
+        return self._file_patterns(device, INCLUDE_FILES_VARIABLE)
+
+    def _file_patterns(self, device: Device, variable: str) -> List[str]:
+        patterns = self._variable_manager.get_vars(device.path).get(variable, [])
         if isinstance(patterns, str):
             patterns = [patterns]
         if not isinstance(patterns, list) or not all(isinstance(pattern, str) for pattern in patterns):
-            raise ValueError(f"'{INCLUDE_FILES_VARIABLE}' must be a list of file name patterns, found: {patterns}")
+            raise ValueError(f"'{variable}' must be a list of file name patterns, found: {patterns}")
         return patterns
+
+    def _binary_image_names(self, device: Device, components: List[Component]) -> Set[str]:
+        """
+        :return: the names of the PNG images of the components that are deployed as binary images, see `BINARY_IMAGES_VARIABLE`
+        """
+        png_names = [c.name for c in components if isinstance(c, ImageComponent) and c.name.endswith(".png")]
+        names = set(matching_names(self._file_patterns(device, BINARY_IMAGES_VARIABLE), png_names))
+        taken = {c.name for c in components}
+        for name in sorted(names):
+            if f"{name[:-4]}.bin" in taken:
+                raise AssertionError(f"Can't convert '{name}' to '{name[:-4]}.bin': a file with that name is deployed as well")
+        return names
 
     def determine_device_jsonl_component_order_for_cmd(
         self,
@@ -675,10 +705,10 @@ class ConfigManager:
         return jsonl_components
 
     @staticmethod
-    def _write_output(device: Device, component: Component, output_content: str | bytes):
+    def _write_output(device: Device, name: str, output_content: str | bytes):
         device.output_dir.mkdir(parents=True, exist_ok=True)
 
-        component_output_file = Path(device.output_dir, component.name)
+        component_output_file = Path(device.output_dir, name)
 
         if isinstance(output_content, bytes):
             component_output_file.write_bytes(output_content)

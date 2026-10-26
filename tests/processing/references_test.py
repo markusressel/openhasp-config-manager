@@ -3,6 +3,7 @@ from openhasp_config_manager.processing.references import (
     find_image_references,
     font_file_name,
     matching_names,
+    use_binary_images,
 )
 
 
@@ -63,3 +64,11 @@ def test_matching_names_match_the_whole_name():
 
     assert matching_names(["a_*.png", "b.?in"], names) == ["a_icon.png", "b.bin"]
     assert matching_names([], names) == []
+
+
+def test_references_to_binary_images_are_rewritten_for_the_given_names_only():
+    text = '{"src": "L:/a.png", "text": "L:/b.png"}\np1b2.src=L:/a.png\nrun L:/page.jsonl'
+
+    assert (
+        use_binary_images(text, ["a.png"]) == '{"src": "L:/a.bin", "text": "L:/b.png"}\np1b2.src=L:/a.bin\nrun L:/page.jsonl'
+    )

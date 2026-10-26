@@ -3,6 +3,8 @@ from typing import Tuple
 from PIL import Image
 from temppathlib import NamedTemporaryFile
 
+from openhasp_config_manager.processing.image_conversion import image_to_binary
+
 
 class OpenHaspImageProcessor:
     async def image_to_rgb565(self, in_image, out_image, size: Tuple[int | None, int | None], fitscreen: bool):
@@ -13,8 +15,6 @@ class OpenHaspImageProcessor:
         :param size: the size of the output image
         :param fitscreen: if True, the image will be resized to fit the screen
         """
-        import struct
-
         if in_image.startswith("http"):
             tmp_file_container = await self._fetch_image_from_url(in_image)
         else:
@@ -49,20 +49,11 @@ class OpenHaspImageProcessor:
                     h_val = height if height is not None else original_height
                     w_val = width if width is not None else original_width
                     im = im.resize((int(h_val), int(w_val)), Image.Resampling.LANCZOS)
-                w, h = im.size  # actual size after resize
-
-                out_image.write(struct.pack("I", h << 21 | w << 10 | 4))
-
-                img = im.convert("RGB")
-                for pix in img.getdata():
-                    r = (pix[0] >> 3) & 0x1F
-                    g = (pix[1] >> 2) & 0x3F
-                    b = (pix[2] >> 3) & 0x1F
-                    out_image.write(struct.pack("H", (r << 11) | (g << 5) | b))
+                with im.convert("RGB") as img:
+                    out_image.write(image_to_binary(img, alpha=False))
                 out_image.flush()
 
                 im.close()
-                img.close()
 
             import asyncio
 

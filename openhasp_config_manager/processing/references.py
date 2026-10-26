@@ -55,3 +55,9 @@ def matching_names(patterns: Iterable[str], file_names: Iterable[str]) -> List[s
     """:return: the names that match one of the glob patterns (`*`, `?`, `[a-z]`) completely"""
     patterns = list(patterns)
     return [name for name in file_names if any(fnmatchcase(name, pattern) for pattern in patterns)]
+
+
+def use_binary_images(text: str, png_names: Iterable[str]) -> str:
+    """:return: the text with the references to the given PNG images (`L:/a.png`) changed to their binary version (`L:/a.bin`)"""
+    names = set(png_names)
+    return _IMAGE.sub(lambda match: f"L:/{match[1][:-4]}.bin" if match[1] in names else match[0], text)
