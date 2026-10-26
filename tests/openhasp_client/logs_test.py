@@ -50,7 +50,7 @@ class TestParseLogLine(TestBase):
 
     def test_a_line_without_a_time_continues_the_line_before(self):
         # WHEN
-        entry = parse_log_line("  {\"a\": 1}\r\n")
+        entry = parse_log_line('  {"a": 1}\r\n')
 
         # THEN
         assert entry == LogEntry(message='{"a": 1}', continuation=True)

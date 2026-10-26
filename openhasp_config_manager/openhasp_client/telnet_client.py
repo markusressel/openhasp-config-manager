@@ -73,7 +73,9 @@ class OpenHaspTelnetClient:
         while True:
             chunk = await reader.read(2048)
             if not chunk:
-                raise ConnectionError("The plate closed the connection while logging in")
+                raise ConnectionError(
+                    "The plate closed the connection while logging in (it only allows one telnet connection at a time)"
+                )
             buffer += chunk
             if "Prompt >" in buffer:
                 # the banner is followed by the prompt, and then the log

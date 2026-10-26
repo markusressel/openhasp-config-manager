@@ -1,7 +1,6 @@
 import click
 import pytest
 
-from openhasp_config_manager.cli import logs
 from openhasp_config_manager.cli.logs import c_logs, format_entry, should_color
 from openhasp_config_manager.openhasp_client.logs import LogConnectionEvent, parse_log_line
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
@@ -83,7 +82,9 @@ class TestLogsCommand(TestBase):
 
     async def test_the_status_is_not_part_of_the_output(self, monkeypatch, capsys):
         # GIVEN
-        self._follow(monkeypatch, [LogConnectionEvent(True), LogConnectionEvent(False, "reset"), parse_log_line("[   2.000] b")])
+        self._follow(
+            monkeypatch, [LogConnectionEvent(True), LogConnectionEvent(False, "reset"), parse_log_line("[   2.000] b")]
+        )
 
         # WHEN
         await c_logs(self.cfg_root, "test_device", color=False)

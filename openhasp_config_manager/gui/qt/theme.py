@@ -24,6 +24,10 @@ class ThemeColors:
     canvas: str
     # alignment guides and the selection outline in the preview
     accent: str
+    # the levels of the log that error, warning and success don't cover
+    log_verbose: str
+    log_debug: str
+    log_received: str
 
 
 THEMES = {
@@ -34,6 +38,9 @@ THEMES = {
         success="#98c379",
         canvas="#1e2127",
         accent="#ff4fd8",
+        log_verbose="#56b6c2",
+        log_debug="#61afef",
+        log_received="#d19a66",
     ),
     ThemeMode.LIGHT: ThemeColors(
         qt_theme="github_light",
@@ -42,6 +49,9 @@ THEMES = {
         success="#1a7f37",
         canvas="#d0d7de",
         accent="#d6008f",
+        log_verbose="#1b7c83",
+        log_debug="#0969da",
+        log_received="#bc4c00",
     ),
 }
 

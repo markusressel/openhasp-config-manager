@@ -3,6 +3,8 @@ from pathlib import Path
 
 import pytest
 
+from openhasp_config_manager.gui.domain.log_history import LogLinkState
+from openhasp_config_manager.gui.qt import main as window_module
 from tests import TestBase
 from tests.gui.helpers import wait_until
 
@@ -54,3 +56,38 @@ class TestSelectedDeviceIsRemembered(TestBase):
 
         # THEN
         assert window._selected_name is None
+
+
+class TestLogsPanel(TestBase):
+    def test_is_hidden_and_not_connected_until_it_is_shown(self, create_window):
+        # GIVEN
+        window = create_window()
+        wait_until(lambda: window.devices)
+        window.on_device_selected("test_device")
+        wait_until(lambda: window.device is not None)
+
+        # THEN
+        assert window.logs_dock.isHidden()
+        assert window.log_stream.state == LogLinkState.INACTIVE
+
+    def test_connects_only_while_it_is_visible(self, create_window, monkeypatch):
+        # GIVEN
+        started = []
+        monkeypatch.setattr(window_module.LogStreamController, "_restart", lambda self: started.append(self._active))
+        window = create_window()
+        wait_until(lambda: window.devices)
+        window.show()
+
+        # WHEN
+        window.logs_dock.show()
+        window.logs_dock.raise_()
+
+        # THEN
+        wait_until(lambda: window.log_stream._active)
+
+        # WHEN
+        window.logs_dock.hide()
+
+        # THEN
+        wait_until(lambda: not window.log_stream._active)
+        assert started[-2:] == [True, False]

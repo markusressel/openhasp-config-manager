@@ -110,6 +110,10 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
   preferences (window geometry, theme, view toggles) are plain `QSettings` keys.
 - **Preview controls** float inside the preview (`PagePreviewWidget.add_overlay`); `fit_to_view` keeps their rows free, so the plate is
   never covered. Messages about an object go next to it (`show_message`), errors also to the status bar (`OperationStatus.failed`).
+- **Logs**: `openhasp_client/logs.py` (Qt-free) parses the telnet output into `LogEntry`s (`segments()` are the parts a CLI or GUI styles)
+  and `follow_logs` reconnects with a growing delay; the `logs` command and the Logs dock (`gui/qt/log_stream.py`, `widgets/log_view.py`)
+  both use it. The plate only allows one telnet connection, a second one is closed while logging in, so the dock connects only while it
+  is visible. The level of a line is the ANSI color the plate sends (`debug.ansi`), otherwise it is guessed from tag and words.
 
 ## Testing
 

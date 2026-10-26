@@ -56,6 +56,7 @@ from openhasp_config_manager.gui.qt.config_watcher import ConfigWatcher
 from openhasp_config_manager.gui.qt.gui_state_publisher import GuiStatePublisher
 from openhasp_config_manager.gui.qt.source_sync import SourceEditorSync
 from openhasp_config_manager.gui.qt.connection import ConnectionController
+from openhasp_config_manager.gui.qt.log_stream import LogStreamController
 from openhasp_config_manager.gui.qt.operations import OperationStatus, error_text, run_busy
 from openhasp_config_manager.gui.qt.ui_session_store import UiSessionStore
 from openhasp_config_manager.gui.qt.theme import ThemeMode, apply_theme, current_mode, current_colors
@@ -63,6 +64,7 @@ from openhasp_config_manager.gui.qt.async_bridge import run_async
 from openhasp_config_manager.gui.qt.widgets.code_view import CodeView
 from openhasp_config_manager.gui.qt.widgets.device_list import DeviceListWidget
 from openhasp_config_manager.gui.qt.widgets.file_tree import FileTreeWidget
+from openhasp_config_manager.gui.qt.widgets.log_view import LogView
 from openhasp_config_manager.gui.qt.widgets.message_panel import MessagePanel, DiskConflictBanner, file_list_text
 from openhasp_config_manager.gui.qt.widgets.pagelayout import OpenHaspDevicePagesData
 from openhasp_config_manager.gui.qt.widgets.pagelayout.page_layout_editor import PageLayoutEditorWidget
@@ -318,6 +320,18 @@ class MainWindow(QMainWindow):
         self.file_tree_widget.openRequested.connect(self.source_sync.open_file)
         self.jsonl_dock = self._add_dock("Code", "jsonl_dock", self.code_view)
         self.splitDockWidget(self.preview_dock, self.jsonl_dock, Qt.Orientation.Vertical)
+
+        # the log of the plate, next to the code. Hidden at first: it holds the only telnet connection the plate allows while shown.
+        self.log_view = LogView()
+        self.logs_dock = self._add_dock("Logs", "logs_dock", self.log_view)
+        self.tabifyDockWidget(self.jsonl_dock, self.logs_dock)
+        self.jsonl_dock.raise_()
+        self.logs_dock.hide()
+        self.log_stream = LogStreamController(self)
+        self.log_stream.deviceChanged.connect(self.log_view.clear)
+        self.log_stream.entriesReceived.connect(self.log_view.add_entries)
+        self.log_stream.stateChanged.connect(lambda state, error: self.log_view.set_link(state, error))
+        self.logs_dock.visibilityChanged.connect(self.log_stream.set_active)
         self._size_docks()
 
         self.status_bar = StatusBarController(self, self.status, on_resync=self.page_layout_editor_widget.resync_page)
@@ -431,7 +445,7 @@ class MainWindow(QMainWindow):
         for action in [editor.action_zoom_in, editor.action_zoom_out, editor.action_zoom_fit]:
             view_menu.addAction(action)
         view_menu.addSeparator()
-        for dock in [self.devices_dock, self.properties_dock, self.jsonl_dock]:
+        for dock in [self.devices_dock, self.properties_dock, self.jsonl_dock, self.logs_dock]:
             view_menu.addAction(dock.toggleViewAction())
         view_menu.addSeparator()
         view_menu.addAction(
@@ -469,6 +483,7 @@ class MainWindow(QMainWindow):
         self.file_tree_widget.refresh_theme()
         self.page_layout_editor_widget.jsonl_preview.refresh_theme()
         self.source_editor.refresh_theme()
+        self.log_view.refresh_theme()
         self.page_layout_editor_widget.problems_panel.refresh_theme()
         self.page_layout_editor_widget.page_preview_widget.viewport().update()
 
@@ -490,7 +505,7 @@ class MainWindow(QMainWindow):
             QtCore.QTimer.singleShot(0, self._size_sidebar)
 
     def restore_default_layout(self):
-        for dock in [self.devices_dock, self.preview_dock, self.properties_dock, self.jsonl_dock]:
+        for dock in [self.devices_dock, self.preview_dock, self.properties_dock, self.jsonl_dock, self.logs_dock]:
             dock.setFloating(False)
         self.restoreState(self._default_dock_state, DOCK_STATE_VERSION)
         self._size_docks()
@@ -526,6 +541,7 @@ class MainWindow(QMainWindow):
                 event.ignore()
                 return
         self.connection.stop()
+        self.log_stream.stop()
         self._watcher.stop()
         self._state_publisher.stop()
         self.code_view.save_state()
@@ -603,6 +619,7 @@ class MainWindow(QMainWindow):
         if self.device is None or self.device.name != name:
             # another device: start without a connection and in interaction mode, not editing its objects by accident
             self.connection.set_device(None)
+            self.log_stream.set_device(None)
             self.page_layout_editor_widget.set_edit_mode(False)
             self.page_layout_editor_widget.plate.stop_live_preview()
         self.device = None
@@ -963,6 +980,7 @@ class MainWindow(QMainWindow):
         )
         self.page_layout_editor_widget.device_controls.set_device(self.device)
         self.connection.set_device(self.device)
+        self.log_stream.set_device(self.device)
         self.page_layout_editor_widget.set_data(
             session=session, device_pages_data=pages_data, page=self._page_after_reload.pop(key, None)
         )
