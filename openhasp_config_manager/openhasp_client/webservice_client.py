@@ -18,6 +18,8 @@ DELETE = "DELETE"
 # (a 460 kB font took longer than 5 seconds)
 REQUEST_TIMEOUT_SECONDS = 5
 UPLOAD_BYTES_PER_SECOND = 20_000
+# what the web server of the plate answers to a file it has stored
+UPLOAD_OK_REPLY = "Upload OK"
 
 
 class WebserviceClient:
@@ -240,11 +242,16 @@ class WebserviceClient:
         :param name: the target name of the file on the device
         :param content: the file content
         """
-        await self._do_request(
-            method=POST,
-            url=self._base_url + "edit",
-            files={f"{name}": content},
-        )
+        try:
+            await self._do_request(
+                method=POST,
+                url=self._base_url + "edit",
+                files={f"{name}": content},
+            )
+        except aiohttp.ClientResponseError as ex:
+            # the web server of the plate sometimes sends a second status line after "Upload OK", which aiohttp rejects
+            if UPLOAD_OK_REPLY not in ex.message:
+                raise
 
     async def get_files(self) -> List[str]:
         """
