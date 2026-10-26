@@ -575,6 +575,13 @@ class OpenHaspClient:
     async def shell(self):
         await self._telnet_client.shell()
 
+    async def apply_gui_settings(self, settings: Dict[str, int]):
+        """
+        Apply GUI settings (e.g. `idle1`) to the running plate with the `config/gui` command, which doesn't change what is saved on the
+        plate and doesn't need a restart. Only some settings can be used like this, see `uploader.LIVE_GUI_SETTINGS`.
+        """
+        await self.command(keyword="config/gui", params=orjson.dumps(settings).decode())
+
     async def set_ansi_colors(self, enabled: bool):
         """
         Turns the colors of the log lines (`debug.ansi`) on or off, which is how the plate tells the level of a log line. Takes effect at once.

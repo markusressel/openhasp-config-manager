@@ -26,10 +26,10 @@ async def _upload(device: Device, output_dir: Path, purge: bool, show_diff: bool
     return await uploader.upload(device, purge, show_diff)
 
 
-async def _deploy(config_manager: ConfigManager, device: Device, purge: bool, show_diff: bool):
+async def _deploy(config_manager: ConfigManager, device: Device, purge: bool, show_diff: bool, restart: bool = False):
     from openhasp_config_manager.deployment import deploy_device
 
-    await deploy_device(config_manager, device, purge=purge, show_diff=show_diff)
+    await deploy_device(config_manager, device, purge=purge, show_diff=show_diff, restart=restart)
 
 
 async def _reload(device: Device):

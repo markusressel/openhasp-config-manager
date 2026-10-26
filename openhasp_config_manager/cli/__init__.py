@@ -215,11 +215,16 @@ def generate(config_dir: Path, output_dir: Path, device: str):
 @click.option(*get_option_names(PARAM_DEVICE), required=False, default=None, help=get_option_help(PARAM_DEVICE))
 @click.option(*get_option_names(PARAM_PURGE), is_flag=True, help=get_option_help(PARAM_PURGE))
 @click.option(*get_option_names(PARAM_SHOW_DIFF), is_flag=True, help=get_option_help(PARAM_SHOW_DIFF))
-def deploy(config_dir: Path, output_dir: Path, device: str, purge: bool, diff: bool):
+@click.option(
+    "--restart",
+    is_flag=True,
+    help="Restart the plate after every change. By default it only rebuilds its pages, unless its settings or fonts changed.",
+)
+def deploy(config_dir: Path, output_dir: Path, device: str, purge: bool, diff: bool, restart: bool):
     """
-    Combines the generation and upload of a configuration.
+    Combines the generation and upload of a configuration, and makes the plate load it.
     """
-    asyncio.run(c_deploy(config_dir, output_dir, device, purge, diff))
+    asyncio.run(c_deploy(config_dir, output_dir, device, purge, diff, restart))
 
 
 @cli.command(name="upload")
