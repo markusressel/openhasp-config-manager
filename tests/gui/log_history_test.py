@@ -1,4 +1,4 @@
-from openhasp_config_manager.gui.domain.log_history import LogHistory, LogLinkState, describe_link, matches
+from openhasp_config_manager.gui.domain.log_history import ColorDetector, LogHistory, LogLinkState, describe_link, matches
 from openhasp_config_manager.openhasp_client.logs import parse_log_line
 from tests import TestBase
 
@@ -55,3 +55,34 @@ class TestDescribeLink(TestBase):
 
     def test_a_lost_connection_names_the_error(self):
         assert describe_link(LogLinkState.RECONNECTING, "reset") == ("Connection lost, trying again: reset", "error")
+
+
+class TestColorDetector(TestBase):
+    PLAIN = "[   1.000][1/2  3][4/5  6] HASP: a"
+    COLORED = "\x1b[97m[   1.000][1/2  3][4/5  6]\x1b[97m HASP: a"
+
+    def test_waits_for_enough_lines(self):
+        # GIVEN
+        detector = ColorDetector()
+
+        # THEN
+        assert not detector.observe(parse_log_line(self.PLAIN) for _ in range(ColorDetector.SAMPLE - 1))
+        assert detector.observe([parse_log_line(self.PLAIN)])
+
+    def test_a_colored_line_ends_the_doubt_for_good(self):
+        # GIVEN
+        detector = ColorDetector()
+        detector.observe(parse_log_line(self.PLAIN) for _ in range(5))
+
+        # WHEN
+        detector.observe([parse_log_line(self.COLORED)])
+
+        # THEN
+        assert not detector.observe(parse_log_line(self.PLAIN) for _ in range(20))
+
+    def test_lines_that_continue_another_do_not_count(self):
+        # GIVEN
+        detector = ColorDetector()
+
+        # THEN
+        assert not detector.observe(parse_log_line("  more text") for _ in range(20))

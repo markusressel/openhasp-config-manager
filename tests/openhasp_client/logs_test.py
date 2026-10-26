@@ -93,6 +93,10 @@ class TestParseLogLine(TestBase):
         assert entry.level == level
         assert entry.text == "[   1.000][1/2  3][4/5  6] HASP: all fine"
 
+    def test_a_line_knows_whether_the_plate_sent_its_color(self):
+        assert parse_log_line("\x1b[97m[   1.000][1/2  3][4/5  6]\x1b[97m HASP: a").colored
+        assert not parse_log_line("[   1.000][1/2  3][4/5  6] FILE: Failed to open").colored
+
     def test_the_color_of_the_time_is_not_a_level(self):
         # WHEN
         entry = parse_log_line("\x1b[96m[   1.000]\x1b[0m just text")

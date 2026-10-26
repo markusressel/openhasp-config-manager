@@ -88,6 +88,8 @@ class LogEntry:
     tag: str = ""
     level: Optional[LogLevel] = None
     continuation: bool = False
+    # whether the plate sent the color of the level (`debug.ansi`), so `level` is exact and not guessed
+    colored: bool = False
 
     @property
     def text(self) -> str:
@@ -140,6 +142,7 @@ def parse_log_line(line: str) -> LogEntry:
         memory=match["memory"],
         tag=tag,
         level=level or guess_level(tag, match["message"]),
+        colored=level is not None,
     )
 
 

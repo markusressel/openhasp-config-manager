@@ -582,6 +582,8 @@ The log is read from the telnet server of the device, which only allows one conn
 
 openHASP doesn't write the level of a message as text, only as the color of the line, and only if the device sends colors
 (`"debug": {"ansi": 1}` in its `config.json`). Without it the level is guessed from the tag and words like "failed" or "timeout".
+The Logs panel of the GUI notices a plate without colors and offers to turn them on (at once over MQTT, and in the `config.json` of
+the device so a deploy keeps it).
 
 If that doesn't work, open a terminal and run the following command with the device connected via USB cable:
 

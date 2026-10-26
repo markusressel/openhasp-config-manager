@@ -575,6 +575,13 @@ class OpenHaspClient:
     async def shell(self):
         await self._telnet_client.shell()
 
+    async def set_ansi_colors(self, enabled: bool):
+        """
+        Turns the colors of the log lines (`debug.ansi`) on or off, which is how the plate tells the level of a log line. Takes effect at once.
+        See: https://www.openhasp.com/0.7.0/commands/mqtt/#configuration
+        """
+        await self.command(keyword="config/debug", params=orjson.dumps({"ansi": int(enabled)}).decode())
+
     def follow_logs(self, reconnect: bool = True) -> AsyncIterator[LogItem]:
         """
         Streams the log of the plate (over its telnet server, which only allows one connection at a time).

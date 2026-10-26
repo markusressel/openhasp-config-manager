@@ -2,15 +2,17 @@ from typing import Dict, Iterable, Optional
 
 from PyQt6 import QtCore
 from PyQt6.QtGui import QColor, QFont, QFontDatabase, QPalette, QTextCharFormat, QTextCursor
-from PyQt6.QtWidgets import QLineEdit, QPlainTextEdit, QWidget
+from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLineEdit, QPlainTextEdit, QToolButton, QWidget
 
+from openhasp_config_manager.gui.dimensions import UiDimensions
 from openhasp_config_manager.gui.domain.log_history import MAX_ENTRIES, LogHistory, LogLinkState, describe_link, matches
-from openhasp_config_manager.gui.qt.components import UiComponents
+from openhasp_config_manager.gui.qt.components import ThemedIcons, UiComponents
 from openhasp_config_manager.gui.qt.theme import current_colors
 from openhasp_config_manager.openhasp_client.logs import LogEntry, LogLevel, Segment
 
 # if the view is scrolled to this many pixels from the end it follows the new entries
 _FOLLOW_TOLERANCE = 4
+_FOLLOW_BUTTON_MARGIN = 12
 
 
 class LogView(QWidget):
@@ -18,6 +20,9 @@ class LogView(QWidget):
     The log of a plate as colored text that follows the newest entry, like a terminal, unless it was scrolled up to read.
     Shows what it is given: the connection is the business of `LogStreamController`.
     """
+
+    # the user wants the plate to send the colors of the levels, see `set_colors_missing`
+    enableColorsRequested = QtCore.pyqtSignal()
 
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
@@ -40,12 +45,53 @@ class LogView(QWidget):
         header.addWidget(self._clear_button)
         layout.addLayout(header)
 
+        # shown while the plate sends no colors, so the levels are only guessed
+        self._colors_hint = QFrame()
+        hint_row = UiComponents.create_row(alignment=QtCore.Qt.AlignmentFlag.AlignVCenter)
+        hint_row.setContentsMargins(0, 0, 0, 0)
+        self._colors_hint.setLayout(hint_row)
+        hint_row.addWidget(
+            UiComponents.create_label(
+                "The plate sends no colors, so errors and warnings are only guessed from the text.",
+                role="hint",
+                word_wrap=True,
+            ),
+            1,
+        )
+        hint_row.addWidget(
+            UiComponents.create_button(
+                title="Enable colors…",
+                icon="palette",
+                tooltip="Ask the plate to send the level of each line (debug.ansi)",
+                on_click=self.enableColorsRequested.emit,
+            )
+        )
+        self._colors_hint.hide()
+        layout.addWidget(self._colors_hint)
+
         self._text = QPlainTextEdit()
         self._text.setReadOnly(True)
         self._text.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
         self._text.setMaximumBlockCount(MAX_ENTRIES)
         self._text.setFont(QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont))
         layout.addWidget(self._text, 1)
+
+        # floats over the end of the log while it was scrolled up, to follow the newest entry again
+        self._follow_bar = QFrame(self._text)
+        self._follow_bar.setProperty("role", "floating")
+        QHBoxLayout(self._follow_bar).setContentsMargins(
+            UiDimensions.half, UiDimensions.half, UiDimensions.half, UiDimensions.half
+        )
+        self._follow_button = QToolButton()
+        self._follow_bar.layout().addWidget(self._follow_button)
+        self._follow_button.setText("Follow")
+        self._follow_button.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self._follow_button.setToolTip("Scroll to the newest entry and follow the log again")
+        ThemedIcons.apply(self._follow_button, "arrow-collapse-down")
+        self._follow_button.clicked.connect(self.follow)
+        self._follow_bar.hide()
+        self._text.verticalScrollBar().valueChanged.connect(lambda _: self._update_follow_button())
+        self._text.installEventFilter(self)
 
         self.set_link(LogLinkState.NO_DEVICE)
 
@@ -60,10 +106,20 @@ class LogView(QWidget):
             self._insert(shown)
             if follow:
                 self._scroll_to_end()
+            self._update_follow_button()
 
     def clear(self):
         self._history.clear()
         self._text.clear()
+        self._update_follow_button()
+
+    def follow(self):
+        """Scrolls to the newest entry. The view follows the new ones from then on."""
+        self._scroll_to_end()
+        self._update_follow_button()
+
+    def set_colors_missing(self, missing: bool):
+        self._colors_hint.setVisible(missing)
 
     def set_link(self, state: LogLinkState, error: Optional[str] = None):
         text, role = describe_link(state, error)
@@ -113,6 +169,28 @@ class LogView(QWidget):
     def _scroll_to_end(self):
         bar = self._text.verticalScrollBar()
         bar.setValue(bar.maximum())
+
+    def is_follow_button_visible(self) -> bool:
+        return not self._follow_bar.isHidden()
+
+    def _update_follow_button(self):
+        self._follow_bar.setVisible(not self._is_following())
+        self._place_follow_button()
+
+    def _place_follow_button(self):
+        viewport = self._text.viewport().geometry()
+        bar = self._follow_bar
+        bar.adjustSize()
+        bar.move(
+            viewport.right() - bar.width() - _FOLLOW_BUTTON_MARGIN,
+            viewport.bottom() - bar.height() - _FOLLOW_BUTTON_MARGIN,
+        )
+        bar.raise_()
+
+    def eventFilter(self, watched, event):
+        if watched is self._text and event.type() == QtCore.QEvent.Type.Resize:
+            QtCore.QTimer.singleShot(0, self._update_follow_button)
+        return super().eventFilter(watched, event)
 
     def _formats(self) -> "_Formats":
         return _Formats(self.palette())

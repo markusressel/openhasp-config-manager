@@ -61,3 +61,28 @@ class LogHistory:
     def filtered(self, query: str = "") -> List[LogEntry]:
         """:return: the entries that contain the text"""
         return [entry for entry in self._entries if matches(entry, query)] if query else list(self._entries)
+
+
+class ColorDetector:
+    """
+    Tells whether the plate sends the colors that give a log line its level (`debug.ansi`). It can't know before it has seen some
+    lines: a plate with colors sends them on every line.
+    """
+
+    SAMPLE = 10
+
+    def __init__(self):
+        self._seen = 0
+        self._colored = False
+
+    def observe(self, entries: Iterable[LogEntry]) -> bool:
+        """:return: whether the colors are missing: there were enough lines and none had a color"""
+        for entry in entries:
+            if not entry.continuation:
+                self._seen += 1
+                self._colored = self._colored or entry.colored
+        return self.missing
+
+    @property
+    def missing(self) -> bool:
+        return self._seen >= self.SAMPLE and not self._colored

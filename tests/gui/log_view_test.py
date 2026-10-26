@@ -6,6 +6,7 @@ from tests.gui.helpers import wait_until
 pytest.importorskip("PyQt6")
 
 from PyQt6.QtGui import QColor  # noqa: E402
+from PyQt6.QtWidgets import QPushButton  # noqa: E402
 
 from openhasp_config_manager.gui.domain.log_history import LogLinkState  # noqa: E402
 from openhasp_config_manager.gui.qt.log_stream import LogStreamController  # noqa: E402
@@ -111,6 +112,82 @@ class TestLogView(TestBase):
 
         # THEN
         assert bar.value() == bar.maximum()
+
+    def test_the_hint_for_missing_colors_asks_to_enable_them(self, qapp):
+        # GIVEN
+        view = LogView()
+        requests = []
+        view.enableColorsRequested.connect(lambda: requests.append(True))
+        view.show()
+
+        # THEN
+        assert view._colors_hint.isHidden()
+
+        # WHEN
+        view.set_colors_missing(True)
+        view._colors_hint.findChild(QPushButton).click()
+
+        # THEN
+        assert not view._colors_hint.isHidden()
+        assert requests == [True]
+
+        # WHEN
+        view.set_colors_missing(False)
+
+        # THEN
+        assert view._colors_hint.isHidden()
+
+    def test_a_button_follows_the_log_again_after_scrolling_up(self, qapp):
+        # GIVEN
+        view = LogView()
+        view.resize(400, 120)
+        view.show()
+        view.add_entries([parse_log_line(f"[{i:4}.000] HASP: line {i}") for i in range(200)])
+        bar = view._text.verticalScrollBar()
+
+        # THEN: following, so nothing to catch up
+        assert not view.is_follow_button_visible()
+
+        # WHEN
+        bar.setValue(0)
+
+        # THEN
+        assert view.is_follow_button_visible()
+
+        # WHEN: new entries don't move the view, and the button stays
+        view.add_entries([parse_log_line("[ 999.000] HASP: more")])
+
+        # THEN
+        assert bar.value() == 0
+        assert view.is_follow_button_visible()
+
+        # WHEN
+        view._follow_button.click()
+
+        # THEN
+        assert bar.value() == bar.maximum()
+        assert not view.is_follow_button_visible()
+
+        # WHEN: it follows again
+        view.add_entries([parse_log_line("[ 999.000] HASP: even more")])
+
+        # THEN
+        assert bar.value() == bar.maximum()
+
+    def test_scrolling_back_to_the_end_by_hand_hides_the_button(self, qapp):
+        # GIVEN
+        view = LogView()
+        view.resize(400, 120)
+        view.show()
+        view.add_entries([parse_log_line(f"[{i:4}.000] HASP: line {i}") for i in range(200)])
+        bar = view._text.verticalScrollBar()
+        bar.setValue(0)
+
+        # WHEN
+        bar.setValue(bar.maximum())
+
+        # THEN
+        assert not view.is_follow_button_visible()
 
     def test_the_status_line(self, qapp):
         # GIVEN
@@ -242,6 +319,40 @@ class TestLogStreamController(TestBase):
         # THEN
         assert len(_FakeClient.created) == 1
         assert len(changed) == 1
+
+    def test_tells_when_the_plate_sends_no_colors(self, async_loop):
+        # GIVEN
+        lines = [parse_log_line(f"[{i:4}.000][1/2  3][4/5  6] HASP: a") for i in range(10)]
+        controller, entries, states, _ = self._controller(async_loop, lines)
+        missing = []
+        controller.colorsMissingChanged.connect(missing.append)
+        controller.set_device(_Device("plate"))
+
+        # WHEN
+        controller.set_active(True)
+
+        # THEN
+        wait_until(lambda: controller.colors_missing)
+        assert missing == [True]
+
+        # WHEN: the stream starts over, with a plate that sends colors
+        controller.set_active(False)
+
+        # THEN
+        assert missing == [True, False]
+
+    def test_colors_are_not_missing_when_lines_have_them(self, async_loop):
+        # GIVEN
+        colored = "\x1b[97m[   1.000][1/2  3][4/5  6]\x1b[97m HASP: a"
+        controller, entries, *_ = self._controller(async_loop, [parse_log_line(colored) for _ in range(15)])
+        controller.set_device(_Device("plate"))
+
+        # WHEN
+        controller.set_active(True)
+
+        # THEN
+        wait_until(lambda: len(entries) == 15)
+        assert not controller.colors_missing
 
     def test_no_device(self, async_loop):
         # GIVEN

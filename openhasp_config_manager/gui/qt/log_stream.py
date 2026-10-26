@@ -5,7 +5,7 @@ from typing import Callable, Optional
 
 from PyQt6 import QtCore
 
-from openhasp_config_manager.gui.domain.log_history import LogLinkState
+from openhasp_config_manager.gui.domain.log_history import ColorDetector, LogLinkState
 from openhasp_config_manager.gui.qt.async_bridge import get_global_async_loop
 from openhasp_config_manager.openhasp_client.logs import LogConnectionEvent, LogEntry
 from openhasp_config_manager.openhasp_client.model.device import Device
@@ -24,6 +24,8 @@ class LogStreamController(QtCore.QObject):
     deviceChanged = QtCore.pyqtSignal()
     entriesReceived = QtCore.pyqtSignal(list)  # List[LogEntry]
     stateChanged = QtCore.pyqtSignal(object, str)  # LogLinkState, the error of a lost connection
+    # whether the plate sends no colors, so the levels of the lines are guessed. Emitted when that changes.
+    colorsMissingChanged = QtCore.pyqtSignal(bool)
 
     # emitted from the asyncio thread, Qt queues them to the main thread; the int is the generation of the stream
     _received = QtCore.pyqtSignal(int, object)
@@ -36,6 +38,8 @@ class LogStreamController(QtCore.QObject):
         # incremented for every stream, so what a stream that was stopped still sends is ignored
         self._generation = 0
         self._future: Optional[Future] = None
+        self._colors = ColorDetector()
+        self.colors_missing = False
         self.state = LogLinkState.NO_DEVICE
         self._received.connect(self._on_received)
 
@@ -58,8 +62,14 @@ class LogStreamController(QtCore.QObject):
         self._active = False
         self._restart()
 
+    async def set_colors(self, enabled: bool):
+        """Turns the colors of the log on or off at the plate (`debug.ansi`)."""
+        await self._client_factory(self._device).set_ansi_colors(enabled)
+
     def _restart(self):
         self._generation += 1
+        self._colors = ColorDetector()
+        self._set_colors_missing(False)
         if self._future is not None:
             self._future.cancel()
             self._future = None
@@ -86,10 +96,16 @@ class LogStreamController(QtCore.QObject):
             return
         if isinstance(item, LogEntry):
             self.entriesReceived.emit([item])
+            self._set_colors_missing(self._colors.observe([item]))
         elif item.connected:
             self._set_state(LogLinkState.CONNECTED)
         else:
             self._set_state(LogLinkState.RECONNECTING, item.error or "")
+
+    def _set_colors_missing(self, missing: bool):
+        if missing != self.colors_missing:
+            self.colors_missing = missing
+            self.colorsMissingChanged.emit(missing)
 
     def _set_state(self, state: LogLinkState, error: str = ""):
         self.state = state
