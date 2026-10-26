@@ -8,6 +8,14 @@ None known.
 
 ## 2. Editor
 
+- [ ] **Fact-check the preview against openHASP/LVGL.** The widgets in `gui/qt/widgets/pagelayout/openhasp_widgets/` are drawn
+  with Qt from what was seen on a plate, not from the source. Defaults come from openHASP's own LVGL theme (in its source code), and
+  the preview uses guesses instead: e.g. `button.py` falls back to our green `#558B2F`, `drawing.py` has `DEFAULT_ACCENT` and
+  `DEFAULT_TRACK`, `base_object.py` has `_DEFAULT_RADIUS = 4`. Read the theme and object code of openHASP 0.7.0 (and the LVGL version
+  it uses), list the real defaults per object, part and state (radius, border, padding, gradients, colors, fonts), fix the widgets,
+  and compare them with a screenshot of the same page from a plate (`openhasp-config-manager screenshot`).
+  Then try to remove `FONT_SCALE = 0.7` in `drawing.py`: it is probably a fudge factor for the difference between Qt's and LVGL's text
+  rendering. Check how a font id maps to a font on the plate (family, pixel size) and use the real metrics.
 - [ ] Insert template variables inside longer texts (the suggestions replace the whole value today).
 - [ ] Preview of the new object types: objects inside a `tab` (`parentid`) and the open list of a `dropdown` are not drawn.
 - [ ] Files tree: "New .jsonl file here" on a folder (adds the `run L:/<flattened name>` line to the right .cmd and checks the 30
@@ -30,6 +38,11 @@ into JSONL objects.
 
 ## 4. The real plate
 
+- [ ] **Keep the display awake while Live preview is on.** The plate dims and turns its display off after the idle timeout, so the
+  live preview changes can't be seen. Wake it when Live preview starts and keep it awake as long as it is on. Check this regularly
+  (not once), because automations (e.g. a presence or night mode automation in haad-home) may turn the display off or dim it again
+  against our intention. Read the actual state (backlight/idle state) in each check, correct it only when it differs, and stop
+  when Live preview is turned off, so the plate goes back to its normal behavior.
 - [ ] Verify Restore plate: whether `clearpage all` also clears page 0, and whether `run /pages.jsonl`, `page`, `run /boot.cmd`,
   `run /online.cmd` rebuild the plate like a restart (the docs don't give the startup order).
 - [ ] Verify what the runtime and Live preview rely on: `delete` cascading to children, a single JSONL add onto a shown page, and the

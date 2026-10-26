@@ -1,54 +1,8 @@
 from pathlib import Path
 
-from openhasp_config_manager.gui.domain.source_docs import describe_property, documentation_at
 from openhasp_config_manager.gui.domain.source_links import find_links, link_at, link_targets, plate_names, resolve_link
-from openhasp_config_manager.gui.domain.source_objects import scan_objects
 from openhasp_config_manager.gui.domain.source_syntax import Language
 from tests import TestBase
-
-
-class TestDocs(TestBase):
-    def test_known_and_unknown(self):
-        assert "pixels" in describe_property("x")
-        assert describe_property("nope") is None
-
-    def test_suffix_is_part_and_state(self):
-        text = describe_property("bg_color12")
-        assert text.startswith(describe_property("bg_color"))
-        assert "part 1 is the indicator or needle" in text and "state 2 is pressed, not toggled" in text
-        assert "part 0 is the main part" in describe_property("text_color00")
-        assert "state 0 is default" in describe_property("text_color00")
-
-    def test_parts_depend_on_the_object(self):
-        assert "part 2 is the knob;" in describe_property("bg_color20", "switch")
-        assert "the colored track" in describe_property("bg_color10", "switch")
-        assert "the spinning segment" in describe_property("line_width10", "spinner")
-        assert "the tab buttons" in describe_property("text_font40", "tabview")
-        assert "the indicator or needle" in describe_property("bg_color10", "btn")
-        assert "the items/buttons" in describe_property("bg_color40", "unknown")
-
-    def test_state_beyond_the_known_ones(self):
-        text = describe_property("bg_color09")
-        assert "part 0" in text and "state 9" not in text
-
-    def test_not_a_property(self):
-        assert describe_property("nope02") is None
-        assert describe_property("12") is None
-
-
-class TestDocumentationAt(TestBase):
-    def test_the_key_at_the_column_with_the_parts_of_its_object(self):
-        text = '{"obj": "switch",\n "bg_color20": "red", "nope": 1}'
-        objects = scan_objects(text)
-        line = text.split("\n")[1]
-
-        name, doc = documentation_at(objects, line, 2, line.index("bg_color20"))
-        assert name == "bg_color20" and "part 2 is the knob" in doc
-        assert documentation_at(objects, line, 2, line.index("red")) is None
-        assert documentation_at(objects, line, 2, line.index("nope")) is None
-
-    def test_outside_of_objects(self):
-        assert documentation_at([], '"x": 1', 1, 1)[0] == "x"
 
 
 class TestLinks(TestBase):

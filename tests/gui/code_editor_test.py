@@ -2,7 +2,7 @@ import pytest
 
 pytest.importorskip("PyQt6")
 
-from PyQt6.QtCore import QPoint, Qt  # noqa: E402
+from PyQt6.QtCore import QPoint, QRect, Qt  # noqa: E402
 from PyQt6.QtGui import QContextMenuEvent, QTextCursor  # noqa: E402
 from PyQt6.QtTest import QTest  # noqa: E402
 
@@ -149,9 +149,41 @@ class TestCompletion(TestBase):
     def test_property_names(self, editor):
         _type(editor, '{"bg_c')
         assert editor._completer.popup().isVisible()
-        assert editor._completer.completionCount() == 2
+        assert editor._completer.completionCount() == 1
         QTest.keyClick(editor._completer.popup(), Qt.Key.Key_Return)
         assert editor.toPlainText().startswith('{"bg_color')
+
+    def test_a_key_is_completed_before_its_quote(self, editor):
+        editor.set_text('{\n  "obj": "slider",\n  ')
+        editor.go_to(3, 3)
+        _type(editor, "va")
+        assert editor._completer.popup().isVisible()
+        assert "val" in editor._completer.model().stringList()
+        QTest.keyClick(editor._completer.popup(), Qt.Key.Key_Return)
+        assert editor.toPlainText().endswith('  "val": ')
+        assert editor.textCursor().position() == len(editor.toPlainText())
+
+    def test_text_values_start_inside_their_quotes(self, editor):
+        editor.set_text("{\n  ")
+        editor.go_to(2, 3)
+        _type(editor, "alig")
+        QTest.keyClick(editor._completer.popup(), Qt.Key.Key_Return)
+        assert editor.toPlainText() == '{\n  "align": ""'
+        _type(editor, "left")
+        assert editor.toPlainText() == '{\n  "align": "left"'
+
+    def test_the_quote_that_was_closed_for_us_is_not_doubled(self, editor):
+        _type(editor, '{"alig')
+        assert editor.toPlainText() == '{"alig"}'
+        QTest.keyClick(editor._completer.popup(), Qt.Key.Key_Return)
+        assert editor.toPlainText() == '{"align": ""}'
+        _type(editor, "left")
+        assert editor.toPlainText() == '{"align": "left"}'
+
+    def test_nothing_before_the_quote_outside_of_objects(self, editor):
+        editor.set_text("")
+        _type(editor, "alig")
+        assert not editor._completer.popup().isVisible()
 
     def test_variables(self, editor):
         editor.set_variables(lambda: ["theme.navbar.height", "theme.name", "other"])
@@ -162,6 +194,52 @@ class TestCompletion(TestBase):
         assert editor._completer.completionCount() == 3
         _type(editor, "the")
         assert editor._completer.completionCount() == 2
+
+    def test_only_the_properties_of_the_type_of_the_object(self, editor):
+        editor.set_text('{"obj": "slider", "page": 1,\n "')
+        editor.go_to(2, 2)
+        QTest.keyClick(editor, Qt.Key.Key_Space, Qt.KeyboardModifier.ControlModifier)
+        words = set(editor._completer.model().stringList())
+        assert {"val", "min", "bg_color"} <= words
+        assert not {"text", "options", "obj", "page"} & words  # not of a slider, or there already
+
+    def test_explanation_of_the_highlighted_entry_next_to_the_list(self, editor):
+        editor.resize(900, 400)
+        editor.set_text('{"obj": "slider", "va')
+        editor.go_to(1, 21)
+        QTest.keyClick(editor, Qt.Key.Key_Space, Qt.KeyboardModifier.ControlModifier)
+        popup = editor._completer.popup()
+        card = editor._completion_card
+        assert popup.isVisible() and card.isVisible()
+        assert card._name.text() == "val" and "current value" in card._body.toPlainText()
+        assert card._kind.text() == "slider property"
+        popup.hide()
+        assert not card.isVisible()
+
+    def test_explanation_follows_the_highlighted_entry(self, editor):
+        editor.resize(900, 400)
+        editor.set_text('{"obj": "slider", "m')
+        editor.go_to(1, 20)
+        QTest.keyClick(editor, Qt.Key.Key_Space, Qt.KeyboardModifier.ControlModifier)
+        first = editor._completion_card._name.text()
+        QTest.keyClick(editor._completer.popup(), Qt.Key.Key_Down)
+        assert editor._completion_card._name.text() != first
+
+    def test_no_explanation_without_room_next_to_the_list(self, editor):
+        editor.resize(300, 400)
+        editor.set_text('{"obj": "slider", "va')
+        editor.go_to(1, 21)
+        QTest.keyClick(editor, Qt.Key.Key_Space, Qt.KeyboardModifier.ControlModifier)
+        assert editor._completer.popup().isVisible()
+        assert not editor._completion_card.isVisible()
+
+    def test_no_explanation_for_variables(self, editor):
+        editor.set_variables(lambda: ["theme.name"])
+        editor.set_text('{"text": "{{ ')
+        editor.go_to(1, 13)
+        QTest.keyClick(editor, Qt.Key.Key_Space, Qt.KeyboardModifier.ControlModifier)
+        assert editor._completer.popup().isVisible()
+        assert not editor._completion_card.isVisible()
 
     def test_nothing_to_complete(self, editor):
         _type(editor, "zzz")
@@ -426,25 +504,130 @@ class TestLinksAndDocs(TestBase):
         assert editor.viewport().cursor().shape() == Qt.CursorShape.IBeamCursor
         editor.close()
 
-    def test_documentation_of_a_property(self, editor):
+    def _position(self, editor, prefix: str, line: int = 0) -> QPoint:
+        # the line height of the editor is not the height of its font (it depends on the font of the machine)
+        block = editor.blockBoundingGeometry(editor.document().findBlockByNumber(line)).translated(editor.contentOffset())
+        return QPoint(editor.fontMetrics().horizontalAdvance(prefix) + 6, int(block.center().y()))
+
+    def _hover(self, editor, position: QPoint):
+        # the cursor of the test platform stays where it was, so moving to the same place twice sends no event
+        QTest.mouseMove(editor.viewport(), QPoint(450, 250))
+        QTest.mouseMove(editor.viewport(), position)
+
+    def test_hover_card_shows_after_a_short_delay(self, editor):
+        from openhasp_config_manager.gui.qt.widgets import code_editor
+
+        editor.set_text('{"w": "33%"}')
+        self._hover(editor, self._position(editor, '{"'))
+        assert code_editor._HOVER_DELAY_MS <= 150
+        assert not editor._hover_card.isVisible()
+        wait_until(lambda: editor._hover_card.isVisible(), timeout_ms=2 * code_editor._HOVER_DELAY_MS + 400)
+        assert editor._hover_card._name.text() == "w" and "pixels" in editor._hover_card._body.toPlainText()
+        assert editor._hover_card._kind.text() == "Property of every object"
+        assert "openhasp.com" in editor._hover_card._link.text()
+
+    def _card_and_property(self, editor, line: int):
+        """:return: the rectangles of the card and of the property it is about, in the coordinates of the editor"""
+        self._hover(editor, self._position(editor, '{"', line))
+        wait_until(lambda: editor._hover_card.isVisible(), timeout_ms=1000)
+        area = editor._tip_area
+        return editor._hover_card.geometry(), QRect(editor.viewport().mapTo(editor, area.topLeft()), area.size())
+
+    def test_hover_card_is_above_the_property(self, editor):
+        editor.resize(600, 700)
+        editor.set_text("\n" * 14 + '{"w": "33%"}')
+        card, area = self._card_and_property(editor, 14)
+        assert card.bottom() < area.top()
+        assert editor.rect().contains(card)
+
+    def test_hover_card_is_below_if_there_is_no_room_above(self, editor):
+        editor.resize(600, 700)
+        editor.set_text('{"w": "33%"}')
+        card, area = self._card_and_property(editor, 0)
+        assert card.top() > area.bottom()
+        assert editor.rect().contains(card)
+
+    def test_hover_card_never_covers_the_property(self, editor):
+        # an editor that is too small for the card above or below: the text of the card gets shorter
+        editor.resize(600, 160)
+        editor.set_text("\n" * 3 + '{"obj": "switch", "bg_color10": "x"}')
+        card, area = self._card_and_property(editor, 3)
+        assert not card.intersects(area)
+
+    def test_hover_card_is_not_a_window(self, editor):
+        assert not editor._hover_card.isWindow() and editor._hover_card.parentWidget() is editor
+        assert not editor._completion_card.isWindow()
+
+    def test_hover_card_stays_while_the_mouse_is_on_it(self, editor):
+        from openhasp_config_manager.gui.qt.widgets import code_editor
+
+        editor.set_text('{"w": "33%"}')
+        self._hover(editor, self._position(editor, '{"'))
+        wait_until(lambda: editor._hover_card.isVisible(), timeout_ms=1000)
+        # the mouse leaves the editor and reaches the card in time
+        editor._hover_grace_timer.start()
+        editor._hover_card.mouseEntered.emit()
+        QTest.qWait(code_editor._HOVER_GRACE_MS + 100)
+        assert editor._hover_card.isVisible()
+        # and leaves the card
+        editor._hover_card.mouseLeft.emit()
+        wait_until(lambda: not editor._hover_card.isVisible(), timeout_ms=code_editor._HOVER_GRACE_MS + 500)
+
+    def test_hover_card_goes_away_after_the_mouse_left_the_property(self, editor):
+        from openhasp_config_manager.gui.qt.widgets import code_editor
+
+        editor.set_text('{"w": "33%", "h": 1}')
+        self._hover(editor, self._position(editor, '{"'))
+        wait_until(lambda: editor._hover_card.isVisible(), timeout_ms=1000)
+        self._hover(editor, QPoint(490, 290))
+        wait_until(lambda: not editor._hover_card.isVisible(), timeout_ms=code_editor._HOVER_GRACE_MS + 500)
+
+    def test_hover_card_moves_to_the_next_property(self, editor):
+        editor.set_text('{"w": "33%", "h": 1}')
+        self._hover(editor, self._position(editor, '{"'))
+        wait_until(lambda: editor._hover_card.isVisible() and editor._hover_card._name.text() == "w", timeout_ms=1000)
+        self._hover(editor, self._position(editor, '{"w": "33%", "h'))
+        wait_until(lambda: editor._hover_card._name.text() == "h", timeout_ms=1000)
+        assert editor._hover_card.isVisible()
+
+    def test_hover_card_goes_away_when_typing_or_clicking(self, editor):
+        editor.set_text('{"w": "33%"}')
+        for action in (
+            lambda: QTest.keyClick(editor, Qt.Key.Key_End),
+            lambda: QTest.mouseClick(editor.viewport(), Qt.MouseButton.LeftButton, pos=QPoint(300, 100)),
+        ):
+            self._hover(editor, self._position(editor, '{"'))
+            wait_until(lambda: editor._hover_card.isVisible(), timeout_ms=1000)
+            action()
+            assert not editor._hover_card.isVisible()
+
+    def test_card_content_of_a_property(self, editor):
         text = '{"w": "33%", "nope": 1, "bg_color02": "x"}'
         editor.set_text(text)
 
-        def doc_at(prefix: str):
-            return editor._documentation_at(QPoint(editor.fontMetrics().horizontalAdvance(prefix) + 6, 8))
+        def at(prefix: str):
+            return editor._card_content_at(self._position(editor, prefix))
 
-        assert doc_at('{"').startswith("<b>w</b><br>") and "pixels" in doc_at('{"')
-        assert doc_at('{"w": "33%", "no') is None  # unknown property
-        assert doc_at('{"w": "33%') is None  # a value
+        assert at('{"').help.name == "w" and "pixels" in at('{"').help.summary
+        assert at('{"w": "33%", "no').is_empty()  # unknown property
+        assert at('{"w": "33%').is_empty()  # a value
         editor.set_text('{"src": "x", "text_color02": 1}')
-        assert "<code>L:/image.png</code>" in doc_at('{"sr')
-        assert "<b>text_color02</b>" in doc_at('{"src": "x", "text_c') and "state 2 is pressed" in doc_at(
-            '{"src": "x", "text_c'
-        )
+        assert "`L:/image.png`" in at('{"sr').help.summary
+        found = at('{"src": "x", "text_c').help
+        assert found.name == "text_color02" and dict(found.details)["State"] == "2: pressed, not toggled"
         editor.set_text('{"obj": "switch", "bg_color10": 1}')
-        assert "the colored track" in doc_at('{"obj": "switch", "bg_c')
+        assert dict(at('{"obj": "switch", "bg_c').help.details)["Part"] == "1: the indicator (the colored track)"
         editor.set_text("run x")
-        assert doc_at("ru") is None
+        assert at("ru").is_empty()
+
+    def test_card_shows_issues_with_the_explanation(self, editor):
+        editor.set_text('{"w": "33%"}')
+        editor.set_app_markers([SourceIssue(1, 1, 3, Severity.ERROR, "Broken")])
+        content = editor._card_content_at(self._position(editor, '{"'))
+        assert content.issues == [(Severity.ERROR, "Broken")] and content.help.name == "w"
+        self._hover(editor, self._position(editor, '{"'))
+        wait_until(lambda: editor._hover_card.isVisible(), timeout_ms=1000)
+        assert "Broken" in editor._hover_card._issues.text()
 
 
 class TestFlash(TestBase):
