@@ -14,6 +14,11 @@ GET = "GET"
 POST = "POST"
 DELETE = "DELETE"
 
+# how long a plate may take to answer a request, and how many bytes per second an upload is expected to reach at least
+# (a 460 kB font took longer than 5 seconds)
+REQUEST_TIMEOUT_SECONDS = 5
+UPLOAD_BYTES_PER_SECOND = 20_000
+
 
 class WebserviceClient:
     def __init__(self, url: str, username: str, password: str):
@@ -322,7 +327,7 @@ class WebserviceClient:
                 json=json,
                 data=data,
                 auth=auth,
-                timeout=aiohttp.ClientTimeout(total=5),
+                timeout=aiohttp.ClientTimeout(total=self._timeout_seconds(files)),
             ) as response:
                 response.raise_for_status()
                 content = await response.read()
@@ -332,6 +337,11 @@ class WebserviceClient:
                     else:
                         return content
                 return None
+
+    @staticmethod
+    def _timeout_seconds(files: Optional[Dict[str, bytes]]) -> float:
+        """:return: how long a request may take: more for the upload of big files, which the plate writes to flash"""
+        return REQUEST_TIMEOUT_SECONDS + sum(len(content) for content in (files or {}).values()) / UPLOAD_BYTES_PER_SECOND
 
     @staticmethod
     def _compute_base_url(url: str) -> str:
