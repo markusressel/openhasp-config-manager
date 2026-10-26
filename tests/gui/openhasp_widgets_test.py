@@ -305,7 +305,7 @@ class TestImageItem(TestBase):
         item = self._item(tmp_path, "a.bin", b"not an image", bg_color="#00ff00")
 
         assert item.image is None
-        assert self._paint(item, 8, 8).pixelColor(0, 0).green() == 255
+        assert self._paint(item, 8, 8).pixelColor(4, 4).green() == 255
 
     def test_image_from_a_url_shows_the_placeholder(self):
         from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.image import HaspImageItem
