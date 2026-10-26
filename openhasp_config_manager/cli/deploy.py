@@ -4,7 +4,7 @@ from openhasp_config_manager.cli.common import _create_config_manager, _analyze_
 from openhasp_config_manager.console import warn, success, error
 
 
-async def c_deploy(config_dir: Path, output_dir: Path, device: str, purge: bool, diff: bool):
+async def c_deploy(config_dir: Path, output_dir: Path, device: str, purge: bool, diff: bool, restart: bool = False):
     try:
         config_manager = _create_config_manager(config_dir, output_dir)
         filtered_devices, ignored_devices = _analyze_and_filter(config_manager=config_manager, device_filter=device)
@@ -25,6 +25,7 @@ async def c_deploy(config_dir: Path, output_dir: Path, device: str, purge: bool,
                 device=device,
                 purge=purge,
                 show_diff=diff,
+                restart=restart,
             )
 
         success("Done!")

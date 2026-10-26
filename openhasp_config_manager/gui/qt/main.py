@@ -394,7 +394,7 @@ class MainWindow(QMainWindow):
             "upload",
             self.deploy_saved_files,
             tooltip="Upload the saved files to the plate, like the deploy command of the CLI. "
-            "The plate restarts if anything changed.\nUnsaved changes of the draft are not deployed.",
+            "The plate rebuilds its pages, or restarts if its settings or fonts changed.\nUnsaved changes of the draft are not deployed.",
         )
         # next to the files they act on
         self.file_tree_widget.set_actions(
@@ -978,7 +978,7 @@ class MainWindow(QMainWindow):
 
         def __on_success(changed: bool):
             if changed:
-                self.status.succeeded.emit(f"Deployed {name}: the plate restarts to load the new files")
+                self.status.succeeded.emit(f"Deployed {name}: the plate loaded the new files")
                 self.connection.plate_restored()
             else:
                 self.status.succeeded.emit(f"{name} is already up to date")

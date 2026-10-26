@@ -1,3 +1,4 @@
+from dataclasses import replace
 from typing import Dict, List
 
 from openhasp_config_manager.manager import ConfigManager
@@ -16,6 +17,9 @@ class FakeClient:
         self.mqtt_config = device.config.mqtt
         self.http_config = device.config.http
         self.gui_config = device.config.gui
+        # like the plate, which doesn't tell its passwords
+        self.mask_passwords = False
+        self.applied_live: List[dict] = []
 
     async def get_files(self) -> List[str]:
         return list(self.files)
@@ -32,16 +36,19 @@ class FakeClient:
         self.deleted.append(file_name)
 
     async def get_mqtt_config(self):
-        return self.mqtt_config
+        return replace(self.mqtt_config, password="********") if self.mask_passwords else self.mqtt_config
 
     async def set_mqtt_config(self, config):
         self.mqtt_config = config
 
     async def get_http_config(self):
-        return self.http_config
+        return replace(self.http_config, password="********") if self.mask_passwords else self.http_config
 
     async def set_http_config(self, config):
         self.http_config = config
+
+    async def apply_gui_settings(self, settings):
+        self.applied_live.append(settings)
 
     async def get_gui_config(self):
         return self.gui_config
@@ -95,3 +102,80 @@ class TestConfigUploader(TestBase):
 
         # THEN
         assert client.deleted == ["old.jsonl"]
+
+    async def test_upload_changes_tells_what_changed(self, tmp_path):
+        # GIVEN
+        device = self._processed_device(tmp_path)
+        client = FakeClient(device)
+        client.files = {"old.jsonl": b"{}", "config.json": b"{}"}
+        uploader = ConfigUploader(tmp_path, client)
+
+        # WHEN
+        result = await uploader.upload_changes(device, purge=True)
+
+        # THEN
+        assert sorted(result.files) == sorted(file.name for file in device.output_dir.iterdir())
+        assert result.deleted == ["old.jsonl"]
+        assert result.changed
+        assert not (await uploader.upload_changes(device)).changed
+
+    async def test_masked_passwords_do_not_count_as_a_change(self, tmp_path):
+        # GIVEN
+        device = self._processed_device(tmp_path)
+        client = FakeClient(device)
+        client.mask_passwords = True
+        uploader = ConfigUploader(tmp_path, client)
+
+        # WHEN
+        first = await uploader.upload_changes(device)
+        second = await uploader.upload_changes(device)
+
+        # THEN the passwords are sent once, since nothing says they are on the plate. Then the plate has them.
+        assert first.config_changed
+        assert not second.config_changed
+
+    async def test_changed_password_is_sent_when_the_plate_masks_it(self, tmp_path):
+        # GIVEN
+        device = self._processed_device(tmp_path)
+        client = FakeClient(device)
+        client.mask_passwords = True
+        uploader = ConfigUploader(tmp_path, client)
+        await uploader.upload_changes(device)
+        device.config.mqtt = replace(device.config.mqtt, password="new")
+
+        # WHEN
+        result = await uploader.upload_changes(device)
+
+        # THEN
+        assert result.config_changed
+        assert client.mqtt_config.password == "new"
+
+    async def test_idle_timeouts_are_applied_to_the_running_plate(self, tmp_path):
+        # GIVEN the plate has other idle timeouts, like haad leaves them
+        device = self._processed_device(tmp_path)
+        client = FakeClient(device)
+        client.gui_config = replace(device.config.gui, idle1=15, idle2=0)
+
+        # WHEN
+        result = await ConfigUploader(tmp_path, client).upload_changes(device)
+
+        # THEN no restart is needed
+        assert result.settings_applied
+        assert not result.config_changed
+        assert result.changed
+        assert not result.needs_restart
+        assert client.applied_live == [{"idle1": device.config.gui.idle1, "idle2": device.config.gui.idle2}]
+
+    async def test_rotation_needs_a_restart(self, tmp_path):
+        # GIVEN
+        device = self._processed_device(tmp_path)
+        client = FakeClient(device)
+        client.gui_config = replace(device.config.gui, rotate=(device.config.gui.rotate or 0) + 1)
+
+        # WHEN
+        result = await ConfigUploader(tmp_path, client).upload_changes(device)
+
+        # THEN
+        assert result.config_changed
+        assert result.needs_restart
+        assert client.applied_live == []

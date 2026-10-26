@@ -1,29 +1,52 @@
+import pytest
+
 from openhasp_config_manager.cli.common import _create_config_manager, _deploy
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
-from openhasp_config_manager.uploader import ConfigUploader
+from openhasp_config_manager.uploader import ConfigUploader, UploadResult
 from tests import TestBase
 
 
 class TestDeploy(TestBase):
-    async def _deploy(self, tmp_path, monkeypatch, changed: bool):
-        reboots = []
+    async def _deploy(self, tmp_path, monkeypatch, result: UploadResult, restart: bool = False):
+        actions = []
 
-        async def upload(uploader, device, purge, show_diff):
-            return changed
+        async def upload_changes(uploader, device, purge, show_diff):
+            return result
 
         async def reboot(client):
-            reboots.append(client._device.name)
+            actions.append("reboot")
 
-        monkeypatch.setattr(ConfigUploader, "upload", upload)
+        async def restore_from_files(client):
+            actions.append("reload")
+
+        monkeypatch.setattr(ConfigUploader, "upload_changes", upload_changes)
         monkeypatch.setattr(OpenHaspClient, "reboot", reboot)
+        monkeypatch.setattr(OpenHaspClient, "restore_from_files", restore_from_files)
         config_manager = _create_config_manager(self.cfg_root, tmp_path)
         device = config_manager.analyze()[0]
 
-        await _deploy(config_manager, device, purge=False, show_diff=False)
-        return reboots
+        await _deploy(config_manager, device, purge=False, show_diff=False, restart=restart)
+        return actions
 
-    async def test_reboots_when_files_changed(self, tmp_path, monkeypatch):
-        assert await self._deploy(tmp_path, monkeypatch, changed=True) == ["test_device"]
+    async def test_reloads_pages_when_only_pages_changed(self, tmp_path, monkeypatch):
+        result = UploadResult(files=["pages.jsonl", "boot.cmd", "icon.png"])
+        assert await self._deploy(tmp_path, monkeypatch, result) == ["reload"]
 
-    async def test_no_reboot_without_changes(self, tmp_path, monkeypatch):
-        assert await self._deploy(tmp_path, monkeypatch, changed=False) == []
+    @pytest.mark.parametrize(
+        "result", [UploadResult(config_changed=True), UploadResult(files=["arial20.ttf"]), UploadResult(files=["a.bin"])]
+    )
+    async def test_reboots_when_the_plate_loads_it_at_startup(self, tmp_path, monkeypatch, result):
+        assert await self._deploy(tmp_path, monkeypatch, result) == ["reboot"]
+
+    async def test_reboots_when_a_deleted_file_is_a_font(self, tmp_path, monkeypatch):
+        assert await self._deploy(tmp_path, monkeypatch, UploadResult(deleted=["old.ttf"])) == ["reboot"]
+
+    async def test_applied_settings_need_no_reload(self, tmp_path, monkeypatch):
+        assert await self._deploy(tmp_path, monkeypatch, UploadResult(settings_applied=True)) == []
+
+    async def test_restart_option_reboots_for_any_change(self, tmp_path, monkeypatch):
+        assert await self._deploy(tmp_path, monkeypatch, UploadResult(files=["pages.jsonl"]), restart=True) == ["reboot"]
+
+    async def test_nothing_without_changes(self, tmp_path, monkeypatch):
+        assert await self._deploy(tmp_path, monkeypatch, UploadResult()) == []
+        assert await self._deploy(tmp_path, monkeypatch, UploadResult(), restart=True) == []

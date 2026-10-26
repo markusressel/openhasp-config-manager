@@ -443,6 +443,11 @@ binary_images:
 To deploy your configurations to the already connected openHASP devices, simply use the
 `generate`, `upload` or `deploy` commands of `openhasp-config-manager`.
 
+`deploy` uploads what changed and makes the plate load it. If only pages, commands or PNG images changed, the plate rebuilds its pages
+from the files (like after a restart, but faster and without losing the connection). Changed idle timeouts, backlight and cursor
+settings are applied to the running plate, like haad does. It restarts if its MQTT, HTTP or rotation settings, fonts or `.bin` files
+(could be fonts) changed, because it only loads those at startup. `--restart` restarts it after every change.
+
 > **Note**
 > openhasp-config-manager needs direct IP access as well as an enabled webservice on the plate
 > to be able to deploy files to the device. To enable the webservice
