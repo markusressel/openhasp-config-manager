@@ -1,14 +1,17 @@
 import re
 import socket
 
+import pytest
 import pytest_asyncio
 
 from openhasp_config_manager.haad.objects import image
 from openhasp_config_manager.haad.page import PageController
 from openhasp_config_manager.openhasp_client.image_server import ImageServer
+from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 from tests.haad.conftest import CFG_ROOT
 from tests.haad.fakes import FakePlate
 
+PLACEHOLDER = "L:/common_page_md_empty.bin"
 IMAGE = CFG_ROOT / "devices" / "test_device" / "home" / "image_50x50.png"
 
 
@@ -22,6 +25,19 @@ async def _image_server(monkeypatch):
     monkeypatch.setattr(image, "_global_image_server", server)
     yield
     await server.stop()
+
+
+@pytest.fixture(autouse=True)
+def _plate_source(monkeypatch):
+    """What the plate answers when asked for the `src` of an object: its configured placeholder."""
+    reads = []
+
+    async def get_object_property(self, obj, prop, timeout=1.0):
+        reads.append((obj, prop))
+        return PLACEHOLDER
+
+    monkeypatch.setattr(OpenHaspClient, "get_object_property", get_object_property)
+    return reads
 
 
 async def test_image_init_sends_nothing(page: PageController, plate: FakePlate):
@@ -120,3 +136,61 @@ async def test_image_property_setters(page: PageController, plate: FakePlate):
         "p1b45.antialias=True",
         "p1b45.antialias=False",
     ]
+
+
+async def test_default_source_is_restored_after_an_image_was_pushed(page: PageController, plate: FakePlate, monkeypatch):
+    monkeypatch.setattr(image, "OPENHASP_IMAGE_HOST", "127.0.0.1")
+    img = await page.add_image(obj_id=45)
+    await img.push_image(image=str(IMAGE), width=10, height=10)
+    await plate.settle()
+
+    assert await img.restore_default_source()
+    # an image of the same object pushed again, and the default is restored again
+    await img.push_image(image=str(IMAGE), width=10, height=10)
+    await plate.settle()
+    assert await img.restore_default_source()
+
+    assert [c.split("=")[1] if "http" not in c else "pushed" for c in plate.commands] == [
+        "pushed",
+        PLACEHOLDER,
+        "pushed",
+        PLACEHOLDER,
+    ]
+
+
+async def test_default_source_is_read_once_before_the_first_push(
+    page: PageController, plate: FakePlate, monkeypatch, _plate_source
+):
+    monkeypatch.setattr(image, "OPENHASP_IMAGE_HOST", "127.0.0.1")
+    img = await page.add_image(obj_id=45)
+
+    await img.push_image(image=str(IMAGE), width=10, height=10)
+    await plate.settle()
+    await img.push_image(image=str(IMAGE), width=10, height=10)
+    await plate.settle()
+    await img.restore_default_source()
+
+    assert _plate_source == [("p1b45", "src")]
+
+
+async def test_default_source_can_be_restored_before_anything_was_pushed(page: PageController, plate: FakePlate):
+    img = await page.add_image(obj_id=45)
+
+    assert await img.restore_default_source()
+
+    assert plate.commands == [f"p1b45.src={PLACEHOLDER}"]
+
+
+@pytest.mark.parametrize("answer", [None, "", "http://192.168.2.10:20000/0f1e2d3c"])
+async def test_object_without_a_configured_image_has_no_default_source(
+    page: PageController, plate: FakePlate, monkeypatch, answer
+):
+    async def get_object_property(self, obj, prop, timeout=1.0):
+        return answer
+
+    monkeypatch.setattr(OpenHaspClient, "get_object_property", get_object_property)
+    img = await page.add_image(obj_id=45)
+
+    assert not await img.restore_default_source()
+
+    assert plate.commands == []

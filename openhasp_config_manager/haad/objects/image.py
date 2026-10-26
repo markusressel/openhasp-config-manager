@@ -6,6 +6,7 @@ from openhasp_config_manager.haad.objects import ObjectController
 from openhasp_config_manager.openhasp_client.image_server import ImageServer
 
 import os
+from typing import Optional
 
 # TODO: make this configurable via config file or env variable, using container_app_conf
 OPENHASP_IMAGE_PORT = int(os.environ.get("OPENHASP_IMAGE_PORT", "0"))
@@ -50,6 +51,12 @@ class ImageObjectController(ObjectController):
 
     LOGGER = logging.getLogger(__name__)
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # the `src` the plate was configured with, see `restore_default_source`
+        self._default_source: Optional[str] = None
+        self._default_source_read = False
+
     async def init(self):
         """
         Sets up the image object. This is called when the page is loaded, and can be used to set up the initial state of the object.
@@ -67,6 +74,9 @@ class ImageObjectController(ObjectController):
         :param height: the height of the image in pixels
         """
         try:
+            # before the first push replaces it
+            await self._read_default_source()
+
             ip = OPENHASP_IMAGE_HOST or get_local_ip()
 
             async with _server_lock:
@@ -87,6 +97,28 @@ class ImageObjectController(ObjectController):
                 )
         except Exception as e:
             self.LOGGER.error(f"Error pushing image: {e}")
+
+    async def restore_default_source(self) -> bool:
+        """
+        Shows the image the object was configured with (the `src` of its JSONL object, e.g. a placeholder) again, after
+        `push_image` replaced it. The plate is asked for it once, before the first push.
+
+        :return: whether the object has a default image. If not, nothing is sent: hide the object instead.
+        """
+        source = await self._read_default_source()
+        if not source:
+            return False
+        await self.set_object_properties({"src": source}, force=True)
+        return True
+
+    async def _read_default_source(self) -> Optional[str]:
+        if not self._default_source_read:
+            self._default_source_read = True
+            source = await self.client.get_object_property(self.object_id, "src")
+            # an image from an earlier run of haad is still on the plate, and was not configured
+            if isinstance(source, str) and not source.startswith("http"):
+                self._default_source = source
+        return self._default_source
 
     async def set_offset(self, offset_x: int = 0, offset_y: int = 0):
         """
