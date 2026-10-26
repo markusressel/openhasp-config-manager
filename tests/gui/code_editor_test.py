@@ -505,7 +505,9 @@ class TestLinksAndDocs(TestBase):
         editor.close()
 
     def _position(self, editor, prefix: str, line: int = 0) -> QPoint:
-        return QPoint(editor.fontMetrics().horizontalAdvance(prefix) + 6, 8 + line * editor.fontMetrics().height())
+        # the line height of the editor is not the height of its font (it depends on the font of the machine)
+        block = editor.blockBoundingGeometry(editor.document().findBlockByNumber(line)).translated(editor.contentOffset())
+        return QPoint(editor.fontMetrics().horizontalAdvance(prefix) + 6, int(block.center().y()))
 
     def _hover(self, editor, position: QPoint):
         # the cursor of the test platform stays where it was, so moving to the same place twice sends no event
