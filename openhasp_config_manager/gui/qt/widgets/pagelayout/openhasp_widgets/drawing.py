@@ -1,9 +1,10 @@
 """What the preview items share: the colors of the default theme and how text is drawn."""
 
 import math
-import re
 
 from PyQt6 import QtCore, QtGui
+
+from openhasp_config_manager.gui.domain.fonts import font_size
 
 DEFAULT_ACCENT = "#558B2F"
 DEFAULT_TRACK = "#313131"
@@ -17,18 +18,6 @@ def to_color(value, default: str) -> QtGui.QColor:
     """:return: the color of a property, the default if there is none or it is not a color (e.g. a template that is not rendered)"""
     color = QtGui.QColor(value) if isinstance(value, str) else QtGui.QColor()
     return color if color.isValid() else QtGui.QColor(default)
-
-
-def font_size(value, default: int = 25) -> float:
-    """
-    :param value: the `text_font` of an object: the size of a built-in font, or the name of a font file, which ends with its size
-        (`arial20`, `arial_20`)
-    :return: the size, the default if there is none (e.g. a template that is not rendered)
-    """
-    if isinstance(value, (int, float)) and not isinstance(value, bool):
-        return value
-    match = re.search(r"(\d+)$", value) if isinstance(value, str) else None
-    return int(match[1]) if match else default
 
 
 def plate_font(size) -> QtGui.QFont:

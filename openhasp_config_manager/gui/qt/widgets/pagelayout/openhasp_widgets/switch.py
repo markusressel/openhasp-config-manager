@@ -1,8 +1,8 @@
 from PyQt6 import QtCore, QtGui
 
 from openhasp_config_manager.gui.domain.style_parts import Part
+from openhasp_config_manager.gui.domain.fonts import font_size
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
-from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import font_size
 
 
 class HaspSwitchItem(EditableWidget):

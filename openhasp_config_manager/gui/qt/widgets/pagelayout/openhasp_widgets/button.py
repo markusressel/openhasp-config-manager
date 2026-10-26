@@ -6,8 +6,8 @@ from PyQt6.QtGui import QColor, QFont, QPen, QBrush
 from PyQt6.QtWidgets import QGraphicsTextItem
 
 from openhasp_config_manager.gui.qt.async_bridge import qBridge
+from openhasp_config_manager.gui.domain.fonts import font_size
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
-from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import font_size
 
 
 class HaspButtonItem(EditableWidget):
