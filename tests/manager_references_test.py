@@ -6,11 +6,12 @@ import pytest
 from openhasp_config_manager.manager import ConfigManager
 from openhasp_config_manager.processing.variables import VariableManager
 from tests import TestBase
+from tests.png import png
 
 PAGE = Path("devices", "test_device", "home", "page.jsonl")
 
 
-class TestReferencedFiles(TestBase):
+class ConfigCopyBase(TestBase):
     @pytest.fixture
     def cfg(self, tmp_path) -> Path:
         cfg = Path(tmp_path, "cfg")
@@ -34,6 +35,8 @@ class TestReferencedFiles(TestBase):
         device = manager.analyze()[0]
         return {c.name for c in manager.find_relevant_components(device)}
 
+
+class TestReferencedFiles(ConfigCopyBase):
     def test_truetype_font_is_copied_with_its_size_in_the_reference(self, cfg, tmp_path):
         self._add_file(cfg, "fonts/arial.ttf")
         self._add_file(cfg, "fonts/unused.ttf")
@@ -101,3 +104,53 @@ class TestReferencedFiles(TestBase):
         manager.process(manager.analyze()[0])
 
         assert Path(tmp_path, "out", "test_device", "fonts_arial.ttf").read_bytes() == b"font"
+
+
+class TestBinaryImages(ConfigCopyBase):
+    @staticmethod
+    def _generate(cfg: Path, tmp_path: Path) -> Path:
+        manager = ConfigManager(cfg, Path(tmp_path, "out"), VariableManager(cfg))
+        manager.process(manager.analyze()[0])
+        return Path(tmp_path, "out", "test_device")
+
+    def test_images_that_match_are_deployed_as_binary_images(self, cfg, tmp_path):
+        self._add_file(cfg, "icons/home.png", png((2, 2), [(255, 0, 0)] * 4))
+        self._add_file(cfg, "icons/keep.png", png((2, 2), [(255, 0, 0)] * 4))
+        self._add_object(cfg, page=1, id=20, obj="img", src="L:/icons_home.png")
+        self._add_object(cfg, page=1, id=21, obj="img", src="L:/icons_keep.png")
+        Path(cfg, "devices", "test_device", "binary.yaml").write_text("binary_images: icons_home.png\n")
+
+        out = self._generate(cfg, tmp_path)
+
+        assert not Path(out, "icons_home.png").exists()
+        assert len(Path(out, "icons_home.bin").read_bytes()) == 4 + 2 * 4
+        assert Path(out, "icons_keep.png").read_bytes().startswith(b"\x89PNG")
+        page = Path(out, "home_page.jsonl").read_text()
+        assert "L:/icons_home.bin" in page
+        assert "L:/icons_keep.png" in page
+
+    def test_images_stay_png_by_default(self, cfg, tmp_path):
+        self._add_file(cfg, "icons/home.png", png((1, 1), [(255, 0, 0)]))
+        self._add_object(cfg, page=1, id=20, obj="img", src="L:/icons_home.png")
+
+        out = self._generate(cfg, tmp_path)
+
+        assert Path(out, "icons_home.png").exists()
+
+    def test_conversion_does_not_replace_a_file_with_the_binary_name(self, cfg, tmp_path):
+        self._add_file(cfg, "icons/home.png", png((1, 1), [(255, 0, 0)]))
+        self._add_file(cfg, "icons/home.bin")
+        self._add_object(cfg, page=1, id=20, obj="img", src="L:/icons_home.png")
+        self._add_object(cfg, page=1, id=21, obj="img", src="L:/icons_home.bin")
+        Path(cfg, "binary.yaml").write_text("binary_images: ['*.png']\n")
+
+        with pytest.raises(AssertionError, match="icons_home.bin"):
+            self._generate(cfg, tmp_path)
+
+    def test_invalid_png_names_the_file(self, cfg, tmp_path):
+        self._add_file(cfg, "icons/home.png", b"not a png")
+        self._add_object(cfg, page=1, id=20, obj="img", src="L:/icons_home.png")
+        Path(cfg, "binary.yaml").write_text("binary_images: ['*.png']\n")
+
+        with pytest.raises(Exception, match="home.png"):
+            self._generate(cfg, tmp_path)

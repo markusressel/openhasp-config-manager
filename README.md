@@ -427,6 +427,17 @@ include_files:
   - fonts_arial.ttf
 ```
 
+* **Binary images**: a PNG is decoded into the memory of the plate, while a binary image (`.bin`) is read from flash each time, so it
+  needs no PSRAM and no memory. The disadvantage is that openHASP can't use `zoom` and `angle` with it, and the file is bigger. List the PNG
+  images that should be converted when they are deployed in the `binary_images` variable (names on the plate, with `*` and `?`, set
+  like `include_files`). The references in your files change to the `.bin` file, your sources stay as they are. An image
+  that is not fully opaque gets an alpha byte per pixel. The size is the size of the PNG, so scale it as it should be shown.
+
+```yaml
+binary_images:
+  - icons_*.png
+```
+
 ## Deployment
 
 To deploy your configurations to the already connected openHASP devices, simply use the
