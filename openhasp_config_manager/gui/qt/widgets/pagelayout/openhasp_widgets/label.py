@@ -1,6 +1,7 @@
 from PyQt6 import QtCore, QtGui
 from PyQt6.QtWidgets import QGraphicsTextItem
 
+from openhasp_config_manager.gui.domain.fonts import font_size
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
 
 
@@ -16,8 +17,8 @@ class HaspLabelItem(EditableWidget):
         return self.obj_data.get("text_color", "#FFFFFF")
 
     @property
-    def text_font(self) -> int:
-        return self.obj_data.get("text_font", 25)
+    def text_font(self) -> float:
+        return font_size(self.obj_data.get("text_font"))
 
     @property
     def align(self) -> str:

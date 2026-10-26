@@ -2,6 +2,7 @@ from PyQt6 import QtCore, QtGui
 from PyQt6.QtGui import QColor, QBrush, QPen, QFont
 from PyQt6.QtWidgets import QGraphicsTextItem
 
+from openhasp_config_manager.gui.domain.fonts import font_size
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
 
 
@@ -27,8 +28,8 @@ class HaspBarItem(EditableWidget):
         return self.obj_data.get("text_color", "#FFFFFF")
 
     @property
-    def text_font(self) -> int:
-        return self.obj_data.get("text_font", 25)
+    def text_font(self) -> float:
+        return font_size(self.obj_data.get("text_font"))
 
     @property
     def bg_color(self) -> str:
@@ -71,9 +72,8 @@ class HaspBarItem(EditableWidget):
         self.text_item.setPlainText(text)
         self.text_item.setDefaultTextColor(QColor(self.text_color))
 
-        font_size = self.text_font
-        font_size = int(font_size * 0.7)
-        self.text_item.setFont(QFont("Roboto Condensed", font_size))
+        pixel_size = int(self.text_font * 0.7)
+        self.text_item.setFont(QFont("Roboto Condensed", pixel_size))
 
         # Center text within the bar
         t_rect = self.text_item.boundingRect()

@@ -4,6 +4,8 @@ import math
 
 from PyQt6 import QtCore, QtGui
 
+from openhasp_config_manager.gui.domain.fonts import font_size
+
 DEFAULT_ACCENT = "#558B2F"
 DEFAULT_TRACK = "#313131"
 DEFAULT_KNOB = "lightgray"
@@ -19,8 +21,8 @@ def to_color(value, default: str) -> QtGui.QColor:
 
 
 def plate_font(size) -> QtGui.QFont:
-    """:return: the font for a `text_font` size of the plate"""
-    pixel_size = int(float(size) * FONT_SCALE) if isinstance(size, (int, float)) else 17
+    """:return: the font for a `text_font` of the plate, see `font_size`"""
+    pixel_size = int(float(font_size(size, 17)) * FONT_SCALE)
     return QtGui.QFont("Roboto Condensed", max(pixel_size, 1))
 
 

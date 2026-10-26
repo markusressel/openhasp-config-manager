@@ -402,6 +402,31 @@ theme:
 in a global variable file named `theme.yaml` located at the root of your configurations directory
 `openhasp-configs/theme.yaml`.
 
+## Images and fonts
+
+Put `.png` and `.bin` images, and `.ttf` and `.bin` fonts, anywhere in the `common` folder or a device folder. Like all files they are
+uploaded with a flattened name (`devices/plate1/icons/home.png` becomes `icons_home.png`, see
+[the file name length](#output-file-name-length-must-not-exceed-30-characters)), and that is the name you refer to.
+Only the files that are used are copied to a device:
+
+* **Images** are found by the `L:/` path in your `.jsonl` and `.cmd` files, e.g. `"src": "L:/icons_home.png"`. The text is
+  searched after the templates are rendered, so `"src": "L:/icons_{{ name }}.png"` works too. A missing image is an error.
+* **Fonts** are referenced by their name on the plate, without `L:/` and without the extension, see the
+  [openHASP docs](https://www.openhasp.com/0.7.0/design/fonts/): `"text_font": "fonts_arial_20"` is the binary font `fonts_arial_20.bin`,
+  and `"text_font": "fonts_arial20"` is the TrueType font `fonts_arial.ttf` in size 20 (the `.ttf` extension has to be lowercase). The
+  `font` of the `hasp` section of `config.json` is searched as well. A font that has no file in the config only produces a warning,
+  because it might already be on the plate.
+* **Files that are not found in your config files**, e.g. because they are used by MQTT commands from an automation, are copied
+  when they match a pattern of the `include_files` variable. It is a list of names on the plate, with `*` and `?` as wildcards. Define it in
+  a variable file of the root folder to include them for every device, or in the folder of a device for that device
+  (a device's list replaces the global one):
+
+```yaml
+include_files:
+  - icons_weather_*.png
+  - fonts_arial.ttf
+```
+
 ## Deployment
 
 To deploy your configurations to the already connected openHASP devices, simply use the
