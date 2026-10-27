@@ -214,6 +214,11 @@ class PlateSession:
         resolved = path.resolve()
         return next((component for component in self._components.values() if component.path.resolve() == resolved), None)
 
+    def objects_of_file(self, path: Path) -> Optional[List[Dict]]:
+        """:return: the rendered objects of a file of the draft, in the order of the file; None if the draft has none of that file"""
+        component = self.component_at(path)
+        return None if component is None else list(self._working_objects.get(component.key, []))
+
     def object_of_source(self, component: str, index: int) -> Optional[Dict]:
         """:return: the rendered object that was written as the n-th object of a component's file, None if it was deleted"""
         return next(

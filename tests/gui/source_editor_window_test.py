@@ -38,6 +38,33 @@ class TestOpening(TestBase):
         assert window.code_view.mode.value == "split"
         assert window.source_editor.current_editor.toPlainText() == EDITOR_JSONL
 
+    def test_the_rendered_view_shows_the_objects_of_the_open_file(self, window, editor_file):
+        # GIVEN
+        [component] = window.session.components
+        assert window.file_rendered.toPlainText() == ""
+
+        # WHEN
+        window.file_tree_widget.openRequested.emit(editor_file)
+
+        # THEN
+        lines = window.file_rendered.toPlainText().splitlines()
+        assert [json.loads(line)["id"] for line in lines] == [
+            obj["id"] for obj in window.session.working_objects[component.key]
+        ]
+
+    def test_the_rendered_view_follows_the_current_tab(self, window, editor_file, cfg_root):
+        # GIVEN
+        window.file_tree_widget.openRequested.emit(editor_file)
+        other = cfg_root / "other.cmd"
+        other.write_text("page 1\n")
+
+        # WHEN: a file without objects in the draft
+        window.file_tree_widget.openRequested.emit(other)
+
+        # THEN
+        assert window.file_rendered.toPlainText() == ""
+        assert window.file_rendered.placeholderText() == "No objects of this file in the draft."
+
     def test_selecting_an_object_shows_its_line(self, window, editor_file):
         # GIVEN
         window.code_view.set_mode(window.code_view.mode.__class__.SPLIT)

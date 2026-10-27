@@ -15,12 +15,19 @@ SELECTED_ALPHA = 70
 
 
 class PageJsonlPreviewWidget(QTextEdit):
-    def __init__(self, *args, **kwargs):
+    """
+    The rendered JSONL of objects, one line each, with the lines of the selected objects highlighted.
+    :param sort_objects: sort the objects by page, id and position (the page view); False keeps their order (the objects of a file)
+    :param placeholder: the text shown while there are no objects
+    """
+
+    def __init__(self, *args, sort_objects: bool = True, placeholder: str = "No objects on this page.", **kwargs):
         super().__init__(*args, **kwargs)
+        self._sort_objects = sort_objects
         self.setReadOnly(True)
         self.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
         self.setFont(QFont("Roboto Mono", 10))
-        self.setPlaceholderText("No objects on this page.")
+        self.setPlaceholderText(placeholder)
 
         self.highlighter = SourceHighlighter(self.document(), Language.JSONL)
         # the objects in the order of the lines, and which of them are dimmed (e.g. those of other files)
@@ -46,12 +53,12 @@ class PageJsonlPreviewWidget(QTextEdit):
         self._update_dimmed_lines()
         self._update_selections()
 
-    def set_selected_objects(self, objects: List[dict]):
-        """Highlight the lines of the objects selected in the preview, and scroll to the first of them."""
+    def set_selected_objects(self, objects: List[dict], scroll: bool = True):
+        """Highlight the lines of the objects selected in the preview, and scroll to the first of them (if `scroll`)."""
         self._selected = list(objects)
         self._update_selections()
         lines = self.selected_lines
-        if lines:
+        if scroll and lines:
             self.setTextCursor(QTextCursor(self.document().findBlockByNumber(lines[0])))
             self.ensureCursorVisible()
 
@@ -95,19 +102,25 @@ class PageJsonlPreviewWidget(QTextEdit):
         Set the objects for the page.
         :param page_objects: the list of objects to set
         """
-        sorted_page_objects = sorted(
-            page_objects,
-            # values that are not numbers (templates that can't be rendered) sort like 0, they can't be compared with numbers
-            key=lambda obj: (
-                number_or(obj.get("page"), 0),
-                number_or(obj.get("id"), 0),
-                geometry_value(obj, "y"),
-                geometry_value(obj, "x"),
-            ),
+        sorted_page_objects = (
+            list(page_objects)
+            if not self._sort_objects
+            else sorted(
+                page_objects,
+                # values that are not numbers (templates that can't be rendered) sort like 0, they can't be compared with numbers
+                key=lambda obj: (
+                    number_or(obj.get("page"), 0),
+                    number_or(obj.get("id"), 0),
+                    geometry_value(obj, "y"),
+                    geometry_value(obj, "x"),
+                ),
+            )
         )
 
         self._objects = sorted_page_objects
         content = "\n".join(map(lambda x: orjson.dumps(x).decode(), sorted_page_objects))
-        self.setText(content)
+        if content != self.toPlainText():
+            # not for the same text: setting it resets the scroll position
+            self.setText(content)
         self._update_dimmed_lines()
         self._update_selections()

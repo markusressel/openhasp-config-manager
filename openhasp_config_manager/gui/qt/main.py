@@ -64,6 +64,7 @@ from openhasp_config_manager.gui.qt.ui_session_store import UiSessionStore
 from openhasp_config_manager.gui.qt.theme import ThemeMode, apply_theme, current_mode, current_colors
 from openhasp_config_manager.gui.qt.async_bridge import run_async
 from openhasp_config_manager.gui.qt.widgets.code_view import CodeView
+from openhasp_config_manager.gui.qt.widgets.pagelayout.jsonl_preview import PageJsonlPreviewWidget
 from openhasp_config_manager.gui.qt.widgets.device_list import DeviceListWidget
 from openhasp_config_manager.gui.qt.widgets.file_tree import FileTreeWidget
 from openhasp_config_manager.gui.qt.widgets.log_view import LogView
@@ -78,7 +79,7 @@ from openhasp_config_manager.processing.variables import VariableManager
 LOGGER = logging.getLogger(__name__)
 
 # the version of the saved arrangement of the docks: a state of another version is not restored
-DOCK_STATE_VERSION = 2
+DOCK_STATE_VERSION = 3
 
 
 class StatusBarController:
@@ -308,7 +309,9 @@ class MainWindow(QMainWindow):
         self.source_editor.saved.connect(self._on_source_saved)
         self.source_editor.stateChanged.connect(self._state_publisher.request)
         self.source_editor.openFailed.connect(lambda path, message: self.status.failed.emit(f"Opening {path.name}", message))
-        self.code_view = CodeView(self.source_editor, self.page_layout_editor_widget.jsonl_preview)
+        # the rendered view of the code view follows the file in the current tab, the page view is a dock of its own
+        self.file_rendered = PageJsonlPreviewWidget(sort_objects=False, placeholder="Open a file to see it rendered.")
+        self.code_view = CodeView(self.source_editor, self.file_rendered)
         self.code_view.modeChanged.connect(lambda _mode: self._state_publisher.request())
         self.source_sync = SourceEditorSync(
             self.source_editor,
@@ -317,11 +320,16 @@ class MainWindow(QMainWindow):
             lambda: self.session,
             self.ui_session,
             self._cfg_root,
+            self.file_rendered,
             parent=self,
         )
         self.file_tree_widget.openRequested.connect(self.source_sync.open_file)
         self.jsonl_dock = self._add_dock("Code", "jsonl_dock", self.code_view)
         self.splitDockWidget(self.preview_dock, self.jsonl_dock, Qt.Orientation.Vertical)
+
+        # the JSONL of the page in the preview: the objects of all files that contribute to it, the way the plate gets them
+        self.page_jsonl_dock = self._add_dock("Page JSONL", "page_jsonl_dock", self.page_layout_editor_widget.jsonl_preview)
+        self.tabifyDockWidget(self.jsonl_dock, self.page_jsonl_dock)
 
         # the log of the plate, next to the code. Hidden at first: it holds the only telnet connection the plate allows while shown.
         self.log_view = LogView()
@@ -450,7 +458,7 @@ class MainWindow(QMainWindow):
         for action in [editor.action_zoom_in, editor.action_zoom_out, editor.action_zoom_fit]:
             view_menu.addAction(action)
         view_menu.addSeparator()
-        for dock in [self.devices_dock, self.properties_dock, self.jsonl_dock, self.logs_dock]:
+        for dock in [self.devices_dock, self.properties_dock, self.jsonl_dock, self.page_jsonl_dock, self.logs_dock]:
             view_menu.addAction(dock.toggleViewAction())
         view_menu.addSeparator()
         view_menu.addAction(
@@ -487,6 +495,7 @@ class MainWindow(QMainWindow):
         self.status_bar.refresh_theme()
         self.file_tree_widget.refresh_theme()
         self.page_layout_editor_widget.jsonl_preview.refresh_theme()
+        self.file_rendered.refresh_theme()
         self.source_editor.refresh_theme()
         self.log_view.refresh_theme()
         self.page_layout_editor_widget.problems_panel.refresh_theme()
@@ -510,7 +519,14 @@ class MainWindow(QMainWindow):
             QtCore.QTimer.singleShot(0, self._size_sidebar)
 
     def restore_default_layout(self):
-        for dock in [self.devices_dock, self.preview_dock, self.properties_dock, self.jsonl_dock, self.logs_dock]:
+        for dock in [
+            self.devices_dock,
+            self.preview_dock,
+            self.properties_dock,
+            self.jsonl_dock,
+            self.page_jsonl_dock,
+            self.logs_dock,
+        ]:
             dock.setFloating(False)
         self.restoreState(self._default_dock_state, DOCK_STATE_VERSION)
         self._size_docks()

@@ -464,8 +464,9 @@ focus, `Ctrl+Z` undoes its text instead.
 ## Editing the files as text in the GUI
 
 The **Code** panel below the preview shows the files in three ways, like the code/design views of an IDE: **Source** (the text
-editor), **Rendered** (the JSONL of the page the way the plate gets it) and **Split** (both side by side or above each other, with a
-splitter). Double-click a file in the Files tree to open it (JSONL, `.cmd` and variable files), or select an object in the preview
+editor), **Rendered** (the JSONL of the file in the current tab, with its templates rendered) and **Split** (both side by side or above each other, with a
+splitter). The JSONL of the whole page, from all files that contribute to it, the way the plate gets it, is the **Page JSONL**
+tab next to **Code**. Double-click a file in the Files tree to open it (JSONL, `.cmd` and variable files), or select an object in the preview
 while the source is shown: the editor jumps to the line of the object. It works the other way too: moving the cursor into an
 object (typing, clicking, arrow keys) selects that object in the preview, on its page.
 
