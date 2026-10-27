@@ -26,9 +26,11 @@ def c_check(config_dir: Path, device: Optional[str], as_json: bool) -> bool:
     for issue in issues:
         click.echo(str(issue))
     errors = sum(issue.severity == Severity.ERROR for issue in issues)
-    warnings = len(issues) - errors
-    click.echo(
+    hints = sum(issue.severity == Severity.HINT for issue in issues)
+    warnings = len(issues) - errors - hints
+    summary = (
         f"Checked {len(devices)} device{'' if len(devices) == 1 else 's'}: {errors} error{'' if errors == 1 else 's'}, "
         f"{warnings} warning{'' if warnings == 1 else 's'}"
     )
+    click.echo(summary + (f", {hints} hint{'' if hints == 1 else 's'}" if hints else ""))
     return ok

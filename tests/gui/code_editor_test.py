@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 pytest.importorskip("PyQt6")
@@ -8,6 +10,7 @@ from PyQt6.QtTest import QTest  # noqa: E402
 
 from openhasp_config_manager.gui.domain.problems import Severity  # noqa: E402
 from openhasp_config_manager.gui.domain.source_syntax import Language  # noqa: E402
+from openhasp_config_manager.gui.domain.variable_definitions import Definition  # noqa: E402
 from openhasp_config_manager.gui.domain.source_issues import SourceIssue  # noqa: E402
 from openhasp_config_manager.gui.qt.widgets.code_editor import CodeEditor  # noqa: E402
 from tests import TestBase  # noqa: E402
@@ -487,6 +490,27 @@ class TestLinksAndDocs(TestBase):
         assert targets == ["pages.jsonl"]
         editor.close()
 
+    def test_ctrl_click_on_a_part_of_a_variable(self, qapp, settings):
+        # GIVEN: only `common.header` is defined
+        editor = CodeEditor(Language.JSONL)
+        editor.resize(500, 100)
+        editor.show()
+        editor.set_text('{"h": "{{ common.header.height }}"}')
+        known = {"common", "common.header"}
+        editor.set_definition_finder(lambda name: Definition(Path("x.yaml"), 1, 0) if name in known else None)
+        names = []
+        editor.definitionRequested.connect(names.append)
+        click = Qt.KeyboardModifier.ControlModifier
+
+        # WHEN
+        for prefix in ('{"h": "{{ com', '{"h": "{{ common.hea', '{"h": "{{ common.header.hei'):
+            position = QPoint(editor.fontMetrics().horizontalAdvance(prefix) + 2, 5)
+            QTest.mouseClick(editor.viewport(), Qt.MouseButton.LeftButton, click, position)
+
+        # THEN: the last part has no definition
+        assert names == ["common", "common.header"]
+        editor.close()
+
     def test_hovering_with_ctrl_underlines_the_reference(self, qapp, settings):
         editor = CodeEditor(Language.CMD)
         editor.resize(500, 100)
@@ -660,3 +684,94 @@ class TestFlash(TestBase):
         editor.flash_lines(1, 1)
         editor.set_text('{"page": 2}\n')
         assert editor.flashed_lines is None
+
+
+class TestColorPicker(TestBase):
+    def _editor(self, language=Language.JSONL, text='{"c": "#0D0F14", "d": 1}'):
+        editor = CodeEditor(language)
+        editor.resize(500, 300)
+        editor.show()
+        editor.set_text(text)
+        return editor
+
+    def _color(self, editor, prefix='{"c": "#0D'):
+        position = QPoint(editor.fontMetrics().horizontalAdvance(prefix) + 2, 5)
+        return editor._colors.color_at(position)
+
+    def test_finds_the_color_under_the_mouse(self, qapp, settings):
+        editor = self._editor()
+        number, token = self._color(editor)
+        assert (number, token.start, token.end) == (0, 6, 15)
+        assert self._color(editor, '{"c"') is None
+        editor.close()
+
+    def test_ctrl_click_opens_the_picker_and_edits_the_text(self, qapp, settings):
+        # GIVEN
+        editor = self._editor()
+        edits = []
+        editor.textEdited.connect(lambda: edits.append(1))
+        position = QPoint(editor.fontMetrics().horizontalAdvance('{"c": "#0D') + 2, 5)
+
+        # WHEN
+        QTest.mouseClick(editor.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.ControlModifier, position)
+        assert editor._picker.isVisible()
+        editor._picker.set_color(255, 0, 0, 255)
+        editor._picker.set_color(0, 128, 255, 255)
+
+        # THEN: the quotes and the case stay, the rest of the line is untouched
+        assert editor.toPlainText() == '{"c": "#0080FF", "d": 1}'
+        assert edits
+
+        # WHEN: closed, the changes are one step to undo
+        editor._picker.close_picker()
+        editor.undo()
+        assert editor.toPlainText() == '{"c": "#0D0F14", "d": 1}'
+        editor.close()
+
+    def test_the_style_of_the_color_is_kept(self, qapp, settings):
+        editor = self._editor(Language.YAML, "color: '#0d0f14'")
+        editor.edit_color(*self._color_at_start(editor))
+        editor._picker.set_color(1, 2, 255, 255)
+        assert editor.toPlainText() == "color: '#0102ff'"
+
+        # an alpha other than 255 makes it #AARRGGBB
+        editor._picker.set_color(1, 2, 255, 128)
+        assert editor.toPlainText() == "color: '#800102ff'"
+        editor._picker.set_color(1, 2, 255, 255)
+        assert editor.toPlainText() == "color: '#0102ff'"
+        editor.close()
+
+    def _color_at_start(self, editor):
+        return editor._colors.color_at(QPoint(editor.fontMetrics().horizontalAdvance("color: '#0") + 2, 5))
+
+    def test_the_text_of_the_picker_follows_typing(self, qapp, settings):
+        editor = self._editor()
+        editor.edit_color(*self._color(editor))
+        picker = editor._picker
+        picker._text.textEdited.emit("#336699")
+        assert editor.toPlainText() == '{"c": "#336699", "d": 1}'
+        assert [picker._channels[name].value() for name in "ARGB"] == [255, 51, 102, 153]
+
+        # not a color yet: nothing changes
+        picker._text.textEdited.emit("#33")
+        assert editor.toPlainText() == '{"c": "#336699", "d": 1}'
+        editor.close()
+
+    def test_the_wheel_changes_the_color(self, qapp, settings):
+        editor = self._editor(text='{"c": "#FF0000"}')
+        editor.edit_color(*self._color(editor, '{"c": "#F'))
+        wheel = editor._picker._wheel
+        assert wheel.hue == 0 and wheel.saturation == 1.0 and wheel.value == 1.0
+
+        wheel.hue = 120
+        wheel.changed.emit()
+        assert editor.toPlainText() == '{"c": "#00FF00"}'
+        editor.close()
+
+    def test_escape_closes_the_picker(self, qapp, settings):
+        editor = self._editor()
+        editor.edit_color(*self._color(editor))
+        QTest.keyClick(editor._picker, Qt.Key.Key_Escape)
+        assert not editor._picker.isVisible()
+        assert editor._colors._edit is None
+        editor.close()

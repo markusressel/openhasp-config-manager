@@ -5,7 +5,7 @@ import qtawesome as qta
 from PyQt6 import QtCore
 from PyQt6.QtCore import Qt, QSettings
 from PyQt6.QtGui import QAction, QBrush, QColor, QFont, QPalette
-from PyQt6.QtWidgets import QApplication, QHeaderView, QMenu, QTreeWidget, QTreeWidgetItem, QWidget
+from PyQt6.QtWidgets import QApplication, QHeaderView, QLabel, QMenu, QTreeWidget, QTreeWidgetItem, QWidget, QWidgetAction
 
 from openhasp_config_manager.gui.domain.file_tree import FileKind, FileNode, format_pages
 from openhasp_config_manager.gui.qt.components import ThemedIcons, UiComponents
@@ -25,6 +25,42 @@ _ICONS = {
     FileKind.VARIABLES: "variable",
 }
 _TARGET_ICON = "plus-circle"
+
+# the top-level folders: (icon, the text of the second column, the explanation). The config directory itself only lists its global
+# variable files, so it is named by that
+_ROLE_GLOBAL = (
+    "earth",
+    "global",
+    "Variables in the root of the config directory (theme.yaml, global.vars.yaml, ...): they apply to every file.",
+)
+_ROLE_COMMON = ("folder-multiple-outline", "shared", "The common folder: its files can be loaded by every device.")
+_ROLE_DEVICE = (
+    "tablet",
+    "this device",
+    "The folder of the selected device: its files are only used by this device, and its variables override the ones above.",
+)
+_GLOBAL_NAME = "Global variables"
+
+# what the colors and the second column of the tree mean: (the sample, its explanation). `{accent}` is the accent color.
+_LEGEND = [
+    (
+        '<b style="color:{accent}">name.jsonl</b>',
+        "has objects on the page shown in the preview (objects on page 0, like the navbar, count for every page)",
+    ),
+    ("<b>name.jsonl</b> + the plus icon", "new objects are added to this file (double-click a file to choose it)"),
+    ('<span style="color:gray">name.cmd</span>', "not part of the draft: the preview doesn't show objects of it"),
+    (
+        "<i>name.jsonl</i> (not used)",
+        "no startup script (boot.cmd, online.cmd, offline.cmd) runs it. Shown with the eye button",
+    ),
+    ("<i>vars.yaml</i> (not used)", "none of its variables is used by a file the plate runs"),
+]
+_LEGEND_COLUMN = [
+    "p1, p2–p4: the pages a .jsonl file has objects on",
+    "boot.cmd, ...: the startup script that loads a file that is not in the draft",
+    "title, theme: the variables of a variable file that are used",
+    "global, shared, this device: what the top-level folders are for. The ones further down win: the variables of the device override the shared and the global ones",
+]
 
 _VARIABLES_HINT = "Variables for the templates of the files in this folder and its subfolders."
 
@@ -60,6 +96,13 @@ class FileTreeWidget(QWidget):
         )
         self._show_all_button.setCheckable(True)
         header.addWidget(self._show_all_button)
+        self._legend_button = UiComponents.create_button(
+            title="",
+            icon="information-outline",
+            tooltip="What the colors and the second column mean",
+            on_click=self._show_legend,
+        )
+        header.addWidget(self._legend_button)
         layout.addLayout(header)
 
         self._hint = UiComponents.create_label("", role="hint", word_wrap=True)
@@ -178,7 +221,7 @@ class FileTreeWidget(QWidget):
         self._items_by_key = {}
         self._common_path = common_path.resolve()
         for root in roots:
-            item = self._create_item(root)
+            item = self._create_item(root, top_level=True)
             self._tree.addTopLevelItem(item)
         self._restore_expanded(expanded)
         self._apply_filter()
@@ -223,7 +266,16 @@ class FileTreeWidget(QWidget):
 
     # --- items ---
 
-    def _create_item(self, node: FileNode) -> QTreeWidgetItem:
+    def _role_of(self, node: FileNode) -> Tuple[str, str, str]:
+        """:return: what a top-level folder is for (see `_ROLE_GLOBAL`)"""
+        path = node.path.resolve()
+        if path == self._common_path:
+            return _ROLE_COMMON
+        if path == self._common_path.parent:
+            return _ROLE_GLOBAL
+        return _ROLE_DEVICE
+
+    def _create_item(self, node: FileNode, top_level: bool = False) -> QTreeWidgetItem:
         item = QTreeWidgetItem([node.name, ""])
         item.setData(0, _PATH_ROLE, str(node.path))
         item.setIcon(0, ThemedIcons.icon(_ICONS[node.kind]))
@@ -234,9 +286,13 @@ class FileTreeWidget(QWidget):
                 item.addChild(child_item)
                 relevant |= child_item.data(0, _RELEVANT_ROLE)
             item.setData(0, _RELEVANT_ROLE, relevant)
-            if node.path.resolve() == self._common_path:
-                item.setText(1, "shared")
-                item.setToolTip(0, "The common folder: its files can be loaded by every device.")
+            if top_level:
+                icon, role, explanation = self._role_of(node)
+                if (icon, role, explanation) == _ROLE_GLOBAL:
+                    item.setText(0, _GLOBAL_NAME)
+                item.setIcon(0, ThemedIcons.icon(icon))
+                item.setText(1, role)
+                item.setToolTip(0, f"{node.path}\n{explanation}")
             return item
 
         path = node.path.resolve()
@@ -249,12 +305,14 @@ class FileTreeWidget(QWidget):
             self._items_by_key[key] = item
             return item
 
-        # not part of the draft: dimmed
-        dimmed = QBrush(QApplication.palette().color(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text))
-        item.setForeground(0, dimmed)
-        item.setForeground(1, dimmed)
+        # not part of the draft: dimmed, unless it is a variable file the plate's files use
+        if not (node.kind == FileKind.VARIABLES and variables is not None):
+            dimmed = QBrush(QApplication.palette().color(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text))
+            item.setForeground(0, dimmed)
+            item.setForeground(1, dimmed)
         if node.kind == FileKind.VARIABLES and variables is not None:
             used_names = f"Used: {', '.join(variables)}" if variables else "Could not be read as YAML."
+            item.setText(1, ", ".join(variables) if variables else "invalid YAML")
             item.setToolTip(0, f"{_VARIABLES_HINT}\n{used_names}")
         elif node.kind == FileKind.VARIABLES:
             item.setText(1, "not used")
@@ -274,6 +332,28 @@ class FileTreeWidget(QWidget):
         else:
             item.setToolTip(0, f"Run by the plate ({script}).")
         return item
+
+    def legend_html(self) -> str:
+        """:return: what the colors and the second column of the tree mean, as rich text (in the colors of the theme)"""
+        accent = current_colors().accent
+        rows = "".join(
+            f"<tr><td style='padding-right:12px; white-space:nowrap'>{sample.format(accent=accent)}</td><td>{text}</td></tr>"
+            for sample, text in _LEGEND
+        )
+        column = "".join(f"<li>{text}</li>" for text in _LEGEND_COLUMN)
+        return f"<table>{rows}</table><p><b>Second column</b></p><ul style='margin-left:-20px'>{column}</ul>"
+
+    def _show_legend(self):
+        menu = QMenu(self)
+        label = QLabel(self.legend_html())
+        label.setTextFormat(Qt.TextFormat.RichText)
+        label.setWordWrap(True)
+        label.setMaximumWidth(460)
+        label.setContentsMargins(8, 8, 8, 8)
+        action = QWidgetAction(menu)
+        action.setDefaultWidget(label)
+        menu.addAction(action)
+        menu.exec(self._legend_button.mapToGlobal(self._legend_button.rect().bottomLeft()))
 
     def _apply_filter(self):
         stack = [self._tree.topLevelItem(i) for i in range(self._tree.topLevelItemCount())]

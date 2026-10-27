@@ -14,8 +14,10 @@ _REFERENCE = re.compile(r"L:/[^\s\"']+?\.(?:jsonl|cmd)(?=$|[\s\"'])")
 class Link:
     start: int
     end: int
-    # the file name on the plate, without `L:/`
+    # the file name on the plate, without `L:/` (a file link), or the variable (a variable link)
     target: str
+    # "file" for a reference to a file, "variable" for a part of a variable in a template, "usages" for the key of a variable
+    kind: str = "file"
 
 
 def find_links(line: str, language: Language) -> list:

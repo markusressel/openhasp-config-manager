@@ -53,6 +53,22 @@ class TestScanFileTree(TestBase):
         assert [child.kind for child in home.children] == [FileKind.JSONL, FileKind.CMD]
         assert roots[1].children[2].kind == FileKind.VARIABLES
 
+    def test_global_variable_files_of_the_config_directory(self, tmp_path):
+        # GIVEN
+        for path in ["theme.yaml", "global.vars.yaml", ".hidden.yaml", "README.md", "devices/plate/boot.cmd"]:
+            (tmp_path / path).parent.mkdir(parents=True, exist_ok=True)
+            (tmp_path / path).write_text("")
+
+        # WHEN
+        roots = scan_file_tree(tmp_path / "devices" / "plate")
+
+        # THEN: only the files of the config directory itself, not its folders
+        assert [_names(root) for root in roots] == [
+            (tmp_path.name, ["global.vars.yaml", "theme.yaml"]),
+            ("plate", ["boot.cmd"]),
+        ]
+        assert [child.kind for child in roots[0].children] == [FileKind.VARIABLES, FileKind.VARIABLES]
+
     def test_without_common_folder(self, tmp_path):
         # GIVEN
         (tmp_path / "devices" / "plate").mkdir(parents=True)
@@ -177,6 +193,19 @@ class TestFileTreeWidget(TestBase):
         assert self._visible(device) == ["0_home", "boot.cmd", "old.cmd", "old.jsonl", "vars.yaml"]
         assert device.child(3).text(1) == "not used"
 
+    def test_a_used_variable_file_shows_what_is_used_and_is_not_dimmed(self, tmp_path):
+        # GIVEN
+        from PyQt6.QtCore import Qt
+
+        widget = self._widget(tmp_path)
+        device = widget.tree.topLevelItem(1)
+        used = next(device.child(i) for i in range(device.childCount()) if device.child(i).text(0) == "vars.yaml")
+
+        # THEN
+        assert used.text(1) == "title"
+        assert "Used: title" in used.toolTip(0)
+        assert used.foreground(0).style() == Qt.BrushStyle.NoBrush
+
     def test_show_all_is_remembered(self, tmp_path):
         # GIVEN
         self._widget(tmp_path).set_show_all(True)
@@ -274,54 +303,42 @@ class TestUsedFiles(TestBase):
         }
 
 
-class TestUsedVariableFiles(TestBase):
-    def test_referenced_variables(self):
-        from openhasp_config_manager.processing.template_rendering import referenced_variables
-
-        assert referenced_variables('{"text": "{{ about.title }}", "x": "{{ p1b1.x + offset }}"}') == {
-            "about",
-            "p1b1",
-            "offset",
-        }
-        # a broken template: the others are found anyway
-        assert referenced_variables('{"a": "{{ title }}", "b": "{{ broken", "c": "{% if night %}x{% endif %}"}') >= {"title"}
-
-    def _write(self, tmp_path, files):
-        for path, content in files.items():
-            (tmp_path / path).parent.mkdir(parents=True, exist_ok=True)
-            (tmp_path / path).write_text(content)
-
-    def test_variable_files_whose_variables_used_files_reference(self, tmp_path):
+class TestTopLevelFolders(TestBase):
+    def test_every_top_level_folder_says_what_it_is_for(self, tmp_path, qapp, settings):
         # GIVEN
-        from openhasp_config_manager.gui.domain.file_tree import used_variable_files
+        from openhasp_config_manager.gui.qt.widgets.file_tree import FileTreeWidget
 
-        self._write(
-            tmp_path,
-            {
-                "common/header.jsonl": '{"text": "{{ device_title }}"}',
-                "devices/plate/vars.yaml": "device_title: Plate\nunused: 1\nsubtitle: '{{ chained }}'\n",
-                "devices/plate/home/vars.yaml": "home_title: Home\n",
-                "devices/plate/home/page.jsonl": '{"text": "{{ home_title }} {{ subtitle }}"}',
-                "devices/plate/about/vars.yaml": "about_title: About\n",
-                "devices/plate/about/page.jsonl": '{"text": "{{ about_title }}"}',
-                "devices/plate/home/more.yaml": "chained: x\n",
-                "devices/plate/chain/vars.yaml": "chained: y\n",
-                "devices/plate/broken.yaml": "a: [",
-            },
-        )
+        for path in ["theme.yaml", "common/header.jsonl", "devices/plate/boot.cmd", "devices/plate/home/page.jsonl"]:
+            (tmp_path / path).parent.mkdir(parents=True, exist_ok=True)
+            (tmp_path / path).write_text("")
         device = tmp_path / "devices" / "plate"
-        used = [tmp_path / "common/header.jsonl", device / "home/page.jsonl"]
+        widget = FileTreeWidget()
 
         # WHEN
-        result = used_variable_files(scan_file_tree(device), used, device)
+        widget.set_files(scan_file_tree(device), {}, {}, {}, common_path=tmp_path / "common")
 
         # THEN
-        assert {str(path.relative_to(tmp_path.resolve())): names for path, names in result.items()} == {
-            # used by the common file through the device folder, and by home/page.jsonl
-            "devices/plate/vars.yaml": ["device_title", "subtitle"],
-            "devices/plate/home/vars.yaml": ["home_title"],
-            # only through the value of subtitle
-            "devices/plate/home/more.yaml": ["chained"],
-            # can't be read: shown, not hidden
-            "devices/plate/broken.yaml": [],
-        }
+        roots = [widget.tree.topLevelItem(i) for i in range(3)]
+        assert [(root.text(0), root.text(1)) for root in roots] == [
+            ("Global variables", "global"),
+            ("common", "shared"),
+            ("plate", "this device"),
+        ]
+        assert all(str(path) in root.toolTip(0) for root, path in zip(roots, [tmp_path, tmp_path / "common", device]))
+        # the icons tell them apart, subfolders have no role
+        assert len({root.icon(0).cacheKey() for root in roots}) == 3
+        assert roots[2].child(0).text(1) == ""
+
+
+class TestLegend(TestBase):
+    def test_the_legend_explains_the_colors_and_the_second_column(self, qapp, settings):
+        from openhasp_config_manager.gui.qt.theme import current_colors
+        from openhasp_config_manager.gui.qt.widgets.file_tree import FileTreeWidget
+
+        html = FileTreeWidget().legend_html()
+
+        assert current_colors().accent in html
+        assert "objects on the page shown in the preview" in html
+        assert "not used" in html
+        assert "Second column" in html
+        assert "{accent}" not in html

@@ -22,7 +22,7 @@ from functools import lru_cache
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 import jinja2
-from jinja2 import BaseLoader, Template, TemplateError, TemplateSyntaxError, UndefinedError, meta
+from jinja2 import BaseLoader, Template, TemplateError, TemplateSyntaxError, UndefinedError
 from jinja2.sandbox import ImmutableSandboxedEnvironment
 
 from openhasp_config_manager.console import warn
@@ -62,20 +62,12 @@ class _Environment(ImmutableSandboxedEnvironment):
 _LENIENT = _Environment(loader=BaseLoader(), undefined=_Undefined)
 _STRICT = _Environment(loader=BaseLoader(), undefined=jinja2.StrictUndefined)
 
-# the innermost expressions of a text that can't be parsed as a whole, to parse them one by one
-_EXPRESSION = re.compile(r"\{\{(?:(?!\{\{).)*?\}\}|\{%.*?%\}", re.DOTALL)
-
 _CACHE_SIZE = 4096
 
 
 @lru_cache(maxsize=_CACHE_SIZE)
 def _compile(content: str, strict: bool) -> Template:
     return (_STRICT if strict else _LENIENT).from_string(content)
-
-
-@lru_cache(maxsize=_CACHE_SIZE)
-def _undeclared(text: str) -> frozenset:
-    return frozenset(meta.find_undeclared_variables(_LENIENT.parse(text)))
 
 
 def _find_nested_template(content: str) -> Optional[Tuple[int, int]]:
@@ -266,24 +258,6 @@ def referenced_objects(content: str, template_vars: Dict[str, Any]) -> Optional[
         return set(_OBJECT_NAME.findall(render_nested_templates(content, template_vars)))
     except TemplateError:
         return None
-
-
-def referenced_variables(text: str) -> Set[str]:
-    """
-    :return: the top-level names the templates in a text use, e.g. {"about"} for "{{ about.title }}". If the text can't be
-        parsed as a whole (nested templates, a template that is not finished), the names of the innermost expressions that
-        can. The names an outer template of nested templates uses are not known (`p{{ page }}b1` is not a name).
-    """
-    try:
-        return set(_undeclared(text))
-    except TemplateSyntaxError:
-        result = set()
-        for expression in _EXPRESSION.findall(text):
-            try:
-                result |= _undeclared(expression)
-            except TemplateSyntaxError:
-                continue
-        return result
 
 
 # what could not be rendered: where it is, and why

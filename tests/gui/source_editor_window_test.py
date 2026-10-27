@@ -3,8 +3,14 @@ from pathlib import Path
 
 import pytest
 
-from tests import TestBase
-from tests.gui.helpers import EDITOR_JSONL, create_editor_cfg_root, gui_state, wait_until, x_of_label
+pytest.importorskip("PyQt6")
+
+from PyQt6.QtCore import QPoint, Qt  # noqa: E402
+from PyQt6.QtTest import QTest  # noqa: E402
+
+from openhasp_config_manager.gui.domain.problems import Severity  # noqa: E402
+from tests import TestBase  # noqa: E402
+from tests.gui.helpers import EDITOR_JSONL, create_editor_cfg_root, gui_state, wait_until, x_of_label  # noqa: E402
 
 
 @pytest.fixture
@@ -28,6 +34,157 @@ def editor_file(cfg_root) -> Path:
     return (cfg_root / "devices" / "test_device" / "editor.jsonl").resolve()
 
 
+@pytest.fixture
+def unused_file(cfg_root) -> Path:
+    # written before the window loads the device
+    path = cfg_root / "devices" / "test_device" / "vars.yaml"
+    path.write_text("unused_one: 1\nunused_two: 2\n")
+    return path.resolve()
+
+
+@pytest.fixture
+def used_variables(cfg_root) -> Path:
+    # `shared` is used by two files, `single` by one, `nobody` by none. Written before the window loads the device
+    device = cfg_root / "devices" / "test_device"
+    path = device / "vars.yaml"
+    path.write_text("shared: 1\nsingle: 2\nnobody: 3\n")
+    editor = device / "editor.jsonl"
+    editor.write_text(
+        editor.read_text()
+        + '{"page": 9, "id": 9, "obj": "label", "text": "{{ shared }} {{ single }}"}\n'
+        + '{"page": 9, "id": 10, "obj": "label", "text": "{{ shared }}"}\n'
+    )
+    return path.resolve()
+
+
+class TestNavigationHistory(TestBase):
+    def _click(self, editor, button):
+        QTest.mouseClick(editor.viewport(), button, Qt.KeyboardModifier.NoModifier, QPoint(5, 5))
+
+    def test_back_and_forward_buttons_follow_the_jumps(self, used_variables, window, editor_file):
+        # GIVEN: the cursor is in vars.yaml, from where the user jumps to the one usage of `single`
+        window.file_tree_widget.openRequested.emit(used_variables)
+        window.source_editor.current_editor.go_to(2, 3)
+        window.source_editor._show_usages(used_variables, "single", QPoint(0, 0))
+        assert window.source_editor.current_file == editor_file
+
+        # WHEN: back
+        self._click(window.source_editor.current_editor, Qt.MouseButton.BackButton)
+
+        # THEN: the place the jump came from
+        assert window.source_editor.current_file == used_variables
+        assert window.source_editor.location.line == 2
+        assert window.source_editor.location.column == 4
+
+        # WHEN: forward
+        self._click(window.source_editor.current_editor, Qt.MouseButton.ForwardButton)
+
+        # THEN
+        assert window.source_editor.current_file == editor_file
+        assert window.source_editor.location.line == 3
+
+    def test_nothing_happens_without_history(self, used_variables, window):
+        window.file_tree_widget.openRequested.emit(used_variables)
+        window.source_editor.go_back()
+        window.source_editor.go_forward()
+        assert window.source_editor.current_file == used_variables
+
+    def test_previews_and_restored_tabs_are_no_jumps(self, used_variables, window, editor_file):
+        window.file_tree_widget.openRequested.emit(used_variables)
+        window.source_editor.open_file(editor_file, 1, preview=True)
+        window.source_editor.open_file(used_variables, focus=False)
+        window.source_editor.go_back()
+        assert window.source_editor.current_file == used_variables
+
+
+class TestUsagesOfVariables(TestBase):
+    def test_ctrl_click_on_a_key_without_usages_says_so(self, used_variables, window):
+        # GIVEN
+        window.file_tree_widget.openRequested.emit(used_variables)
+
+        # WHEN
+        window.source_editor._show_usages(used_variables, "nobody", QPoint(0, 0))
+
+        # THEN
+        assert window.source_editor._status.text() == "nobody is not used"
+
+    def test_a_single_usage_is_opened(self, used_variables, window, editor_file):
+        # GIVEN
+        window.file_tree_widget.openRequested.emit(used_variables)
+
+        # WHEN
+        window.source_editor._show_usages(used_variables, "single", QPoint(0, 0))
+
+        # THEN
+        assert window.source_editor.current_file == editor_file
+        assert window.source_editor.current_editor.cursor_line_column[0] == 3
+
+    def test_several_usages_are_listed_to_choose_from(self, used_variables, window, editor_file):
+        # GIVEN
+        window.file_tree_widget.openRequested.emit(used_variables)
+        editor = window.source_editor.editor_of(used_variables)
+        usages = window.source_sync.find_usages(used_variables, "shared")
+        assert len(usages) == 2
+
+        # WHEN
+        editor.usagesRequested.emit("shared", QPoint(0, 0))
+
+        # THEN
+        menu = window.source_editor._usages_menu
+        assert [action.text().split("    ")[0] for action in menu.actions()] == [
+            f"devices/test_device/editor.jsonl:{usage.line}" for usage in usages
+        ]
+        menu.actions()[1].trigger()
+        assert window.source_editor.current_file == usages[1].path
+        menu.close()
+
+    def test_a_key_is_ctrl_clickable_in_a_variable_file(self, used_variables, window):
+        # GIVEN
+        window.file_tree_widget.openRequested.emit(used_variables)
+        editor = window.source_editor.editor_of(used_variables)
+        editor.resize(500, 200)
+        editor.show()
+        requests = []
+        editor.usagesRequested.connect(lambda name, position: requests.append(name))
+        position = QPoint(editor.fontMetrics().horizontalAdvance("sin") + 2, editor.fontMetrics().height() * 3 // 2)
+
+        # WHEN
+        QTest.mouseClick(editor.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.ControlModifier, position)
+
+        # THEN
+        assert requests == ["single"]
+
+
+class TestUnusedVariables(TestBase):
+    def test_unused_variables_are_dimmed_and_explained(self, unused_file, window):
+        # WHEN
+        window.file_tree_widget.openRequested.emit(unused_file)
+
+        # THEN
+        editor = window.source_editor.editor_of(unused_file)
+        assert [(hint.line, hint.column) for hint in editor._hints] == [(1, 0), (2, 0)]
+        assert len(editor._hint_selections()) == 2
+        issues = editor._card_content_at(QPoint(5, 5)).issues
+        assert issues == [(Severity.HINT, "Not used: no file of any device uses unused_one")]
+
+    def test_the_hints_are_hidden_while_the_text_differs_from_the_analyzed_one(self, unused_file, window):
+        # GIVEN
+        window.file_tree_widget.openRequested.emit(unused_file)
+        editor = window.source_editor.editor_of(unused_file)
+
+        # WHEN: a line is added above
+        editor.set_text("\n" + unused_file.read_text())
+        editor.textEdited.emit()
+        # THEN: their lines would be wrong
+        assert editor._hints == []
+
+        # WHEN: it is the text again
+        editor.set_text(unused_file.read_text())
+        editor.textEdited.emit()
+        # THEN
+        assert len(editor._hints) == 2
+
+
 class TestOpening(TestBase):
     def test_double_click_in_the_tree_opens_the_file_next_to_the_rendered_view(self, window, editor_file):
         # WHEN
@@ -37,6 +194,51 @@ class TestOpening(TestBase):
         assert window.source_editor.current_file == editor_file
         assert window.code_view.mode.value == "split"
         assert window.source_editor.current_editor.toPlainText() == EDITOR_JSONL
+
+    def test_the_rendered_view_shows_the_objects_of_the_open_file(self, window, editor_file):
+        # GIVEN
+        [component] = window.session.components
+        assert window.file_rendered.view.toPlainText() == ""
+
+        # WHEN
+        window.file_tree_widget.openRequested.emit(editor_file)
+
+        # THEN
+        lines = window.file_rendered.view.toPlainText().splitlines()
+        assert [json.loads(line)["id"] for line in lines] == [
+            obj["id"] for obj in window.session.working_objects[component.key]
+        ]
+
+    def test_the_rendered_view_follows_the_current_tab(self, window, editor_file, cfg_root):
+        # GIVEN
+        window.file_tree_widget.openRequested.emit(editor_file)
+        other = cfg_root / "other.cmd"
+        other.write_text("page 1\n")
+
+        # WHEN: a file without objects in the draft
+        window.file_tree_widget.openRequested.emit(other)
+
+        # THEN
+        assert window.file_rendered.view.toPlainText() == ""
+        assert window.file_rendered.view.placeholderText() == "No objects of this file in the draft."
+
+    def test_the_rendered_view_says_when_it_is_out_of_date(self, window, editor_file):
+        # GIVEN
+        window.file_tree_widget.openRequested.emit(editor_file)
+        editor = window.source_editor.current_editor
+        assert not window.file_rendered.out_of_date
+
+        # WHEN: unsaved text
+        editor.set_text(EDITOR_JSONL.replace('"x": 10', '"x": 55'))
+        editor.textEdited.emit()
+        # THEN
+        assert window.file_rendered.out_of_date
+
+        # WHEN: saved
+        window.source_editor.save(editor_file)
+        # THEN: once the draft is loaded from the saved file
+        wait_until(lambda: not window.file_rendered.out_of_date)
+        assert x_of_label(window) == 55
 
     def test_selecting_an_object_shows_its_line(self, window, editor_file):
         # GIVEN
@@ -83,6 +285,21 @@ class TestOpening(TestBase):
         window.page_layout_editor_widget.page_preview_widget.select_object(button)
         # THEN
         assert window.source_editor.open_files == []
+
+    def test_ctrl_click_on_a_variable_opens_its_definition(self, window, editor_file, cfg_root):
+        # GIVEN
+        variables = cfg_root / "devices" / "test_device" / "vars.yaml"
+        variables.write_text("header:\n  bar:\n    height: 27\n")
+        window.file_tree_widget.openRequested.emit(editor_file)
+        editor = window.source_editor.editor_of(editor_file)
+        assert window.source_sync.find_definition(editor_file, "header.bar.height").line == 3
+
+        # WHEN
+        editor.definitionRequested.emit("header.bar")
+
+        # THEN
+        assert window.source_editor.current_file == variables.resolve()
+        assert window.source_editor.current_editor.cursor_line_column[0] == 2
 
     def test_files_that_cannot_be_opened_are_reported(self, window, cfg_root):
         failures = []

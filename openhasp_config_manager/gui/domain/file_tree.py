@@ -1,14 +1,12 @@
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Set
+from typing import Dict, Iterable, List, Optional
 
-import yaml
 
 from openhasp_config_manager.const import COMMON_FOLDER_NAME
 from openhasp_config_manager.gui.domain.plate_session import ComponentSource
 from openhasp_config_manager.openhasp_client.model.component import CmdComponent, JsonlComponent
-from openhasp_config_manager.processing.template_rendering import referenced_variables
 
 
 class FileKind(Enum):
@@ -46,11 +44,20 @@ def config_root_of(device_path: Path) -> Path:
 
 def scan_file_tree(device_path: Path) -> List[FileNode]:
     """
-    The folders of the config directory that hold the files of a device: `common` (if it exists) and the device
+    The folders of the config directory that hold the files of a device: the config directory itself with its global
+    variable files (`theme.yaml`, `global.vars.yaml`, ...; not its subfolders), `common` (if it exists) and the device
     folder, with their subfolders. Only .jsonl, .cmd and variable (.yaml) files are listed, folders without any are
     left out.
     """
     roots = []
+    config_root = config_root_of(device_path)
+    global_variables = [
+        FileNode(name=entry.name, path=entry, kind=FileKind.VARIABLES)
+        for entry in sorted(config_root.iterdir(), key=lambda e: e.name)
+        if entry.is_file() and not entry.name.startswith(".") and _KINDS.get(entry.suffix) == FileKind.VARIABLES
+    ]
+    if global_variables:
+        roots.append(FileNode(name=config_root.name, path=config_root, kind=FileKind.FOLDER, children=global_variables))
     common = scan_folder(Path(config_root_of(device_path), COMMON_FOLDER_NAME))
     if common is not None:
         roots.append(common)
@@ -101,62 +108,6 @@ def used_files(cmd_components: List[CmdComponent], jsonl_components: List[JsonlC
         if script in cmds:
             visit(cmds[script], script)
     return result
-
-
-def used_variable_files(roots: List[FileNode], used: Iterable[Path], device_path: Path) -> Dict[Path, List[str]]:
-    """
-    The variable (.yaml) files whose variables the used files reference. A variable file applies to the files in its
-    folder and below; the files of the common folder also get the variables of the device folder itself
-    (see `DeviceProcessor`). Variables used by the values of other variables count too.
-    :param roots: the folders of the device (see `scan_file_tree`)
-    :param used: the .cmd and .jsonl files the plate runs (see `used_files`)
-    :return: the path of each used variable file -> the names of its variables that are referenced. A file that can't
-        be read as YAML counts as used (with no names): better shown than hidden by mistake.
-    """
-    device_path = device_path.resolve()
-    common_path = Path(config_root_of(device_path), COMMON_FOLDER_NAME)
-    used = [path.resolve() for path in used]
-    references = {path: referenced_variables(path.read_text()) for path in used if path.is_file()}
-
-    variable_files: Dict[Path, Dict[str, Any]] = {}
-    unreadable: Dict[Path, List[str]] = {}
-    stack = list(roots)
-    while stack:
-        node = stack.pop()
-        stack.extend(node.children)
-        if node.kind == FileKind.VARIABLES:
-            try:
-                content = yaml.safe_load(node.path.read_text())
-            except yaml.YAMLError:
-                unreadable[node.path.resolve()] = []
-                continue
-            variable_files[node.path.resolve()] = content if isinstance(content, dict) else {}
-
-    def in_scope(variable_file: Path, path: Path) -> bool:
-        folder = variable_file.parent
-        return path.is_relative_to(folder) or (path.is_relative_to(common_path) and folder == device_path)
-
-    result: Dict[Path, Set[str]] = {}
-    for path, names in references.items():
-        visible = {
-            variable_file: variables for variable_file, variables in variable_files.items() if in_scope(variable_file, path)
-        }
-        names = set(names)
-        # variables can use other variables: follow their values until nothing new is found
-        while True:
-            used_here = {
-                variable_file: set(variables) & names for variable_file, variables in visible.items() if set(variables) & names
-            }
-            more = set()
-            for variable_file, used_names in used_here.items():
-                more |= referenced_variables(yaml.safe_dump({name: visible[variable_file][name] for name in used_names}))
-            if more <= names:
-                break
-            names |= more
-        for variable_file, used_names in used_here.items():
-            result.setdefault(variable_file, set()).update(used_names)
-
-    return {**{path: sorted(names) for path, names in result.items()}, **unreadable}
 
 
 def format_pages(pages: Iterable[int]) -> str:

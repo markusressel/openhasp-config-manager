@@ -25,8 +25,9 @@ class CodeViewMode(StrEnum):
 class CodeView(QWidget):
     """
     The files as text. Like the design/code views of Android Studio, one view shows either the source (the text
-    editor for the files, as written, with their templates), the rendered JSONL of the page (what the plate gets), or both side by
-    side (or above each other), with a splitter between them.
+    editor for the files, as written, with their templates), the rendered JSONL of the file in the current tab (what its templates
+    make of it), or both side by side (or above each other), with a splitter between them. The JSONL of the whole page, from all
+    files, is the "Page JSONL" dock.
     """
 
     modeChanged = QtCore.pyqtSignal(object)
@@ -48,7 +49,12 @@ class CodeView(QWidget):
         for mode, title, icon, tooltip in (
             (CodeViewMode.SOURCE, "Source", "file-code-outline", "Edit the files as written, with their templates"),
             (CodeViewMode.SPLIT, "Split", "view-split-vertical", "Source and rendered side by side"),
-            (CodeViewMode.RENDERED, "Rendered", "eye-outline", "The JSONL of the page the way the plate gets it"),
+            (
+                CodeViewMode.RENDERED,
+                "Rendered",
+                "eye-outline",
+                "The JSONL of the file in the current tab, with its templates rendered",
+            ),
         ):
             action = UiComponents.create_action(self, title, icon, tooltip=tooltip, checkable=True)
             action.triggered.connect(lambda _checked=False, mode=mode: self.set_mode(mode))

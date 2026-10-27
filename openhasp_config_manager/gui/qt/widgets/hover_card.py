@@ -37,6 +37,13 @@ class CardContent:
         return not self.issues and self.help is None
 
 
+def _severity_color(severity: Severity) -> str:
+    colors = current_colors()
+    if severity == Severity.ERROR:
+        return colors.error
+    return colors.warning if severity == Severity.WARNING else "#8a8a8a"
+
+
 def _with_alpha(color: QColor, alpha: int) -> str:
     return f"rgba({color.red()}, {color.green()}, {color.blue()}, {alpha})"
 
@@ -145,8 +152,7 @@ class HoverCard(QFrame):
         self._issues.setVisible(bool(issues))
         self._issues.setText(
             "<br>".join(
-                f'<span style="color: {colors.error if severity == Severity.ERROR else colors.warning};">&#9679;</span> '
-                f"{self._inline(message)}"
+                f'<span style="color: {_severity_color(severity)};">&#9679;</span> {self._inline(message)}'
                 for severity, message in issues
             )
         )

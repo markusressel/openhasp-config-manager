@@ -29,7 +29,7 @@ class TokenKind(StrEnum):
     COMMENT = "comment"
     # a `{{ ... }}` or `{% ... %}` of a string, with its delimiters
     TEMPLATE = "template"
-    # a string that is a color, like "#ff8800"
+    # a string that is a color, like "#ff8800" (with its quotes)
     COLOR = "color"
     COMMAND = "command"
     ARGUMENT = "argument"
@@ -49,7 +49,7 @@ _LANGUAGES = {".jsonl": Language.JSONL, ".cmd": Language.CMD, ".yaml": Language.
 
 _NUMBER = re.compile(r"-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?")
 _CONSTANT = re.compile(r"true|false|null")
-_COLOR = re.compile(r'"#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})"')
+_COLOR = re.compile(r"([\"'])#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\1")
 _YAML_KEY = re.compile(r"(\s*(?:-\s+)?)([^\s:#'\"][^:#]*?)(\s*:)(?=\s|$)")
 _SYMBOLS = "{}[],:"
 
@@ -164,6 +164,8 @@ def _tokenize_yaml(line: str) -> List[Token]:
             tokens.append(Token(offset, end, TokenKind.NUMBER))
         elif _CONSTANT.fullmatch(stripped):
             tokens.append(Token(offset, end, TokenKind.CONSTANT))
+        elif _COLOR.fullmatch(stripped):
+            tokens.append(Token(offset, end, TokenKind.COLOR))
         else:
             tokens += _split_around_templates(line, offset, end, TokenKind.STRING)
     if comment is not None:
