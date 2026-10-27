@@ -19,7 +19,7 @@ from openhasp_config_manager.gui.qt.components import UiComponents
 from openhasp_config_manager.gui.qt.widgets.code_editor.editor import CodeEditor
 from openhasp_config_manager.gui.qt.widgets.source.find_bar import FindBar
 from openhasp_config_manager.gui.qt.widgets.message_panel import DiskConflictBanner
-from openhasp_config_manager.gui.qt.widgets.source.usages_menu import show_usages_menu
+from openhasp_config_manager.gui.qt.widgets.source.usages_popup import UsagesPopup, show_usages_popup
 
 LOGGER = logging.getLogger(__name__)
 
@@ -68,6 +68,7 @@ class SourceEditorWidget(QWidget):
         self._pages: Dict[Path, _Page] = {}
         # the file opened by selecting an object: replaced by the next one until the user edits it or opens it for real
         self._preview_tab: Optional[Path] = None
+        self._usages_popup: Optional[UsagesPopup] = None
         self._variables: Callable[[Path], List[str]] = lambda path: []
         self._definitions: Callable[[Path, str], Optional[Definition]] = lambda path, name: None
         self._usages: Callable[[Path, str], List[Usage]] = lambda path, name: []
@@ -484,7 +485,9 @@ class SourceEditorWidget(QWidget):
         elif len(usages) == 1:
             self._open_usage(usages[0])
         else:
-            self._usages_menu = show_usages_menu(self, usages, self._config_dir, position, self._open_usage)
+            if self._usages_popup is not None:
+                self._usages_popup.deleteLater()
+            self._usages_popup = show_usages_popup(self, usages, self._config_dir, position, self._open_usage)
 
     def _open_usage(self, usage: Usage):
         self.open_file(usage.path, usage.line, usage.column)
