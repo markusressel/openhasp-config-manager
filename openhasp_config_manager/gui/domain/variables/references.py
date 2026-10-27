@@ -4,9 +4,10 @@ part of it can be Ctrl+clicked in the text editor. It looks at the text only (no
 `obj` type has a theme (`theme.obj.<type>`), which a file uses without a template. Qt-free.
 """
 
+import json
 import re
 from dataclasses import dataclass
-from typing import Iterator, List, Optional, Tuple
+from typing import FrozenSet, Iterator, List, Optional, Tuple
 
 from openhasp_config_manager.gui.domain.source.syntax import find_templates
 
@@ -22,6 +23,7 @@ _STRING = re.compile(r"'(?:\\.|[^'\\])*'|\"(?:\\.|[^\"\\])*\"")
 _DEFINED = re.compile(r"(?<=\{%)(?:-?\s*for\s+)([\w\s,]+?)(?=\s+in\b)|(?<=\{%)(?:-?\s*set\s+)(\w+)(?=\s*=)")
 _DELIMITER = re.compile(r"^\{[{%#]-?|-?[}%#]\}$")
 _OBJECT_TYPE = re.compile(r'"obj"\s*:\s*"([^"{}]+)"')
+_KEY = re.compile(r'"(\w+)"\s*:')
 
 
 @dataclass(frozen=True)
@@ -60,6 +62,8 @@ class ObjectTypeUse:
     start: int
     end: int
     type: str
+    # the properties the object sets itself: they replace the ones of the theme
+    keys: FrozenSet[str]
 
     @property
     def variable(self) -> str:
@@ -111,8 +115,19 @@ def part_at(line: str, column: int) -> Optional[VariablePart]:
     return None
 
 
+def _object_keys(line: str) -> FrozenSet[str]:
+    """:return: the properties of the object of a line, also if the line is no valid JSON (e.g. a template outside of a string)"""
+    try:
+        parsed = json.loads(line)
+    except ValueError:
+        return frozenset(_KEY.findall(line))
+    return frozenset(parsed) if isinstance(parsed, dict) else frozenset()
+
+
 def object_type_uses(line: str) -> List[ObjectTypeUse]:
-    return [ObjectTypeUse(*match.span(1), match.group(1)) for match in _OBJECT_TYPE.finditer(line)]
+    matches = list(_OBJECT_TYPE.finditer(line))
+    keys = _object_keys(line) if matches else frozenset()
+    return [ObjectTypeUse(*match.span(1), match.group(1), keys) for match in matches]
 
 
 def scan_text(text: str) -> Iterator[Tuple[int, List[VariableUse], List[ObjectTypeUse]]]:
