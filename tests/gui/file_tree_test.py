@@ -193,6 +193,19 @@ class TestFileTreeWidget(TestBase):
         assert self._visible(device) == ["0_home", "boot.cmd", "old.cmd", "old.jsonl", "vars.yaml"]
         assert device.child(3).text(1) == "not used"
 
+    def test_a_used_variable_file_shows_what_is_used_and_is_not_dimmed(self, tmp_path):
+        # GIVEN
+        from PyQt6.QtCore import Qt
+
+        widget = self._widget(tmp_path)
+        device = widget.tree.topLevelItem(1)
+        used = next(device.child(i) for i in range(device.childCount()) if device.child(i).text(0) == "vars.yaml")
+
+        # THEN
+        assert used.text(1) == "title"
+        assert "Used: title" in used.toolTip(0)
+        assert used.foreground(0).style() == Qt.BrushStyle.NoBrush
+
     def test_show_all_is_remembered(self, tmp_path):
         # GIVEN
         self._widget(tmp_path).set_show_all(True)
@@ -307,6 +320,30 @@ class TestUsedVariableFiles(TestBase):
             (tmp_path / path).parent.mkdir(parents=True, exist_ok=True)
             (tmp_path / path).write_text(content)
 
+    def test_the_theme_is_used_by_the_objects_of_its_types_without_a_template(self, tmp_path):
+        # GIVEN
+        from openhasp_config_manager.gui.domain.file_tree import used_variable_files
+
+        self._write(
+            tmp_path,
+            {
+                "theme.yaml": "theme:\n  obj:\n    btn:\n      radius: 4\n",
+                "other_theme.yaml": "theme:\n  obj:\n    slider:\n      radius: 4\n  header:\n    color: red\n",
+                "global.vars.yaml": "screen:\n  width: 480\nid:\n  time: 10\n",
+                "devices/plate/page.jsonl": '{"obj": "btn", "text": "{{ id.time }}"}',
+            },
+        )
+        device = tmp_path / "devices" / "plate"
+
+        # WHEN
+        result = used_variable_files(scan_file_tree(device), [device / "page.jsonl"], device)
+
+        # THEN: no template refers to `theme`, but the button gets its defaults. The theme of sliders is not used here
+        assert {str(path.relative_to(tmp_path.resolve())): names for path, names in result.items()} == {
+            "theme.yaml": ["theme"],
+            "global.vars.yaml": ["id"],
+        }
+
     def test_variable_files_whose_variables_used_files_reference(self, tmp_path):
         # GIVEN
         from openhasp_config_manager.gui.domain.file_tree import used_variable_files
@@ -341,3 +378,17 @@ class TestUsedVariableFiles(TestBase):
             # can't be read: shown, not hidden
             "devices/plate/broken.yaml": [],
         }
+
+
+class TestLegend(TestBase):
+    def test_the_legend_explains_the_colors_and_the_second_column(self, qapp, settings):
+        from openhasp_config_manager.gui.qt.theme import current_colors
+        from openhasp_config_manager.gui.qt.widgets.file_tree import FileTreeWidget
+
+        html = FileTreeWidget().legend_html()
+
+        assert current_colors().accent in html
+        assert "objects on the page shown in the preview" in html
+        assert "not used" in html
+        assert "Second column" in html
+        assert "{accent}" not in html
