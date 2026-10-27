@@ -4,14 +4,14 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from openhasp_config_manager.gui.domain.draft_files import BOOT_CMD, load_analyzed_device
+from openhasp_config_manager.gui.domain.draft.files import BOOT_CMD, load_analyzed_device
 from openhasp_config_manager.gui.domain.gui_state import relative
 from openhasp_config_manager.gui.domain.file_tree import used_files
-from openhasp_config_manager.gui.domain.page_objects import get_page_objects
-from openhasp_config_manager.gui.domain.plate_session import PlateSession
+from openhasp_config_manager.gui.domain.draft.page_objects import get_page_objects
+from openhasp_config_manager.gui.domain.draft.session import PlateSession
 from openhasp_config_manager.gui.domain.problems import Severity, find_problems, object_name
-from openhasp_config_manager.gui.domain.unused_variables import find_unused_variables
-from openhasp_config_manager.gui.domain.variable_usages import DeviceFiles, VariableUsages
+from openhasp_config_manager.gui.domain.variables.unused import find_unused_variables
+from openhasp_config_manager.gui.domain.variables.usages import DeviceFiles, VariableUsages
 from openhasp_config_manager.manager import ConfigManager
 from openhasp_config_manager.openhasp_client.model.device import Device
 

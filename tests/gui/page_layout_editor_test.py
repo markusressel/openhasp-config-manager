@@ -7,8 +7,8 @@ import orjson
 import pytest
 
 from openhasp_config_manager.cli.common import _create_config_manager
-from openhasp_config_manager.gui.domain.draft_files import load_device
-from openhasp_config_manager.gui.domain.plate_session import PlateSession
+from openhasp_config_manager.gui.domain.draft.files import load_device
+from openhasp_config_manager.gui.domain.draft.session import PlateSession
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 from tests import TestBase
 from tests.gui.helpers import wait_until
@@ -193,7 +193,7 @@ def _key(editor, file_name: str) -> str:
 class TestFiles(TestBase):
     def test_new_objects_go_to_the_chosen_file(self, editor):
         # GIVEN
-        from openhasp_config_manager.gui.domain.page_objects import OpenHASPWidgetType
+        from openhasp_config_manager.gui.domain.draft.page_objects import OpenHASPWidgetType
 
         home = _key(editor, "page.jsonl")
         editor.set_target_component(home)
@@ -208,7 +208,7 @@ class TestFiles(TestBase):
 
     def test_a_new_tab_goes_into_the_tabview_of_the_page(self, editor):
         # GIVEN
-        from openhasp_config_manager.gui.domain.page_objects import OpenHASPWidgetType
+        from openhasp_config_manager.gui.domain.draft.page_objects import OpenHASPWidgetType
 
         home = _key(editor, "page.jsonl")
         editor.set_target_component(home)
@@ -223,7 +223,7 @@ class TestFiles(TestBase):
 
     def test_a_tab_needs_a_tabview_on_the_page(self, editor):
         # GIVEN
-        from openhasp_config_manager.gui.domain.page_objects import OpenHASPWidgetType
+        from openhasp_config_manager.gui.domain.draft.page_objects import OpenHASPWidgetType
 
         home = _key(editor, "page.jsonl")
         editor.set_target_component(home)
@@ -658,7 +658,7 @@ class TestUndo(TestBase):
 
 class TestWidgetPicker(TestBase):
     def test_the_list_of_object_types_scrolls_instead_of_growing_the_preview(self, editor):
-        from openhasp_config_manager.gui.domain.page_objects import WIDGET_TYPES
+        from openhasp_config_manager.gui.domain.draft.page_objects import WIDGET_TYPES
 
         # THEN: all types are offered, but they don't make the editor taller than a small window
         assert len(WIDGET_TYPES) > 20

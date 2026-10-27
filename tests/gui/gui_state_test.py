@@ -7,7 +7,7 @@ import pytest
 
 from openhasp_config_manager.cli.common import _create_config_manager
 from openhasp_config_manager.gui.domain.connection import ConnectionStatus
-from openhasp_config_manager.gui.domain.draft_files import load_device
+from openhasp_config_manager.gui.domain.draft.files import load_device
 from openhasp_config_manager.gui.domain.gui_state import (
     README,
     STATE_DIR_NAME,
@@ -20,7 +20,7 @@ from openhasp_config_manager.gui.domain.gui_state import (
     describe_object,
     describe_problems,
 )
-from openhasp_config_manager.gui.domain.plate_session import PlateSession
+from openhasp_config_manager.gui.domain.draft.session import PlateSession
 from openhasp_config_manager.gui.domain.problems import Problem, Severity
 from tests import TestBase
 

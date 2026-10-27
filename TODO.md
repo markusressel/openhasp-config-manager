@@ -67,11 +67,11 @@ The `gui` extra is done (`pip install 'openhasp-config-manager[gui]'`); AppDaemo
 
 Found in a review of the text editor and preview work, not done yet:
 
-- [ ] `check.py` (CLI, no Qt) imports the editor's domain from `gui/domain/` (`plate_session`, `draft_files`, `problems`,
+- [ ] `check.py` (CLI, no Qt) imports the editor's domain from `gui/domain/` (`draft/session`, `draft/files`, `problems`,
   `gui_state.relative`). It works because `gui/domain` is Qt-free, but the layering is upside down: move the Qt-free model of the
   pages (draft, problems, page objects) out of `gui/`, e.g. to `openhasp_config_manager/pages/`.
 - [ ] The geometry of some preview items is computed in their Qt classes (`HaspArcItem.angles`, `HaspGaugeItem.labels`,
   `HaspLineMeterItem.active_lines`, `drawing.fraction`): move it to `gui/domain` like `line_points.py` and `button_matrix.py`, so it is
   tested without Qt.
-- [ ] `MainWindow._collect_gui_state` builds the `device` part of the state file by hand: a `describe_device` in `gui_state.py`
+- [ ] `collect_gui_state` (`gui/qt/window/gui_state_collector.py`) builds the `device` part of the state file by hand: a `describe_device` in `gui_state.py`
   would make it testable without a window, like the other parts.

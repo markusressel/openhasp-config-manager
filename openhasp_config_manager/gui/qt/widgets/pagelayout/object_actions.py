@@ -4,8 +4,13 @@ from jinja2 import TemplateError
 from PyQt6.QtCore import QObject
 from PyQt6.QtWidgets import QApplication, QMessageBox
 
-from openhasp_config_manager.gui.domain.clipboard import PasteCascade, objects_from_text, objects_to_text, with_descendants
-from openhasp_config_manager.gui.domain.page_objects import OpenHASPWidgetType, create_object, next_free_id
+from openhasp_config_manager.gui.domain.draft.clipboard import (
+    PasteCascade,
+    objects_from_text,
+    objects_to_text,
+    with_descendants,
+)
+from openhasp_config_manager.gui.domain.draft.page_objects import OpenHASPWidgetType, create_object, next_free_id
 from openhasp_config_manager.gui.domain.problems import object_name
 from openhasp_config_manager.gui.domain.tabs import last_tabview_id
 from openhasp_config_manager.gui.qt.operations import error_text

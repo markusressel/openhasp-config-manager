@@ -7,10 +7,10 @@ from PyQt6.QtTest import QTest  # noqa: E402
 from PyQt6.QtWidgets import QMessageBox, QWidget  # noqa: E402
 
 from openhasp_config_manager.gui.domain.problems import Severity  # noqa: E402
-from openhasp_config_manager.gui.domain.source_buffers import DiskChange  # noqa: E402
-from openhasp_config_manager.gui.domain.source_issues import SourceIssue  # noqa: E402
-from openhasp_config_manager.gui.qt.widgets.code_view import CodeView, CodeViewMode  # noqa: E402
-from openhasp_config_manager.gui.qt.widgets.source_editor import SourceEditorWidget  # noqa: E402
+from openhasp_config_manager.gui.domain.source.buffers import DiskChange  # noqa: E402
+from openhasp_config_manager.gui.domain.source.issues import SourceIssue  # noqa: E402
+from openhasp_config_manager.gui.qt.widgets.source.code_view import CodeView, CodeViewMode  # noqa: E402
+from openhasp_config_manager.gui.qt.widgets.source.source_editor import SourceEditorWidget  # noqa: E402
 from tests import TestBase  # noqa: E402
 
 
@@ -312,7 +312,7 @@ class TestFindBar(TestBase):
         assert "Invalid" in bar._status.text()
 
     def test_search_without_an_editor(self, qapp, settings):
-        from openhasp_config_manager.gui.qt.widgets.find_bar import FindBar
+        from openhasp_config_manager.gui.qt.widgets.source.find_bar import FindBar
 
         bar = FindBar()
         bar.open_bar()

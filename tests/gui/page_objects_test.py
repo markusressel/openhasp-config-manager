@@ -2,7 +2,7 @@ from collections import OrderedDict
 
 import pytest
 
-from openhasp_config_manager.gui.domain.page_objects import (
+from openhasp_config_manager.gui.domain.draft.page_objects import (
     OpenHASPWidgetType,
     count_objects,
     create_object,

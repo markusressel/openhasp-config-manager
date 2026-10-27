@@ -1,4 +1,4 @@
-from openhasp_config_manager.gui.domain.source_completion import (
+from openhasp_config_manager.gui.domain.source.completion import (
     CompletionContext,
     Insertion,
     complete,
@@ -7,8 +7,8 @@ from openhasp_config_manager.gui.domain.source_completion import (
     property_insertion,
 )
 from openhasp_config_manager.gui.domain.object_type_docs import is_text_property
-from openhasp_config_manager.gui.domain.source_docs import property_help
-from openhasp_config_manager.gui.domain.source_syntax import Language
+from openhasp_config_manager.gui.domain.source.docs import property_help
+from openhasp_config_manager.gui.domain.source.syntax import Language
 from tests import TestBase
 
 
@@ -48,8 +48,8 @@ class TestComplete(TestBase):
 
 class TestProperties(TestBase):
     def test_documented_properties_are_completed(self):
-        from openhasp_config_manager.gui.domain.source_completion import OBJECT_PROPERTIES
-        from openhasp_config_manager.gui.domain.source_docs import PROPERTY_DOCS
+        from openhasp_config_manager.gui.domain.source.completion import OBJECT_PROPERTIES
+        from openhasp_config_manager.gui.domain.source.docs import PROPERTY_DOCS
 
         assert set(PROPERTY_DOCS) <= set(OBJECT_PROPERTIES)
         assert "tag" in complete(CompletionContext("property", "ta", 1))

@@ -1,6 +1,6 @@
 from openhasp_config_manager.gui.domain.problems import Severity
-from openhasp_config_manager.gui.domain.source_issues import find_source_issues
-from openhasp_config_manager.gui.domain.source_syntax import Language
+from openhasp_config_manager.gui.domain.source.issues import find_source_issues
+from openhasp_config_manager.gui.domain.source.syntax import Language
 from tests import TestBase
 
 

@@ -9,7 +9,7 @@ from openhasp_config_manager.gui.domain.file_tree import (
     relative_config_path,
     scan_file_tree,
 )
-from openhasp_config_manager.gui.domain.draft_model import ComponentSource
+from openhasp_config_manager.gui.domain.draft.model import ComponentSource
 from tests import TestBase
 
 
@@ -131,7 +131,7 @@ class TestDefaultTargetComponent(TestBase):
 @pytest.mark.usefixtures("settings")
 class TestFileTreeWidget(TestBase):
     def _widget(self, tmp_path):
-        from openhasp_config_manager.gui.qt.widgets.file_tree import FileTreeWidget
+        from openhasp_config_manager.gui.qt.widgets.source.file_tree import FileTreeWidget
 
         for path in [
             "common/header.jsonl",
@@ -306,7 +306,7 @@ class TestUsedFiles(TestBase):
 class TestTopLevelFolders(TestBase):
     def test_every_top_level_folder_says_what_it_is_for(self, tmp_path, qapp, settings):
         # GIVEN
-        from openhasp_config_manager.gui.qt.widgets.file_tree import FileTreeWidget
+        from openhasp_config_manager.gui.qt.widgets.source.file_tree import FileTreeWidget
 
         for path in ["theme.yaml", "common/header.jsonl", "devices/plate/boot.cmd", "devices/plate/home/page.jsonl"]:
             (tmp_path / path).parent.mkdir(parents=True, exist_ok=True)
@@ -333,7 +333,7 @@ class TestTopLevelFolders(TestBase):
 class TestLegend(TestBase):
     def test_the_legend_explains_the_colors_and_the_second_column(self, qapp, settings):
         from openhasp_config_manager.gui.qt.theme import current_colors
-        from openhasp_config_manager.gui.qt.widgets.file_tree import FileTreeWidget
+        from openhasp_config_manager.gui.qt.widgets.source.file_tree import FileTreeWidget
 
         html = FileTreeWidget().legend_html()
 

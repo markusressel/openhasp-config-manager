@@ -71,7 +71,7 @@ class TestLogsPanel(TestBase):
 
     def test_connects_only_while_it_is_visible(self, create_window, monkeypatch):
         # GIVEN
-        from openhasp_config_manager.gui.qt import main as window_module
+        from openhasp_config_manager.gui.qt.window import main as window_module
 
         started = []
         monkeypatch.setattr(window_module.LogStreamController, "_restart", lambda self: started.append(self._active))

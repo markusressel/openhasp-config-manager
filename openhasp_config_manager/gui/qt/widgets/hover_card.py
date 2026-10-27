@@ -14,7 +14,7 @@ from PyQt6.QtGui import QColor, QFontDatabase, QPalette
 from PyQt6.QtWidgets import QApplication, QFrame, QHBoxLayout, QLabel, QTextBrowser, QVBoxLayout, QWidget
 
 from openhasp_config_manager.gui.domain.problems import Severity
-from openhasp_config_manager.gui.domain.source_docs import PropertyHelp
+from openhasp_config_manager.gui.domain.source.docs import PropertyHelp
 from openhasp_config_manager.gui.qt.theme import current_colors
 
 _WIDTH = 360

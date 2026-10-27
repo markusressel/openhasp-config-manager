@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from openhasp_config_manager.gui.domain.source_buffers import DiskChange, SourceBuffer, SourceBuffers
+from openhasp_config_manager.gui.domain.source.buffers import DiskChange, SourceBuffer, SourceBuffers
 from tests import TestBase
 
 

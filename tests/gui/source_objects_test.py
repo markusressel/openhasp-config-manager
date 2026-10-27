@@ -1,4 +1,4 @@
-from openhasp_config_manager.gui.domain.source_objects import foldable, object_at_line, scan_objects
+from openhasp_config_manager.gui.domain.source.objects import foldable, object_at_line, scan_objects
 from openhasp_config_manager.processing.jsonl.source_editor import JsonlSourceEditor
 from tests import TestBase
 

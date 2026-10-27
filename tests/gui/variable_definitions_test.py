@@ -1,4 +1,4 @@
-from openhasp_config_manager.gui.domain.variable_definitions import VariableDefinitions, key_at
+from openhasp_config_manager.gui.domain.variables.definitions import VariableDefinitions, key_at
 from tests import TestBase
 
 

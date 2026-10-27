@@ -5,7 +5,7 @@ from PyQt6.QtCore import QPointF, QRectF, Qt
 from PyQt6.QtGui import QColor, QMouseEvent, QPainter, QPalette, QPen
 from PyQt6.QtWidgets import QToolTip, QWidget
 
-from openhasp_config_manager.gui.domain.page_objects import page_label
+from openhasp_config_manager.gui.domain.draft.page_objects import page_label
 from openhasp_config_manager.gui.qt.theme import current_colors
 
 SEGMENT_WIDTH = 16

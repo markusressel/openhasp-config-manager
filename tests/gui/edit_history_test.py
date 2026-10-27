@@ -1,4 +1,4 @@
-from openhasp_config_manager.gui.domain.edit_history import EditHistory
+from openhasp_config_manager.gui.domain.draft.edit_history import EditHistory
 from tests import TestBase
 
 

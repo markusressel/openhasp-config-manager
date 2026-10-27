@@ -9,11 +9,11 @@ from PyQt6.QtGui import QContextMenuEvent, QTextCursor  # noqa: E402
 from PyQt6.QtTest import QTest  # noqa: E402
 
 from openhasp_config_manager.gui.domain.problems import Severity  # noqa: E402
-from openhasp_config_manager.gui.domain.source_syntax import Language  # noqa: E402
-from openhasp_config_manager.gui.domain.variable_definitions import Definition  # noqa: E402
-from openhasp_config_manager.gui.domain.source_issues import SourceIssue  # noqa: E402
-from openhasp_config_manager.gui.qt.widgets.code_editor import CodeEditor  # noqa: E402
-from openhasp_config_manager.gui.qt.widgets import editor_hover  # noqa: E402
+from openhasp_config_manager.gui.domain.source.syntax import Language  # noqa: E402
+from openhasp_config_manager.gui.domain.variables.definitions import Definition  # noqa: E402
+from openhasp_config_manager.gui.domain.source.issues import SourceIssue  # noqa: E402
+from openhasp_config_manager.gui.qt.widgets.code_editor.editor import CodeEditor  # noqa: E402
+from openhasp_config_manager.gui.qt.widgets.code_editor import hover as editor_hover  # noqa: E402
 from tests import TestBase  # noqa: E402
 from tests.gui.helpers import wait_until  # noqa: E402
 

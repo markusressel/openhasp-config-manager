@@ -1,5 +1,5 @@
-from openhasp_config_manager.gui.domain.source_edit import indent_for_new_line, matching_bracket, toggle_comment
-from openhasp_config_manager.gui.domain.source_syntax import Language
+from openhasp_config_manager.gui.domain.source.edit import indent_for_new_line, matching_bracket, toggle_comment
+from openhasp_config_manager.gui.domain.source.syntax import Language
 from tests import TestBase
 
 

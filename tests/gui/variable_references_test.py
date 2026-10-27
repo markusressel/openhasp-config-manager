@@ -1,4 +1,4 @@
-from openhasp_config_manager.gui.domain.variable_references import object_type_uses, part_at, scan_text, variable_uses
+from openhasp_config_manager.gui.domain.variables.references import object_type_uses, part_at, scan_text, variable_uses
 from tests import TestBase
 
 

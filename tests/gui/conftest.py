@@ -70,7 +70,7 @@ def create_window(settings, async_loop, cfg_root, tmp_path, monkeypatch):
     """
     from openhasp_config_manager.cli.common import _create_config_manager
     from openhasp_config_manager.gui.qt import connection
-    from openhasp_config_manager.gui.qt.main import MainWindow
+    from openhasp_config_manager.gui.qt.window.main import MainWindow
 
     monkeypatch.setattr(connection, "OpenHaspClient", _FakeConnectionClient)
     windows = []

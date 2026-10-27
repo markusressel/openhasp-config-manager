@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
 )
 
 from openhasp_config_manager.gui.domain.problems import Problem, find_problems
-from openhasp_config_manager.gui.domain.page_objects import (
+from openhasp_config_manager.gui.domain.draft.page_objects import (
     OpenHASPWidgetType,
     get_page_objects,
     get_navigable_page_indices,
@@ -24,8 +24,8 @@ from openhasp_config_manager.gui.domain.page_objects import (
     step_page,
 )
 from openhasp_config_manager.gui.domain.file_tree import default_target_component, relative_config_path
-from openhasp_config_manager.gui.domain.draft_model import ChangeKind, DraftChange
-from openhasp_config_manager.gui.domain.plate_session import PlateSession
+from openhasp_config_manager.gui.domain.draft.model import ChangeKind, DraftChange
+from openhasp_config_manager.gui.domain.draft.session import PlateSession
 from openhasp_config_manager.gui.domain.ui_session import DeviceSession
 from openhasp_config_manager.gui.qt.components import UiComponents
 from openhasp_config_manager.gui.qt.layouts import frozen
@@ -37,8 +37,8 @@ from openhasp_config_manager.gui.qt.widgets.message_panel import ErrorBanner
 from openhasp_config_manager.gui.qt.widgets.pagelayout import OpenHaspDevicePagesData
 from openhasp_config_manager.gui.qt.widgets.pagelayout.jsonl_preview import PageJsonlPreviewWidget
 from openhasp_config_manager.gui.qt.widgets.pagelayout.problems_panel import ProblemsPanel
-from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widget_picker import OpenHASPWidgetPicker
-from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widget_property_editor import OpenHASPWidgetPropertyEditor
+from openhasp_config_manager.gui.qt.widgets.pagelayout.widget_picker import OpenHASPWidgetPicker
+from openhasp_config_manager.gui.qt.widgets.pagelayout.property_editor import OpenHASPWidgetPropertyEditor
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
 from openhasp_config_manager.gui.qt.widgets.pagelayout.floating_bar import create_zoom_slider, floating_bar
 from openhasp_config_manager.gui.qt.widgets.pagelayout.object_actions import ObjectActions
