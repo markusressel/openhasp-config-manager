@@ -11,6 +11,7 @@ from openhasp_config_manager.gui.domain.source_buffers import DiskChange, Source
 from openhasp_config_manager.gui.domain.source_issues import SourceIssue
 from openhasp_config_manager.gui.domain.source_links import link_targets, resolve_link
 from openhasp_config_manager.gui.domain.source_syntax import language_of
+from openhasp_config_manager.gui.domain.variable_definitions import Definition
 from openhasp_config_manager.gui.qt.components import UiComponents
 from openhasp_config_manager.gui.qt.widgets.code_editor import CodeEditor
 from openhasp_config_manager.gui.qt.widgets.find_bar import FindBar
@@ -60,6 +61,7 @@ class SourceEditorWidget(QWidget):
         # the file opened by selecting an object: replaced by the next one until the user edits it or opens it for real
         self._preview_tab: Optional[Path] = None
         self._variables: Callable[[Path], List[str]] = lambda path: []
+        self._definitions: Callable[[Path, str], Optional[Definition]] = lambda path, name: None
         self._markers: Dict[Path, List[SourceIssue]] = {}
         self._word_wrap = False
         self._show_whitespace = False
@@ -128,6 +130,10 @@ class SourceEditorWidget(QWidget):
         """The template variables a file can use, for the completion."""
         self._variables = provider
 
+    def set_definition_finder(self, finder: Callable[[Path, str], Optional[Definition]]):
+        """Where a variable used in a file is defined, for Ctrl+click on the variables of templates."""
+        self._definitions = finder
+
     def open_file(self, path: Path, line: Optional[int] = None, column: int = 0, focus: bool = True, preview: bool = False):
         """
         Show a file in its tab (a new one if it is not open), at a line.
@@ -159,6 +165,7 @@ class SourceEditorWidget(QWidget):
         editor = CodeEditor(language_of(buffer.path))
         editor.set_text(buffer.text)
         editor.set_variables(lambda path=buffer.path: self._variables(path))
+        editor.set_definition_finder(lambda name, path=buffer.path: self._definitions(path, name))
         editor.set_app_markers(self._markers.get(buffer.path, []))
         editor.set_word_wrap(self._word_wrap)
         editor.set_show_whitespace(self._show_whitespace)
@@ -170,6 +177,7 @@ class SourceEditorWidget(QWidget):
         editor.issuesChanged.connect(self._update_status)
         editor.renameRequested.connect(lambda path=path: self._rename_id(path))
         editor.linkRequested.connect(lambda target, path=path: self._open_link(path, target))
+        editor.definitionRequested.connect(lambda name, path=path: self._open_definition(path, name))
         editor.cursorObjectChanged.connect(lambda index, path=path: self._on_object_at_cursor(path, index))
         editor.cursorPositionChanged.connect(self._update_status)
         page.banner.reloadRequested.connect(lambda path=path: self.reload(path))
@@ -350,6 +358,14 @@ class SourceEditorWidget(QWidget):
             self.show_message(f"No file in the config directory is L:/{target} on the plate")
             return
         self.open_file(found)
+
+    def _open_definition(self, path: Path, name: str):
+        """Ctrl+click on a variable of a template: open the file that defines it, at its line."""
+        found = self._definitions(path, name)
+        if found is None:
+            self.show_message(f"The definition of {name} was not found")
+            return
+        self.open_file(found.path, found.line, found.column)
 
     def _on_object_at_cursor(self, path: Path, index: int):
         # only when the user moved the cursor, not when the app showed a line

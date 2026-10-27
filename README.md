@@ -497,6 +497,14 @@ More features for the objects of a `.jsonl` file:
 - **Rename id** (`Shift+F6`): changes the `id` of the object at the cursor and the `parentid` of the objects on the same page that
   have it as their parent. It refuses an id the page already uses. References in other files or in strings (`p1b2`) are not changed.
 - **Ctrl+click** on `run L:/pages.jsonl` in a `.cmd` file opens the file that has that name on the plate.
+- **Ctrl+click on a variable** in a template (`{{ common.header.bar.height }}`) opens the YAML file that defines it, at its line. Every
+  part of the variable leads to its own key (`header` to `header:`, `height` to `height:`). It uses the rules of the variables: files
+  in deeper folders override those above, and the files of `common` also see the variables of the device. Only the parts that are
+  defined in a YAML file are links (not the Jinja2 keywords and filters, the objects of a file like `p1b1.x`, or `device.*`).
+- **Colors**: strings like `"#0D0F14"` (in `.jsonl` and `.yaml` files, in `#RGB`, `#RRGGBB` or `#AARRGGBB`) are shown in their own
+  color. `Ctrl+click` on one (or *Edit color…* in the context menu) opens a color picker with a hue ring, a saturation/value square,
+  the A, R, G and B values and the text. Every change is written into the file at once as one step to undo, and keeps the quotes and the
+  upper or lower case. An alpha other than 255 makes the color `#AARRGGBB`, but openHASP itself uses `#RRGGBB`.
 
 All of these are also in the context menu.
 

@@ -18,6 +18,7 @@ from PyQt6.QtGui import (
 )
 from PyQt6.QtWidgets import QCompleter, QMenu, QPlainTextEdit, QTextEdit, QWidget
 
+from openhasp_config_manager.gui.domain.colors import parse_color
 from openhasp_config_manager.gui.domain.problems import Severity
 from openhasp_config_manager.gui.domain.source_completion import (
     CompletionContext,
@@ -33,8 +34,10 @@ from openhasp_config_manager.gui.domain.source_issues import SourceIssue, find_s
 from openhasp_config_manager.gui.domain.source_links import Link, link_at
 from openhasp_config_manager.gui.domain.source_objects import SourceObject, foldable, object_at_line, scan_objects
 from openhasp_config_manager.gui.domain.source_rename import id_at_line, rename_object_id
-from openhasp_config_manager.gui.domain.source_syntax import Language
+from openhasp_config_manager.gui.domain.source_syntax import Language, Token, TokenKind, tokenize_line
+from openhasp_config_manager.gui.domain.variable_definitions import Definition, reference_at
 from openhasp_config_manager.gui.qt.source_highlighter import SourceHighlighter
+from openhasp_config_manager.gui.qt.widgets.color_picker import ColorPicker
 from openhasp_config_manager.gui.qt.widgets.hover_card import CardContent, HoverCard
 from openhasp_config_manager.gui.qt.theme import current_colors
 
@@ -109,6 +112,8 @@ class CodeEditor(QPlainTextEdit):
     renameRequested = QtCore.pyqtSignal()
     # Ctrl+click on a reference to another file: its name on the plate (`pages.jsonl` for `L:/pages.jsonl`)
     linkRequested = QtCore.pyqtSignal(str)
+    # Ctrl+click on a part of a variable in a template whose definition is known: the variable up to that part
+    definitionRequested = QtCore.pyqtSignal(str)
 
     def __init__(self, language: Language, parent=None):
         super().__init__(parent)
@@ -119,6 +124,12 @@ class CodeEditor(QPlainTextEdit):
         self._search: Optional[QRegularExpression] = None
         self._search_flags = QTextDocument.FindFlag(0)
         self._variables: Callable[[], List[str]] = lambda: []
+        self._find_definition: Callable[[str], Optional[Definition]] = lambda name: None
+        # the color the picker changes: (block number, start, end of the text with its quotes, whether the first change was made)
+        self._color_edit: Optional[List] = None
+        self._picker = ColorPicker(self)
+        self._picker.colorChanged.connect(self._on_picked_color)
+        self._picker.closed.connect(self._end_color_edit)
         # the first lines of the folded objects
         self._folded: Set[int] = set()
         self._objects: List[SourceObject] = []
@@ -683,9 +694,72 @@ class CodeEditor(QPlainTextEdit):
 
     # --- links, documentation, menu ---
 
+    # --- colors ---
+
+    def _color_at(self, position: QPoint) -> Optional[Tuple[int, Token]]:
+        """:return: (block number, token) of the color string at a position of the viewport"""
+        cursor = self.cursorForPosition(position)
+        text, column = cursor.block().text(), cursor.positionInBlock()
+        for token in tokenize_line(text, self.language):
+            if token.kind == TokenKind.COLOR and token.start <= column < token.end:
+                return cursor.blockNumber(), token
+        return None
+
+    def edit_color(self, block_number: int, token: Token):
+        """Open the color picker for the color string (with its quotes) at a place of the text."""
+        block = self.document().findBlockByNumber(block_number)
+        text = token.text(block.text())
+        argb = parse_color(text[1:-1])
+        if argb is None:
+            return
+        self._color_edit = [block_number, token.start, token.end, False]
+        cursor = QTextCursor(block)
+        cursor.setPosition(block.position() + token.start)
+        rect = self.cursorRect(cursor)
+        anchor = self.viewport().mapTo(self, rect.bottomLeft())
+        self._picker.open(argb)
+        x = min(max(anchor.x(), 4), max(self.width() - self._picker.width() - 4, 4))
+        y = anchor.y() + 4
+        if y + self._picker.height() > self.height():
+            y = max(self.viewport().mapTo(self, rect.topLeft()).y() - self._picker.height() - 4, 4)
+        self._picker.move(x, y)
+
+    def _on_picked_color(self, argb):
+        """The picker changed the color: write it into the text, as one step of the undo history."""
+        if self._color_edit is None:
+            return
+        block_number, start, end, started = self._color_edit
+        block = self.document().findBlockByNumber(block_number)
+        quote = block.text()[start]
+        cursor = QTextCursor(self.document())
+        cursor.setPosition(block.position() + start)
+        cursor.setPosition(block.position() + end, QTextCursor.MoveMode.KeepAnchor)
+        # the changes while the picker is open are one step to undo
+        if started:
+            cursor.joinPreviousEditBlock()
+        else:
+            cursor.beginEditBlock()
+        new_text = f"{quote}{argb.hex()}{quote}"
+        cursor.insertText(new_text)
+        cursor.endEditBlock()
+        self._color_edit = [block_number, start, start + len(new_text), True]
+
+    def _end_color_edit(self):
+        self._color_edit = None
+        self.setFocus()
+
+    def set_definition_finder(self, finder: Callable[[str], Optional[Definition]]):
+        """Where a variable of a template is defined: only the parts of variables that are found can be Ctrl+clicked."""
+        self._find_definition = finder
+
     def _link_at(self, position) -> Optional[Tuple[int, Link]]:
         cursor = self.cursorForPosition(position)
-        link = link_at(cursor.block().text(), cursor.positionInBlock(), self.language)
+        text, column = cursor.block().text(), cursor.positionInBlock()
+        link = link_at(text, column, self.language)
+        if link is None and self.language != Language.TEXT:
+            reference = reference_at(text, column)
+            if reference is not None and self._find_definition(reference.name) is not None:
+                link = Link(reference.start, reference.end, reference.name, kind="variable")
         return None if link is None else (cursor.blockNumber(), link)
 
     def _set_hover_link(self, found: Optional[Tuple[int, Link]]):
@@ -727,13 +801,19 @@ class CodeEditor(QPlainTextEdit):
         super().leaveEvent(event)
 
     def mouseReleaseEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            color = self._color_at(event.position().toPoint())
+            if color is not None:
+                self.edit_color(*color)
+                event.accept()
+                return
         found = self._link_at(event.position().toPoint())
         if (
             found is not None
             and event.button() == Qt.MouseButton.LeftButton
             and event.modifiers() & Qt.KeyboardModifier.ControlModifier
         ):
-            self.linkRequested.emit(found[1].target)
+            (self.definitionRequested if found[1].kind == "variable" else self.linkRequested).emit(found[1].target)
             event.accept()
             return
         super().mouseReleaseEvent(event)
@@ -746,6 +826,12 @@ class CodeEditor(QPlainTextEdit):
     def contextMenuEvent(self, event):
         menu: QMenu = self.createStandardContextMenu()
         menu.addSeparator()
+        color = self._color_at(event.pos())
+        if color is not None:
+            action = QAction("Edit color…\tCtrl+click", menu)
+            action.triggered.connect(lambda _checked=False, color=color: self.edit_color(*color))
+            menu.addAction(action)
+            menu.addSeparator()
         for text, handler in (
             ("Format document\tCtrl+Alt+L", self.format_document),
             ("Rename id…\tShift+F6", self.renameRequested.emit),

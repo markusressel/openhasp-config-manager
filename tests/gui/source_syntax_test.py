@@ -66,6 +66,20 @@ class TestJsonl(TestBase):
         assert _kinds('"c": "#ff8800"')[-1] == ('"#ff8800"', TokenKind.COLOR)
         assert _kinds('"c": "#fff"')[-1] == ('"#fff"', TokenKind.COLOR)
         assert _kinds('"c": "#ff88"')[-1] == ('"#ff88"', TokenKind.STRING)
+        assert _kinds('"c": "#80ff8800"')[-1] == ('"#80ff8800"', TokenKind.COLOR)
+
+    def test_colors_in_yaml(self):
+        assert _kinds('  background_color: "#0D0F14"', Language.YAML) == [
+            ("background_color", TokenKind.KEY),
+            ('"#0D0F14"', TokenKind.COLOR),
+        ]
+        assert _kinds("c: '#fff' # white", Language.YAML)[1:] == [
+            ("'#fff'", TokenKind.COLOR),
+            ("# white", TokenKind.COMMENT),
+        ]
+        # an unquoted one is a comment in YAML, a mismatched quote is no color
+        assert _kinds("c: #fff", Language.YAML)[-1][1] == TokenKind.COMMENT
+        assert _kinds("c: \"#fff'", Language.YAML)[-1][1] == TokenKind.STRING
 
     def test_templates_are_split_out_of_strings(self):
         assert _kinds('"text": "a {{ b }} c"')[2:] == [
@@ -129,7 +143,7 @@ class TestYaml(TestBase):
         assert _kinds("- plain", Language.YAML) == [("- plain", TokenKind.STRING)]
 
     def test_hash_in_quotes_is_no_comment(self):
-        assert _kinds('color: "#fff"', Language.YAML) == [("color", TokenKind.KEY), ('"#fff"', TokenKind.STRING)]
+        assert _kinds('color: "#fff"', Language.YAML) == [("color", TokenKind.KEY), ('"#fff"', TokenKind.COLOR)]
         assert _kinds("color: '#fff' # c", Language.YAML)[-1] == ("# c", TokenKind.COMMENT)
         assert _kinds("# all", Language.YAML) == [("# all", TokenKind.COMMENT)]
         assert _kinds("a#b", Language.YAML) == [("a#b", TokenKind.STRING)]

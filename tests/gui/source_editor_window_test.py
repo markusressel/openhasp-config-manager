@@ -129,6 +129,21 @@ class TestOpening(TestBase):
         # THEN
         assert window.source_editor.open_files == []
 
+    def test_ctrl_click_on_a_variable_opens_its_definition(self, window, editor_file, cfg_root):
+        # GIVEN
+        variables = cfg_root / "devices" / "test_device" / "vars.yaml"
+        variables.write_text("header:\n  bar:\n    height: 27\n")
+        window.file_tree_widget.openRequested.emit(editor_file)
+        editor = window.source_editor.editor_of(editor_file)
+        assert window.source_sync.find_definition(editor_file, "header.bar.height").line == 3
+
+        # WHEN
+        editor.definitionRequested.emit("header.bar")
+
+        # THEN
+        assert window.source_editor.current_file == variables.resolve()
+        assert window.source_editor.current_editor.cursor_line_column[0] == 2
+
     def test_files_that_cannot_be_opened_are_reported(self, window, cfg_root):
         failures = []
         window.status.failed.connect(lambda description, error: failures.append(description))
