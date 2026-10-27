@@ -1,7 +1,12 @@
 from jinja2 import TemplateSyntaxError
 
-from openhasp_config_manager.gui.domain.source_syntax import Language
-from openhasp_config_manager.gui.domain.template_values import describe_value, line_colors, line_values, variable_help
+from openhasp_config_manager.gui.domain.source.syntax import Language
+from openhasp_config_manager.gui.domain.variables.template_values import (
+    describe_value,
+    line_colors,
+    line_values,
+    variable_help,
+)
 from tests import TestBase
 
 VARIABLES = {"header": {"height": 44, "title": "Living room"}, "flag": True, "items": [1, 2, 3]}

@@ -1,47 +1,35 @@
 import logging
-import math
 from collections import Counter, OrderedDict
 from typing import List, Dict, Optional, Any, Callable, Set, Tuple
 
 from PyQt6 import QtCore
-from jinja2 import TemplateError
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QAction, QKeySequence
+from PyQt6.QtGui import QKeySequence
 from PyQt6.QtWidgets import (
-    QApplication,
-    QSlider,
     QWidget,
     QToolBar,
     QComboBox,
-    QMessageBox,
-    QToolButton,
-    QFrame,
-    QHBoxLayout,
-    QVBoxLayout,
 )
 
-from openhasp_config_manager.gui.domain.problems import Problem, find_problems, object_name
-from openhasp_config_manager.gui.domain.tabs import last_tabview_id
-from openhasp_config_manager.gui.domain.page_objects import (
+from openhasp_config_manager.gui.domain.problems import Problem, find_problems
+from openhasp_config_manager.gui.domain.draft.page_objects import (
     OpenHASPWidgetType,
     get_page_objects,
     get_navigable_page_indices,
     count_objects,
-    next_free_id,
     is_id_used,
-    create_object,
     navigate,
     page_label,
     selectable_pages,
     step_page,
 )
-from openhasp_config_manager.gui.domain.clipboard import PasteCascade, objects_from_text, objects_to_text, with_descendants
 from openhasp_config_manager.gui.domain.file_tree import default_target_component, relative_config_path
-from openhasp_config_manager.gui.domain.plate_session import ChangeKind, DraftChange, PlateSession
+from openhasp_config_manager.gui.domain.draft.model import ChangeKind, DraftChange
+from openhasp_config_manager.gui.domain.draft.session import PlateSession
 from openhasp_config_manager.gui.domain.ui_session import DeviceSession
 from openhasp_config_manager.gui.qt.components import UiComponents
 from openhasp_config_manager.gui.qt.layouts import frozen
-from openhasp_config_manager.gui.qt.operations import BusyState, OperationStatus, error_text
+from openhasp_config_manager.gui.qt.operations import BusyState, OperationStatus
 from openhasp_config_manager.gui.qt.async_bridge import qBridge
 from openhasp_config_manager.gui.qt.ui_session_store import UiSessionStore
 from openhasp_config_manager.gui.qt.widgets.device_controls import DeviceControlsWidget
@@ -49,31 +37,23 @@ from openhasp_config_manager.gui.qt.widgets.message_panel import ErrorBanner
 from openhasp_config_manager.gui.qt.widgets.pagelayout import OpenHaspDevicePagesData
 from openhasp_config_manager.gui.qt.widgets.pagelayout.jsonl_preview import PageJsonlPreviewWidget
 from openhasp_config_manager.gui.qt.widgets.pagelayout.problems_panel import ProblemsPanel
-from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widget_picker import OpenHASPWidgetPicker
-from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widget_property_editor import OpenHASPWidgetPropertyEditor
+from openhasp_config_manager.gui.qt.widgets.pagelayout.widget_picker import OpenHASPWidgetPicker
+from openhasp_config_manager.gui.qt.widgets.pagelayout.property_editor import OpenHASPWidgetPropertyEditor
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
+from openhasp_config_manager.gui.qt.widgets.pagelayout.floating_bar import create_zoom_slider, floating_bar
+from openhasp_config_manager.gui.qt.widgets.pagelayout.object_actions import ObjectActions
 from openhasp_config_manager.gui.qt.widgets.pagelayout.plate_link import PlateLink
-from openhasp_config_manager.gui.dimensions import UiDimensions
+from openhasp_config_manager.gui.qt.widgets.pagelayout.preview_overlays import OverlayAnchor
 from openhasp_config_manager.gui.qt.widgets.pagelayout.page_indicator import PageIndicator
 from openhasp_config_manager.gui.qt.widgets.pagelayout.page_preview_layout import (
-    MAX_ZOOM,
-    MIN_ZOOM,
-    OverlayAnchor,
     PagePreviewWidget,
     PreviewMode,
 )
 
 LOGGER = logging.getLogger(__name__)
 
-LOCKED_POSITION_HINT = "the position is a template or a percentage: use pixels for x/y in the properties to move it"
-LOCKED_POSITION_FIX = "To move it, use pixels for x/y in the properties: this replaces the template or percentage."
-
 NUDGE_STEP = 1
 NUDGE_STEP_LARGE = 10
-
-
-# the positions of the zoom slider
-ZOOM_SLIDER_STEPS = 100
 
 
 class PageLayoutEditorWidget(QWidget):
@@ -113,17 +93,17 @@ class PageLayoutEditorWidget(QWidget):
         self._jsonl_dimmed_component: Optional[str] = None
         # what is wrong with the objects on the page
         self.problems: List[Problem] = []
-        self._paste_cascade = PasteCascade()
 
         # remote control of the selected plate; the preview shows its brightness
         self.device_controls = DeviceControlsWidget(status=status)
         # what is wrong with the objects of the page
         self.problems_panel = ProblemsPanel()
 
+        self.object_actions = ObjectActions(self)
         self.property_editor = OpenHASPWidgetPropertyEditor()
-        self.property_editor.removeObjectClicked.connect(self.remove_selected_objects)
-        self.property_editor.duplicateObjectClicked.connect(self.duplicate_selected_objects)
-        self.property_editor.usePixelPositionClicked.connect(self.use_pixel_positions)
+        self.property_editor.removeObjectClicked.connect(self.object_actions.remove_selected)
+        self.property_editor.duplicateObjectClicked.connect(self.object_actions.duplicate_selected)
+        self.property_editor.usePixelPositionClicked.connect(self.object_actions.use_pixel_positions)
         self.property_editor.set_validator(self._validate_property)
 
         self.jsonl_preview = PageJsonlPreviewWidget()
@@ -152,7 +132,7 @@ class PageLayoutEditorWidget(QWidget):
         row = UiComponents.create_row(parent=self)
 
         self.widget_picker = OpenHASPWidgetPicker()
-        self.widget_picker.addItem.connect(self.add_object)
+        self.widget_picker.addItem.connect(self.object_actions.add)
         row.addWidget(self.widget_picker)
 
         column = UiComponents.create_column()
@@ -162,13 +142,13 @@ class PageLayoutEditorWidget(QWidget):
         column.addWidget(self.error_banner)
 
         self.page_preview_widget = PagePreviewWidget()
-        self.page_preview_widget.set_movable_predicate(lambda obj: self.session is None or self._is_movable(obj))
+        self.page_preview_widget.set_movable_predicate(lambda obj: self.session is None or self.object_actions.is_movable(obj))
         self.page_preview_widget.buttonClicked.connect(self.__on_preview_layout_button_clicked)
         self.page_preview_widget.modeChanged.connect(self._on_editor_mode_changed)
         self.page_preview_widget.selectionChanged.connect(self._on_openhasp_widget_selection_changed)
-        self.page_preview_widget.itemsMoved.connect(self._on_items_moved)
-        self.page_preview_widget.lockedDragAttempted.connect(self._report_locked)
-        self.page_preview_widget.addObjectRequested.connect(lambda: self.add_object(OpenHASPWidgetType.LABEL))
+        self.page_preview_widget.itemsMoved.connect(self.object_actions.on_items_moved)
+        self.page_preview_widget.lockedDragAttempted.connect(self.object_actions.report_locked)
+        self.page_preview_widget.addObjectRequested.connect(lambda: self.object_actions.add(OpenHASPWidgetType.LABEL))
         column.addWidget(self.page_preview_widget, 1)
 
     def _create_actions(self):
@@ -212,17 +192,24 @@ class PageLayoutEditorWidget(QWidget):
         self.action_undo = create(self, "Undo", "undo", self.undo, shortcut=QKeySequence.StandardKey.Undo)
         self.action_redo = create(self, "Redo", "redo", self.redo, shortcut=QKeySequence.StandardKey.Redo)
         self.action_duplicate = create(
-            self, "Duplicate", "content-duplicate", self.duplicate_selected_objects, shortcut="Ctrl+D", context=canvas
+            self, "Duplicate", "content-duplicate", self.object_actions.duplicate_selected, shortcut="Ctrl+D", context=canvas
         )
-        self.action_delete = create(self, "Remove", "delete", self.remove_selected_objects, shortcut="Del", context=canvas)
+        self.action_delete = create(
+            self, "Remove", "delete", self.object_actions.remove_selected, shortcut="Del", context=canvas
+        )
         self.action_copy = create(
-            self, "Copy", "content-copy", self.copy_selected_objects, shortcut=QKeySequence.StandardKey.Copy, context=canvas
+            self,
+            "Copy",
+            "content-copy",
+            self.object_actions.copy_selected,
+            shortcut=QKeySequence.StandardKey.Copy,
+            context=canvas,
         )
         self.action_paste = create(
             self,
             "Paste",
             "content-paste",
-            self.paste_objects,
+            self.object_actions.paste,
             shortcut=QKeySequence.StandardKey.Paste,
             tooltip="Paste the copied objects where the mouse is, or next to the originals",
             context=canvas,
@@ -277,7 +264,7 @@ class PageLayoutEditorWidget(QWidget):
                         self,
                         f"Nudge {key.lower()}",
                         "arrow-all",
-                        lambda dx=dx, dy=dy, step=step: self.nudge_selected_objects(dx * step, dy * step),
+                        lambda dx=dx, dy=dy, step=step: self.object_actions.nudge_selected(dx * step, dy * step),
                         shortcut=f"{modifier}{key}",
                         context=canvas,
                     )
@@ -302,10 +289,11 @@ class PageLayoutEditorWidget(QWidget):
         self.toolbar.addAction(self.plate.action_restore_plate)
 
         preview = self.page_preview_widget
-        preview.add_overlay(self._floating_bar([self.device_controls]), OverlayAnchor.TOP_LEFT)
+        self.zoom_slider = create_zoom_slider(preview)
+        preview.add_overlay(floating_bar([self.device_controls]), OverlayAnchor.TOP_LEFT)
         preview.add_overlay(self.problems_panel, OverlayAnchor.BOTTOM_LEFT)
         preview.add_overlay(
-            self._floating_bar(
+            floating_bar(
                 [
                     self.action_edit_mode,
                     self.action_snap,
@@ -321,13 +309,11 @@ class PageLayoutEditorWidget(QWidget):
             OverlayAnchor.TOP_RIGHT,
         )
         preview.add_overlay(
-            self._floating_bar(
-                [self.action_previous_page, self.page_combo, self.action_next_page], footer=self.page_indicator
-            ),
+            floating_bar([self.action_previous_page, self.page_combo, self.action_next_page], footer=self.page_indicator),
             OverlayAnchor.BOTTOM_CENTER,
         )
         preview.add_overlay(
-            self._floating_bar([self.action_zoom_out, self._create_zoom_slider(), self.action_zoom_in, self.action_zoom_fit]),
+            floating_bar([self.action_zoom_out, self.zoom_slider, self.action_zoom_in, self.action_zoom_fit]),
             OverlayAnchor.BOTTOM_RIGHT,
         )
 
@@ -335,73 +321,6 @@ class PageLayoutEditorWidget(QWidget):
         self.action_zoom_fit.blockSignals(True)
         self.action_zoom_fit.setChecked(fit)
         self.action_zoom_fit.blockSignals(False)
-
-    def _create_zoom_slider(self) -> QSlider:
-        """A slider for the zoom of the preview, on a logarithmic scale: every step zooms by the same factor."""
-        slider = QSlider(Qt.Orientation.Horizontal)
-        slider.setRange(0, ZOOM_SLIDER_STEPS)
-        slider.setFixedWidth(UiDimensions.five * 4)
-        slider.setToolTip("Zoom of the preview")
-        # keep the keyboard focus on the plate, for its shortcuts
-        slider.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        preview = self.page_preview_widget
-
-        def on_moved(position: int):
-            preview.set_zoom(MIN_ZOOM * (MAX_ZOOM / MIN_ZOOM) ** (position / ZOOM_SLIDER_STEPS))
-
-        def on_zoom_changed(zoom: float):
-            # the zoom changed by other means: only move the handle
-            slider.blockSignals(True)
-            slider.setValue(round(ZOOM_SLIDER_STEPS * math.log(zoom / MIN_ZOOM) / math.log(MAX_ZOOM / MIN_ZOOM)))
-            slider.blockSignals(False)
-
-        slider.valueChanged.connect(on_moved)
-        preview.zoomChanged.connect(on_zoom_changed)
-        self.zoom_slider = slider
-        return slider
-
-    @staticmethod
-    def _floating_bar(
-        items: List[Optional[QAction | QWidget]], with_text: List[QAction] = (), footer: Optional[QWidget] = None
-    ) -> QFrame:
-        """
-        A small toolbar that floats on the preview.
-        :param items: actions (shown as buttons), widgets, and None for a separator
-        :param with_text: the actions that show their text next to the icon
-        :param footer: a widget below the toolbar, centered
-        """
-        bar = QFrame()
-        bar.setProperty("role", "floating")
-        row = QHBoxLayout()
-        column = QVBoxLayout(bar)
-        column.setContentsMargins(0, 0, 0, 0)
-        column.setSpacing(0)
-        column.addLayout(row)
-        if footer is not None:
-            column.addWidget(footer, alignment=Qt.AlignmentFlag.AlignHCenter)
-            column.addSpacing(UiDimensions.half)
-        row.setContentsMargins(UiDimensions.half, UiDimensions.half, UiDimensions.half, UiDimensions.half)
-        row.setSpacing(UiDimensions.half)
-        for item in items:
-            if item is None:
-                separator = QFrame()
-                separator.setFrameShape(QFrame.Shape.VLine)
-                separator.setFrameShadow(QFrame.Shadow.Sunken)
-                row.addWidget(separator)
-            elif isinstance(item, QAction):
-                button = QToolButton()
-                button.setDefaultAction(item)
-                button.setAutoRaise(True)
-                button.setCursor(Qt.CursorShape.PointingHandCursor)
-                # keep the keyboard focus on the plate, for its shortcuts
-                button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-                button.setToolButtonStyle(
-                    Qt.ToolButtonStyle.ToolButtonTextBesideIcon if item in with_text else Qt.ToolButtonStyle.ToolButtonIconOnly
-                )
-                row.addWidget(button)
-            else:
-                row.addWidget(item)
-        return bar
 
     def _update_actions(self):
         has_data = self.session is not None
@@ -610,13 +529,6 @@ class PageLayoutEditorWidget(QWidget):
         done = "Undone" if change.kind == ChangeKind.UNDO else "Redone"
         self.status.succeeded.emit(f"{done}: {change.description}")
 
-    @staticmethod
-    def _describe(action: str, items: List[EditableWidget]) -> str:
-        """:return: e.g. "Move p1b2" or "Move 3 objects", for the undo history"""
-        if len(items) == 1:
-            return f"{action} {object_name(items[0].obj_data)}"
-        return f"{action} {len(items)} objects"
-
     # --- editing ---
 
     def set_edit_mode(self, enabled: bool):
@@ -666,51 +578,6 @@ class PageLayoutEditorWidget(QWidget):
             return f"Id {value} is already used on page {obj.get('page')}."
         return None
 
-    def _is_movable(self, obj: Dict) -> bool:
-        """Objects whose position is a template or a percentage can't be dragged: it would replace them with pixels."""
-        return not self.session.has_computed_position(obj)
-
-    def _report_locked(self, items: List[EditableWidget]):
-        """Explain why objects can't be moved: in the status bar, and next to the first of them."""
-        names = ", ".join(f"p{item.obj_data.get('page')}b{item.obj_id}" for item in items)
-        self.status.failed.emit(f"Moving {names}", LOCKED_POSITION_HINT)
-        first = items[0]
-        reasons = "\n".join(self.session.computed_position_reasons(first.obj_data))
-        name = f"p{first.obj_data.get('page')}b{first.obj_id}"
-        self.page_preview_widget.show_message(f"{name} can't be moved:\n{reasons}\n{LOCKED_POSITION_FIX}", near=first)
-
-    def use_pixel_positions(self):
-        """Replace the templates and percentages in x and y of the selected objects with pixels, so they can be moved."""
-        items = self.page_preview_widget.selected_items()
-        if not self.edit_mode or not items:
-            return
-        with self.session.edit(self._describe("Use pixels for x/y of", items)):
-            for item in items:
-                self.session.use_pixel_position(item.obj_data)
-
-    def _on_items_moved(self, items: List[EditableWidget]):
-        with self.session.edit(self._describe("Move", items)):
-            for item in items:
-                self._move(item, item.live_x, item.live_y)
-
-    def nudge_selected_objects(self, dx: int, dy: int):
-        items = self.page_preview_widget.selected_items()
-        if not self.edit_mode or not items:
-            return
-        locked = [item for item in items if not self._is_movable(item.obj_data)]
-        if locked:
-            self._report_locked(locked)
-        movable = [item for item in items if item not in locked]
-        # pressing the keys again and again is one step
-        nudged = ("nudge", tuple(sorted(self.session.object_uid(item.obj_data) for item in movable)))
-        with self.session.edit(self._describe("Move", movable), merge_key=nudged):
-            for item in movable:
-                self._move(item, item.obj_x + dx, item.obj_y + dy)
-
-    def _move(self, item: EditableWidget, x: int, y: int):
-        self.session.set_source_value(item.obj_data, "x", x)
-        self.session.set_source_value(item.obj_data, "y", y)
-
     # --- files ---
 
     @property
@@ -758,110 +625,6 @@ class PageLayoutEditorWidget(QWidget):
     def _outside_of(self, key: Optional[str]) -> Callable[[Dict], bool]:
         """:return: whether an object is not in the component (False for all objects if None)"""
         return lambda obj: key is not None and self.session.component_of(obj).key != key
-
-    def add_object(self, widget_type: OpenHASPWidgetType):
-        component = self.target_component
-        if component is None:
-            return
-        if not self.edit_mode:
-            self.action_edit_mode.setChecked(True)
-
-        parent_id = self._parent_for(widget_type)
-        if widget_type == OpenHASPWidgetType.TAB and parent_id is None:
-            self.status.failed.emit("Adding a tab", "A tab belongs to a tabview: add a tabview to this page first")
-            return
-        try:
-            obj_id = next_free_id(self.working_objects, self.current_index)
-        except ValueError as ex:
-            self.status.failed.emit(f"Adding a {widget_type}", error_text(ex))
-            return
-        screen = self.device_pages_data.device.config.openhasp_config_manager.device.screen
-        obj = create_object(
-            widget_type,
-            page=self.current_index,
-            obj_id=obj_id,
-            screen_width=screen.width,
-            screen_height=screen.height,
-            parent_id=parent_id,
-        )
-        self.session.add_object(component, obj)
-
-    def _parent_for(self, widget_type: OpenHASPWidgetType) -> Optional[int]:
-        """The object a new object belongs to: a tab goes into the last tabview of the page."""
-        if widget_type != OpenHASPWidgetType.TAB:
-            return None
-        objects = [obj for objects in self.working_objects.values() for obj in objects]
-        return last_tabview_id(objects, self.current_index)
-
-    def duplicate_selected_objects(self):
-        items = self.page_preview_widget.selected_items()
-        if not self.edit_mode or not items:
-            return
-        with self.session.edit(self._describe("Duplicate", items)):
-            for item in items:
-                try:
-                    self.session.duplicate_object(item.obj_data)
-                except ValueError as ex:
-                    self.status.failed.emit(f"Duplicating p{item.obj_data.get('page')}b{item.obj_id}", error_text(ex))
-                    break
-
-    def copy_selected_objects(self):
-        """Copy the selected objects (with the objects inside of them) to the clipboard, as JSONL with their templates."""
-        items = self.page_preview_widget.selected_items()
-        if not self.edit_mode or not items:
-            return
-        objects = with_descendants(self.page_objects, [item.obj_data for item in items])
-        QApplication.clipboard().setText(objects_to_text([self.session.source_of(obj) for obj in objects]))
-        self._paste_cascade.reset()
-
-    def paste_objects(self):
-        """
-        Paste the objects of the clipboard into the file for new objects: where the mouse is, if it is over the plate,
-        otherwise next to the originals. Pasting again to the same spot moves the copies a bit further each time.
-        """
-        component = self.target_component
-        if component is None:
-            return
-        text = QApplication.clipboard().text()
-        sources = objects_from_text(text)
-        if not sources:
-            self.status.failed.emit("Pasting", "the clipboard holds no openHASP objects (JSONL)")
-            return
-        if not self.edit_mode:
-            self.action_edit_mode.setChecked(True)
-
-        screen = self.device_pages_data.device.config.openhasp_config_manager.device.screen
-        position = self.page_preview_widget.cursor_plate_position()
-        try:
-            self.session.paste_objects(
-                component,
-                sources,
-                page=self.current_index,
-                screen=(screen.width, screen.height),
-                position=position,
-                offset=self._paste_cascade.next_offset(text, position),
-            )
-        except (ValueError, TemplateError) as ex:
-            self.status.failed.emit("Pasting", error_text(ex))
-
-    def remove_selected_objects(self):
-        items = self.page_preview_widget.selected_items()
-        if not self.edit_mode or not items:
-            return
-        names = ", ".join(f"p{item.obj_data.get('page')}b{item.obj_id}" for item in items)
-        answer = QMessageBox.question(
-            self,
-            "Remove objects" if len(items) > 1 else "Remove object",
-            f"Remove {names} from the page?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
-            QMessageBox.StandardButton.Cancel,
-        )
-        if answer != QMessageBox.StandardButton.Yes:
-            return
-
-        with self.session.edit(self._describe("Remove", items)):
-            for item in items:
-                self.session.remove_object(item.obj_data)
 
     # --- plate ---
 

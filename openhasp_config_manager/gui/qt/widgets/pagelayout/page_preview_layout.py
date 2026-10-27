@@ -1,6 +1,6 @@
 import logging
 import time
-from enum import Enum, StrEnum
+from enum import StrEnum
 from pathlib import Path
 from typing import List, Optional, Dict, Callable, Tuple
 
@@ -19,6 +19,7 @@ from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.registry
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.button import HaspButtonItem
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
 from openhasp_config_manager.gui.qt.widgets.pagelayout.plate_scene import PlateScene
+from openhasp_config_manager.gui.qt.widgets.pagelayout.preview_overlays import OverlayAnchor, overlay_layout
 from openhasp_config_manager.openhasp_client.icons import IntegratedIcon
 
 LOGGER = logging.getLogger(__name__)
@@ -44,16 +45,6 @@ OUTSIDE_COLOR = "#E53935"
 
 # the opacity of black over the plate at the lowest brightness (and while the screen is off), 0..255
 MAX_DARKNESS = 215
-
-
-class OverlayAnchor(Enum):
-    """Where a floating bar sits on the preview (see `PagePreviewWidget.add_overlay`)."""
-
-    TOP_LEFT = "top_left"
-    TOP_RIGHT = "top_right"
-    BOTTOM_LEFT = "bottom_left"
-    BOTTOM_CENTER = "bottom_center"
-    BOTTOM_RIGHT = "bottom_right"
 
 
 class PagePreviewWidget(QGraphicsView):
@@ -335,71 +326,13 @@ class PagePreviewWidget(QGraphicsView):
 
     def _overlay_margins(self) -> Tuple[int, int]:
         """:return: the height to keep free above and below the plate for the floating bars"""
-        _positions, top, bottom = self._overlay_layout()
+        _positions, top, bottom = overlay_layout(self._overlays, self.viewport().width(), self.viewport().height())
         return top, bottom
 
     def _position_overlays(self):
-        positions, _top, _bottom = self._overlay_layout()
+        positions, _top, _bottom = overlay_layout(self._overlays, self.viewport().width(), self.viewport().height())
         for widget, position in positions.items():
             widget.move(position)
-
-    def _overlay_layout(self) -> Tuple[Dict[QWidget, QtCore.QPoint], int, int]:
-        """
-        Where the floating bars go: the top left and top right ones in their corners (the left one below the right one if they don't fit next to each other), the bottom right one in its corner, and the bottom
-        center one centered next to it, or in a row above it if they don't fit next to each other.
-        :return: the position of each bar, and the height of the rows above and below the plate
-        """
-        margin = UiDimensions.one
-        width = self.viewport().width()
-        height = self.viewport().height()
-        positions = {}
-        top_row_bottom = 0
-        bottom_row_top = height
-        right_edge = width - margin
-        top_right_x = width
-        visible = [(widget, anchor) for widget, anchor in self._overlays if not widget.isHidden()]
-        for widget, anchor in visible:
-            widget.adjustSize()
-            x = max(margin, width - widget.width() - margin)
-            if anchor == OverlayAnchor.TOP_RIGHT:
-                positions[widget] = QtCore.QPoint(x, margin)
-                top_row_bottom = max(top_row_bottom, margin + widget.height())
-                top_right_x = x
-            elif anchor == OverlayAnchor.BOTTOM_RIGHT:
-                y = height - widget.height() - margin
-                positions[widget] = QtCore.QPoint(x, y)
-                right_edge = min(right_edge, x - margin)
-                bottom_row_top = min(bottom_row_top, y)
-        for widget, anchor in visible:
-            if anchor == OverlayAnchor.TOP_LEFT:
-                if margin + widget.width() + margin <= top_right_x:
-                    y = margin
-                else:
-                    # no room next to the bar on the right: below it
-                    y = top_row_bottom + margin if top_row_bottom else margin
-                positions[widget] = QtCore.QPoint(margin, y)
-                top_row_bottom = max(top_row_bottom, y + widget.height())
-        left_edge = margin
-        for widget, anchor in visible:
-            if anchor == OverlayAnchor.BOTTOM_LEFT:
-                y = height - widget.height() - margin
-                positions[widget] = QtCore.QPoint(margin, y)
-                left_edge = max(left_edge, margin + widget.width() + margin)
-                bottom_row_top = min(bottom_row_top, y)
-        last_row_top = bottom_row_top
-        for widget, anchor in visible:
-            if anchor == OverlayAnchor.BOTTOM_CENTER:
-                x = min((width - widget.width()) // 2, right_edge - widget.width())
-                y = height - widget.height() - margin
-                if x < left_edge:
-                    # no room next to the bar on the right: above it
-                    x = max(margin, (width - widget.width()) // 2)
-                    y = last_row_top - margin - widget.height()
-                positions[widget] = QtCore.QPoint(x, y)
-                bottom_row_top = min(bottom_row_top, y)
-        top = top_row_bottom + margin if top_row_bottom else 0
-        bottom = height - bottom_row_top + margin if bottom_row_top < height else 0
-        return positions, top, bottom
 
     def _zoom_by(self, factor: float):
         current = self.transform().m11()

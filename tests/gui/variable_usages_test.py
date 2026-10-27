@@ -1,4 +1,4 @@
-from openhasp_config_manager.gui.domain.variable_usages import DeviceFiles, Usage, VariableUsages
+from openhasp_config_manager.gui.domain.variables.usages import DeviceFiles, Usage, VariableUsages
 from tests import TestBase
 
 

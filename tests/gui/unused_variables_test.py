@@ -1,6 +1,6 @@
 from openhasp_config_manager.gui.domain.problems import Severity
-from openhasp_config_manager.gui.domain.unused_variables import find_unused_variables
-from openhasp_config_manager.gui.domain.variable_usages import DeviceFiles, VariableUsages
+from openhasp_config_manager.gui.domain.variables.unused import find_unused_variables
+from openhasp_config_manager.gui.domain.variables.usages import DeviceFiles, VariableUsages
 from tests import TestBase
 
 

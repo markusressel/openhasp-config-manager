@@ -1,6 +1,6 @@
 import pytest
 
-from openhasp_config_manager.gui.domain.source_rename import id_at_line, rename_object_id
+from openhasp_config_manager.gui.domain.source.rename import id_at_line, rename_object_id
 from tests import TestBase
 
 TEXT = """{"page": 1, "id": 1, "obj": "cont"}

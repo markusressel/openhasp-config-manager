@@ -4,7 +4,8 @@ from typing import Any, Dict, List, Optional, Tuple
 import pytest
 from jinja2 import TemplateSyntaxError
 
-from openhasp_config_manager.gui.domain.plate_session import ChangeKind, ComponentSource, PlateSession
+from openhasp_config_manager.gui.domain.draft.model import ChangeKind, ComponentSource
+from openhasp_config_manager.gui.domain.draft.session import PlateSession
 from tests import TestBase
 
 

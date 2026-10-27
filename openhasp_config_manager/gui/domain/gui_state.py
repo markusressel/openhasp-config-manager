@@ -8,7 +8,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
 from openhasp_config_manager.gui.domain.connection import ConnectionStatus
-from openhasp_config_manager.gui.domain.plate_session import ComponentSource, PlateSession
+from openhasp_config_manager.gui.domain.draft.model import ComponentSource
+from openhasp_config_manager.gui.domain.draft.session import PlateSession
 from openhasp_config_manager.gui.domain.problems import Problem, object_name
 from openhasp_config_manager.openhasp_client.model.device import Device
 

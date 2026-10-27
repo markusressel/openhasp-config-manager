@@ -1,4 +1,4 @@
-from openhasp_config_manager.gui.domain.clipboard import (
+from openhasp_config_manager.gui.domain.draft.clipboard import (
     PASTE_OFFSET,
     PasteCascade,
     objects_from_text,

@@ -1,5 +1,5 @@
-from openhasp_config_manager.gui.domain.source_format import format_text
-from openhasp_config_manager.gui.domain.source_syntax import Language
+from openhasp_config_manager.gui.domain.source.format import format_text
+from openhasp_config_manager.gui.domain.source.syntax import Language
 from tests import TestBase
 
 

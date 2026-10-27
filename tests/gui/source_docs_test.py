@@ -1,5 +1,5 @@
-from openhasp_config_manager.gui.domain.source_docs import help_at, object_type_at_line, property_help
-from openhasp_config_manager.gui.domain.source_objects import scan_objects
+from openhasp_config_manager.gui.domain.source.docs import help_at, object_type_at_line, property_help
+from openhasp_config_manager.gui.domain.source.objects import scan_objects
 from tests import TestBase
 
 

@@ -66,13 +66,13 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
 
 ## GUI editor
 
-- **Draft**: `PlateSession` (`gui/domain/plate_session.py`) keeps every object twice: rendered (shown in the preview) and as written in its
+- **Draft**: `PlateSession` (`gui/domain/draft/session.py`) keeps every object twice: rendered (shown in the preview) and as written in its
   file, with its templates. Change objects through the session (`set_source_value`, `add_object`, `paste_objects`, ...), never by
   mutating the rendered dicts: Save patches only the changed source properties back into the files. The session reports every
   finished edit, undo and redo to its listeners (`DraftChange`); `PageLayoutEditorWidget._on_draft_changed` updates the preview,
   the JSONL, the properties, the dirty state, the undo actions and Live preview from it. An edit operation only changes the
   session, it doesn't refresh anything itself.
-- **Undo/redo**: every change through the session is a step of its undo history (`gui/domain/edit_history.py`, whole states of
+- **Undo/redo**: every change through the session is a step of its undo history (`gui/domain/draft/edit_history.py`, whole states of
   the sources, so undo doesn't depend on how an edit was made). Group the changes of one user action with
   `with session.edit("Move 3 objects"):`, and pass a `merge_key` for actions repeated in a row (typing into a property, nudging). An
   edit operation of the editor needs no undo code of its own, only the grouping. Save doesn't load the draft again: the
@@ -88,14 +88,15 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
   zoom; a failing reload keeps what is shown and reports it in the status bar). A draft with changes is never replaced: a banner offers
   *Reload from disk* or *Keep my changes*. Writes of the app itself (Save) are recognized by content (`OwnWrites`), so they don't count.
 - **Text editor** (the *Code* dock: `CodeView` with Source / Split / Rendered): every open file is a `SourceBuffer`
-  (`gui/domain/source_buffers.py`, Qt-free) in a tab of `SourceEditorWidget`, independent of the object draft. The syntax (highlighting,
-  templates) is `gui/domain/source_syntax.py`, issues while typing `source_issues.py`, edits `source_edit.py`, completion
-  `source_completion.py`, objects of a text (folding, the object at the cursor) `source_objects.py`, `source_rename.py`,
-  `source_format.py`, hover texts `source_docs.py`, references between files `source_links.py`; `CodeEditor` (`gui/qt/widgets/code_editor.py`) only wires them to Qt. Keep that split: logic goes into the
+  (`gui/domain/source/buffers.py`, Qt-free) in a tab of `SourceEditorWidget`, independent of the object draft. The syntax (highlighting,
+  templates) is `gui/domain/source/syntax.py`, issues while typing `issues.py`, edits `edit.py`, completion
+  `completion.py`, objects of a text (folding, the object at the cursor) `objects.py`, `rename.py`,
+  `format.py`, hover texts `docs.py`, references between files `links.py` (all in `gui/domain/source/`); `CodeEditor`
+  (`gui/qt/widgets/code_editor/editor.py`, with the helpers for search, folding, edits, values, completion and hover next to it) only wires them to Qt. Keep that split: logic goes into the
   domain modules with tests, the widget stays thin. Tabs follow disk changes through `MainWindow._on_config_changed`
   (`external_changes`: clean tabs reload, tabs with changes show a banner). Saving a tab goes through `_on_source_saved`, which treats
   it like an external change for the draft (reload, or the *Reload from disk* banner if the draft has changes). `SourceEditorSync`
-  (`gui/qt/source_sync.py`) connects the editor with the draft: selecting an object shows its line, the cursor selects its object,
+  (`gui/qt/window/source_sync.py`) connects the editor with the draft: selecting an object shows its line, the cursor selects its object,
   the problems of the page are marked in their files, open tabs are remembered in `UiSession.open_files`. A new editor feature needs a test in `tests/gui/code_editor_test.py` or `source_editor_test.py`.
 - **State file**: the GUI writes `<config dir>/.openhasp-config-manager/gui-state.json` for tools that edit the config files next to it
   (what is open, the text editor tabs, selection, draft, problems, load errors, connection). The format is documented in `README` in `gui/domain/gui_state.py`

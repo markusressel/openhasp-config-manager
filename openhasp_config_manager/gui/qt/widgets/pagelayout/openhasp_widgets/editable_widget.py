@@ -3,7 +3,7 @@ from typing import Dict
 from PyQt6 import QtGui, QtCore, QtWidgets
 from PyQt6.QtWidgets import QGraphicsObject, QGraphicsItem
 
-from openhasp_config_manager.gui.domain.page_objects import is_hidden
+from openhasp_config_manager.gui.domain.draft.page_objects import is_hidden
 from openhasp_config_manager.gui.domain.problems import geometry_value
 from openhasp_config_manager.gui.domain.style_parts import Part, State, style_key
 from openhasp_config_manager.gui.qt.theme import current_colors

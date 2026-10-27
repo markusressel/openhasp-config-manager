@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from openhasp_config_manager.gui.domain.source_syntax import (
+from openhasp_config_manager.gui.domain.source.syntax import (
     Language,
     TokenKind,
     find_templates,

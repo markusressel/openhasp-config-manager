@@ -7,8 +7,8 @@ import orjson
 import pytest
 
 from openhasp_config_manager.cli.common import _create_config_manager
-from openhasp_config_manager.gui.domain.draft_files import load_device
-from openhasp_config_manager.gui.domain.plate_session import PlateSession
+from openhasp_config_manager.gui.domain.draft.files import load_device
+from openhasp_config_manager.gui.domain.draft.session import PlateSession
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 from tests import TestBase
 from tests.gui.helpers import wait_until
@@ -193,13 +193,13 @@ def _key(editor, file_name: str) -> str:
 class TestFiles(TestBase):
     def test_new_objects_go_to_the_chosen_file(self, editor):
         # GIVEN
-        from openhasp_config_manager.gui.domain.page_objects import OpenHASPWidgetType
+        from openhasp_config_manager.gui.domain.draft.page_objects import OpenHASPWidgetType
 
         home = _key(editor, "page.jsonl")
         editor.set_target_component(home)
 
         # WHEN
-        editor.add_object(OpenHASPWidgetType.LABEL)
+        editor.object_actions.add(OpenHASPWidgetType.LABEL)
 
         # THEN
         added = editor.working_objects[home][-1]
@@ -208,29 +208,29 @@ class TestFiles(TestBase):
 
     def test_a_new_tab_goes_into_the_tabview_of_the_page(self, editor):
         # GIVEN
-        from openhasp_config_manager.gui.domain.page_objects import OpenHASPWidgetType
+        from openhasp_config_manager.gui.domain.draft.page_objects import OpenHASPWidgetType
 
         home = _key(editor, "page.jsonl")
         editor.set_target_component(home)
-        editor.add_object(OpenHASPWidgetType.TABVIEW)
+        editor.object_actions.add(OpenHASPWidgetType.TABVIEW)
         tabview = editor.working_objects[home][-1]
 
         # WHEN
-        editor.add_object(OpenHASPWidgetType.TAB)
+        editor.object_actions.add(OpenHASPWidgetType.TAB)
 
         # THEN
         assert editor.working_objects[home][-1]["parentid"] == tabview["id"]
 
     def test_a_tab_needs_a_tabview_on_the_page(self, editor):
         # GIVEN
-        from openhasp_config_manager.gui.domain.page_objects import OpenHASPWidgetType
+        from openhasp_config_manager.gui.domain.draft.page_objects import OpenHASPWidgetType
 
         home = _key(editor, "page.jsonl")
         editor.set_target_component(home)
         count = len(editor.working_objects[home])
 
         # WHEN
-        editor.add_object(OpenHASPWidgetType.TAB)
+        editor.object_actions.add(OpenHASPWidgetType.TAB)
 
         # THEN
         assert len(editor.working_objects[home]) == count
@@ -248,7 +248,7 @@ class TestFiles(TestBase):
         monkeypatch.setattr(editor.property_editor, "_create_content", lambda: rebuilds.append(1) or original())
 
         # WHEN
-        editor.remove_selected_objects()
+        editor.object_actions.remove_selected()
 
         # THEN
         assert len(rebuilds) == 1
@@ -264,7 +264,7 @@ class TestFiles(TestBase):
         monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *args: QMessageBox.StandardButton.Yes))
 
         # WHEN (this crashed: clearing the scene reported the selection of objects that were removed already)
-        editor.remove_selected_objects()
+        editor.object_actions.remove_selected()
 
         # THEN
         assert editor.page_preview_widget.editable_items() == []
@@ -280,7 +280,7 @@ class TestFiles(TestBase):
         monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *args: QMessageBox.StandardButton.Yes))
 
         # WHEN
-        editor.remove_selected_objects()
+        editor.object_actions.remove_selected()
 
         # THEN
         assert len(editor.page_preview_widget.editable_items()) == 1
@@ -480,7 +480,7 @@ class TestLockedPosition(TestBase):
         message = editor.page_preview_widget._message
 
         # WHEN
-        editor.nudge_selected_objects(1, 0)
+        editor.object_actions.nudge_selected(1, 0)
         shown = message.isVisible()
         QTest.mouseClick(editor.page_preview_widget.viewport(), Qt.MouseButton.LeftButton)
 
@@ -542,7 +542,7 @@ class TestUndo(TestBase):
 
         # WHEN
         for _ in range(3):
-            editor.nudge_selected_objects(1, 0)
+            editor.object_actions.nudge_selected(1, 0)
 
         # THEN
         assert label["x"] == 13
@@ -574,7 +574,7 @@ class TestUndo(TestBase):
         self._select(editor, 1)
         _item = next(item for item in editor.page_preview_widget.editable_items() if item.obj_data.get("id") == 2)
         _item.setSelected(True)
-        editor.remove_selected_objects()
+        editor.object_actions.remove_selected()
         assert len(editor.page_preview_widget.editable_items()) == 0
         assert editor.action_undo.text() == "Undo Remove 2 objects"
 
@@ -643,8 +643,8 @@ class TestUndo(TestBase):
         editor.plate.action_live_preview.setChecked(True)
         wait_until(lambda: plate.calls and plate.calls[-1] == ("set_page", 9))
         self._select(editor, 1)
-        editor.nudge_selected_objects(5, 0)
-        editor.nudge_selected_objects(5, 0)
+        editor.object_actions.nudge_selected(5, 0)
+        editor.object_actions.nudge_selected(5, 0)
         wait_until(lambda: plate.calls[-1] == ("jsonl", {"page": 9, "id": 1, "x": 20}))
         plate.clear()
 
@@ -658,7 +658,7 @@ class TestUndo(TestBase):
 
 class TestWidgetPicker(TestBase):
     def test_the_list_of_object_types_scrolls_instead_of_growing_the_preview(self, editor):
-        from openhasp_config_manager.gui.domain.page_objects import WIDGET_TYPES
+        from openhasp_config_manager.gui.domain.draft.page_objects import WIDGET_TYPES
 
         # THEN: all types are offered, but they don't make the editor taller than a small window
         assert len(WIDGET_TYPES) > 20
@@ -780,7 +780,7 @@ class TestPropertyEditor(TestBase):
         assert _object(editor, 1)["text"] == "Ab"
 
         # WHEN the object is moved in the preview
-        editor.nudge_selected_objects(1, 0)
+        editor.object_actions.nudge_selected(1, 0)
 
         # THEN the panel shows the new x
         assert rebuilds == [1]

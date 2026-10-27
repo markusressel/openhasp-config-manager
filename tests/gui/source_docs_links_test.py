@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from openhasp_config_manager.gui.domain.source_links import find_links, link_at, link_targets, plate_names, resolve_link
-from openhasp_config_manager.gui.domain.source_syntax import Language
+from openhasp_config_manager.gui.domain.source.links import find_links, link_at, link_targets, plate_names, resolve_link
+from openhasp_config_manager.gui.domain.source.syntax import Language
 from tests import TestBase
 
 

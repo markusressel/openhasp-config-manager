@@ -9,10 +9,11 @@ from PyQt6.QtGui import QContextMenuEvent, QTextCursor  # noqa: E402
 from PyQt6.QtTest import QTest  # noqa: E402
 
 from openhasp_config_manager.gui.domain.problems import Severity  # noqa: E402
-from openhasp_config_manager.gui.domain.source_syntax import Language  # noqa: E402
-from openhasp_config_manager.gui.domain.variable_definitions import Definition  # noqa: E402
-from openhasp_config_manager.gui.domain.source_issues import SourceIssue  # noqa: E402
-from openhasp_config_manager.gui.qt.widgets.code_editor import CodeEditor  # noqa: E402
+from openhasp_config_manager.gui.domain.source.syntax import Language  # noqa: E402
+from openhasp_config_manager.gui.domain.variables.definitions import Definition  # noqa: E402
+from openhasp_config_manager.gui.domain.source.issues import SourceIssue  # noqa: E402
+from openhasp_config_manager.gui.qt.widgets.code_editor.editor import CodeEditor  # noqa: E402
+from openhasp_config_manager.gui.qt.widgets.code_editor import hover as editor_hover  # noqa: E402
 from tests import TestBase  # noqa: E402
 from tests.gui.helpers import wait_until  # noqa: E402
 
@@ -151,18 +152,18 @@ class TestTyping(TestBase):
 class TestCompletion(TestBase):
     def test_property_names(self, editor):
         _type(editor, '{"bg_c')
-        assert editor._completer.popup().isVisible()
-        assert editor._completer.completionCount() == 1
-        QTest.keyClick(editor._completer.popup(), Qt.Key.Key_Return)
+        assert editor.completion.completer.popup().isVisible()
+        assert editor.completion.completer.completionCount() == 1
+        QTest.keyClick(editor.completion.completer.popup(), Qt.Key.Key_Return)
         assert editor.toPlainText().startswith('{"bg_color')
 
     def test_a_key_is_completed_before_its_quote(self, editor):
         editor.set_text('{\n  "obj": "slider",\n  ')
         editor.go_to(3, 3)
         _type(editor, "va")
-        assert editor._completer.popup().isVisible()
-        assert "val" in editor._completer.model().stringList()
-        QTest.keyClick(editor._completer.popup(), Qt.Key.Key_Return)
+        assert editor.completion.completer.popup().isVisible()
+        assert "val" in editor.completion.completer.model().stringList()
+        QTest.keyClick(editor.completion.completer.popup(), Qt.Key.Key_Return)
         assert editor.toPlainText().endswith('  "val": ')
         assert editor.textCursor().position() == len(editor.toPlainText())
 
@@ -170,7 +171,7 @@ class TestCompletion(TestBase):
         editor.set_text("{\n  ")
         editor.go_to(2, 3)
         _type(editor, "alig")
-        QTest.keyClick(editor._completer.popup(), Qt.Key.Key_Return)
+        QTest.keyClick(editor.completion.completer.popup(), Qt.Key.Key_Return)
         assert editor.toPlainText() == '{\n  "align": ""'
         _type(editor, "left")
         assert editor.toPlainText() == '{\n  "align": "left"'
@@ -178,7 +179,7 @@ class TestCompletion(TestBase):
     def test_the_quote_that_was_closed_for_us_is_not_doubled(self, editor):
         _type(editor, '{"alig')
         assert editor.toPlainText() == '{"alig"}'
-        QTest.keyClick(editor._completer.popup(), Qt.Key.Key_Return)
+        QTest.keyClick(editor.completion.completer.popup(), Qt.Key.Key_Return)
         assert editor.toPlainText() == '{"align": ""}'
         _type(editor, "left")
         assert editor.toPlainText() == '{"align": "left"}'
@@ -186,23 +187,23 @@ class TestCompletion(TestBase):
     def test_nothing_before_the_quote_outside_of_objects(self, editor):
         editor.set_text("")
         _type(editor, "alig")
-        assert not editor._completer.popup().isVisible()
+        assert not editor.completion.completer.popup().isVisible()
 
     def test_variables(self, editor):
-        editor.set_variables(lambda: ["theme.navbar.height", "theme.name", "other"])
+        editor.completion.set_variables(lambda: ["theme.navbar.height", "theme.name", "other"])
         editor.set_text('{"text": "{{ ')
         editor.go_to(1, 13)
         QTest.keyClick(editor, Qt.Key.Key_Space, Qt.KeyboardModifier.ControlModifier)
-        assert editor._completer.popup().isVisible()
-        assert editor._completer.completionCount() == 3
+        assert editor.completion.completer.popup().isVisible()
+        assert editor.completion.completer.completionCount() == 3
         _type(editor, "the")
-        assert editor._completer.completionCount() == 2
+        assert editor.completion.completer.completionCount() == 2
 
     def test_only_the_properties_of_the_type_of_the_object(self, editor):
         editor.set_text('{"obj": "slider", "page": 1,\n "')
         editor.go_to(2, 2)
         QTest.keyClick(editor, Qt.Key.Key_Space, Qt.KeyboardModifier.ControlModifier)
-        words = set(editor._completer.model().stringList())
+        words = set(editor.completion.completer.model().stringList())
         assert {"val", "min", "bg_color"} <= words
         assert not {"text", "options", "obj", "page"} & words  # not of a slider, or there already
 
@@ -211,8 +212,8 @@ class TestCompletion(TestBase):
         editor.set_text('{"obj": "slider", "va')
         editor.go_to(1, 21)
         QTest.keyClick(editor, Qt.Key.Key_Space, Qt.KeyboardModifier.ControlModifier)
-        popup = editor._completer.popup()
-        card = editor._completion_card
+        popup = editor.completion.completer.popup()
+        card = editor.completion.card
         assert popup.isVisible() and card.isVisible()
         assert card._name.text() == "val" and "current value" in card._body.toPlainText()
         assert card._kind.text() == "slider property"
@@ -224,76 +225,76 @@ class TestCompletion(TestBase):
         editor.set_text('{"obj": "slider", "m')
         editor.go_to(1, 20)
         QTest.keyClick(editor, Qt.Key.Key_Space, Qt.KeyboardModifier.ControlModifier)
-        first = editor._completion_card._name.text()
-        QTest.keyClick(editor._completer.popup(), Qt.Key.Key_Down)
-        assert editor._completion_card._name.text() != first
+        first = editor.completion.card._name.text()
+        QTest.keyClick(editor.completion.completer.popup(), Qt.Key.Key_Down)
+        assert editor.completion.card._name.text() != first
 
     def test_no_explanation_without_room_next_to_the_list(self, editor):
         editor.resize(300, 400)
         editor.set_text('{"obj": "slider", "va')
         editor.go_to(1, 21)
         QTest.keyClick(editor, Qt.Key.Key_Space, Qt.KeyboardModifier.ControlModifier)
-        assert editor._completer.popup().isVisible()
-        assert not editor._completion_card.isVisible()
+        assert editor.completion.completer.popup().isVisible()
+        assert not editor.completion.card.isVisible()
 
     def test_no_explanation_for_variables(self, editor):
-        editor.set_variables(lambda: ["theme.name"])
+        editor.completion.set_variables(lambda: ["theme.name"])
         editor.set_text('{"text": "{{ ')
         editor.go_to(1, 13)
         QTest.keyClick(editor, Qt.Key.Key_Space, Qt.KeyboardModifier.ControlModifier)
-        assert editor._completer.popup().isVisible()
-        assert not editor._completion_card.isVisible()
+        assert editor.completion.completer.popup().isVisible()
+        assert not editor.completion.card.isVisible()
 
     def test_nothing_to_complete(self, editor):
         _type(editor, "zzz")
-        assert not editor._completer.popup().isVisible()
+        assert not editor.completion.completer.popup().isVisible()
 
 
 class TestSearch(TestBase):
     def test_find_next_wraps(self, editor):
         editor.set_text("ab AB ab")
-        assert editor.set_search("ab")
-        assert editor.find_next()
+        assert editor.search.set_search("ab")
+        assert editor.search.find_next()
         assert editor.textCursor().selectionStart() == 0
-        editor.find_next()
-        editor.find_next()
-        editor.find_next()
+        editor.search.find_next()
+        editor.search.find_next()
+        editor.search.find_next()
         assert editor.textCursor().selectionStart() == 0
-        editor.find_next(forward=False)
+        editor.search.find_next(forward=False)
         assert editor.textCursor().selectionStart() == 6
 
     def test_options(self, editor):
         editor.set_text("ab AB abc")
-        editor.set_search("ab", case_sensitive=True)
+        editor.search.set_search("ab", case_sensitive=True)
         assert len(editor.extraSelections()) == 3  # current line + two matches
-        editor.set_search("ab", whole_word=True)
+        editor.search.set_search("ab", whole_word=True)
         assert len(editor.extraSelections()) == 3
-        editor.set_search("a.", regex=True)
+        editor.search.set_search("a.", regex=True)
         assert len(editor.extraSelections()) == 4
-        assert not editor.set_search("(", regex=True)
-        assert not editor.find_next()
-        assert editor.set_search("")
-        assert not editor.find_next()
+        assert not editor.search.set_search("(", regex=True)
+        assert not editor.search.find_next()
+        assert editor.search.set_search("")
+        assert not editor.search.find_next()
 
     def test_no_match(self, editor):
         editor.set_text("abc")
-        editor.set_search("zzz")
-        assert not editor.find_next()
-        assert not editor.find_next(forward=False)
+        editor.search.set_search("zzz")
+        assert not editor.search.find_next()
+        assert not editor.search.find_next(forward=False)
 
     def test_replace(self, editor):
         editor.set_text("a1 a2 a3")
-        editor.set_search(r"a(\d)", regex=True)
-        editor.find_next()
-        assert editor.replace_current(r"b\1\1")
+        editor.search.set_search(r"a(\d)", regex=True)
+        editor.search.find_next()
+        assert editor.search.replace_current(r"b\1\1")
         assert editor.toPlainText() == "b11 a2 a3"
-        assert editor.replace_all("x")
+        assert editor.search.replace_all("x")
         assert editor.toPlainText() == "b11 x x"
-        assert not editor.replace_current("y")
+        assert not editor.search.replace_current("y")
 
     def test_replace_without_search(self, editor):
-        assert editor.replace_all("x") == 0
-        assert not editor.replace_current("x")
+        assert editor.search.replace_all("x") == 0
+        assert not editor.search.replace_current("x")
 
 
 class TestAppearance(TestBase):
@@ -336,76 +337,76 @@ MULTILINE = '{\n  "page": 1,\n  "id": 1,\n  "text": "a"\n}\n{"page": 1, "id": 2,
 class TestFolding(TestBase):
     def test_fold_hides_the_lines_between_the_brackets(self, editor):
         editor.set_text(MULTILINE)
-        assert editor.fold_ranges() == [(1, 5)]
+        assert editor.folding.ranges() == [(1, 5)]
 
-        assert editor.fold(1)
+        assert editor.folding.fold(1)
 
         document = editor.document()
         assert [document.findBlockByNumber(n).isVisible() for n in range(6)] == [True, False, False, False, True, True]
-        assert editor.is_folded(1)
-        assert editor.unfold(1)
+        assert editor.folding.is_folded(1)
+        assert editor.folding.unfold(1)
         assert all(document.findBlockByNumber(n).isVisible() for n in range(6))
-        assert not editor.fold(6)  # one line, nothing to fold
+        assert not editor.folding.fold(6)  # one line, nothing to fold
         editor.grab()
 
     def test_toggle_and_all(self, editor):
         editor.set_text(MULTILINE + MULTILINE)
-        editor.fold_all()
-        assert editor.is_folded(1) and editor.is_folded(7)
-        editor.unfold_all()
-        assert not editor.is_folded(1)
-        assert editor.toggle_fold(7)
-        assert editor.is_folded(7)
+        editor.folding.fold_all()
+        assert editor.folding.is_folded(1) and editor.folding.is_folded(7)
+        editor.folding.unfold_all()
+        assert not editor.folding.is_folded(1)
+        assert editor.folding.toggle(7)
+        assert editor.folding.is_folded(7)
 
     def test_fold_and_unfold_at_cursor(self, editor):
         editor.set_text(MULTILINE)
         editor.go_to(3, 2)
-        editor.fold_at_cursor()
-        assert editor.is_folded(1)
+        editor.folding.fold_at_cursor()
+        assert editor.folding.is_folded(1)
         assert editor.cursor_line_column[0] == 1  # the cursor was in the hidden lines
-        editor.unfold_at_cursor()
-        assert not editor.is_folded(1)
+        editor.folding.unfold_at_cursor()
+        assert not editor.folding.is_folded(1)
 
     def test_keys(self, editor):
         editor.set_text(MULTILINE)
         editor.go_to(2, 0)
         QTest.keyClick(editor, Qt.Key.Key_Minus, Qt.KeyboardModifier.ControlModifier)
-        assert editor.is_folded(1)
+        assert editor.folding.is_folded(1)
         QTest.keyClick(editor, Qt.Key.Key_Equal, Qt.KeyboardModifier.ControlModifier)
-        assert not editor.is_folded(1)
+        assert not editor.folding.is_folded(1)
         QTest.keyClick(editor, Qt.Key.Key_Underscore, Qt.KeyboardModifier.ControlModifier)
-        assert editor.is_folded(1)
+        assert editor.folding.is_folded(1)
         QTest.keyClick(editor, Qt.Key.Key_Plus, Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.AltModifier)
-        assert not editor.is_folded(1)
+        assert not editor.folding.is_folded(1)
 
     def test_cursor_moving_into_a_fold_opens_it(self, editor):
         editor.set_text(MULTILINE)
-        editor.fold(1)
+        editor.folding.fold(1)
         editor.go_to(3, 0)
-        assert not editor.is_folded(1)
+        assert not editor.folding.is_folded(1)
 
     def test_clicking_the_gutter(self, editor):
         editor.set_text(MULTILINE)
-        QTest.mouseClick(editor._gutter, Qt.MouseButton.LeftButton, pos=QPoint(5, 10))
-        assert editor.is_folded(1)
-        QTest.mouseClick(editor._gutter, Qt.MouseButton.LeftButton, pos=QPoint(5, 10))
-        assert not editor.is_folded(1)
+        QTest.mouseClick(editor.gutter, Qt.MouseButton.LeftButton, pos=QPoint(5, 10))
+        assert editor.folding.is_folded(1)
+        QTest.mouseClick(editor.gutter, Qt.MouseButton.LeftButton, pos=QPoint(5, 10))
+        assert not editor.folding.is_folded(1)
         # a line without an object that can be folded, and below the text
-        QTest.mouseClick(editor._gutter, Qt.MouseButton.LeftButton, pos=QPoint(5, editor.fontMetrics().height() * 5 + 10))
-        QTest.mouseClick(editor._gutter, Qt.MouseButton.LeftButton, pos=QPoint(5, 290))
-        assert editor._folded == set()
+        QTest.mouseClick(editor.gutter, Qt.MouseButton.LeftButton, pos=QPoint(5, editor.fontMetrics().height() * 5 + 10))
+        QTest.mouseClick(editor.gutter, Qt.MouseButton.LeftButton, pos=QPoint(5, 290))
+        assert editor.folding._folded == set()
 
     def test_editing_the_line_count_unfolds(self, editor):
         editor.set_text(MULTILINE)
-        editor.fold(1)
+        editor.folding.fold(1)
         editor.go_to(1, 1)
         QTest.keyClick(editor, Qt.Key.Key_Return)
-        assert not editor.is_folded(1)
+        assert not editor.folding.is_folded(1)
 
     def test_other_languages_have_nothing_to_fold(self, qapp, settings):
         yaml = CodeEditor(Language.YAML)
         yaml.set_text(MULTILINE)
-        assert yaml.fold_ranges() == []
+        assert yaml.folding.ranges() == []
 
 
 class TestObjectAtCursor(TestBase):
@@ -427,9 +428,9 @@ class TestFormatAndRename(TestBase):
     def test_format_document_is_one_undo_step(self, editor):
         editor.set_text('{\n"a": 1,   \n    "b": 2\n}')
         editor.go_to(3, 4)
-        assert editor.format_document()
+        assert editor.edits.format_document()
         assert editor.toPlainText() == '{\n  "a": 1,\n  "b": 2\n}\n'
-        assert not editor.format_document()
+        assert not editor.edits.format_document()
         editor.undo()
         assert editor.toPlainText() == '{\n"a": 1,   \n    "b": 2\n}'
 
@@ -441,19 +442,19 @@ class TestFormatAndRename(TestBase):
     def test_rename_id(self, editor):
         editor.set_text(MULTILINE)
         editor.go_to(2, 0)
-        assert editor.object_id == 1
-        assert editor.rename_id(7) is None
+        assert editor.edits.object_id == 1
+        assert editor.edits.rename_id(7) is None
         assert editor.toPlainText() == MULTILINE.replace('"id": 1,', '"id": 7,').replace('"parentid": 1', '"parentid": 7')
         assert editor.cursor_line_column[0] == 2
 
     def test_rename_reports_why_not(self, editor):
         editor.set_text(MULTILINE)
         editor.go_to(2, 0)
-        assert "already used" in editor.rename_id(2)
+        assert "already used" in editor.edits.rename_id(2)
         editor.go_to(6, 0)
         editor.set_text("// nothing")
-        assert editor.object_id is None
-        assert "no object" in editor.rename_id(2)
+        assert editor.edits.object_id is None
+        assert "no object" in editor.edits.rename_id(2)
 
     def test_rename_key(self, editor):
         requests = []
@@ -539,23 +540,22 @@ class TestLinksAndDocs(TestBase):
         QTest.mouseMove(editor.viewport(), position)
 
     def test_hover_card_shows_after_a_short_delay(self, editor):
-        from openhasp_config_manager.gui.qt.widgets import code_editor
 
         editor.set_text('{"w": "33%"}')
         self._hover(editor, self._position(editor, '{"'))
-        assert code_editor._HOVER_DELAY_MS <= 150
-        assert not editor._hover_card.isVisible()
-        wait_until(lambda: editor._hover_card.isVisible(), timeout_ms=2 * code_editor._HOVER_DELAY_MS + 400)
-        assert editor._hover_card._name.text() == "w" and "pixels" in editor._hover_card._body.toPlainText()
-        assert editor._hover_card._kind.text() == "Property of every object"
-        assert "openhasp.com" in editor._hover_card._link.text()
+        assert editor_hover._HOVER_DELAY_MS <= 150
+        assert not editor.hover.card.isVisible()
+        wait_until(lambda: editor.hover.card.isVisible(), timeout_ms=2 * editor_hover._HOVER_DELAY_MS + 400)
+        assert editor.hover.card._name.text() == "w" and "pixels" in editor.hover.card._body.toPlainText()
+        assert editor.hover.card._kind.text() == "Property of every object"
+        assert "openhasp.com" in editor.hover.card._link.text()
 
     def _card_and_property(self, editor, line: int):
         """:return: the rectangles of the card and of the property it is about, in the coordinates of the editor"""
         self._hover(editor, self._position(editor, '{"', line))
-        wait_until(lambda: editor._hover_card.isVisible(), timeout_ms=1000)
-        area = editor._tip_area
-        return editor._hover_card.geometry(), QRect(editor.viewport().mapTo(editor, area.topLeft()), area.size())
+        wait_until(lambda: editor.hover.card.isVisible(), timeout_ms=1000)
+        area = editor.hover.tip_area
+        return editor.hover.card.geometry(), QRect(editor.viewport().mapTo(editor, area.topLeft()), area.size())
 
     def test_hover_card_is_above_the_property(self, editor):
         editor.resize(600, 700)
@@ -579,40 +579,38 @@ class TestLinksAndDocs(TestBase):
         assert not card.intersects(area)
 
     def test_hover_card_is_not_a_window(self, editor):
-        assert not editor._hover_card.isWindow() and editor._hover_card.parentWidget() is editor
-        assert not editor._completion_card.isWindow()
+        assert not editor.hover.card.isWindow() and editor.hover.card.parentWidget() is editor
+        assert not editor.completion.card.isWindow()
 
     def test_hover_card_stays_while_the_mouse_is_on_it(self, editor):
-        from openhasp_config_manager.gui.qt.widgets import code_editor
 
         editor.set_text('{"w": "33%"}')
         self._hover(editor, self._position(editor, '{"'))
-        wait_until(lambda: editor._hover_card.isVisible(), timeout_ms=1000)
+        wait_until(lambda: editor.hover.card.isVisible(), timeout_ms=1000)
         # the mouse leaves the editor and reaches the card in time
-        editor._hover_grace_timer.start()
-        editor._hover_card.mouseEntered.emit()
-        QTest.qWait(code_editor._HOVER_GRACE_MS + 100)
-        assert editor._hover_card.isVisible()
+        editor.hover.grace_timer.start()
+        editor.hover.card.mouseEntered.emit()
+        QTest.qWait(editor_hover._HOVER_GRACE_MS + 100)
+        assert editor.hover.card.isVisible()
         # and leaves the card
-        editor._hover_card.mouseLeft.emit()
-        wait_until(lambda: not editor._hover_card.isVisible(), timeout_ms=code_editor._HOVER_GRACE_MS + 500)
+        editor.hover.card.mouseLeft.emit()
+        wait_until(lambda: not editor.hover.card.isVisible(), timeout_ms=editor_hover._HOVER_GRACE_MS + 500)
 
     def test_hover_card_goes_away_after_the_mouse_left_the_property(self, editor):
-        from openhasp_config_manager.gui.qt.widgets import code_editor
 
         editor.set_text('{"w": "33%", "h": 1}')
         self._hover(editor, self._position(editor, '{"'))
-        wait_until(lambda: editor._hover_card.isVisible(), timeout_ms=1000)
+        wait_until(lambda: editor.hover.card.isVisible(), timeout_ms=1000)
         self._hover(editor, QPoint(490, 290))
-        wait_until(lambda: not editor._hover_card.isVisible(), timeout_ms=code_editor._HOVER_GRACE_MS + 500)
+        wait_until(lambda: not editor.hover.card.isVisible(), timeout_ms=editor_hover._HOVER_GRACE_MS + 500)
 
     def test_hover_card_moves_to_the_next_property(self, editor):
         editor.set_text('{"w": "33%", "h": 1}')
         self._hover(editor, self._position(editor, '{"'))
-        wait_until(lambda: editor._hover_card.isVisible() and editor._hover_card._name.text() == "w", timeout_ms=1000)
+        wait_until(lambda: editor.hover.card.isVisible() and editor.hover.card._name.text() == "w", timeout_ms=1000)
         self._hover(editor, self._position(editor, '{"w": "33%", "h'))
-        wait_until(lambda: editor._hover_card._name.text() == "h", timeout_ms=1000)
-        assert editor._hover_card.isVisible()
+        wait_until(lambda: editor.hover.card._name.text() == "h", timeout_ms=1000)
+        assert editor.hover.card.isVisible()
 
     def test_hover_card_goes_away_when_typing_or_clicking(self, editor):
         editor.set_text('{"w": "33%"}')
@@ -621,16 +619,16 @@ class TestLinksAndDocs(TestBase):
             lambda: QTest.mouseClick(editor.viewport(), Qt.MouseButton.LeftButton, pos=QPoint(300, 100)),
         ):
             self._hover(editor, self._position(editor, '{"'))
-            wait_until(lambda: editor._hover_card.isVisible(), timeout_ms=1000)
+            wait_until(lambda: editor.hover.card.isVisible(), timeout_ms=1000)
             action()
-            assert not editor._hover_card.isVisible()
+            assert not editor.hover.card.isVisible()
 
     def test_card_content_of_a_property(self, editor):
         text = '{"w": "33%", "nope": 1, "bg_color02": "x"}'
         editor.set_text(text)
 
         def at(prefix: str):
-            return editor._card_content_at(self._position(editor, prefix))
+            return editor.hover.card_content_at(self._position(editor, prefix))
 
         assert at('{"').help.name == "w" and "pixels" in at('{"').help.summary
         assert at('{"w": "33%", "no').is_empty()  # unknown property
@@ -646,55 +644,55 @@ class TestLinksAndDocs(TestBase):
 
     def test_card_content_of_a_variable_is_its_value(self, editor):
         editor.set_text('{"h": "{{ header.height }}"}')
-        editor.set_value_source(lambda name: 44 if name == "header.height" else {"height": 44}, lambda text: "44")
+        editor.values.set_source(lambda name: 44 if name == "header.height" else {"height": 44}, lambda text: "44")
 
-        found = editor._card_content_at(self._position(editor, '{"h": "{{ header.he')).help
+        found = editor.hover.card_content_at(self._position(editor, '{"h": "{{ header.he')).help
         assert (found.name, found.summary) == ("header.height", "`44`")
-        assert editor._card_content_at(self._position(editor, '{"h": "{{ hea')).help.summary == "`{height}`"
+        assert editor.hover.card_content_at(self._position(editor, '{"h": "{{ hea')).help.summary == "`{height}`"
 
     def test_values_are_shown_after_the_line_when_asked_for(self, editor):
         editor.resize(600, 200)
         editor.show()
         editor.set_text('{"h": "{{ header.height }}"}\n{"x": 1}')
         calls = []
-        editor.set_value_source(lambda name: 44, lambda text: calls.append(text) or "44")
+        editor.values.set_source(lambda name: 44, lambda text: calls.append(text) or "44")
 
         # on: the templates of the visible lines, once (until the values are refreshed)
-        editor.set_show_values(True)
+        editor.values.set_show(True)
         editor.grab()
         editor.grab()
         assert calls == ["{{ header.height }}"]
-        editor.refresh_values()
+        editor.values.refresh()
         editor.grab()
         assert calls == ["{{ header.height }}"] * 2
 
     def test_card_shows_issues_with_the_explanation(self, editor):
         editor.set_text('{"w": "33%"}')
         editor.set_app_markers([SourceIssue(1, 1, 3, Severity.ERROR, "Broken")])
-        content = editor._card_content_at(self._position(editor, '{"'))
+        content = editor.hover.card_content_at(self._position(editor, '{"'))
         assert content.issues == [(Severity.ERROR, "Broken")] and content.help.name == "w"
         self._hover(editor, self._position(editor, '{"'))
-        wait_until(lambda: editor._hover_card.isVisible(), timeout_ms=1000)
-        assert "Broken" in editor._hover_card._issues.text()
+        wait_until(lambda: editor.hover.card.isVisible(), timeout_ms=1000)
+        assert "Broken" in editor.hover.card._issues.text()
 
 
 class TestColorSwatches(TestBase):
     def test_colors_of_a_line_are_its_color_strings_and_templates_rendering_to_colors(self, editor):
         editor.set_text('{"bg_color": "#FF0000", "text_color": "{{ c }}"}\n{"x": 1}')
-        editor.set_value_source(lambda name: None, lambda text: "#00FF00")
+        editor.values.set_source(lambda name: None, lambda text: "#00FF00")
 
-        assert [color.hex() for color in editor._colors_of(editor.document().findBlockByNumber(0).text())] == [
+        assert [color.hex() for color in editor.values.colors_of(editor.document().findBlockByNumber(0).text())] == [
             "#FF0000",
             "#00FF00",
         ]
-        assert editor._colors_of(editor.document().findBlockByNumber(1).text()) == []
+        assert editor.values.colors_of(editor.document().findBlockByNumber(1).text()) == []
 
     def test_swatches_are_painted_in_the_gutter(self, editor):
         editor.resize(600, 200)
         editor.show()
         editor.set_text('{"bg_color": "#FF0000"}')
 
-        image = editor._gutter.grab().toImage()
+        image = editor.gutter.grab().toImage()
 
         assert any(
             image.pixelColor(x, y).red() > 200 and image.pixelColor(x, y).green() < 60

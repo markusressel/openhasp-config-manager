@@ -4,14 +4,14 @@ from pathlib import Path
 import pytest
 
 from openhasp_config_manager.cli.common import _create_config_manager
-from openhasp_config_manager.gui.domain.draft_files import (
+from openhasp_config_manager.gui.domain.draft.files import (
     SaveConflictError,
     flatten_template_variables,
     load_device,
     plan_save,
     write_save,
 )
-from openhasp_config_manager.gui.domain.plate_session import PlateSession
+from openhasp_config_manager.gui.domain.draft.session import PlateSession
 from tests import TestBase
 
 EDITOR_JSONL = """// objects for the editor test
