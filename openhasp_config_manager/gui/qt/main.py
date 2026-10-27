@@ -64,7 +64,7 @@ from openhasp_config_manager.gui.qt.ui_session_store import UiSessionStore
 from openhasp_config_manager.gui.qt.theme import ThemeMode, apply_theme, current_mode, current_colors
 from openhasp_config_manager.gui.qt.async_bridge import run_async
 from openhasp_config_manager.gui.qt.widgets.code_view import CodeView
-from openhasp_config_manager.gui.qt.widgets.pagelayout.jsonl_preview import PageJsonlPreviewWidget
+from openhasp_config_manager.gui.qt.widgets.file_rendered_view import FileRenderedView
 from openhasp_config_manager.gui.qt.widgets.device_list import DeviceListWidget
 from openhasp_config_manager.gui.qt.widgets.file_tree import FileTreeWidget
 from openhasp_config_manager.gui.qt.widgets.log_view import LogView
@@ -310,7 +310,7 @@ class MainWindow(QMainWindow):
         self.source_editor.stateChanged.connect(self._state_publisher.request)
         self.source_editor.openFailed.connect(lambda path, message: self.status.failed.emit(f"Opening {path.name}", message))
         # the rendered view of the code view follows the file in the current tab, the page view is a dock of its own
-        self.file_rendered = PageJsonlPreviewWidget(sort_objects=False, placeholder="Open a file to see it rendered.")
+        self.file_rendered = FileRenderedView()
         self.code_view = CodeView(self.source_editor, self.file_rendered)
         self.code_view.modeChanged.connect(lambda _mode: self._state_publisher.request())
         self.source_sync = SourceEditorSync(
@@ -495,7 +495,7 @@ class MainWindow(QMainWindow):
         self.status_bar.refresh_theme()
         self.file_tree_widget.refresh_theme()
         self.page_layout_editor_widget.jsonl_preview.refresh_theme()
-        self.file_rendered.refresh_theme()
+        self.file_rendered.view.refresh_theme()
         self.source_editor.refresh_theme()
         self.log_view.refresh_theme()
         self.page_layout_editor_widget.problems_panel.refresh_theme()

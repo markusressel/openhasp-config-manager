@@ -41,13 +41,13 @@ class TestOpening(TestBase):
     def test_the_rendered_view_shows_the_objects_of_the_open_file(self, window, editor_file):
         # GIVEN
         [component] = window.session.components
-        assert window.file_rendered.toPlainText() == ""
+        assert window.file_rendered.view.toPlainText() == ""
 
         # WHEN
         window.file_tree_widget.openRequested.emit(editor_file)
 
         # THEN
-        lines = window.file_rendered.toPlainText().splitlines()
+        lines = window.file_rendered.view.toPlainText().splitlines()
         assert [json.loads(line)["id"] for line in lines] == [
             obj["id"] for obj in window.session.working_objects[component.key]
         ]
@@ -62,8 +62,26 @@ class TestOpening(TestBase):
         window.file_tree_widget.openRequested.emit(other)
 
         # THEN
-        assert window.file_rendered.toPlainText() == ""
-        assert window.file_rendered.placeholderText() == "No objects of this file in the draft."
+        assert window.file_rendered.view.toPlainText() == ""
+        assert window.file_rendered.view.placeholderText() == "No objects of this file in the draft."
+
+    def test_the_rendered_view_says_when_it_is_out_of_date(self, window, editor_file):
+        # GIVEN
+        window.file_tree_widget.openRequested.emit(editor_file)
+        editor = window.source_editor.current_editor
+        assert not window.file_rendered.out_of_date
+
+        # WHEN: unsaved text
+        editor.set_text(EDITOR_JSONL.replace('"x": 10', '"x": 55'))
+        editor.textEdited.emit()
+        # THEN
+        assert window.file_rendered.out_of_date
+
+        # WHEN: saved
+        window.source_editor.save(editor_file)
+        # THEN: once the draft is loaded from the saved file
+        wait_until(lambda: not window.file_rendered.out_of_date)
+        assert x_of_label(window) == 55
 
     def test_selecting_an_object_shows_its_line(self, window, editor_file):
         # GIVEN

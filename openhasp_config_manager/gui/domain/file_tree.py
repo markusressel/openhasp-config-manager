@@ -46,11 +46,20 @@ def config_root_of(device_path: Path) -> Path:
 
 def scan_file_tree(device_path: Path) -> List[FileNode]:
     """
-    The folders of the config directory that hold the files of a device: `common` (if it exists) and the device
+    The folders of the config directory that hold the files of a device: the config directory itself with its global
+    variable files (`theme.yaml`, `global.vars.yaml`, ...; not its subfolders), `common` (if it exists) and the device
     folder, with their subfolders. Only .jsonl, .cmd and variable (.yaml) files are listed, folders without any are
     left out.
     """
     roots = []
+    config_root = config_root_of(device_path)
+    global_variables = [
+        FileNode(name=entry.name, path=entry, kind=FileKind.VARIABLES)
+        for entry in sorted(config_root.iterdir(), key=lambda e: e.name)
+        if entry.is_file() and not entry.name.startswith(".") and _KINDS.get(entry.suffix) == FileKind.VARIABLES
+    ]
+    if global_variables:
+        roots.append(FileNode(name=config_root.name, path=config_root, kind=FileKind.FOLDER, children=global_variables))
     common = scan_folder(Path(config_root_of(device_path), COMMON_FOLDER_NAME))
     if common is not None:
         roots.append(common)

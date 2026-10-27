@@ -8,7 +8,7 @@ from openhasp_config_manager.gui.domain.plate_session import PlateSession
 from openhasp_config_manager.gui.domain.source_issues import SourceIssue
 from openhasp_config_manager.gui.qt.ui_session_store import UiSessionStore
 from openhasp_config_manager.gui.qt.widgets.code_view import CodeView
-from openhasp_config_manager.gui.qt.widgets.pagelayout.jsonl_preview import PageJsonlPreviewWidget
+from openhasp_config_manager.gui.qt.widgets.file_rendered_view import FileRenderedView
 from openhasp_config_manager.gui.qt.widgets.pagelayout.page_layout_editor import PageLayoutEditorWidget
 from openhasp_config_manager.gui.qt.widgets.source_editor import SourceEditorWidget
 
@@ -29,7 +29,7 @@ class SourceEditorSync(QtCore.QObject):
         session: Callable[[], Optional[PlateSession]],
         ui_session: UiSessionStore,
         config_dir: Path,
-        file_view: PageJsonlPreviewWidget,
+        file_view: FileRenderedView,
         parent: Optional[QtCore.QObject] = None,
     ):
         """:param session: the draft of the selected device, None if there is none"""
@@ -151,23 +151,27 @@ class SourceEditorSync(QtCore.QObject):
         self._page_editor.page_preview_widget.select_object(obj)
 
     def update_file_view(self):
-        """The rendered view shows the objects of the file in the current tab, as the draft renders them."""
+        """The rendered view shows the objects of the file in the current tab, as the draft rendered them from the saved file."""
         session = self._shown_session()
         path = self._source_editor.current_file
+        view = self._file_view.view
+        objects = []
+        out_of_date = False
         if path is None:
-            self._file_view.setPlaceholderText("Open a file to see it rendered.")
-            objects = []
+            view.setPlaceholderText("Open a file to see it rendered.")
         else:
             found = None if session is None else session.objects_of_file(path)
             objects = found or []
-            self._file_view.setPlaceholderText(
-                "No objects of this file in the draft." if found is None else "No objects in this file."
-            )
-        self._file_view.set_objects(objects)
+            view.setPlaceholderText("No objects of this file in the draft." if found is None else "No objects in this file.")
+            component = None if session is None else session.component_at(path)
+            buffer = self._source_editor.buffer_of(path)
+            out_of_date = component is not None and buffer is not None and buffer.text != component.content
+        self._file_view.set_out_of_date(out_of_date)
+        view.set_objects(objects)
         self._select_in_file_view(self._page_editor.page_preview_widget.selected_items(), scroll=False)
 
     def _select_in_file_view(self, selected: list, scroll: bool = True):
-        self._file_view.set_selected_objects([widget.obj_data for widget in selected], scroll=scroll)
+        self._file_view.view.set_selected_objects([widget.obj_data for widget in selected], scroll=scroll)
 
     def update_markers(self):
         """The problems of the open page are shown in the editors of their files."""

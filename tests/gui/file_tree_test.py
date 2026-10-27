@@ -53,6 +53,22 @@ class TestScanFileTree(TestBase):
         assert [child.kind for child in home.children] == [FileKind.JSONL, FileKind.CMD]
         assert roots[1].children[2].kind == FileKind.VARIABLES
 
+    def test_global_variable_files_of_the_config_directory(self, tmp_path):
+        # GIVEN
+        for path in ["theme.yaml", "global.vars.yaml", ".hidden.yaml", "README.md", "devices/plate/boot.cmd"]:
+            (tmp_path / path).parent.mkdir(parents=True, exist_ok=True)
+            (tmp_path / path).write_text("")
+
+        # WHEN
+        roots = scan_file_tree(tmp_path / "devices" / "plate")
+
+        # THEN: only the files of the config directory itself, not its folders
+        assert [_names(root) for root in roots] == [
+            (tmp_path.name, ["global.vars.yaml", "theme.yaml"]),
+            ("plate", ["boot.cmd"]),
+        ]
+        assert [child.kind for child in roots[0].children] == [FileKind.VARIABLES, FileKind.VARIABLES]
+
     def test_without_common_folder(self, tmp_path):
         # GIVEN
         (tmp_path / "devices" / "plate").mkdir(parents=True)
