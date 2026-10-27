@@ -9,6 +9,8 @@ from PyQt6.QtCore import QPoint, Qt  # noqa: E402
 from PyQt6.QtTest import QTest  # noqa: E402
 
 from openhasp_config_manager.gui.domain.problems import Severity  # noqa: E402
+from openhasp_config_manager.gui.domain.variables.usages import Usage  # noqa: E402
+from openhasp_config_manager.gui.qt.widgets.source.usages_popup import show_usages_popup  # noqa: E402
 from tests import TestBase  # noqa: E402
 from tests.gui.helpers import EDITOR_JSONL, create_editor_cfg_root, gui_state, wait_until, x_of_label  # noqa: E402
 
@@ -130,13 +132,14 @@ class TestUsagesOfVariables(TestBase):
         editor.usagesRequested.emit("shared", QPoint(0, 0))
 
         # THEN
-        menu = window.source_editor._usages_menu
-        assert [action.text().split("    ")[0] for action in menu.actions()] == [
-            f"devices/test_device/editor.jsonl:{usage.line}" for usage in usages
-        ]
-        menu.actions()[1].trigger()
+        popup = window.source_editor._usages_popup
+        assert popup.tree.topLevelItemCount() == 1
+        assert popup.tree.topLevelItem(0).text(0) == f"devices/test_device/editor.jsonl  ({len(usages)})"
+        items = popup.usage_items()
+        assert [item.data(0, Qt.ItemDataRole.UserRole) for item in items] == usages
+        popup.choose(items[1])
         assert window.source_editor.current_file == usages[1].path
-        menu.close()
+        assert window.source_editor.current_editor.cursor_line_column[0] == usages[1].line
 
     def test_a_key_is_ctrl_clickable_in_a_variable_file(self, used_variables, window):
         # GIVEN
@@ -541,3 +544,63 @@ class TestMistakesDoNotCrash(TestBase):
         # THEN: the reload works, the template stays as written and is reported
         wait_until(lambda: window.session.working_objects[window.session.components[0].key][1].get("x") == "{{ p9b1.x + 5 }}")
         wait_until(lambda: any("x is not a number" in p.message for p in window.page_layout_editor_widget.problems))
+
+
+class TestUsagesPopup(TestBase):
+    def test_selecting_a_usage_shows_the_code_around_it(self, used_variables, window, editor_file):
+        # GIVEN
+        window.file_tree_widget.openRequested.emit(used_variables)
+        usages = window.source_sync.find_usages(used_variables, "shared")
+        popup = show_usages_popup(window, usages, window.cfg_root, QPoint(0, 0), lambda usage: None)
+        lines = editor_file.read_text(encoding="utf-8").splitlines()
+
+        # WHEN
+        popup.tree.setCurrentItem(popup.usage_items()[1])
+
+        # THEN: the lines around the line of the usage
+        assert lines[usages[1].line - 1].strip() in popup.preview_text()
+        popup.close()
+
+    def test_a_usage_is_chosen_by_activating_it_not_by_selecting_it(self, window, editor_file):
+        # GIVEN
+        chosen = []
+        usages = [Usage(editor_file, 1, 0, 1), Usage(editor_file, 2, 0, 1)]
+        popup = show_usages_popup(window, usages, window.cfg_root, QPoint(0, 0), chosen.append)
+
+        # WHEN
+        popup.tree.setCurrentItem(popup.usage_items()[1])
+
+        # THEN
+        assert chosen == []
+
+        # WHEN
+        popup.tree.itemActivated.emit(popup.usage_items()[1], 0)
+
+        # THEN
+        assert chosen == [usages[1]]
+
+    def test_many_usages_do_not_make_the_popup_bigger_than_the_screen(self, window, editor_file):
+        usages = [Usage(editor_file, 1, 0, 1) for _ in range(300)]
+        popup = show_usages_popup(window, usages, window.cfg_root, QPoint(0, 0), lambda usage: None)
+        assert popup.height() <= 520
+        assert popup.tree.verticalScrollBar().maximum() > 0
+        popup.close()
+
+    def test_activating_a_file_folds_it(self, window, editor_file):
+        popup = show_usages_popup(window, [Usage(editor_file, 1, 0, 1)], window.cfg_root, QPoint(0, 0), lambda usage: None)
+        file_item = popup.tree.topLevelItem(0)
+        popup.tree.itemActivated.emit(file_item, 0)
+        assert not file_item.isExpanded()
+        popup.close()
+
+
+class TestUsagesPopupColors(TestBase):
+    def test_text_that_can_not_be_read_on_the_mark_gets_a_readable_color(self):
+        from PyQt6.QtGui import QColor
+
+        from openhasp_config_manager.gui.qt.widgets.source.usages_popup import _contrast, _readable_on
+
+        background = QColor("#3b6070")
+        readable = _readable_on(QColor("#795E26"), background, QColor("#222222"))
+        assert _contrast(readable, background) >= 4.5
+        assert _readable_on(QColor("#FFFFFF"), background, QColor("#222222")) == QColor("#FFFFFF")
