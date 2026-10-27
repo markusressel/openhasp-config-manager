@@ -2,12 +2,15 @@ import json
 from pathlib import Path
 
 import pytest
-from PyQt6.QtCore import QPoint, Qt
-from PyQt6.QtTest import QTest
 
-from openhasp_config_manager.gui.domain.problems import Severity
-from tests import TestBase
-from tests.gui.helpers import EDITOR_JSONL, create_editor_cfg_root, gui_state, wait_until, x_of_label
+pytest.importorskip("PyQt6")
+
+from PyQt6.QtCore import QPoint, Qt  # noqa: E402
+from PyQt6.QtTest import QTest  # noqa: E402
+
+from openhasp_config_manager.gui.domain.problems import Severity  # noqa: E402
+from tests import TestBase  # noqa: E402
+from tests.gui.helpers import EDITOR_JSONL, create_editor_cfg_root, gui_state, wait_until, x_of_label  # noqa: E402
 
 
 @pytest.fixture

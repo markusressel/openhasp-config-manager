@@ -29,6 +29,38 @@ a logic-aware config engine with a robust API client and deployment automation.
 * 🔔 **Real-time Events:** Subscribe to button presses, state updates, and touch events as they happen.
 * 🪄 **AppDaemon Integration Utilities:** Seamlessly integrate with AppDaemon for advanced automations and logic.
 
+# GUI
+
+![The GUI: devices and files, the page preview with the properties of the selected object, and the text editor next to the rendered JSONL](docs/screenshots/gui.png)
+
+A graphical editor for your config directory: preview the pages of a plate, edit objects visually or as text, and deploy.
+The preview and the text editor follow each other, and both follow changes to the files on disk, so you can also edit them
+with another editor or an LLM at the same time. Hints, shortcuts and explanations are in the GUI itself (hover over things,
+use the context menus, and the legend of the file tree).
+
+The GUI has additional dependencies (PyQt6) and is optional:
+
+```shell
+pip3 install 'openhasp-config-manager[gui]'
+openhasp-config-manager gui -c "./openhasp-configs"
+```
+
+## Working with an LLM next to the GUI
+
+The config files are plain text, so an LLM (or any tool) can edit them while the GUI is open. For context the files don't
+have, the GUI keeps `.openhasp-config-manager/gui-state.json` in the config directory up to date: the device and page that are
+open, the selected objects (with file and line), the unsaved changes, the warnings and errors the GUI shows, files it can't load
+and the connection to the plate. The folder is ignored by git and has a `README.md` that describes the format. Without the GUI,
+`openhasp-config-manager check -c <config dir>` prints the same problems (and what a deployment would fail on) for all devices,
+as text or `--json`, and exits with 1 on errors. Variables no device uses are listed as `hint`s (they don't fail the check).
+
+Tell your LLM about it, e.g. in the `AGENTS.md` or `CLAUDE.md` of your config repository:
+
+```markdown
+While the openhasp-config-manager GUI runs, `.openhasp-config-manager/gui-state.json` tells what the user has open and which
+problems the GUI shows (see the README in that folder). Edit only the config files.
+```
+
 # CLI
 
 ```shell
@@ -452,97 +484,6 @@ settings are applied to the running plate, like haad does. It restarts if its MQ
 > openhasp-config-manager needs direct IP access as well as an enabled webservice on the plate
 > to be able to deploy files to the device. To enable the webservice
 > try: `openhasp-config-manager cmd -d plate35 -C service -p "start http"`
-
-## Undo and redo in the GUI
-
-`Ctrl+Z` undoes an edit of the draft in the preview (moving, adding, removing, pasting objects, changing their properties) and
-`Ctrl+Shift+Z` redoes it, also in the *Edit* menu and on the preview. Undo goes to the page of the change and selects the changed
-objects. Typing into a property, or nudging with the arrow keys, is one step. Saved changes can be undone too (the draft has changes
-again then). Revert, *Reload from disk* and changes of the files by someone else start a new history. While a text field has the
-focus, `Ctrl+Z` undoes its text instead.
-
-## Editing the files as text in the GUI
-
-The **Code** panel below the preview shows the files in three ways, like the code/design views of an IDE: **Source** (the text
-editor), **Rendered** (the JSONL of the file in the current tab, with its templates rendered) and **Split** (both side by side or above each other, with a
-splitter). The JSONL of the whole page, from all files that contribute to it, the way the plate gets it, is the **Page JSONL**
-tab next to **Code**. Double-click a file in the Files tree to open it (JSONL, `.cmd` and variable files), or select an object in the preview
-while the source is shown: the editor jumps to the line of the object. It works the other way too: moving the cursor into an
-object (typing, clicking, arrow keys) selects that object in the preview, on its page.
-
-The editor knows the JSONL dialect of this project: comments, trailing commas, objects over several lines and `{{ templates }}`
-(also nested ones) are highlighted. It marks what is wrong while you type (an object that is not closed, invalid JSON, an invalid
-template, invalid YAML), and the problems the preview shows (e.g. an object outside of the screen) at the line of their object.
-Other features: line numbers, matching brackets, auto-closing of brackets and quotes, smart indentation, `Ctrl+/` to comment lines,
-`Ctrl+D` to duplicate lines, `Ctrl+Space` completion (object properties, and the template variables a file can use), search and
-replace (`Ctrl+F`, with match case, whole words and regular expressions), `Ctrl+wheel` to zoom, word wrap and whitespace display
-(menu of the Code panel). `Ctrl+S` saves the file, then the pages follow it.
-
-More features for the objects of a `.jsonl` file:
-
-- **Folding**: click the arrow in the gutter, or `Ctrl+-` / `Ctrl+=` for the object at the cursor, `Ctrl+Shift+-` / `Ctrl+Alt+=`
-  for all objects. A fold opens by itself when the cursor moves into it (e.g. by a search).
-- **Completion** (`Ctrl+Space`, or while typing): offers the properties that make sense for the `obj` type of the object (a `slider`
-  gets `val`, `min`, `max`, but no `text`), without those the object has already. Once you type a style property
-  (`bg_color`), the suffixes for the part and state of the object type are offered (`bg_color10`, `bg_color12`, ...). A card
-  next to the list explains the highlighted entry. The key can be completed before its opening quote is typed. Choosing a
-  property writes the key with its quotes and the colon, and for text values (`align`, `text`, colors, ...) the quotes of the value
-  with the cursor between them: `"align": "|"`. Objects without a known `obj` get every property.
-- **Hover**: rest the mouse on a property name for a card with what it does for this object type, the problems of the line, and a
-  link to the openHASP documentation. A style property with a two digit suffix (`bg_color12`) is explained by part and state (10 is
-  the indicator, 20 the knob, ...; 02 is pressed), with the names the object type uses, e.g. the colored track of a `switch`. The card
-  stays while the mouse is on it, so its text can be selected and copied; it goes away when you type, scroll, or click into the text.
-- **Format document** (`Ctrl+Alt+L`): indents the lines by the depth of the brackets and removes spaces at the end of lines. Comments,
-  blank lines and the order of properties stay as they are.
-- **Rename id** (`Shift+F6`): changes the `id` of the object at the cursor and the `parentid` of the objects on the same page that
-  have it as their parent. It refuses an id the page already uses. References in other files or in strings (`p1b2`) are not changed.
-- **Ctrl+click** on `run L:/pages.jsonl` in a `.cmd` file opens the file that has that name on the plate.
-- **Ctrl+click on a variable** in a template (`{{ common.header.bar.height }}`) opens the YAML file that defines it, at its line. Every
-  part of the variable leads to its own key (`header` to `header:`, `height` to `height:`). It uses the rules of the variables: files
-  in deeper folders override those above, and the files of `common` also see the variables of the device. Only the parts that are
-  defined in a YAML file are links (not the Jinja2 keywords and filters, the objects of a file like `p1b1.x`, or `device.*`).
-- **Ctrl+click on the key of a variable** in a `.yaml` file shows where it is used, like the usages of an IDE: nothing says so in the
-  status line, one place opens it, several places are listed (`file:line` and the line) to choose from. The usages of everything
-  below the key count for it (`header:` lists the uses of `header.height` too), and so do the values of other variables and the
-  objects that get `theme.obj.<type>`. All devices are searched. The places are those of the saved files.
-- **Back and forward mouse buttons** go to the places you jumped from, like in a browser: a jump (Ctrl+click on a reference, a
-  variable or a usage, opening a file from the file tree) records where the cursor was, *back* returns there, *forward* undoes that.
-  A new jump drops what was forward. Previews of selected objects and restored tabs are no jumps.
-- **Unused variables**: a variable in a `.yaml` file that no file of any device uses is dimmed and in italics, and the hover says so.
-  A variable is used by a template of a file a plate runs (`{{ common.header.height }}`; `{{ common.header }}` uses everything below it,
-  also `{{ a.b[page] }}` and `a.b.items()`), by the value of another variable that is used, or as the theme of the type of an
-  object (`theme.obj.btn`, applied without a template). `include_files` and `binary_images` are read by the manager itself. All devices
-  count, and files only see the variables of their folders, so a variable of one device is not used by the files of another.
-  What other code reads from the files is not known, e.g. a haad controller that loads `theme.yaml`: such variables are shown as
-  unused. The hints follow the saved files, so they are hidden while the text in the editor is not what they were found in.
-- **Colors**: strings like `"#0D0F14"` (in `.jsonl` and `.yaml` files, in `#RGB`, `#RRGGBB` or `#AARRGGBB`) are shown in their own
-  color. `Ctrl+click` on one (or *Edit color…* in the context menu) opens a color picker with a hue ring, a saturation/value square,
-  the A, R, G and B values and the text. Every change is written into the file at once as one step to undo, and keeps the quotes and the
-  upper or lower case. An alpha other than 255 makes the color `#AARRGGBB`, but openHASP itself uses `#RRGGBB`.
-
-All of these are also in the context menu.
-
-Every file is edited on its own, separate from the unsaved changes of the visual editor. If a file changes on disk (an LLM, another
-editor) while its tab has no changes, the tab follows quietly. If it has changes, the tab offers to reload from disk or to keep
-your version.
-
-## Working with an LLM next to the GUI
-
-The config files are plain text, so an LLM (or any tool) can edit them while the GUI is open: the GUI reloads when files change. A
-draft with unsaved changes is never replaced, the GUI asks first.
-
-For context the files don't have, the GUI keeps `.openhasp-config-manager/gui-state.json` in the config directory up to date: the
-device and page that are open, the selected objects (with file and line), the unsaved changes, the warnings and errors the GUI shows,
-files it can't load (e.g. invalid JSON) and the connection to the plate. The folder is ignored by git and has a `README.md` that
-describes the format. A tool should check that `running` is `true` and the `pid` exists. Everything still works without the file. Without the GUI, `openhasp-config-manager check -c <config dir>` prints the same problems
-(and what a deployment would fail on) for all devices, as text or `--json`, and exits with 1 on errors. Variables no device uses are
-listed as `hint`s (only when all devices are checked, and they don't fail the check).
-Tell your LLM about it, e.g. in the `AGENTS.md` or `CLAUDE.md` of your config repository:
-
-```markdown
-While the openhasp-config-manager GUI runs, `.openhasp-config-manager/gui-state.json` tells what the user has open and which
-problems the GUI shows (see the README in that folder). Edit only the config files.
-```
 
 ## Run commands
 
