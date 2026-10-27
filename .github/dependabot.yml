@@ -24,5 +24,9 @@ updates:
       - dependency-name: prometheus-client
         versions:
           - 0.10.0
+      # AppDaemon requires aiohttp<3.12, which requires multidict<7
+      - dependency-name: multidict
+        update-types:
+          - version-update:semver-major
     registries:
       - python-index-pypi-python-org-simple
