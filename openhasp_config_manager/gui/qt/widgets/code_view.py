@@ -13,6 +13,7 @@ _MODE_KEY = "code_view/mode"
 _ORIENTATION_KEY = "code_view/orientation"
 _SPLITTER_KEY = "code_view/splitter"
 _WRAP_KEY = "code_view/word_wrap"
+_VALUES_KEY = "code_view/template_values"
 _WHITESPACE_KEY = "code_view/whitespace"
 
 
@@ -82,9 +83,12 @@ class CodeView(QWidget):
         self._wrap_action.toggled.connect(self._set_word_wrap)
         self._whitespace_action = QAction("Show whitespace", menu, checkable=True)
         self._whitespace_action.toggled.connect(self._set_whitespace)
+        self._values_action = QAction("Show template values", menu, checkable=True)
+        self._values_action.setToolTip("Show what the templates of a line render to after the line")
+        self._values_action.toggled.connect(self._set_values)
         zoom_reset = QAction("Reset zoom (Ctrl+wheel zooms)", menu)
         zoom_reset.triggered.connect(self._reset_zoom)
-        for action in (self._wrap_action, self._whitespace_action, zoom_reset):
+        for action in (self._wrap_action, self._whitespace_action, self._values_action, zoom_reset):
             menu.addAction(action)
         options = QToolButton()
         ThemedIcons.apply(options, "dots-vertical")
@@ -113,6 +117,7 @@ class CodeView(QWidget):
             self._splitter.restoreState(state)
         self._wrap_action.setChecked(settings.value(_WRAP_KEY, False, type=bool))
         self._whitespace_action.setChecked(settings.value(_WHITESPACE_KEY, False, type=bool))
+        self._values_action.setChecked(settings.value(_VALUES_KEY, False, type=bool))
         mode = settings.value(_MODE_KEY, CodeViewMode.RENDERED.value)
         self.set_mode(CodeViewMode(mode) if mode in CodeViewMode._value2member_map_ else CodeViewMode.RENDERED)
         self._update_orientation_action()
@@ -156,6 +161,10 @@ class CodeView(QWidget):
     def _set_word_wrap(self, wrap: bool):
         self.source.set_word_wrap(wrap)
         QSettings().setValue(_WRAP_KEY, wrap)
+
+    def _set_values(self, show: bool):
+        self.source.set_show_values(show)
+        QSettings().setValue(_VALUES_KEY, show)
 
     def _set_whitespace(self, show: bool):
         self.source.set_show_whitespace(show)

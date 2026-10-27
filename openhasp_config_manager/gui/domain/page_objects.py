@@ -6,6 +6,8 @@ from typing import Dict, List, Optional
 
 # openHASP object ids are 0..254 per page
 MAX_OBJECT_ID = 254
+# the pages of a plate are 1 to 12, page 0 is shown on all of them
+MAX_PAGE = 12
 
 
 class OpenHASPWidgetType(StrEnum):
@@ -210,6 +212,15 @@ def is_hidden(obj: Dict) -> bool:
     return str(obj.get("hidden", False)).lower() in ("true", "1")
 
 
+def page_label(index: int) -> str:
+    return "Global (page 0)" if index == 0 else f"Page {index}"
+
+
+def selectable_pages(current: int) -> List[int]:
+    """:return: the pages a user can go to: the global page 0, all pages of a plate, and the current one (which may be none of them)"""
+    return sorted({0, *range(1, MAX_PAGE + 1), current})
+
+
 def step_page(pages: List[int], current: int, step: int) -> Optional[int]:
     """
     :param pages: the navigable page indices, sorted
@@ -220,8 +231,43 @@ def step_page(pages: List[int], current: int, step: int) -> Optional[int]:
     if not pages:
         return None
     if current not in pages:
-        return pages[0]
+        # the next page in that direction
+        beyond = [page for page in pages if (page > current) == (step > 0)]
+        return (beyond[0] if step > 0 else beyond[-1]) if beyond else (pages[0] if step > 0 else pages[-1])
     return pages[(pages.index(current) + step) % len(pages)]
+
+
+def page_settings(component_objects: OrderedDict[str, List[Dict]], page: int) -> Dict:
+    """:return: the settings of a page: its object with the id 0 (`prev`, `next` and `back`), the last one wins"""
+    result: Dict = {}
+    for objects in component_objects.values():
+        for obj in objects:
+            if obj.get("page") == page and obj.get("id") == 0:
+                result.update(obj)
+    return result
+
+
+def navigate(component_objects: OrderedDict[str, List[Dict]], current: int, action: str, start_page: int = 1) -> Optional[int]:
+    """
+    Where a button with the action `next`, `prev` or `back` leads, the way openHASP does it (`Page` in `hasp_page.cpp`): to the
+    page its settings name (`{"page": 4, "id": 0, "next": 1}`: after page 4 comes page 1), by default to the page after
+    (before) it, rolling over between 12 and 1, empty pages included. `back` leads to the start page of the plate.
+    :param start_page: `hasp.startpage` of the config of the plate
+    :return: the page to show, None if there is none (the current page is no page of the plate)
+    """
+    if not 1 <= current <= MAX_PAGE:
+        return None
+    try:
+        configured = int(page_settings(component_objects, current).get(action))
+    except (TypeError, ValueError):
+        configured = None
+    if configured is not None and 1 <= configured <= MAX_PAGE:
+        return configured
+    if action == "next":
+        return current % MAX_PAGE + 1
+    if action == "prev":
+        return (current - 2) % MAX_PAGE + 1
+    return start_page
 
 
 def get_navigable_page_indices(component_objects: OrderedDict[str, List[Dict]]) -> List[int]:

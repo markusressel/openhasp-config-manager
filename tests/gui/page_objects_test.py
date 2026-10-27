@@ -9,6 +9,10 @@ from openhasp_config_manager.gui.domain.page_objects import (
     get_navigable_page_indices,
     get_page_objects,
     is_hidden,
+    navigate,
+    page_label,
+    page_settings,
+    selectable_pages,
     step_page,
     is_id_used,
     next_free_id,
@@ -64,11 +68,77 @@ class TestPageObjects(TestBase):
     def test_step_page_from_a_page_without_objects_goes_to_the_first(self):
         assert step_page([1, 2], current=42, step=1) == 1
 
+    def test_step_page_from_a_page_without_objects_goes_to_the_next_one_in_that_direction(self):
+        assert step_page([1, 5, 8], current=3, step=1) == 5
+        assert step_page([1, 5, 8], current=3, step=-1) == 1
+        assert step_page([1, 5, 8], current=10, step=1) == 1
+        assert step_page([2, 5, 8], current=1, step=-1) == 8
+
+    def test_every_page_and_the_global_one_can_be_selected(self):
+        assert selectable_pages(3) == list(range(0, 13))
+        assert selectable_pages(15) == [*range(0, 13), 15]
+        assert page_label(0) == "Global (page 0)"
+        assert page_label(4) == "Page 4"
+
     def test_step_page_without_pages(self):
         assert step_page([], current=1, step=1) is None
 
     def test_navigable_pages_skip_page_0(self):
         assert get_navigable_page_indices(_draft()) == [1, 2]
+
+    def _limited(self) -> OrderedDict:
+        # the pages 1 to 3 are the navigation, 9 is a page of its own
+        return OrderedDict(
+            [
+                (
+                    "pages.jsonl",
+                    [
+                        {"page": 1, "id": 0, "prev": 3},
+                        {"page": 3, "id": 0, "next": "1"},
+                        {"page": 1, "id": 1, "obj": "label"},
+                        {"page": 2, "id": 1, "obj": "label"},
+                        {"page": 3, "id": 1, "obj": "label"},
+                        {"page": 9, "id": 1, "obj": "label"},
+                    ],
+                )
+            ]
+        )
+
+    def test_page_settings_are_the_object_with_id_0(self):
+        assert page_settings(self._limited(), 3) == {"page": 3, "id": 0, "next": "1"}
+        assert page_settings(self._limited(), 2) == {}
+
+    def test_the_settings_of_a_page_limit_where_the_buttons_lead(self):
+        draft = self._limited()
+        assert navigate(draft, 3, "next") == 1
+        assert navigate(draft, 1, "prev") == 3
+
+    def test_without_a_setting_the_buttons_go_to_the_page_after_and_before_like_on_the_plate(self):
+        draft = self._limited()
+        # empty pages included, rolling over between 12 and 1
+        assert navigate(draft, 2, "next") == 3
+        assert navigate(draft, 9, "next") == 10
+        assert navigate(draft, 12, "next") == 1
+        assert navigate(draft, 2, "prev") == 1
+        assert navigate(draft, 9, "prev") == 8
+        assert navigate(draft, 1, "prev") == 3  # configured
+        assert navigate(OrderedDict(), 1, "prev") == 12
+
+    def test_back_leads_to_the_start_page_unless_configured(self):
+        draft = self._limited()
+        assert navigate(draft, 2, "back") == 1
+        assert navigate(draft, 2, "back", start_page=5) == 5
+        draft["pages.jsonl"].append({"page": 2, "id": 0, "back": 3})
+        assert navigate(draft, 2, "back", start_page=5) == 3
+
+    def test_invalid_settings_are_ignored(self):
+        draft = self._limited()
+        draft["pages.jsonl"].append({"page": 2, "id": 0, "next": "x", "prev": 99})
+        assert navigate(draft, 2, "next") == 3
+        assert navigate(draft, 2, "prev") == 1
+
+    def test_the_global_page_is_no_page_to_navigate_from(self):
+        assert navigate(self._limited(), 0, "next") is None
 
     def test_count_objects(self):
         assert count_objects(_draft()) == 4

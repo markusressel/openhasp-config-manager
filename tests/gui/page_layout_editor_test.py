@@ -692,6 +692,52 @@ class TestNavigationButtons(TestBase):
         wait_until(lambda: editor.current_index != 9)
 
 
+class TestPageSelection(TestBase):
+    def test_every_page_and_the_global_page_can_be_chosen(self, editor):
+        # THEN: also pages without objects
+        combo = editor.page_combo
+        assert [combo.itemData(i) for i in range(combo.count())] == list(range(0, 13))
+        assert combo.itemText(0) == "Global (page 0)"
+        assert combo.itemText(7) == "Page 7"
+
+        # WHEN
+        editor._go_to_page(0)
+
+        # THEN: only what is on all pages
+        assert editor.current_index == 0
+        assert combo.currentData() == 0
+        assert all(obj.get("page") == 0 for obj in editor.page_objects)
+
+    def test_interactive_buttons_follow_the_settings_of_the_pages(self, editor):
+        # GIVEN: the buttons of page 9 lead to 4 and not to the page the toolbar would go to
+        key = _key(editor, "editor.jsonl")
+        editor.session.add_object(key, {"page": 9, "id": 0, "next": 4})
+        editor.set_page_index(9)
+
+        # WHEN: a click on a button with the action next
+        editor._PageLayoutEditorWidget__on_preview_layout_button_clicked({"action": "next"})
+
+        # THEN
+        assert editor.current_index == 4
+
+        # WHEN: the toolbar ignores the settings
+        editor.set_page_index(9)
+        editor._on_next_page_clicked()
+        assert editor.current_index == 10
+
+    def test_the_arrows_go_through_the_pages_of_the_dropdown(self, editor):
+        visited = [editor.current_index]
+        editor._go_to_page(11)
+        for _ in range(3):
+            editor._on_next_page_clicked()
+            visited.append(editor.current_index)
+        assert visited[1:] == [12, 0, 1]
+        editor._on_previous_page_clicked()
+        assert editor.current_index == 0
+        editor._on_previous_page_clicked()
+        assert editor.current_index == 12
+
+
 class TestPropertyEditor(TestBase):
     def _template_field(self, editor):
         from PyQt6.QtWidgets import QLineEdit
@@ -924,3 +970,42 @@ class TestZoomSlider(TestBase):
         assert stepped > 0
         assert 0 < slider.value() < 100
         assert slider.value() == round(100 * math.log(preview.zoom() / 0.25) / math.log(32))
+
+
+class TestPageIndicator(TestBase):
+    def _click(self, indicator, x: float):
+        from PyQt6.QtCore import QEvent, QPointF, Qt
+        from PyQt6.QtGui import QMouseEvent
+
+        position = QPointF(x, 3)
+        indicator.mousePressEvent(
+            QMouseEvent(
+                QEvent.Type.MouseButtonPress,
+                position,
+                indicator.mapToGlobal(position),
+                Qt.MouseButton.LeftButton,
+                Qt.MouseButton.LeftButton,
+                Qt.KeyboardModifier.NoModifier,
+            )
+        )
+
+    def test_it_has_a_segment_per_page_and_shows_the_current_one(self, editor):
+        indicator = editor.page_indicator
+        editor._go_to_page(5)
+        assert indicator._pages == list(range(0, 13))
+        assert indicator._current == 5
+        assert [page for page in indicator._pages if indicator._counts.get(page)] == [1, 9]
+        assert "empty" in indicator._description(2)
+        assert "objects" in indicator._description(9)
+
+    def test_a_click_on_a_segment_or_the_gap_after_it_goes_to_its_page(self, editor):
+        indicator = editor.page_indicator
+        editor._go_to_page(5)
+        self._click(indicator, indicator._segment(3).left() + 2)
+        assert editor.current_index == 3
+        editor._go_to_page(5)
+        self._click(indicator, indicator._segment(3).right() + 1)
+        assert editor.current_index == 3
+
+    def test_it_is_painted(self, editor):
+        assert not editor.page_indicator.grab().isNull()

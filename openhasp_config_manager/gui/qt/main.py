@@ -51,7 +51,7 @@ from openhasp_config_manager.gui.domain.gui_state import (
     now,
     relative,
 )
-from openhasp_config_manager.gui.domain.page_objects import get_navigable_page_indices
+from openhasp_config_manager.gui.domain.page_objects import get_navigable_page_indices, page_label
 from openhasp_config_manager.gui.domain.plate_session import PlateSession
 from openhasp_config_manager.gui.qt.components import UiComponents, ThemedIcons
 from openhasp_config_manager.gui.qt.config_watcher import ConfigWatcher
@@ -147,7 +147,7 @@ class StatusBarController:
             self._on_resync(min(self._connection_status.out_of_sync_pages))
 
     def set_page(self, index: Optional[int], count: int = 0):
-        self._page.setText("" if index is None else f"Page {index}  ·  {count} pages")
+        self._page.setText("" if index is None else f"{page_label(index)}  ·  {count} pages")
 
     def set_dirty(self, dirty: bool):
         self._dirty.setText("● Modified" if dirty else "")

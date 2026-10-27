@@ -481,7 +481,7 @@ class TestLinksAndDocs(TestBase):
         editor.set_text("run L:/pages.jsonl\nrun x")
         targets = []
         editor.linkRequested.connect(targets.append)
-        position = QPoint(editor.fontMetrics().horizontalAdvance("run L:/pa") + editor.gutter_width() + 5, 5)
+        position = QPoint(editor.fontMetrics().horizontalAdvance("run L:/pa") + 5, 5)
 
         QTest.mouseClick(editor.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.ControlModifier, position)
         QTest.mouseClick(editor.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, position)
@@ -516,7 +516,7 @@ class TestLinksAndDocs(TestBase):
         editor.resize(500, 100)
         editor.show()
         editor.set_text("run L:/pages.jsonl")
-        position = QPoint(editor.fontMetrics().horizontalAdvance("run L:/pa") + editor.gutter_width() + 5, 5)
+        position = QPoint(editor.fontMetrics().horizontalAdvance("run L:/pa") + 5, 5)
         before = len(editor.extraSelections())
 
         QTest.mouseMove(editor.viewport(), position)
@@ -644,6 +644,30 @@ class TestLinksAndDocs(TestBase):
         editor.set_text("run x")
         assert at("ru").is_empty()
 
+    def test_card_content_of_a_variable_is_its_value(self, editor):
+        editor.set_text('{"h": "{{ header.height }}"}')
+        editor.set_value_source(lambda name: 44 if name == "header.height" else {"height": 44}, lambda text: "44")
+
+        found = editor._card_content_at(self._position(editor, '{"h": "{{ header.he')).help
+        assert (found.name, found.summary) == ("header.height", "`44`")
+        assert editor._card_content_at(self._position(editor, '{"h": "{{ hea')).help.summary == "`{height}`"
+
+    def test_values_are_shown_after_the_line_when_asked_for(self, editor):
+        editor.resize(600, 200)
+        editor.show()
+        editor.set_text('{"h": "{{ header.height }}"}\n{"x": 1}')
+        calls = []
+        editor.set_value_source(lambda name: 44, lambda text: calls.append(text) or "44")
+
+        # on: the templates of the visible lines, once (until the values are refreshed)
+        editor.set_show_values(True)
+        editor.grab()
+        editor.grab()
+        assert calls == ["{{ header.height }}"]
+        editor.refresh_values()
+        editor.grab()
+        assert calls == ["{{ header.height }}"] * 2
+
     def test_card_shows_issues_with_the_explanation(self, editor):
         editor.set_text('{"w": "33%"}')
         editor.set_app_markers([SourceIssue(1, 1, 3, Severity.ERROR, "Broken")])
@@ -652,6 +676,31 @@ class TestLinksAndDocs(TestBase):
         self._hover(editor, self._position(editor, '{"'))
         wait_until(lambda: editor._hover_card.isVisible(), timeout_ms=1000)
         assert "Broken" in editor._hover_card._issues.text()
+
+
+class TestColorSwatches(TestBase):
+    def test_colors_of_a_line_are_its_color_strings_and_templates_rendering_to_colors(self, editor):
+        editor.set_text('{"bg_color": "#FF0000", "text_color": "{{ c }}"}\n{"x": 1}')
+        editor.set_value_source(lambda name: None, lambda text: "#00FF00")
+
+        assert [color.hex() for color in editor._colors_of(editor.document().findBlockByNumber(0).text())] == [
+            "#FF0000",
+            "#00FF00",
+        ]
+        assert editor._colors_of(editor.document().findBlockByNumber(1).text()) == []
+
+    def test_swatches_are_painted_in_the_gutter(self, editor):
+        editor.resize(600, 200)
+        editor.show()
+        editor.set_text('{"bg_color": "#FF0000"}')
+
+        image = editor._gutter.grab().toImage()
+
+        assert any(
+            image.pixelColor(x, y).red() > 200 and image.pixelColor(x, y).green() < 60
+            for x in range(image.width())
+            for y in range(20)
+        )
 
 
 class TestFlash(TestBase):
