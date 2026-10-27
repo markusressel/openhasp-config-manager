@@ -9,7 +9,7 @@ loads `theme.yaml`) is not known. Qt-free.
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Set, Tuple
+from typing import Dict, FrozenSet, Iterable, List, Set, Tuple
 
 from openhasp_config_manager.gui.domain.variables.definitions import VariableDefinitions, VariableLeaf
 from openhasp_config_manager.gui.domain.variables.references import scan_text
@@ -39,19 +39,20 @@ class DeviceFiles:
     files: List[Path]
 
 
-# the variables a file names, with where
-_Named = List[Tuple[str, Usage]]
+# the variables a file names, with where, and the properties of the object that replace what the variable gives it (an object
+# that sets `bg_color` itself doesn't use `theme.obj.btn.bg_color`)
+_Named = List[Tuple[str, Usage, FrozenSet[str]]]
 
 
 class _Names:
     """The variables a file names, to ask which of them concern a variable."""
 
     def __init__(self, named: _Named):
-        self._exact: Dict[str, List[Usage]] = defaultdict(list)
+        self._exact: Dict[str, List[Tuple[Usage, FrozenSet[str]]]] = defaultdict(list)
         # every name and everything it is inside of: `a.b.c` is `a`, `a.b` and `a.b.c`
         self._inside: Dict[str, List[Usage]] = defaultdict(list)
-        for name, usage in named:
-            self._exact[name].append(usage)
+        for name, usage, overridden in named:
+            self._exact[name].append((usage, overridden))
             parts = name.split(".")
             for index in range(len(parts)):
                 self._inside[".".join(parts[: index + 1])].append(usage)
@@ -61,7 +62,12 @@ class _Names:
         parts = variable.split(".")
         usages = list(self._inside.get(variable, ()))
         for index in range(len(parts) - 1):
-            usages += self._exact.get(".".join(parts[: index + 1]), ())
+            # the variable is below the name: not used by what replaces it
+            usages += [
+                usage
+                for usage, overridden in self._exact.get(".".join(parts[: index + 1]), ())
+                if parts[index + 1] not in overridden
+            ]
         return usages
 
 
@@ -124,9 +130,9 @@ class VariableUsages:
         if file not in self._scans:
             by_line: Dict[int, _Named] = {}
             for number, uses, types in scan_text(file.read_text(encoding="utf-8")):
-                by_line[number] = [(use.name, Usage(file, number, use.start, use.end - use.start)) for use in uses] + [
-                    (use.variable, Usage(file, number, use.start, use.end - use.start)) for use in types
-                ]
+                by_line[number] = [
+                    (use.name, Usage(file, number, use.start, use.end - use.start), frozenset()) for use in uses
+                ] + [(use.variable, Usage(file, number, use.start, use.end - use.start), use.keys) for use in types]
             self._scans[file] = by_line
         return self._scans[file]
 

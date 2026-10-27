@@ -60,6 +60,33 @@ class TestUsages(TestBase):
             ("devices/plate/page.jsonl", 1, 9, 3)
         ]
 
+    def test_objects_that_set_a_property_themselves_do_not_use_the_theme_value(self, tmp_path):
+        _write(
+            tmp_path,
+            {
+                "theme.yaml": "theme:\n  obj:\n    btn:\n      radius: 4\n      bg_color: 1\n",
+                "devices/plate/page.jsonl": '{"obj": "btn", "radius": 2}\n{"obj": "btn"}',
+            },
+        )
+        index = _index(tmp_path, ("devices/plate", ["devices/plate/page.jsonl"]))
+        file = tmp_path / "theme.yaml"
+
+        # THEN: only the second button gets the radius of the theme, but both get the color
+        assert _places(tmp_path, index.usages(file, "theme.obj.btn.radius")) == [("devices/plate/page.jsonl", 2, 9, 3)]
+        assert len(index.usages(file, "theme.obj.btn.bg_color")) == 2
+        assert len(index.usages(file, "theme.obj.btn")) == 2
+
+    def test_a_theme_property_every_object_replaces_is_unused(self, tmp_path):
+        _write(
+            tmp_path,
+            {
+                "theme.yaml": "theme:\n  obj:\n    btn:\n      radius: 4\n",
+                "devices/plate/page.jsonl": '{"obj": "btn", "radius": 2}',
+            },
+        )
+        index = _index(tmp_path, ("devices/plate", ["devices/plate/page.jsonl"]))
+        assert [leaf.name for leaf in index.unused()[(tmp_path / "theme.yaml").resolve()]] == ["theme.obj.btn.radius"]
+
     def test_the_value_of_a_used_variable_uses_other_variables(self, tmp_path):
         _write(
             tmp_path,

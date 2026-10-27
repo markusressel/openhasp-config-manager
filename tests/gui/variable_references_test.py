@@ -57,6 +57,14 @@ class TestObjectTypeUses(TestBase):
         [use] = object_type_uses(line)
         assert (use.type, use.variable, line[use.start : use.end]) == ("btn", "theme.obj.btn", "btn")
 
+    def test_the_properties_the_object_sets_are_known(self):
+        [use] = object_type_uses('{"obj": "btn", "text": "{{ a }}", "radius": 2}')
+        assert use.keys == {"obj", "text", "radius"}
+
+    def test_the_properties_of_a_line_that_is_no_valid_json_are_known(self):
+        [use] = object_type_uses('{"obj": "btn", "radius": {{ r }}}')
+        assert use.keys == {"obj", "radius"}
+
     def test_types_from_templates_are_not_known(self):
         assert object_type_uses('{"obj": "{{ t }}"}') == []
 
