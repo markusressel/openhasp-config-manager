@@ -5,6 +5,8 @@ from typing import Dict, List, Tuple
 
 
 class Severity(StrEnum):
+    # something to know, not a problem (e.g. a variable that is not used)
+    HINT = "hint"
     WARNING = "warning"
     ERROR = "error"
 

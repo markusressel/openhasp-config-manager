@@ -303,81 +303,31 @@ class TestUsedFiles(TestBase):
         }
 
 
-class TestUsedVariableFiles(TestBase):
-    def test_referenced_variables(self):
-        from openhasp_config_manager.processing.template_rendering import referenced_variables
+class TestTopLevelFolders(TestBase):
+    def test_every_top_level_folder_says_what_it_is_for(self, tmp_path, qapp, settings):
+        # GIVEN
+        from openhasp_config_manager.gui.qt.widgets.file_tree import FileTreeWidget
 
-        assert referenced_variables('{"text": "{{ about.title }}", "x": "{{ p1b1.x + offset }}"}') == {
-            "about",
-            "p1b1",
-            "offset",
-        }
-        # a broken template: the others are found anyway
-        assert referenced_variables('{"a": "{{ title }}", "b": "{{ broken", "c": "{% if night %}x{% endif %}"}') >= {"title"}
-
-    def _write(self, tmp_path, files):
-        for path, content in files.items():
+        for path in ["theme.yaml", "common/header.jsonl", "devices/plate/boot.cmd", "devices/plate/home/page.jsonl"]:
             (tmp_path / path).parent.mkdir(parents=True, exist_ok=True)
-            (tmp_path / path).write_text(content)
-
-    def test_the_theme_is_used_by_the_objects_of_its_types_without_a_template(self, tmp_path):
-        # GIVEN
-        from openhasp_config_manager.gui.domain.file_tree import used_variable_files
-
-        self._write(
-            tmp_path,
-            {
-                "theme.yaml": "theme:\n  obj:\n    btn:\n      radius: 4\n",
-                "other_theme.yaml": "theme:\n  obj:\n    slider:\n      radius: 4\n  header:\n    color: red\n",
-                "global.vars.yaml": "screen:\n  width: 480\nid:\n  time: 10\n",
-                "devices/plate/page.jsonl": '{"obj": "btn", "text": "{{ id.time }}"}',
-            },
-        )
+            (tmp_path / path).write_text("")
         device = tmp_path / "devices" / "plate"
+        widget = FileTreeWidget()
 
         # WHEN
-        result = used_variable_files(scan_file_tree(device), [device / "page.jsonl"], device)
-
-        # THEN: no template refers to `theme`, but the button gets its defaults. The theme of sliders is not used here
-        assert {str(path.relative_to(tmp_path.resolve())): names for path, names in result.items()} == {
-            "theme.yaml": ["theme"],
-            "global.vars.yaml": ["id"],
-        }
-
-    def test_variable_files_whose_variables_used_files_reference(self, tmp_path):
-        # GIVEN
-        from openhasp_config_manager.gui.domain.file_tree import used_variable_files
-
-        self._write(
-            tmp_path,
-            {
-                "common/header.jsonl": '{"text": "{{ device_title }}"}',
-                "devices/plate/vars.yaml": "device_title: Plate\nunused: 1\nsubtitle: '{{ chained }}'\n",
-                "devices/plate/home/vars.yaml": "home_title: Home\n",
-                "devices/plate/home/page.jsonl": '{"text": "{{ home_title }} {{ subtitle }}"}',
-                "devices/plate/about/vars.yaml": "about_title: About\n",
-                "devices/plate/about/page.jsonl": '{"text": "{{ about_title }}"}',
-                "devices/plate/home/more.yaml": "chained: x\n",
-                "devices/plate/chain/vars.yaml": "chained: y\n",
-                "devices/plate/broken.yaml": "a: [",
-            },
-        )
-        device = tmp_path / "devices" / "plate"
-        used = [tmp_path / "common/header.jsonl", device / "home/page.jsonl"]
-
-        # WHEN
-        result = used_variable_files(scan_file_tree(device), used, device)
+        widget.set_files(scan_file_tree(device), {}, {}, {}, common_path=tmp_path / "common")
 
         # THEN
-        assert {str(path.relative_to(tmp_path.resolve())): names for path, names in result.items()} == {
-            # used by the common file through the device folder, and by home/page.jsonl
-            "devices/plate/vars.yaml": ["device_title", "subtitle"],
-            "devices/plate/home/vars.yaml": ["home_title"],
-            # only through the value of subtitle
-            "devices/plate/home/more.yaml": ["chained"],
-            # can't be read: shown, not hidden
-            "devices/plate/broken.yaml": [],
-        }
+        roots = [widget.tree.topLevelItem(i) for i in range(3)]
+        assert [(root.text(0), root.text(1)) for root in roots] == [
+            ("Global variables", "global"),
+            ("common", "shared"),
+            ("plate", "this device"),
+        ]
+        assert all(str(path) in root.toolTip(0) for root, path in zip(roots, [tmp_path, tmp_path / "common", device]))
+        # the icons tell them apart, subfolders have no role
+        assert len({root.icon(0).cacheKey() for root in roots}) == 3
+        assert roots[2].child(0).text(1) == ""
 
 
 class TestLegend(TestBase):

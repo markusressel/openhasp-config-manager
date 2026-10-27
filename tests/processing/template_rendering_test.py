@@ -6,7 +6,6 @@ from openhasp_config_manager.processing import template_rendering
 from openhasp_config_manager.processing.template_rendering import (
     TemplateRenderError,
     check_template,
-    referenced_variables,
     render_dict_recursive,
     render_template,
     render_template_collecting_unknown,
@@ -347,34 +346,6 @@ class TestTemplateSpans(TestBase):
     def test_text_without_templates(self):
         # THEN
         assert template_spans("a } b {") == []
-
-
-class TestReferencedVariables(TestBase):
-    def test_variables_of_templates(self):
-        # THEN
-        assert referenced_variables("{{ about.title }}") == {"about"}
-        assert referenced_variables('{"text": "{{ about.title }}", "x": "{{ p1b1.x + offset }}"}') == {
-            "about",
-            "p1b1",
-            "offset",
-        }
-        assert referenced_variables("{% if night %}{{ a }}{% endif %}") == {"night", "a"}
-        assert referenced_variables("no templates") == set()
-        assert referenced_variables("") == set()
-
-    def test_text_that_can_not_be_parsed_as_a_whole(self):
-        # THEN: the expressions that can be parsed count
-        assert referenced_variables('{"a": "{{ title }}", "b": "{{ broken", "c": "{% if night %}x{% endif %}"}') >= {"title"}
-        assert referenced_variables("{{ a }} and {{ b ") == {"a"}
-
-    def test_nested_templates(self):
-        # THEN: the variables of the inner templates are found, the outer one can't be parsed
-        assert referenced_variables("{{ (p{{ page }}b21.x | int) + (p{{ other }}b21.w | int) }}") == {"page", "other"}
-        assert referenced_variables("{{ p{{ common.pages.index }}b1.x }} {{ title }}") == {"common", "title"}
-
-    def test_expressions_that_can_not_be_parsed_are_skipped(self):
-        # THEN
-        assert referenced_variables("{{ 1 + }} {{ ok }} {% if %}") == {"ok"}
 
 
 class TestRenderDictRecursive(TestBase):

@@ -696,7 +696,7 @@ class TestColorPicker(TestBase):
 
     def _color(self, editor, prefix='{"c": "#0D'):
         position = QPoint(editor.fontMetrics().horizontalAdvance(prefix) + 2, 5)
-        return editor._color_at(position)
+        return editor._colors.color_at(position)
 
     def test_finds_the_color_under_the_mouse(self, qapp, settings):
         editor = self._editor()
@@ -742,7 +742,7 @@ class TestColorPicker(TestBase):
         editor.close()
 
     def _color_at_start(self, editor):
-        return editor._color_at(QPoint(editor.fontMetrics().horizontalAdvance("color: '#0") + 2, 5))
+        return editor._colors.color_at(QPoint(editor.fontMetrics().horizontalAdvance("color: '#0") + 2, 5))
 
     def test_the_text_of_the_picker_follows_typing(self, qapp, settings):
         editor = self._editor()
@@ -773,5 +773,5 @@ class TestColorPicker(TestBase):
         editor.edit_color(*self._color(editor))
         QTest.keyClick(editor._picker, Qt.Key.Key_Escape)
         assert not editor._picker.isVisible()
-        assert editor._color_edit is None
+        assert editor._colors._edit is None
         editor.close()

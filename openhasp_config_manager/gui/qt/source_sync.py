@@ -7,6 +7,7 @@ from openhasp_config_manager.gui.domain.gui_state import relative
 from openhasp_config_manager.gui.domain.plate_session import PlateSession
 from openhasp_config_manager.gui.domain.source_issues import SourceIssue
 from openhasp_config_manager.gui.domain.variable_definitions import Definition, VariableDefinitions
+from openhasp_config_manager.gui.domain.variable_usages import Usage, VariableUsages
 from openhasp_config_manager.gui.qt.ui_session_store import UiSessionStore
 from openhasp_config_manager.gui.qt.widgets.code_view import CodeView
 from openhasp_config_manager.gui.qt.widgets.file_rendered_view import FileRenderedView
@@ -43,6 +44,7 @@ class SourceEditorSync(QtCore.QObject):
         self._config_dir = config_dir
         self._file_view = file_view
         self._definitions = VariableDefinitions(config_dir)
+        self._variable_usages: Optional[VariableUsages] = None
         self._restoring_open_files = False
 
         page_editor.stateChanged.connect(self.update_markers)
@@ -54,6 +56,7 @@ class SourceEditorSync(QtCore.QObject):
         source_editor.stateChanged.connect(self.update_file_view)
         source_editor.set_variables(self.variables_of_file)
         source_editor.set_definition_finder(self.find_definition)
+        source_editor.set_usages_finder(self.find_usages)
 
     def open_file(self, path: Path):
         """Show a file in the text editor, for editing (not as a preview)."""
@@ -71,6 +74,14 @@ class SourceEditorSync(QtCore.QObject):
         session = self._session()
         device_path = None if session is None else session.device.path
         return self._definitions.find(name, path, device_path)
+
+    def set_variable_usages(self, usages: VariableUsages):
+        """Where the variables are used, by all devices (see `LoadedDevice.variable_usages`)."""
+        self._variable_usages = usages
+
+    def find_usages(self, path: Path, name: str) -> List[Usage]:
+        """:return: where the variable `name`, defined in a file, is used"""
+        return [] if self._variable_usages is None else self._variable_usages.usages(path, name)
 
     # --- open tabs ---
 

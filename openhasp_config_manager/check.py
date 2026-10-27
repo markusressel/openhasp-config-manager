@@ -6,9 +6,12 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from openhasp_config_manager.gui.domain.draft_files import BOOT_CMD, load_analyzed_device
 from openhasp_config_manager.gui.domain.gui_state import relative
+from openhasp_config_manager.gui.domain.file_tree import used_files
 from openhasp_config_manager.gui.domain.page_objects import get_page_objects
 from openhasp_config_manager.gui.domain.plate_session import PlateSession
 from openhasp_config_manager.gui.domain.problems import Severity, find_problems, object_name
+from openhasp_config_manager.gui.domain.unused_variables import find_unused_variables
+from openhasp_config_manager.gui.domain.variable_usages import DeviceFiles, VariableUsages
 from openhasp_config_manager.manager import ConfigManager
 from openhasp_config_manager.openhasp_client.model.device import Device
 
@@ -38,6 +41,7 @@ def check_config(config_manager: ConfigManager, device_name: Optional[str] = Non
     """
     Check the config directory without writing or sending anything: what a deployment would fail on (files that can't be
     processed, validation), and what is wrong with the pages (the problems the GUI shows, unknown template variables).
+    Variables that no device uses are reported as hints, but only when all devices are checked (a device alone can't tell).
     Console output of the analysis goes to stderr.
     :param device_name: check only this device
     :return: the names of the checked devices, and what is wrong, errors first
@@ -56,7 +60,23 @@ def check_config(config_manager: ConfigManager, device_name: Optional[str] = Non
         issues: List[Issue] = []
         for device in devices:
             issues += _check_device(config_manager, config_dir, devices, device)
+        if device_name is None:
+            issues += _check_unused_variables(config_dir, devices)
     return [device.name for device in devices], sorted(issues, key=lambda issue: issue.severity != Severity.ERROR)
+
+
+def _check_unused_variables(config_dir: Path, devices: List[Device]) -> List[Issue]:
+    """The variables of the YAML files that no file of any device uses (see `VariableUsages`)."""
+    try:
+        usages = VariableUsages(config_dir, [DeviceFiles(d.path, list(used_files(d.cmd, d.jsonl))) for d in devices])
+        unused = find_unused_variables(usages)
+    except Exception as ex:
+        return [Issue(Severity.ERROR, f"Can't look for unused variables: {ex}")]
+    return [
+        Issue(issue.severity, issue.message, file=relative(path, config_dir), line=issue.line)
+        for path, found in sorted(unused.items())
+        for issue in found.issues
+    ]
 
 
 def _check_device(config_manager: ConfigManager, config_dir: Path, devices: List[Device], device: Device) -> List[Issue]:

@@ -501,6 +501,20 @@ More features for the objects of a `.jsonl` file:
   part of the variable leads to its own key (`header` to `header:`, `height` to `height:`). It uses the rules of the variables: files
   in deeper folders override those above, and the files of `common` also see the variables of the device. Only the parts that are
   defined in a YAML file are links (not the Jinja2 keywords and filters, the objects of a file like `p1b1.x`, or `device.*`).
+- **Ctrl+click on the key of a variable** in a `.yaml` file shows where it is used, like the usages of an IDE: nothing says so in the
+  status line, one place opens it, several places are listed (`file:line` and the line) to choose from. The usages of everything
+  below the key count for it (`header:` lists the uses of `header.height` too), and so do the values of other variables and the
+  objects that get `theme.obj.<type>`. All devices are searched. The places are those of the saved files.
+- **Back and forward mouse buttons** go to the places you jumped from, like in a browser: a jump (Ctrl+click on a reference, a
+  variable or a usage, opening a file from the file tree) records where the cursor was, *back* returns there, *forward* undoes that.
+  A new jump drops what was forward. Previews of selected objects and restored tabs are no jumps.
+- **Unused variables**: a variable in a `.yaml` file that no file of any device uses is dimmed and in italics, and the hover says so.
+  A variable is used by a template of a file a plate runs (`{{ common.header.height }}`; `{{ common.header }}` uses everything below it,
+  also `{{ a.b[page] }}` and `a.b.items()`), by the value of another variable that is used, or as the theme of the type of an
+  object (`theme.obj.btn`, applied without a template). `include_files` and `binary_images` are read by the manager itself. All devices
+  count, and files only see the variables of their folders, so a variable of one device is not used by the files of another.
+  What other code reads from the files is not known, e.g. a haad controller that loads `theme.yaml`: such variables are shown as
+  unused. The hints follow the saved files, so they are hidden while the text in the editor is not what they were found in.
 - **Colors**: strings like `"#0D0F14"` (in `.jsonl` and `.yaml` files, in `#RGB`, `#RRGGBB` or `#AARRGGBB`) are shown in their own
   color. `Ctrl+click` on one (or *Edit color…* in the context menu) opens a color picker with a hue ring, a saturation/value square,
   the A, R, G and B values and the text. Every change is written into the file at once as one step to undo, and keeps the quotes and the
@@ -521,7 +535,8 @@ For context the files don't have, the GUI keeps `.openhasp-config-manager/gui-st
 device and page that are open, the selected objects (with file and line), the unsaved changes, the warnings and errors the GUI shows,
 files it can't load (e.g. invalid JSON) and the connection to the plate. The folder is ignored by git and has a `README.md` that
 describes the format. A tool should check that `running` is `true` and the `pid` exists. Everything still works without the file. Without the GUI, `openhasp-config-manager check -c <config dir>` prints the same problems
-(and what a deployment would fail on) for all devices, as text or `--json`, and exits with 1 on errors.
+(and what a deployment would fail on) for all devices, as text or `--json`, and exits with 1 on errors. Variables no device uses are
+listed as `hint`s (only when all devices are checked, and they don't fail the check).
 Tell your LLM about it, e.g. in the `AGENTS.md` or `CLAUDE.md` of your config repository:
 
 ```markdown

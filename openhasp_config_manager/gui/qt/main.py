@@ -1051,6 +1051,8 @@ class MainWindow(QMainWindow):
             used_variables=loaded.used_variable_files,
             common_path=Path(self.config_manager.cfg_root, COMMON_FOLDER_NAME),
         )
+        self.source_editor.set_hints(loaded.unused_variables)
+        self.source_sync.set_variable_usages(loaded.variable_usages)
         self.page_layout_editor_widget.device_controls.set_device(self.device)
         self.connection.set_device(self.device)
         self.log_stream.set_device(self.device)

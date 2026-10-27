@@ -168,7 +168,8 @@ def check(config_dir: Path, device: str, as_json: bool):
     Checks the config directory for errors and warnings, without writing or sending anything.
 
     Prints what a deployment would fail on, and what the GUI shows as problems (duplicate ids, objects outside of the
-    screen, unknown template variables). Exits with 1 if there are errors.
+    screen, unknown template variables), and lists the variables no device uses as hints (when all devices are checked).
+    Exits with 1 if there are errors.
     """
     if not c_check(config_dir, device, as_json):
         raise SystemExit(1)

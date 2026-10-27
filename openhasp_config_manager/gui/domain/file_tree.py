@@ -1,15 +1,12 @@
-import re
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Set
+from typing import Dict, Iterable, List, Optional
 
-import yaml
 
 from openhasp_config_manager.const import COMMON_FOLDER_NAME
 from openhasp_config_manager.gui.domain.plate_session import ComponentSource
 from openhasp_config_manager.openhasp_client.model.component import CmdComponent, JsonlComponent
-from openhasp_config_manager.processing.template_rendering import referenced_variables
 
 
 class FileKind(Enum):
@@ -111,81 +108,6 @@ def used_files(cmd_components: List[CmdComponent], jsonl_components: List[JsonlC
         if script in cmds:
             visit(cmds[script], script)
     return result
-
-
-# the `obj` types of the objects in a text: their defaults come from `theme.obj.<type>` (see `ObjectThemeProcessor`)
-_OBJECT_TYPE = re.compile(r'"obj"\s*:\s*"([^"{}]+)"')
-
-
-def used_variable_files(roots: List[FileNode], used: Iterable[Path], device_path: Path) -> Dict[Path, List[str]]:
-    """
-    The variable (.yaml) files whose variables the used files reference. A variable file applies to the files in its
-    folder and below; the files of the common folder also get the variables of the device folder itself
-    (see `DeviceProcessor`). Variables used by the values of other variables count too. The theme counts as used without a
-    template: every object gets the defaults of its type from `theme.obj.<type>`, so a variable file that defines that is used by
-    each file that has an object of that type.
-    :param roots: the folders of the device (see `scan_file_tree`)
-    :param used: the .cmd and .jsonl files the plate runs (see `used_files`)
-    :return: the path of each used variable file -> the names of its variables that are referenced. A file that can't
-        be read as YAML counts as used (with no names): better shown than hidden by mistake.
-    """
-    device_path = device_path.resolve()
-    common_path = Path(config_root_of(device_path), COMMON_FOLDER_NAME)
-    used = [path.resolve() for path in used]
-    texts = {path: path.read_text() for path in used if path.is_file()}
-    references = {path: referenced_variables(text) for path, text in texts.items()}
-
-    variable_files: Dict[Path, Dict[str, Any]] = {}
-    unreadable: Dict[Path, List[str]] = {}
-    stack = list(roots)
-    while stack:
-        node = stack.pop()
-        stack.extend(node.children)
-        if node.kind == FileKind.VARIABLES:
-            try:
-                content = yaml.safe_load(node.path.read_text())
-            except yaml.YAMLError:
-                unreadable[node.path.resolve()] = []
-                continue
-            variable_files[node.path.resolve()] = content if isinstance(content, dict) else {}
-
-    def in_scope(variable_file: Path, path: Path) -> bool:
-        folder = variable_file.parent
-        return path.is_relative_to(folder) or (path.is_relative_to(common_path) and folder == device_path)
-
-    result: Dict[Path, Set[str]] = {}
-    for path, names in references.items():
-        visible = {
-            variable_file: variables for variable_file, variables in variable_files.items() if in_scope(variable_file, path)
-        }
-        names = set(names)
-        # variables can use other variables: follow their values until nothing new is found
-        while True:
-            used_here = {
-                variable_file: set(variables) & names for variable_file, variables in visible.items() if set(variables) & names
-            }
-            more = set()
-            for variable_file, used_names in used_here.items():
-                more |= referenced_variables(yaml.safe_dump({name: visible[variable_file][name] for name in used_names}))
-            if more <= names:
-                break
-            names |= more
-        for variable_file, used_names in used_here.items():
-            result.setdefault(variable_file, set()).update(used_names)
-        # no template refers to the theme of the types of the objects, they get its defaults anyway
-        object_types = set(_OBJECT_TYPE.findall(texts[path]))
-        for variable_file, variables in visible.items():
-            if object_types & set(_theme_types(variables)):
-                result.setdefault(variable_file, set()).add("theme")
-
-    return {**{path: sorted(names) for path, names in result.items()}, **unreadable}
-
-
-def _theme_types(variables: Dict[str, Any]) -> List[str]:
-    """:return: the object types the variables of a file define defaults for (`theme.obj.<type>`)"""
-    theme = variables.get("theme")
-    objects = theme.get("obj") if isinstance(theme, dict) else None
-    return list(objects) if isinstance(objects, dict) else []
 
 
 def format_pages(pages: Iterable[int]) -> str:

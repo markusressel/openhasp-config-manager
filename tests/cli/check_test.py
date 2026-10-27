@@ -25,8 +25,10 @@ def _write(cfg_root: Path, content: str, name: str = "editor.jsonl"):
     (cfg_root / DEVICE / "boot.cmd").write_text(f"run L:/{name}\n")
 
 
-def _check(cfg_root: Path, device=None):
-    return check_config(_create_config_manager(cfg_root, cfg_root.parent / "output"), device)
+def _check(cfg_root: Path, device=None, hints=False):
+    """:param hints: whether to keep the hints (the test config has variables nothing uses)"""
+    devices, issues = check_config(_create_config_manager(cfg_root, cfg_root.parent / "output"), device)
+    return devices, [issue for issue in issues if hints or issue.severity != Severity.HINT]
 
 
 class TestCheck:
@@ -127,6 +129,47 @@ class TestCheck:
         assert [issue.message for issue in issues] == ["No device matches the filter: nope"]
 
 
+class TestUnusedVariables:
+    def _unused_file(self, cfg_root):
+        _write(cfg_root, '{"page": 9, "id": 1, "obj": "label", "text": "{{ used }}"}\n')
+        (cfg_root / DEVICE / "vars.yaml").write_text("used: 1\nunused: 2\n")
+
+    def test_variables_no_device_uses_are_hints_with_file_and_line(self, cfg_root):
+        # GIVEN
+        self._unused_file(cfg_root)
+
+        # WHEN
+        _, issues = _check(cfg_root, hints=True)
+
+        # THEN
+        [issue] = [issue for issue in issues if issue.file.endswith("devices/test_device/vars.yaml") and issue.line == 2]
+        assert issue.severity == Severity.HINT
+        assert issue.message == "Not used: no file of any device uses unused"
+        assert (issue.file, issue.line, issue.device) == (f"{DEVICE}/vars.yaml", 2, None)
+
+    def test_they_are_not_reported_when_only_one_device_is_checked(self, cfg_root):
+        # GIVEN
+        self._unused_file(cfg_root)
+
+        # WHEN
+        _, issues = _check(cfg_root, "test_device", hints=True)
+
+        # THEN: other devices might use them
+        assert issues == []
+
+    def test_hints_are_counted_apart_and_do_not_fail_the_check(self, cfg_root):
+        # GIVEN
+        self._unused_file(cfg_root)
+
+        # WHEN
+        result = CliRunner().invoke(cli, ["check", "-c", str(cfg_root)])
+
+        # THEN
+        assert result.exit_code == 0
+        assert f"{DEVICE}/vars.yaml:2: hint: Not used" in result.stdout
+        assert "Checked 1 device: 0 errors, 0 warnings, " in result.stdout and " hints" in result.stdout
+
+
 class TestCheckCommand:
     def test_json_output_is_clean_and_the_exit_code_tells_about_errors(self, cfg_root):
         # GIVEN
@@ -140,7 +183,7 @@ class TestCheckCommand:
         data = json.loads(result.stdout)
         assert data["ok"] is False
         assert data["devices"] == ["test_device"]
-        assert {issue["severity"] for issue in data["issues"]} == {"error"}
+        assert {issue["severity"] for issue in data["issues"]} == {"error", "hint"}
 
     def test_warnings_do_not_fail(self, cfg_root):
         # GIVEN

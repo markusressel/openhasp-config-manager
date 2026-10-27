@@ -1,38 +1,5 @@
-from openhasp_config_manager.gui.domain.variable_definitions import VariableDefinitions, reference_at, variable_references
+from openhasp_config_manager.gui.domain.variable_definitions import VariableDefinitions, key_at
 from tests import TestBase
-
-
-def _names(line):
-    return [(line[ref.start : ref.end], ref.name) for ref in variable_references(line)]
-
-
-class TestReferences(TestBase):
-    def test_every_part_of_a_variable_stands_for_the_variable_up_to_it(self):
-        assert _names('"h": "{{ common.header.bar.height }}",') == [
-            ("common", "common"),
-            ("header", "common.header"),
-            ("bar", "common.header.bar"),
-            ("height", "common.header.bar.height"),
-        ]
-
-    def test_filters_keywords_strings_and_calls_are_no_variables(self):
-        line = '"t": "{{ \'a.b\' ~ name if flag else other | upper }}{{ items.keys() }}"'
-        assert _names(line) == [("name", "name"), ("flag", "flag"), ("other", "other")]
-
-    def test_templates_in_other_text(self):
-        assert _names("run L:/{{ page.name }}.jsonl") == [("page", "page"), ("name", "page.name")]
-        assert _names('"x": 10, "y": "plain"') == []
-
-    def test_statements_and_comments(self):
-        assert _names("{% if theme.dark %}") == [("theme", "theme"), ("dark", "theme.dark")]
-        assert _names("{# a.b #}") == []
-
-    def test_reference_at(self):
-        line = '"h": "{{ common.header }}"'
-        assert reference_at(line, 10).name == "common"
-        assert reference_at(line, 18).name == "common.header"
-        assert reference_at(line, 15) is None
-        assert reference_at(line, 2) is None
 
 
 def _write(root, files):
@@ -110,3 +77,32 @@ class TestDefinitions(TestBase):
 
         (tmp_path / "global.vars.yaml").write_text("\n\na: 1\n")
         assert definitions.find("a", file).line == 3
+
+
+class TestKeyAt(TestBase):
+    TEXT = "common:\n  header:\n    bar:\n      height: 27\n  list:\n    - a\n"
+
+    def test_the_key_at_a_position_is_the_dotted_name_of_the_variable(self):
+        key = key_at(self.TEXT, 4, 8)
+        assert (key.name, key.start, key.end) == ("common.header.bar.height", 6, 12)
+        assert key_at(self.TEXT, 1, 0).name == "common"
+        assert key_at(self.TEXT, 2, 3).name == "common.header"
+        assert key_at(self.TEXT, 5, 2).name == "common.list"
+
+    def test_values_and_empty_places_are_no_keys(self):
+        assert key_at(self.TEXT, 4, 15) is None
+        assert key_at(self.TEXT, 4, 2) is None
+        assert key_at(self.TEXT, 6, 6) is None
+        assert key_at(self.TEXT, 99, 0) is None
+
+    def test_broken_yaml_has_no_keys(self):
+        assert key_at("a: [\n", 1, 0) is None
+
+
+class TestReadable(TestBase):
+    def test_broken_files_are_not_readable(self, tmp_path):
+        _write(tmp_path, {"ok.yaml": "a: 1\n", "broken.yaml": "a: [\n"})
+        definitions = VariableDefinitions(tmp_path)
+        assert definitions.is_readable(tmp_path / "ok.yaml")
+        assert not definitions.is_readable(tmp_path / "broken.yaml")
+        assert definitions.leaves(tmp_path / "broken.yaml") == []
