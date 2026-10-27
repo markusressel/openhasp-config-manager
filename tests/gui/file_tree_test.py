@@ -9,7 +9,7 @@ from openhasp_config_manager.gui.domain.file_tree import (
     relative_config_path,
     scan_file_tree,
 )
-from openhasp_config_manager.gui.domain.plate_session import ComponentSource
+from openhasp_config_manager.gui.domain.draft_model import ComponentSource
 from tests import TestBase
 
 

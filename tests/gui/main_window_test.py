@@ -119,12 +119,12 @@ class TestEnableLogColors(TestBase):
         assert '"ansi": 0' in path.read_text()
 
         # WHEN
-        window.enable_log_colors(update_config=True)
+        window.log_colors.enable(update_config=True)
 
         # THEN
         wait_until(lambda: calls == [True])
         assert '"ansi": 1' in path.read_text()
-        assert not window._own_writes.foreign([path])
+        assert not window.own_writes.foreign([path])
 
     def test_enables_the_colors_at_the_plate_only(self, create_window, cfg_root):
         # GIVEN
@@ -133,7 +133,7 @@ class TestEnableLogColors(TestBase):
         before = path.read_text()
 
         # WHEN
-        window.enable_log_colors(update_config=False)
+        window.log_colors.enable(update_config=False)
 
         # THEN
         wait_until(lambda: calls == [True])
@@ -148,7 +148,7 @@ class TestEnableLogColors(TestBase):
         window.status.failed.connect(lambda description, error: failures.append(description))
 
         # WHEN
-        window.enable_log_colors(update_config=True)
+        window.log_colors.enable(update_config=True)
 
         # THEN
         assert failures == ["Updating config.json of test_device"]

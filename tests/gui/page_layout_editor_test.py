@@ -199,7 +199,7 @@ class TestFiles(TestBase):
         editor.set_target_component(home)
 
         # WHEN
-        editor.add_object(OpenHASPWidgetType.LABEL)
+        editor.object_actions.add(OpenHASPWidgetType.LABEL)
 
         # THEN
         added = editor.working_objects[home][-1]
@@ -212,11 +212,11 @@ class TestFiles(TestBase):
 
         home = _key(editor, "page.jsonl")
         editor.set_target_component(home)
-        editor.add_object(OpenHASPWidgetType.TABVIEW)
+        editor.object_actions.add(OpenHASPWidgetType.TABVIEW)
         tabview = editor.working_objects[home][-1]
 
         # WHEN
-        editor.add_object(OpenHASPWidgetType.TAB)
+        editor.object_actions.add(OpenHASPWidgetType.TAB)
 
         # THEN
         assert editor.working_objects[home][-1]["parentid"] == tabview["id"]
@@ -230,7 +230,7 @@ class TestFiles(TestBase):
         count = len(editor.working_objects[home])
 
         # WHEN
-        editor.add_object(OpenHASPWidgetType.TAB)
+        editor.object_actions.add(OpenHASPWidgetType.TAB)
 
         # THEN
         assert len(editor.working_objects[home]) == count
@@ -248,7 +248,7 @@ class TestFiles(TestBase):
         monkeypatch.setattr(editor.property_editor, "_create_content", lambda: rebuilds.append(1) or original())
 
         # WHEN
-        editor.remove_selected_objects()
+        editor.object_actions.remove_selected()
 
         # THEN
         assert len(rebuilds) == 1
@@ -264,7 +264,7 @@ class TestFiles(TestBase):
         monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *args: QMessageBox.StandardButton.Yes))
 
         # WHEN (this crashed: clearing the scene reported the selection of objects that were removed already)
-        editor.remove_selected_objects()
+        editor.object_actions.remove_selected()
 
         # THEN
         assert editor.page_preview_widget.editable_items() == []
@@ -280,7 +280,7 @@ class TestFiles(TestBase):
         monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *args: QMessageBox.StandardButton.Yes))
 
         # WHEN
-        editor.remove_selected_objects()
+        editor.object_actions.remove_selected()
 
         # THEN
         assert len(editor.page_preview_widget.editable_items()) == 1
@@ -480,7 +480,7 @@ class TestLockedPosition(TestBase):
         message = editor.page_preview_widget._message
 
         # WHEN
-        editor.nudge_selected_objects(1, 0)
+        editor.object_actions.nudge_selected(1, 0)
         shown = message.isVisible()
         QTest.mouseClick(editor.page_preview_widget.viewport(), Qt.MouseButton.LeftButton)
 
@@ -542,7 +542,7 @@ class TestUndo(TestBase):
 
         # WHEN
         for _ in range(3):
-            editor.nudge_selected_objects(1, 0)
+            editor.object_actions.nudge_selected(1, 0)
 
         # THEN
         assert label["x"] == 13
@@ -574,7 +574,7 @@ class TestUndo(TestBase):
         self._select(editor, 1)
         _item = next(item for item in editor.page_preview_widget.editable_items() if item.obj_data.get("id") == 2)
         _item.setSelected(True)
-        editor.remove_selected_objects()
+        editor.object_actions.remove_selected()
         assert len(editor.page_preview_widget.editable_items()) == 0
         assert editor.action_undo.text() == "Undo Remove 2 objects"
 
@@ -643,8 +643,8 @@ class TestUndo(TestBase):
         editor.plate.action_live_preview.setChecked(True)
         wait_until(lambda: plate.calls and plate.calls[-1] == ("set_page", 9))
         self._select(editor, 1)
-        editor.nudge_selected_objects(5, 0)
-        editor.nudge_selected_objects(5, 0)
+        editor.object_actions.nudge_selected(5, 0)
+        editor.object_actions.nudge_selected(5, 0)
         wait_until(lambda: plate.calls[-1] == ("jsonl", {"page": 9, "id": 1, "x": 20}))
         plate.clear()
 
@@ -780,7 +780,7 @@ class TestPropertyEditor(TestBase):
         assert _object(editor, 1)["text"] == "Ab"
 
         # WHEN the object is moved in the preview
-        editor.nudge_selected_objects(1, 0)
+        editor.object_actions.nudge_selected(1, 0)
 
         # THEN the panel shows the new x
         assert rebuilds == [1]

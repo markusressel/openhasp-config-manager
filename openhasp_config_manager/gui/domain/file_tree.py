@@ -5,7 +5,7 @@ from typing import Dict, Iterable, List, Optional
 
 
 from openhasp_config_manager.const import COMMON_FOLDER_NAME
-from openhasp_config_manager.gui.domain.plate_session import ComponentSource
+from openhasp_config_manager.gui.domain.draft_model import ComponentSource
 from openhasp_config_manager.openhasp_client.model.component import CmdComponent, JsonlComponent
 
 

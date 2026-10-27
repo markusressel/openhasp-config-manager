@@ -161,12 +161,12 @@ class SourceEditorWidget(QWidget):
     def refresh_values(self):
         """The draft changed: the values of the templates are shown again."""
         for page in self._pages.values():
-            page.editor.refresh_values()
+            page.editor.values.refresh()
 
     def set_show_values(self, show: bool):
         self._show_values = show
         for page in self._pages.values():
-            page.editor.set_show_values(show)
+            page.editor.values.set_show(show)
 
     def set_usages_finder(self, finder: Callable[[Path, str], List[Usage]]):
         """Where a variable defined in a YAML file is used, for Ctrl+click on its key."""
@@ -248,14 +248,14 @@ class SourceEditorWidget(QWidget):
             self._remove_tab(self._preview_tab)
         editor = CodeEditor(language_of(buffer.path))
         editor.set_text(buffer.text)
-        editor.set_variables(lambda path=buffer.path: self._variables(path))
+        editor.completion.set_variables(lambda path=buffer.path: self._variables(path))
         editor.set_definition_finder(lambda name, path=buffer.path: self._definitions(path, name))
         editor.set_app_markers(self._markers.get(buffer.path, []))
-        editor.set_value_source(
+        editor.values.set_source(
             lambda name, path=buffer.path: self._variable_value(path, name),
             lambda text, path=buffer.path: self._render_text(path, text),
         )
-        editor.set_show_values(self._show_values)
+        editor.values.set_show(self._show_values)
         editor.set_word_wrap(self._word_wrap)
         editor.set_show_whitespace(self._show_whitespace)
         page = _Page(editor)
@@ -443,14 +443,14 @@ class SourceEditorWidget(QWidget):
 
     def _rename_id(self, path: Path):
         editor = self._pages[path].editor
-        current = editor.object_id
+        current = editor.edits.object_id
         if current is None:
             self.show_message("Put the cursor in an object with a plain number as id to rename it.")
             return
         new_id = self.ask_new_id(current)
         if new_id is None or new_id == current:
             return
-        error = editor.rename_id(new_id)
+        error = editor.edits.rename_id(new_id)
         self.show_message(error or f"Renamed id {current} to {new_id}")
 
     def _ask_new_id(self, current: int) -> Optional[int]:

@@ -9,7 +9,8 @@ from openhasp_config_manager.const import DEVICES_FOLDER_NAME, COMMON_FOLDER_NAM
 from openhasp_config_manager.gui.domain.file_tree import FileNode, scan_file_tree, used_files
 from openhasp_config_manager.gui.domain.unused_variables import UnusedVariables, find_unused_variables
 from openhasp_config_manager.gui.domain.variable_usages import DeviceFiles, VariableUsages
-from openhasp_config_manager.gui.domain.plate_session import ANY_OBJECT, PlateSession, ComponentSource
+from openhasp_config_manager.gui.domain.draft_model import ComponentSource
+from openhasp_config_manager.gui.domain.plate_session import ANY_OBJECT, PlateSession
 from openhasp_config_manager.manager import ConfigManager
 from openhasp_config_manager.openhasp_client.model.component import CmdComponent, JsonlComponent
 from openhasp_config_manager.openhasp_client.model.device import Device

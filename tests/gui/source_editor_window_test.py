@@ -164,7 +164,7 @@ class TestUnusedVariables(TestBase):
         editor = window.source_editor.editor_of(unused_file)
         assert [(hint.line, hint.column) for hint in editor._hints] == [(1, 0), (2, 0)]
         assert len(editor._hint_selections()) == 2
-        issues = editor._card_content_at(QPoint(5, 5)).issues
+        issues = editor.hover.card_content_at(QPoint(5, 5)).issues
         assert issues == [(Severity.HINT, "Not used: no file of any device uses unused_one")]
 
     def test_the_hints_are_hidden_while_the_text_differs_from_the_analyzed_one(self, unused_file, window):
@@ -335,7 +335,7 @@ class TestSaving(TestBase):
         window.session.set_source_value(window.session.working_objects[component.key][0], "x", 20)
 
         # WHEN
-        assert window.save_draft()
+        assert window.draft_actions.save()
 
         # THEN
         wait_until(lambda: window.source_editor.current_editor.toPlainText() == editor_file.read_text())
@@ -386,7 +386,7 @@ class TestChangesOnDisk(TestBase):
         editor_file.write_text(EDITOR_JSONL.replace('"x": 10', '"x": 77'))
 
         wait_until(lambda: window.source_editor.buffer_of(editor_file).conflict)
-        wait_until(lambda: (gui_state(window._cfg_root).get("editor") or {}).get("files", [{}])[0].get("conflict"))
+        wait_until(lambda: (gui_state(window.cfg_root).get("editor") or {}).get("files", [{}])[0].get("conflict"))
         assert window.source_editor.current_editor.toPlainText() == "mine"
 
 
@@ -432,9 +432,9 @@ class TestSessionAndState(TestBase):
         window.source_editor.current_editor.go_to(1, 1)
 
         # the state file may be written before the tab is in it ("files": [])
-        wait_until(lambda: ((gui_state(window._cfg_root).get("editor") or {}).get("files") or [{}])[0].get("dirty"))
+        wait_until(lambda: ((gui_state(window.cfg_root).get("editor") or {}).get("files") or [{}])[0].get("dirty"))
 
-        state = gui_state(window._cfg_root)
+        state = gui_state(window.cfg_root)
         assert state["editor"]["mode"] == "split"
         assert state["editor"]["current"] == "devices/test_device/editor.jsonl"
         [tab] = state["editor"]["files"]

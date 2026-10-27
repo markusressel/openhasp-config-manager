@@ -260,7 +260,7 @@ class TestMarkersAndOptions(TestBase):
     def test_variables_for_the_completion(self, widget, folder):
         widget.set_variables(lambda path: [path.name + ".x"])
         widget.open_file(folder / "a.jsonl")
-        assert widget.current_editor._variables() == ["a.jsonl.x"]
+        assert widget.current_editor.completion._variables() == ["a.jsonl.x"]
 
     def test_options_apply_to_open_and_new_tabs(self, widget, folder):
         widget.open_file(folder / "a.jsonl")

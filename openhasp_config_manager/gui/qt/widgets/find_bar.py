@@ -61,7 +61,7 @@ class FindBar(QFrame):
     def set_editor(self, editor: Optional[CodeEditor]):
         """The editor the bar searches in: the one of the current tab."""
         if self._editor is not None:
-            self._editor.set_search("")
+            self._editor.search.set_search("")
         self._editor = editor
         if editor is None:
             self.close_bar()
@@ -83,7 +83,7 @@ class FindBar(QFrame):
         editor = self._editor
         self.hide()
         if editor is not None:
-            editor.set_search("")
+            editor.search.set_search("")
             editor.setFocus()
 
     def keyPressEvent(self, event):
@@ -97,7 +97,7 @@ class FindBar(QFrame):
     def _search(self):
         if self._editor is None:
             return
-        valid = self._editor.set_search(
+        valid = self._editor.search.set_search(
             self._find.text(), self._case.isChecked(), self._word.isChecked(), self._regex.isChecked()
         )
         self._find.setProperty("invalid", not valid)
@@ -108,14 +108,14 @@ class FindBar(QFrame):
     def _step(self, forward: bool):
         if self._editor is None or not self._find.text():
             return
-        found = self._editor.find_next(forward)
+        found = self._editor.search.find_next(forward)
         self._status.setText("" if found else "No matches")
 
     def _replace_one(self):
         if self._editor is not None:
-            self._editor.replace_current(self._replace.text())
+            self._editor.search.replace_current(self._replace.text())
 
     def _replace_all(self):
         if self._editor is not None:
-            count = self._editor.replace_all(self._replace.text())
+            count = self._editor.search.replace_all(self._replace.text())
             self._status.setText(f"Replaced {count}")

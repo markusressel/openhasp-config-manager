@@ -3,14 +3,22 @@ import itertools
 import re
 from collections import OrderedDict
 from contextlib import contextmanager
-from dataclasses import dataclass, field, replace
-from enum import Enum
+from dataclasses import replace
 from functools import lru_cache
 from pathlib import Path
-from typing import List, Dict, Optional, Any, Protocol, Set, Tuple, Hashable, Iterator, Callable
+from typing import List, Dict, Optional, Any, Set, Tuple, Hashable, Iterator, Callable
 
 from jinja2 import TemplateError
 
+from openhasp_config_manager.gui.domain.draft_model import (
+    ChangeKind,
+    ComponentChanges,
+    ComponentSource,
+    DraftChange,
+    DraftEntry,
+    DraftRenderer,
+    DraftState,
+)
 from openhasp_config_manager.gui.domain.edit_history import EditHistory
 from openhasp_config_manager.gui.domain.page_objects import next_free_id
 from openhasp_config_manager.gui.domain.problems import object_name
@@ -20,107 +28,6 @@ from openhasp_config_manager.processing.jsonl.jsonl import ObjectDimensionsProce
 from openhasp_config_manager.processing.jsonl.source_editor import JsonlSourceEditor
 
 _NUMERIC_PROPERTY = re.compile(NUMERIC_PROPERTY_NAMES)
-
-
-class DraftRenderer(Protocol):
-    """
-    Renders source objects like a deployment does (see DeviceProcessor), with the template variables of their component.
-    """
-
-    def render_object(self, component: str, source: Dict[str, Any]) -> Dict[str, Any]: ...
-
-    def set_draft_sources(self, sources: Dict[str, List[Dict[str, Any]]]):
-        """Templates that refer to other objects (`{{ p1b2.x }}`) see these source objects, per component key."""
-        ...
-
-    def check_template(self, component: str, template: str) -> Optional[str]:
-        """:return: why the template can't be rendered, or None if it can"""
-        ...
-
-    def template_suggestions(self, component: str) -> List[Tuple[str, Any]]:
-        """:return: (template, its current value) for the variables available in the component"""
-        ...
-
-    def variable_value(self, component: str, name: str) -> Any:
-        """:return: the value of a template variable in the component :raises KeyError: if it has none"""
-        ...
-
-    def render_text(self, component: str, text: str) -> str:
-        """:return: a text with templates, rendered like a deployment does :raises jinja2.TemplateError: if it can't be"""
-        ...
-
-
-@dataclass(frozen=True)
-class ComponentSource:
-    """A jsonl component of the draft, as it was read from disk."""
-
-    # the key of the component in the draft
-    key: str
-    path: Path
-    # the content of the file when it was loaded, to detect changes on disk
-    content: str
-    # whether it is a component of the common folder, shared by all devices
-    is_common: bool
-    # the objects as written in the file (templates not rendered), in the order of the file
-    sources: List[Dict[str, Any]]
-
-
-@dataclass
-class _Entry:
-    component: str
-    # the index of the object in the source file, None for objects added in the draft
-    index: Optional[int]
-    # the object as written in the source file (with templates), changed by the draft
-    source: Dict[str, Any]
-    # tells the object apart in the undo history: the rendered dict of an object is a new one after its removal is undone
-    uid: int
-
-
-# the objects of the draft, for undo: per component key (uid, index in the source file, source) of its objects, in order
-DraftState = Dict[str, Tuple[Tuple[int, Optional[int], Dict[str, Any]], ...]]
-
-
-class ChangeKind(Enum):
-    EDIT = "edit"
-    UNDO = "undo"
-    REDO = "redo"
-    # the draft was saved: nothing changed but whether it has changes
-    SAVE = "save"
-
-
-@dataclass(frozen=True)
-class DraftChange:
-    """
-    What a finished edit, undo or redo changed in the draft. Objects with templates that refer to the changed ones may have
-    changed too (they are rendered again).
-    """
-
-    kind: ChangeKind
-    # the edit that was made, undone or redone, e.g. "Move p1b2"
-    description: str
-    # the rendered objects whose source changed, or that were added, in the order of the draft
-    objects: List[Dict]
-    # the rendered objects that were added (also in `objects`)
-    added: List[Dict]
-    # whether objects were removed
-    removed: bool
-    # the pages of the changed and added objects; for an undo or redo also of the removed ones and where objects were before
-    pages: Set[Any]
-
-    @property
-    def adds_or_removes(self) -> bool:
-        return bool(self.added) or self.removed
-
-
-@dataclass
-class ComponentChanges:
-    component: ComponentSource
-    # index in the source file -> properties to set
-    changes: Dict[int, Dict[str, Any]] = field(default_factory=dict)
-    deletions: Set[int] = field(default_factory=set)
-    additions: List[Dict[str, Any]] = field(default_factory=list)
-    # the source objects the file must have after the changes
-    expected_sources: List[Dict[str, Any]] = field(default_factory=list)
 
 
 # stands for every object: the objects a template refers to can't be told
@@ -148,7 +55,7 @@ class PlateSession:
         self._renderer: Optional[DraftRenderer] = None
         self._working_objects: OrderedDict[str, List[Dict]] = OrderedDict()
         # id(rendered object) -> its source
-        self._entries: Dict[int, _Entry] = {}
+        self._entries: Dict[int, DraftEntry] = {}
         self._uids = itertools.count()
         self._loaded = False
         self._history: EditHistory[DraftState] = EditHistory()
@@ -537,7 +444,7 @@ class PlateSession:
 
     def _create(self, component: str, index: Optional[int], source: Dict[str, Any], uid: Optional[int] = None) -> Dict:
         obj = self._renderer.render_object(component, source)
-        self._entries[id(obj)] = _Entry(
+        self._entries[id(obj)] = DraftEntry(
             component=component, index=index, source=source, uid=next(self._uids) if uid is None else uid
         )
         return obj
@@ -572,7 +479,7 @@ class PlateSession:
                     if rendered != obj:
                         self._apply(obj, rendered)
 
-    def _references_of(self, entry: _Entry) -> Set[str]:
+    def _references_of(self, entry: DraftEntry) -> Set[str]:
         """:return: the objects the templates of an object refer to (`ANY_OBJECT` if that can't be told)"""
         values = [value for value in entry.source.values() if isinstance(value, str)]
         if any(has_nested_templates(value) for value in values):
@@ -597,7 +504,7 @@ class PlateSession:
             for key, objects in self._working_objects.items()
         }
 
-    def _frozen_source(self, entry: _Entry) -> Dict[str, Any]:
+    def _frozen_source(self, entry: DraftEntry) -> Dict[str, Any]:
         """:return: a copy of the source of an object, the one of the last state if the source didn't change since"""
         frozen = self._frozen_sources.get(entry.uid)
         if frozen is None or frozen != entry.source:
@@ -679,5 +586,5 @@ class PlateSession:
         for listener in list(self._listeners):
             listener(change)
 
-    def _entry(self, obj: Dict) -> _Entry:
+    def _entry(self, obj: Dict) -> DraftEntry:
         return self._entries[id(obj)]
