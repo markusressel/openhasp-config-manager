@@ -41,6 +41,14 @@ class DraftRenderer(Protocol):
         """:return: (template, its current value) for the variables available in the component"""
         ...
 
+    def variable_value(self, component: str, name: str) -> Any:
+        """:return: the value of a template variable in the component :raises KeyError: if it has none"""
+        ...
+
+    def render_text(self, component: str, text: str) -> str:
+        """:return: a text with templates, rendered like a deployment does :raises jinja2.TemplateError: if it can't be"""
+        ...
+
 
 @dataclass(frozen=True)
 class ComponentSource:
@@ -244,6 +252,14 @@ class PlateSession:
 
     def template_suggestions(self, obj: Dict) -> List[Tuple[str, Any]]:
         return self._renderer.template_suggestions(self._entry(obj).component)
+
+    def variable_value(self, component: str, name: str) -> Any:
+        """:return: the value of a template variable in a component of the draft :raises KeyError: if it has none"""
+        return self._renderer.variable_value(component, name)
+
+    def render_text(self, component: str, text: str) -> str:
+        """:return: a text with templates (e.g. one template), rendered with the variables of a component of the draft"""
+        return self._renderer.render_text(component, text)
 
     def variable_names(self, component: str) -> List[str]:
         """:return: the names of the template variables a file can use, e.g. "theme.navbar.height" """

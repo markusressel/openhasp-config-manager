@@ -123,7 +123,8 @@ class PlateLink(QtCore.QObject):
 
     def show_page(self, index: int):
         """With Live preview: the editor shows another page, show it on the plate with the objects of the draft."""
-        if self.live:
+        # page 0 is no page of the plate: its objects are on all pages
+        if self.live and index != 0:
             self._start_live_page(index)
 
     def draft_changed(self):

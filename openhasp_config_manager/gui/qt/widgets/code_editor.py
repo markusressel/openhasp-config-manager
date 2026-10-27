@@ -1,5 +1,5 @@
 import re
-from typing import Callable, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 from PyQt6 import QtCore
 from PyQt6.QtCore import QEvent, QObject, QPoint, QRect, QRegularExpression, QSettings, QSize, QStringListModel, Qt
@@ -33,6 +33,8 @@ from openhasp_config_manager.gui.domain.source_issues import SourceIssue, find_s
 from openhasp_config_manager.gui.domain.source_links import Link, link_at
 from openhasp_config_manager.gui.domain.source_objects import SourceObject, foldable, object_at_line, scan_objects
 from openhasp_config_manager.gui.domain.source_rename import id_at_line, rename_object_id
+from openhasp_config_manager.gui.domain.colors import Argb
+from openhasp_config_manager.gui.domain.template_values import line_colors, line_values, variable_help
 from openhasp_config_manager.gui.domain.source_syntax import Language, Token
 from openhasp_config_manager.gui.domain.variable_definitions import Definition, key_at
 from openhasp_config_manager.gui.domain.variable_references import part_at
@@ -51,6 +53,7 @@ _HOVER_GRACE_MS = 300
 _MAX_SEARCH_MATCHES = 1000
 _PAIRS = {"{": "}", "[": "]", '"': '"'}
 _FOLD_WIDTH = 14
+_SWATCH_COLORS = 3
 # how long `flash_lines` highlights lines
 FLASH_MS = 3000
 # the opacity of the text of lines with a hint, 0..255
@@ -133,6 +136,14 @@ class CodeEditor(QPlainTextEdit):
         self._search_flags = QTextDocument.FindFlag(0)
         self._variables: Callable[[], List[str]] = lambda: []
         self._find_definition: Callable[[str], Optional[Definition]] = lambda name: None
+        # the value of a variable (KeyError if it has none) and what a text with templates renders to, in the draft
+        self._variable_value: Optional[Callable[[str], Any]] = None
+        self._render_text: Optional[Callable[[str], Optional[str]]] = None
+        self._show_values = False
+        # template -> what it renders to ([] if nothing), for the values next to the text
+        self._values_cache: Dict[str, List[str]] = {}
+        self._colors_cache: Dict[str, List[Argb]] = {}
+        self._rendered: Dict[str, Optional[str]] = {}
         self._colors = EditorColors(self, language)
         self._picker = self._colors.picker
         # the first lines of the folded objects
@@ -329,7 +340,7 @@ class CodeEditor(QPlainTextEdit):
 
     def gutter_width(self) -> int:
         digits = len(str(max(1, self.blockCount())))
-        return 20 + _FOLD_WIDTH + self.fontMetrics().horizontalAdvance("9") * max(digits, 2)
+        return 20 + _FOLD_WIDTH + self.fontMetrics().height() + self.fontMetrics().horizontalAdvance("9") * max(digits, 2)
 
     def _update_gutter_width(self):
         self.setViewportMargins(self.gutter_width(), 0, 0, 0)
@@ -367,6 +378,7 @@ class CodeEditor(QPlainTextEdit):
                     painter.setPen(Qt.PenStyle.NoPen)
                     size = height // 2
                     painter.drawEllipse(4, top + (height - size) // 2, size, size)
+                self._paint_swatch(painter, self._colors_of(block.text()), top, height)
                 font = painter.font()
                 font.setBold(number == current)
                 painter.setFont(font)
@@ -388,6 +400,33 @@ class CodeEditor(QPlainTextEdit):
             block = block.next()
             top = bottom
             number += 1
+
+    def _render(self, text: str) -> Optional[str]:
+        """Renders a template, once (until the values are refreshed): the values and the colors of a line need it both."""
+        if text not in self._rendered:
+            self._rendered[text] = self._render_text(text)
+        return self._rendered[text]
+
+    def _colors_of(self, line: str) -> List[Argb]:
+        if line not in self._colors_cache:
+            self._colors_cache[line] = line_colors(line, self.language, None if self._render_text is None else self._render)
+        return self._colors_cache[line]
+
+    def _paint_swatch(self, painter: QPainter, colors: List[Argb], top: int, height: int):
+        """A small square with the colors of a line (side by side, at most `_SWATCH_COLORS`), right of the issue marker."""
+        if not colors:
+            return
+        colors = colors[:_SWATCH_COLORS]
+        size = height - 4
+        x, y = 4 + height // 2 + 3, top + 2
+        painter.setPen(Qt.PenStyle.NoPen)
+        for index, argb in enumerate(colors):
+            left, right = x + size * index // len(colors), x + size * (index + 1) // len(colors)
+            painter.setBrush(QColor(argb.red, argb.green, argb.blue, argb.alpha))
+            painter.drawRect(left, y, right - left, size)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.setPen(self.palette().color(QPalette.ColorRole.PlaceholderText))
+        painter.drawRect(x, y, size, size)
 
     # --- selections: current line, brackets, issues, search ---
 
@@ -489,6 +528,8 @@ class CodeEditor(QPlainTextEdit):
         found = None
         if self.language == Language.JSONL:
             found = help_at(self.objects(), cursor.block().text(), cursor.blockNumber() + 1, cursor.positionInBlock())
+            if found is None and self._variable_value is not None:
+                found = variable_help(cursor.block().text(), cursor.positionInBlock(), self._variable_value, self._render_text)
         return CardContent(issues, found)
 
     def _tip_area_at(self, position: QPoint) -> QRect:
@@ -739,6 +780,65 @@ class CodeEditor(QPlainTextEdit):
     def edit_color(self, block_number: int, token: Token):
         """Open the color picker for the color string (with its quotes) at a place of the text."""
         self._colors.edit(block_number, token)
+
+    def set_value_source(self, variable_value: Callable[[str], Any], render_text: Callable[[str], Optional[str]]):
+        """What the variables and templates of the text are: for the hover card, and the values next to the text."""
+        self._variable_value = variable_value
+        self._render_text = render_text
+        self.refresh_values()
+
+    def refresh_values(self):
+        """The variables changed: show the values again."""
+        self._values_cache.clear()
+        self._colors_cache.clear()
+        self._rendered.clear()
+        self.viewport().update()
+        self._gutter.update()
+
+    def set_show_values(self, show: bool):
+        """Show what the templates of a line render to after the line, in grey."""
+        self._show_values = show
+        self.viewport().update()
+
+    def _values_of(self, line: str) -> List[str]:
+        if "{{" not in line:
+            return []
+        if line not in self._values_cache:
+            self._values_cache[line] = line_values(line, self._render)
+        return self._values_cache[line]
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        if not self._show_values or self._render_text is None or self.language != Language.JSONL:
+            return
+        painter = QPainter(self.viewport())
+        color = QColor(self.palette().color(QPalette.ColorRole.Text))
+        color.setAlpha(170)
+        painter.setPen(color)
+        font = painter.font()
+        font.setItalic(True)
+        painter.setFont(font)
+        metrics = painter.fontMetrics()
+        block = self.firstVisibleBlock()
+        while block.isValid():
+            top = self.blockBoundingGeometry(block).translated(self.contentOffset()).top()
+            if top > event.rect().bottom():
+                break
+            if block.isVisible() and (values := self._values_of(block.text())):
+                end = QTextCursor(block)
+                end.movePosition(QTextCursor.MoveOperation.EndOfBlock)
+                rect = self.cursorRect(end)
+                text = "= " + " · ".join(values)
+                width = metrics.horizontalAdvance(text)
+                x = rect.right() + 16
+                if x + width + 8 > self.viewport().width():
+                    # the line goes beyond the window: the values stay in sight at its edge, over the text
+                    x = max(self.viewport().width() - width - 8, 0)
+                    painter.fillRect(
+                        x - 6, rect.top(), width + 12, rect.height(), self.palette().color(QPalette.ColorRole.AlternateBase)
+                    )
+                painter.drawText(x, rect.top() + metrics.ascent(), text)
+            block = block.next()
 
     def set_definition_finder(self, finder: Callable[[str], Optional[Definition]]):
         """Where a variable of a template is defined: only the parts of variables that are found can be Ctrl+clicked."""

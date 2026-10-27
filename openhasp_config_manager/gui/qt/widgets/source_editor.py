@@ -1,6 +1,6 @@
 import logging
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Set
+from typing import Any, Callable, Dict, List, Optional, Set
 
 from PyQt6 import QtCore
 from PyQt6.QtCore import QPoint, Qt
@@ -22,6 +22,10 @@ from openhasp_config_manager.gui.qt.widgets.message_panel import DiskConflictBan
 from openhasp_config_manager.gui.qt.widgets.usages_menu import show_usages_menu
 
 LOGGER = logging.getLogger(__name__)
+
+
+def _no_value(path: Path, name: str):
+    raise KeyError(name)
 
 
 class _Page(QWidget):
@@ -67,6 +71,9 @@ class SourceEditorWidget(QWidget):
         self._variables: Callable[[Path], List[str]] = lambda path: []
         self._definitions: Callable[[Path, str], Optional[Definition]] = lambda path, name: None
         self._usages: Callable[[Path, str], List[Usage]] = lambda path, name: []
+        self._variable_value: Callable[[Path, str], Any] = _no_value
+        self._render_text: Callable[[Path, str], Optional[str]] = lambda path, text: None
+        self._show_values = False
         self._history = NavigationHistory()
         # resolved path -> the hints and the text they were found in
         self._hints: Dict[Path, UnusedVariables] = {}
@@ -141,6 +148,25 @@ class SourceEditorWidget(QWidget):
     def set_definition_finder(self, finder: Callable[[Path, str], Optional[Definition]]):
         """Where a variable used in a file is defined, for Ctrl+click on the variables of templates."""
         self._definitions = finder
+
+    def set_value_source(self, variable_value: Callable[[Path, str], Any], render_text: Callable[[Path, str], Optional[str]]):
+        """
+        The value of a variable in a file of the draft (KeyError if it has none), and what a text with templates renders to
+        (None without a draft), for the hover card and the values next to the text.
+        """
+        self._variable_value = variable_value
+        self._render_text = render_text
+        self.refresh_values()
+
+    def refresh_values(self):
+        """The draft changed: the values of the templates are shown again."""
+        for page in self._pages.values():
+            page.editor.refresh_values()
+
+    def set_show_values(self, show: bool):
+        self._show_values = show
+        for page in self._pages.values():
+            page.editor.set_show_values(show)
 
     def set_usages_finder(self, finder: Callable[[Path, str], List[Usage]]):
         """Where a variable defined in a YAML file is used, for Ctrl+click on its key."""
@@ -225,6 +251,11 @@ class SourceEditorWidget(QWidget):
         editor.set_variables(lambda path=buffer.path: self._variables(path))
         editor.set_definition_finder(lambda name, path=buffer.path: self._definitions(path, name))
         editor.set_app_markers(self._markers.get(buffer.path, []))
+        editor.set_value_source(
+            lambda name, path=buffer.path: self._variable_value(path, name),
+            lambda text, path=buffer.path: self._render_text(path, text),
+        )
+        editor.set_show_values(self._show_values)
         editor.set_word_wrap(self._word_wrap)
         editor.set_show_whitespace(self._show_whitespace)
         page = _Page(editor)

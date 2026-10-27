@@ -15,7 +15,7 @@ from openhasp_config_manager.openhasp_client.model.component import CmdComponent
 from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.processing.device_processor import DeviceProcessor
 from openhasp_config_manager.processing.jsonl.source_editor import JsonlSourceEditor, verify_jsonl_source
-from openhasp_config_manager.processing.template_rendering import check_template, referenced_objects
+from openhasp_config_manager.processing.template_rendering import check_template, referenced_objects, render_template_or_keep
 
 # how deep nested variables are offered as suggestions
 _MAX_SUGGESTION_DEPTH = 6
@@ -78,6 +78,22 @@ class ProcessorDraftRenderer:
 
     def check_template(self, component: str, template: str) -> Optional[str]:
         return check_template(template, self._vars_of(component))
+
+    def variable_value(self, component: str, name: str) -> Any:
+        """:return: the value of a template variable (`common.header.bar.height`) in a component :raises KeyError: if it has none"""
+        value: Any = self._vars_of(component)
+        for part in name.split("."):
+            if dataclasses.is_dataclass(value) and not isinstance(value, type) and hasattr(value, part):
+                value = getattr(value, part)
+            elif isinstance(value, dict) and part in value:
+                value = value[part]
+            else:
+                raise KeyError(name)
+        return value
+
+    def render_text(self, component: str, text: str) -> str:
+        """:return: a text with templates the way a deployment renders it (unknown variables stay as written) :raises TemplateError:"""
+        return render_template_or_keep(text, self._vars_of(component))
 
     def template_suggestions(self, component: str) -> List[Tuple[str, Any]]:
         if component not in self._suggestions:

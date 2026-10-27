@@ -98,6 +98,19 @@ class TestDraftFiles(TestBase):
         with pytest.raises(SaveConflictError):
             plan_save(session)
 
+    def test_the_value_of_a_variable_and_a_rendered_text(self, cfg_root):
+        # GIVEN
+        session = _load(cfg_root)
+        [component] = session.components
+
+        # THEN
+        assert session.variable_value(component.key, "key_also_present_in_device_vars") == "test_device_value"
+        assert session.variable_value(component.key, "p9b2.text") == "B"
+        assert session.variable_value(component.key, "device.screen.width") > 0
+        with pytest.raises(KeyError):
+            session.variable_value(component.key, "no.such.variable")
+        assert session.render_text(component.key, "{{ p9b2.text }}!") == "B!"
+
     def test_suggestions_contain_the_variables_of_a_deployment(self, cfg_root):
         # GIVEN
         session = _load(cfg_root)

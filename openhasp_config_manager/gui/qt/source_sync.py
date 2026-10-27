@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from PyQt6 import QtCore
 
@@ -57,6 +57,8 @@ class SourceEditorSync(QtCore.QObject):
         source_editor.set_variables(self.variables_of_file)
         source_editor.set_definition_finder(self.find_definition)
         source_editor.set_usages_finder(self.find_usages)
+        source_editor.set_value_source(self.variable_value, self.render_text)
+        page_editor.stateChanged.connect(source_editor.refresh_values)
 
     def open_file(self, path: Path):
         """Show a file in the text editor, for editing (not as a preview)."""
@@ -68,6 +70,20 @@ class SourceEditorSync(QtCore.QObject):
         session = self._loaded_session()
         component = None if session is None else session.component_at(path)
         return [] if component is None else session.variable_names(component.key)
+
+    def variable_value(self, path: Path, name: str) -> Any:
+        """:return: the value of the template variable `name` in a file of the draft :raises KeyError: if it has none"""
+        session = self._loaded_session()
+        component = None if session is None else session.component_at(path)
+        if component is None:
+            raise KeyError(name)
+        return session.variable_value(component.key, name)
+
+    def render_text(self, path: Path, text: str) -> Optional[str]:
+        """:return: what a text with templates renders to in a file of the draft, None if the draft has no such file"""
+        session = self._loaded_session()
+        component = None if session is None else session.component_at(path)
+        return None if component is None else session.render_text(component.key, text)
 
     def find_definition(self, path: Path, name: str) -> Optional[Definition]:
         """:return: where the variable `name`, used in a file, is defined"""

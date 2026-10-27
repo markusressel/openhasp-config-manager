@@ -1,13 +1,24 @@
 import logging
 import math
-from collections import OrderedDict
+from collections import Counter, OrderedDict
 from typing import List, Dict, Optional, Any, Callable, Set, Tuple
 
 from PyQt6 import QtCore
 from jinja2 import TemplateError
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QAction, QKeySequence
-from PyQt6.QtWidgets import QApplication, QSlider, QWidget, QToolBar, QComboBox, QMessageBox, QToolButton, QFrame, QHBoxLayout
+from PyQt6.QtWidgets import (
+    QApplication,
+    QSlider,
+    QWidget,
+    QToolBar,
+    QComboBox,
+    QMessageBox,
+    QToolButton,
+    QFrame,
+    QHBoxLayout,
+    QVBoxLayout,
+)
 
 from openhasp_config_manager.gui.domain.problems import Problem, find_problems, object_name
 from openhasp_config_manager.gui.domain.tabs import last_tabview_id
@@ -19,6 +30,9 @@ from openhasp_config_manager.gui.domain.page_objects import (
     next_free_id,
     is_id_used,
     create_object,
+    navigate,
+    page_label,
+    selectable_pages,
     step_page,
 )
 from openhasp_config_manager.gui.domain.clipboard import PasteCascade, objects_from_text, objects_to_text, with_descendants
@@ -40,6 +54,7 @@ from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widget_property_
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
 from openhasp_config_manager.gui.qt.widgets.pagelayout.plate_link import PlateLink
 from openhasp_config_manager.gui.dimensions import UiDimensions
+from openhasp_config_manager.gui.qt.widgets.pagelayout.page_indicator import PageIndicator
 from openhasp_config_manager.gui.qt.widgets.pagelayout.page_preview_layout import (
     MAX_ZOOM,
     MIN_ZOOM,
@@ -169,6 +184,8 @@ class PageLayoutEditorWidget(QWidget):
         self.page_combo.setToolTip("Page")
         self.page_combo.setMinimumContentsLength(8)
         self.page_combo.activated.connect(lambda i: self._go_to_page(self.page_combo.itemData(i)))
+        self.page_indicator = PageIndicator()
+        self.page_indicator.pageClicked.connect(self._go_to_page)
 
         self.action_edit_mode = create(
             self,
@@ -304,7 +321,9 @@ class PageLayoutEditorWidget(QWidget):
             OverlayAnchor.TOP_RIGHT,
         )
         preview.add_overlay(
-            self._floating_bar([self.action_previous_page, self.page_combo, self.action_next_page]),
+            self._floating_bar(
+                [self.action_previous_page, self.page_combo, self.action_next_page], footer=self.page_indicator
+            ),
             OverlayAnchor.BOTTOM_CENTER,
         )
         preview.add_overlay(
@@ -342,15 +361,25 @@ class PageLayoutEditorWidget(QWidget):
         return slider
 
     @staticmethod
-    def _floating_bar(items: List[Optional[QAction | QWidget]], with_text: List[QAction] = ()) -> QFrame:
+    def _floating_bar(
+        items: List[Optional[QAction | QWidget]], with_text: List[QAction] = (), footer: Optional[QWidget] = None
+    ) -> QFrame:
         """
         A small toolbar that floats on the preview.
         :param items: actions (shown as buttons), widgets, and None for a separator
         :param with_text: the actions that show their text next to the icon
+        :param footer: a widget below the toolbar, centered
         """
         bar = QFrame()
         bar.setProperty("role", "floating")
-        row = QHBoxLayout(bar)
+        row = QHBoxLayout()
+        column = QVBoxLayout(bar)
+        column.setContentsMargins(0, 0, 0, 0)
+        column.setSpacing(0)
+        column.addLayout(row)
+        if footer is not None:
+            column.addWidget(footer, alignment=Qt.AlignmentFlag.AlignHCenter)
+            column.addSpacing(UiDimensions.half)
         row.setContentsMargins(UiDimensions.half, UiDimensions.half, UiDimensions.half, UiDimensions.half)
         row.setSpacing(UiDimensions.half)
         for item in items:
@@ -376,8 +405,6 @@ class PageLayoutEditorWidget(QWidget):
 
     def _update_actions(self):
         has_data = self.session is not None
-        pages = get_navigable_page_indices(self.working_objects) if has_data else []
-        can_navigate = len(pages) > 1 or (len(pages) == 1 and self.current_index not in pages)
         has_selection = bool(self.page_preview_widget.selected_items())
 
         for action in [
@@ -389,9 +416,9 @@ class PageLayoutEditorWidget(QWidget):
         ]:
             action.setEnabled(has_data)
         self.zoom_slider.setEnabled(has_data)
-        self.page_combo.setEnabled(has_data and self.page_combo.count() > 1)
-        self.action_previous_page.setEnabled(can_navigate)
-        self.action_next_page.setEnabled(can_navigate)
+        self.page_combo.setEnabled(has_data)
+        self.action_previous_page.setEnabled(has_data)
+        self.action_next_page.setEnabled(has_data)
         self.action_duplicate.setEnabled(self.edit_mode and has_selection)
         self.action_delete.setEnabled(self.edit_mode and has_selection)
         self.action_copy.setEnabled(self.edit_mode and has_selection)
@@ -463,19 +490,23 @@ class PageLayoutEditorWidget(QWidget):
         self.property_editor.set_editable_widgets([])
 
         pages = get_navigable_page_indices(self.working_objects)
-        self._update_page_combo(pages)
+        self._update_page_combo()
         self._update_empty_hint()
         self._update_actions()
         self.pageChanged.emit(index, len(pages))
         self.fileStateChanged.emit()
 
-    def _update_page_combo(self, pages: List[int]):
+    def _update_page_combo(self):
         self.page_combo.blockSignals(True)
         self.page_combo.clear()
-        for page in sorted(set(pages) | {self.current_index}):
-            self.page_combo.addItem(f"Page {page}", page)
+        for page in selectable_pages(self.current_index):
+            self.page_combo.addItem(page_label(page), page)
         self.page_combo.setCurrentIndex(self.page_combo.findData(self.current_index))
         self.page_combo.blockSignals(False)
+        counts = Counter(
+            obj["page"] for objects in self.working_objects.values() for obj in objects if isinstance(obj.get("page"), int)
+        )
+        self.page_indicator.set_state(selectable_pages(self.current_index), self.current_index, dict(counts))
 
     def _update_empty_hint(self):
         if not self.working_objects:
@@ -485,7 +516,8 @@ class PageLayoutEditorWidget(QWidget):
         elif count_objects(self.working_objects) == 0:
             self.page_preview_widget.set_empty_hint("This device has no objects yet.", show_add_button=True)
         elif not any(obj.get("page") == self.current_index for obj in self.page_objects):
-            self.page_preview_widget.set_empty_hint(f"Page {self.current_index} is empty.", show_add_button=True)
+            what = "No object is on all pages." if self.current_index == 0 else f"Page {self.current_index} is empty."
+            self.page_preview_widget.set_empty_hint(what, show_add_button=True)
         else:
             self.page_preview_widget.set_empty_hint(None)
 
@@ -524,7 +556,8 @@ class PageLayoutEditorWidget(QWidget):
         self.plate.show_page(index)
 
     def _step_page(self, step: int):
-        new_index = step_page(get_navigable_page_indices(self.working_objects), self.current_index, step)
+        # the pages of the dropdown, in its order
+        new_index = step_page(selectable_pages(self.current_index), self.current_index, step)
         if new_index is not None:
             self._go_to_page(new_index)
 
@@ -547,12 +580,12 @@ class PageLayoutEditorWidget(QWidget):
     def __on_preview_layout_button_clicked(self, obj: dict):
         LOGGER.debug(f"Clicked on object in preview: {obj}")
         action = obj.get("action", None)
-        if action == "next":
-            self._step_page(1)
-        elif action == "prev":
-            self._step_page(-1)
-        elif action == "back":
-            self.go_to_home_page()
+        if action in ("next", "prev", "back"):
+            # like on the plate: the settings of the page limit where the buttons lead (the toolbar can go to any page)
+            start_page = self.device_pages_data.device.config.hasp.startpage
+            target = navigate(self.working_objects, self.current_index, action, start_page)
+            if target is not None:
+                self._go_to_page(target)
 
     # --- undo ---
 
