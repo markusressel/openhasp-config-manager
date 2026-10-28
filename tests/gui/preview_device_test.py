@@ -15,7 +15,7 @@ import pytest
 from PIL import Image, ImageChops
 
 RESOURCES = Path(__file__).parent.parent / "resources" / "preview_device"
-IMAGE_FILE = Path(__file__).parents[2] / "openhasp-configs" / "common" / "page" / "wz" / "image_50x50.png"
+IMAGE_FILE = RESOURCES / "image_50x50.png"
 CASES = json.loads((RESOURCES / "cases.json").read_text())
 BASELINE_FILE = RESOURCES / "baseline.json"
 UPDATE_BASELINE = bool(os.environ.get("UPDATE_PREVIEW_BASELINE"))
