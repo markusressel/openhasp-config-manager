@@ -5,7 +5,7 @@ import pytest
 pytest.importorskip("PyQt6")
 
 from PyQt6.QtCore import QPoint, QRect, Qt  # noqa: E402
-from PyQt6.QtGui import QContextMenuEvent, QTextCursor  # noqa: E402
+from PyQt6.QtGui import QContextMenuEvent, QTextCursor, QTextFormat  # noqa: E402
 from PyQt6.QtTest import QTest  # noqa: E402
 
 from openhasp_config_manager.gui.domain.problems import Severity  # noqa: E402
@@ -266,11 +266,11 @@ class TestSearch(TestBase):
     def test_options(self, editor):
         editor.set_text("ab AB abc")
         editor.search.set_search("ab", case_sensitive=True)
-        assert len(editor.extraSelections()) == 3  # current line + two matches
+        assert len(editor.extraSelections()) == 2  # two matches
         editor.search.set_search("ab", whole_word=True)
-        assert len(editor.extraSelections()) == 3
+        assert len(editor.extraSelections()) == 2
         editor.search.set_search("a.", regex=True)
-        assert len(editor.extraSelections()) == 4
+        assert len(editor.extraSelections()) == 3
         assert not editor.search.set_search("(", regex=True)
         assert not editor.search.find_next()
         assert editor.search.set_search("")
@@ -327,8 +327,8 @@ class TestAppearance(TestBase):
         assert len(editor.extraSelections()) == before + 2
         editor.set_text("{")
         editor.go_to(1, 0)
-        # the current line and the "not closed" marker, no brackets
-        assert len(editor.extraSelections()) == 2
+        # the "not closed" marker, no brackets
+        assert len(editor.extraSelections()) == 1
 
 
 MULTILINE = '{\n  "page": 1,\n  "id": 1,\n  "text": "a"\n}\n{"page": 1, "id": 2, "parentid": 1}\n'
@@ -538,6 +538,69 @@ class TestLinksAndDocs(TestBase):
         # the cursor of the test platform stays where it was, so moving to the same place twice sends no event
         QTest.mouseMove(editor.viewport(), QPoint(450, 250))
         QTest.mouseMove(editor.viewport(), position)
+
+    def test_the_current_line_does_not_hide_the_color_of_a_color_string(self, qapp, settings):
+        # GIVEN: a color string in the line of the cursor: it is shown on its color (white), with dark text
+        editor = CodeEditor(Language.YAML)
+        editor.resize(400, 100)
+        editor.show()
+        editor.set_text('c: "#ffffff"\n')
+        editor.go_to(1, 0)
+        qapp.processEvents()
+
+        # WHEN
+        image = editor.viewport().grab().toImage()
+
+        # THEN: the string still has its light background, not the dark one of the editor
+        block = editor.blockBoundingGeometry(editor.document().firstBlock()).translated(editor.contentOffset())
+        x = editor.fontMetrics().horizontalAdvance('c: "#fff') + editor.document().documentMargin()
+        assert image.pixelColor(int(x), int(block.top() + 1)).lightness() > 150
+        editor.close()
+
+    def test_a_hint_dims_the_text_but_not_a_color_string(self, qapp, settings):
+        # GIVEN: an unused variable (a hint) with a color: dimmed text would be white on the white color
+        editor = CodeEditor(Language.YAML)
+        editor.set_text('  text_color: "#E8EAF0"\n')
+        editor.set_hints([SourceIssue(1, 2, 22, Severity.HINT, "unused")])
+
+        # THEN: the key is dimmed, the color string is not
+        dimmed = {
+            (selection.cursor.selectionStart(), selection.cursor.selectionEnd()): selection.format.hasProperty(
+                QTextFormat.Property.ForegroundBrush
+            )
+            for selection in editor.extraSelections()
+        }
+        assert dimmed == {(2, 14): True, (14, 23): False}
+
+    def test_hover_card_explains_the_default_properties_of_the_theme(self, qapp, settings):
+        yaml_editor = CodeEditor(Language.YAML)
+        yaml_editor.resize(500, 200)
+        yaml_editor.show()
+        yaml_editor.set_text("theme:\n  obj:\n    btn:\n      bg_color04: '#fff'\n")
+
+        content = yaml_editor.hover.card_content_at(self._position(yaml_editor, "      bg_", line=3))
+
+        assert content.help is not None and content.help.name == "bg_color04"
+        yaml_editor.close()
+
+    def test_pressing_ctrl_keeps_the_hover_card_so_its_text_can_be_copied(self, editor):
+        # GIVEN: the card is shown
+        editor.set_text('{"w": "33%"}')
+        self._hover(editor, self._position(editor, '{"'))
+        wait_until(lambda: editor.hover.card.isVisible(), timeout_ms=2 * editor_hover._HOVER_DELAY_MS + 400)
+
+        # WHEN: Ctrl is pressed in the card (which has the focus after text was selected), and in the editor
+        QTest.keyPress(editor.hover.card._body, Qt.Key.Key_Control)
+        QTest.keyPress(editor, Qt.Key.Key_Control)
+
+        # THEN
+        assert editor.hover.card.isVisible()
+
+        # WHEN: a key that is input
+        QTest.keyClick(editor, Qt.Key.Key_X)
+
+        # THEN: the card is gone
+        assert not editor.hover.card.isVisible()
 
     def test_hover_card_shows_after_a_short_delay(self, editor):
 

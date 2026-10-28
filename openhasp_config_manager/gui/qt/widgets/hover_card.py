@@ -48,6 +48,10 @@ def _with_alpha(color: QColor, alpha: int) -> str:
     return f"rgba({color.red()}, {color.green()}, {color.blue()}, {alpha})"
 
 
+# the keys that are only a modifier, they change what the next key does but are no input
+MODIFIER_KEYS = (Qt.Key.Key_Control, Qt.Key.Key_Shift, Qt.Key.Key_Alt, Qt.Key.Key_Meta, Qt.Key.Key_AltGr)
+
+
 class HoverCard(QFrame):
     """
     A card on top of the text editor (its child, not a window of its own: a window gets placed by the window manager, which often
@@ -276,5 +280,9 @@ class HoverCard(QFrame):
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Escape:
             self.hide()
+            return
+        if event.key() in MODIFIER_KEYS:
+            # pressing Ctrl to copy is no reason to go away: the editor, which gets the keys the card doesn't use, would hide it
+            event.accept()
             return
         super().keyPressEvent(event)

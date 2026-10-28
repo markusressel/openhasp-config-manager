@@ -2,7 +2,7 @@ import re
 from typing import Callable, List, Optional, Tuple
 
 from PyQt6 import QtCore
-from PyQt6.QtCore import QPoint, QRect, QSettings, QSize, Qt
+from PyQt6.QtCore import QPoint, QRect, QRectF, QSettings, QSize, Qt
 from PyQt6.QtGui import (
     QAction,
     QColor,
@@ -22,9 +22,10 @@ from openhasp_config_manager.gui.domain.source.edit import INDENT, matching_brac
 from openhasp_config_manager.gui.domain.source.issues import SourceIssue, find_source_issues
 from openhasp_config_manager.gui.domain.source.links import Link, link_at
 from openhasp_config_manager.gui.domain.source.objects import SourceObject, object_at_line, scan_objects
-from openhasp_config_manager.gui.domain.source.syntax import Language, Token
+from openhasp_config_manager.gui.domain.source.syntax import Language, Token, TokenKind, tokenize_line
 from openhasp_config_manager.gui.domain.variables.definitions import Definition, key_at
 from openhasp_config_manager.gui.domain.variables.references import part_at
+from openhasp_config_manager.gui.qt.widgets.hover_card import MODIFIER_KEYS
 from openhasp_config_manager.gui.qt.widgets.code_editor.highlighter import SourceHighlighter
 from openhasp_config_manager.gui.qt.widgets.code_editor.colors import EditorColors
 from openhasp_config_manager.gui.qt.widgets.code_editor.completion import EditorCompletion
@@ -44,6 +45,7 @@ FLASH_MS = 3000
 # the opacity of the text of lines with a hint, 0..255
 _HINT_ALPHA = 110
 # the opacity of the background of flashed lines, 0..255
+_CURRENT_LINE_ALPHA = 28
 _FLASH_ALPHA = 80
 _CODE = re.compile(r"`([^`]+)`")
 
@@ -338,16 +340,6 @@ class CodeEditor(QPlainTextEdit):
 
     def update_selections(self):
         selections: List[QTextEdit.ExtraSelection] = []
-
-        line = QTextEdit.ExtraSelection()
-        color = self.palette().color(QPalette.ColorRole.Highlight)
-        color.setAlpha(28)
-        line.format.setBackground(color)
-        line.format.setProperty(QTextFormat.Property.FullWidthSelection, True)
-        line.cursor = self.textCursor()
-        line.cursor.clearSelection()
-        selections.append(line)
-
         selections += self._bracket_selections()
         selections += self._marker_selections()
         selections += self._hint_selections()
@@ -401,6 +393,7 @@ class CodeEditor(QPlainTextEdit):
         return result
 
     def _hint_selections(self) -> List[QTextEdit.ExtraSelection]:
+        """Dims the text of a hint (italic, and less opaque). A color string keeps its color: dimmed, it can't be read on it."""
         color = self.palette().color(QPalette.ColorRole.Text)
         color.setAlpha(_HINT_ALPHA)
         result = []
@@ -408,16 +401,25 @@ class CodeEditor(QPlainTextEdit):
             block = self.document().findBlockByNumber(hint.line - 1)
             if not block.isValid():
                 continue
-            selection = QTextEdit.ExtraSelection()
-            selection.format.setForeground(color)
-            selection.format.setFontItalic(True)
-            start = block.position() + min(hint.column, max(block.length() - 1, 0))
-            selection.cursor = QTextCursor(self.document())
-            selection.cursor.setPosition(start)
-            selection.cursor.setPosition(
-                min(start + hint.length, block.position() + block.length() - 1), QTextCursor.MoveMode.KeepAnchor
-            )
-            result.append(selection)
+            start = min(hint.column, max(block.length() - 1, 0))
+            end = min(start + hint.length, block.length() - 1)
+            colors = [
+                (token.start, token.end)
+                for token in tokenize_line(block.text(), self.language)
+                if token.kind == TokenKind.COLOR
+            ]
+            # the parts of the hint outside of color strings, then the color strings in it
+            edges = sorted({start, end, *(edge for span in colors for edge in span if start < edge < end)})
+            for left, right in zip(edges, edges[1:]):
+                is_color = any(first <= left and right <= last for first, last in colors)
+                selection = QTextEdit.ExtraSelection()
+                if not is_color:
+                    selection.format.setForeground(color)
+                selection.format.setFontItalic(True)
+                selection.cursor = QTextCursor(self.document())
+                selection.cursor.setPosition(block.position() + left)
+                selection.cursor.setPosition(block.position() + right, QTextCursor.MoveMode.KeepAnchor)
+                result.append(selection)
         return result
 
     def event(self, event):
@@ -507,8 +509,20 @@ class CodeEditor(QPlainTextEdit):
     def paintEvent(self, event):
         super().paintEvent(event)
         painter = QPainter(self.viewport())
+        self._paint_current_line(painter)
         self.values.paint_values(painter, event.rect())
         painter.end()
+
+    def _paint_current_line(self, painter: QPainter):
+        """
+        Tints the line of the cursor. It is drawn over the text, not as a selection: a selection replaces the background of the
+        text, which hides the color of a color string (readable text on it needs that color).
+        """
+        color = self.palette().color(QPalette.ColorRole.Highlight)
+        color.setAlpha(_CURRENT_LINE_ALPHA)
+        block = self.textCursor().block()
+        rect = self.blockBoundingGeometry(block).translated(self.contentOffset())
+        painter.fillRect(QRectF(0, rect.top(), self.viewport().width(), rect.height()), color)
 
     def set_definition_finder(self, finder: Callable[[str], Optional[Definition]]):
         """Where a variable of a template is defined: only the parts of variables that are found can be Ctrl+clicked."""
@@ -610,8 +624,9 @@ class CodeEditor(QPlainTextEdit):
     # --- keys ---
 
     def keyPressEvent(self, event: QKeyEvent):
-        self.end_flash()
-        self.hover.hide()
+        if event.key() not in MODIFIER_KEYS:
+            self.end_flash()
+            self.hover.hide()
         popup = self.completion.popup
         key = event.key()
         modifiers = event.modifiers()
