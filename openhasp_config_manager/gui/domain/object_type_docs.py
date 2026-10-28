@@ -57,6 +57,8 @@ TYPE_DOCS: Dict[str, Dict[str, str]] = {
         "max": f"The largest value. {_VALUE_RANGE}",
         "val": f"The current value. {_VALUE_RANGE}",
         "start_value": f"The start of the filled part of the slider (the smallest allowed value). {_VALUE_RANGE}",
+        "type": "0 normal, 1 symmetrical (fills from 0 if `min` is below 0 and `max` above), 2 range (a second knob moves "
+        "`start_value`). Put it before `start_value`: types other than 2 reset `start_value` to `min`.",
     },
     "bar": {
         "min": f"The smallest value. {_VALUE_RANGE}",

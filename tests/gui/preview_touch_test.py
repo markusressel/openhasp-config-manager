@@ -159,6 +159,59 @@ class TestPreviewTouch(TestBase):
 
         assert 45 <= widget(view, 5).data["val"] <= 55
 
+    def test_a_range_slider_moves_the_knob_nearer_to_the_finger_up_to_the_other_one(self):
+        slider = {
+            "page": 1,
+            "id": 5,
+            "obj": "slider",
+            "x": 10,
+            "y": 10,
+            "w": 200,
+            "h": 20,
+            "type": 2,
+            "start_value": 20,
+            "val": 80,
+        }
+        view = preview(slider)
+        item = widget(view, 5)
+
+        # WHEN: the finger is nearer to the knob at 20
+        view._indev.press((70, 20), 0.0)
+        view._indev.press((110, 20), 0.1)
+
+        # THEN: the track starts at 16 and is 188 wide
+        assert (item.data["start_value"], item.data["val"]) == (50, 80)
+
+        # WHEN: past the other knob
+        view._indev.press((200, 20), 0.2)
+        view._indev.release((200, 20))
+
+        # THEN
+        assert (item.data["start_value"], item.data["val"]) == (80, 80)
+
+        # WHEN: right of the knob at `val`
+        view._indev.press((205, 20), 0.0)
+        view._indev.press((150, 20), 0.1)
+        view._indev.release((150, 20))
+
+        # THEN
+        assert (item.data["start_value"], item.data["val"]) == (80, 80)
+
+        # WHEN: the knobs are on top of each other: the finger left of them takes the start
+        view._indev.press((30, 20), 0.0)
+        view._indev.release((30, 20))
+
+        assert (item.data["start_value"], item.data["val"]) == (7, 80)
+
+    def test_a_slider_value_does_not_go_below_its_start_value(self):
+        slider = {"page": 1, "id": 5, "obj": "slider", "x": 10, "y": 10, "w": 200, "h": 20, "start_value": 40, "val": 80}
+        view = preview(slider)
+
+        view._indev.press((30, 20), 0.0)
+        view._indev.release((30, 20))
+
+        assert widget(view, 5).data["val"] == 40
+
     def test_a_group_follows_a_switch_on_the_page(self):
         switch = {"page": 1, "id": 3, "obj": "switch", "x": 10, "y": 10, "w": 80, "h": 40, "groupid": 2}
         slider = {

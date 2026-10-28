@@ -83,7 +83,7 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
   never in it: items draw from `EditableWidget.data` (the draft plus these values), and when the draft changes a property that was
   touched, the draft wins. Edit mode and *Reset* clear it, switching pages keeps it. Behavior ported from the firmware and LVGL
   (which object runs `action`, groups, slider/arc math, dropdown list layout, roller snapping, dragging and throwing, tabview swipes)
-  lives in Qt-free `gui/domain/touch_*.py`, `dropdown_list.py`, `roller_scroll.py`, `drag_scroll.py`, `tab_swipe.py` and `lvgl_colors.py`;
+  lives in Qt-free `gui/domain/touch_*.py`, `dropdown_list.py`, `roller_scroll.py`, `drag_scroll.py`, `tab_swipe.py`, `bar_values.py` and `lvgl_colors.py`;
   pressed colors can't be measured and are computed there. LVGL does this per read of the touch (every 20 ms), in whole pixels: the
   items read the finger with a timer, and tests call the read themselves (`ScrollDriver.tick`, `HaspTabviewItem.read_swipe`).
 - **Templates are never replaced implicitly.** Objects whose `x`/`y` is a template or a percentage can't be dragged or nudged; the
