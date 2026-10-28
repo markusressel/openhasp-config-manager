@@ -897,6 +897,8 @@ class TestOutsideTheScreen(TestBase):
                 "w": 100,
                 "h": 100,
                 "bg_color": "#FFFFFF",
+                "bg_grad_dir": 0,
+                "border_width": 0,
             },
         )
         editor.set_page_index(9)

@@ -1,11 +1,11 @@
 from PyQt6 import QtCore, QtGui
 
+from openhasp_config_manager.gui.domain.fonts import font_size
 from openhasp_config_manager.gui.domain.style_parts import Part
-
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.box import box_style, draw_box
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.default_theme import INDICATOR_DEFAULTS, TRACK_DEFAULTS
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import (
-    DEFAULT_ACCENT,
     DEFAULT_TEXT,
-    DEFAULT_TRACK,
     draw_text,
     number,
     option_lines,
@@ -14,72 +14,71 @@ from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing 
 )
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
 
-_DEFAULT_ROWS = 3
-_ROW_SPACING = 12
+_DEFAULT_FONT = 25
+# the selected row (part 5): the blue of the indicator, with square corners
+_SELECTED_DEFAULTS = {**INDICATOR_DEFAULTS, "radius": 0}
 
 
 class HaspRollerItem(EditableWidget):
     """
-    A list that shows `rows` entries of `options` with the selected one (`val`) in the middle, highlighted. The height follows
-    `rows` and the font (`h` is ignored). In mode 1 (infinite) the list wraps around.
+    A list of `options` with the selected one (`val`) in the middle, highlighted. With `rows` the height follows the rows and the
+    font (`h` is ignored), without it `h` is the height and the list is cut off at the edges. In mode 1 (infinite) the list wraps around.
     See https://www.openhasp.com/0.7.0/design/objects/roller/
     """
 
     @property
-    def rows(self) -> int:
-        return max(int(number(self.obj_data.get("rows"), _DEFAULT_ROWS)), 1)
+    def rows(self):
+        """:return: the number of visible rows if the object says so, else None"""
+        return max(int(number(self.obj_data["rows"], 3)), 1) if "rows" in self.obj_data else None
 
     @property
     def font(self) -> QtGui.QFont:
-        return plate_font(self.style("text_font", 25))
+        return plate_font(self.style("text_font", _DEFAULT_FONT))
 
     @property
-    def row_height(self) -> int:
-        return QtGui.QFontMetrics(self.font).height() + _ROW_SPACING
+    def row_height(self) -> float:
+        """Measured on a plate: 45 pixels with the default font, 31 with the font 12."""
+        return font_size(self.style("text_font", _DEFAULT_FONT), _DEFAULT_FONT) * 1.077 + 18
 
     @property
     def obj_h(self) -> int:
-        return self.rows * self.row_height
+        rows = self.rows
+        return round(rows * self.row_height) if rows else super().obj_h
 
-    def visible_entries(self) -> list:
-        """:return: the entry of every visible row (None for rows without one), the selected entry in the middle"""
+    def entry_rows(self):
+        """:return: (top of the row, entry or None, whether it is the selected one) for every row that is at least partly visible"""
         options = option_lines(self.obj_data.get("options"))
         selected = int(number(self.obj_data.get("val"), 0))
         infinite = int(number(self.obj_data.get("mode"), 0)) == 1
-        entries = []
-        for row in range(self.rows):
-            index = selected + row - self.rows // 2
+        middle = self.obj_h / 2 - self.row_height / 2
+        reach = int(self.obj_h // self.row_height) + 2
+        result = []
+        for offset in range(-reach, reach + 1):
+            top = middle + offset * self.row_height
+            if top + self.row_height <= 1 or top >= self.obj_h - 1:
+                continue
+            index = selected + offset
             if infinite and options:
                 index %= len(options)
-            entries.append(options[index] if 0 <= index < len(options) else None)
-        return entries
+            result.append((top, options[index] if 0 <= index < len(options) else None, offset == 0))
+        return result
 
     def paint(self, painter, option, widget=None):
-        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
-        radius = number(self.style("radius", 4), 4)
-        painter.setBrush(to_color(self.style("bg_color"), DEFAULT_TRACK))
-        painter.setPen(QtCore.Qt.PenStyle.NoPen)
-        painter.drawRoundedRect(self.obj_rect, radius, radius)
+        draw_box(painter, self.obj_rect, box_style(self, Part.MAIN, TRACK_DEFAULTS))
 
-        # the selected row
-        middle = (self.rows // 2) * self.row_height
-        painter.setBrush(to_color(self.style("bg_color", DEFAULT_ACCENT, Part.SELECTED), DEFAULT_ACCENT))
-        painter.drawRect(QtCore.QRectF(0, middle, self.obj_w, self.row_height))
-
+        painter.save()
+        clip = QtGui.QPainterPath()
+        clip.addRoundedRect(self.obj_rect, 4, 4)
+        painter.setClipPath(clip)
         align = self.obj_data.get("align", "center")
         color = to_color(self.style("text_color"), DEFAULT_TEXT)
-        for row, entry in enumerate(self.visible_entries()):
+        for top, entry, is_selected in self.entry_rows():
+            row = QtCore.QRectF(0, top, self.obj_w, self.row_height)
+            if is_selected:
+                draw_box(painter, row, box_style(self, Part.SELECTED, _SELECTED_DEFAULTS))
             if entry is None:
                 continue
-            row_color = QtGui.QColor(color)
-            if row != self.rows // 2:
-                row_color.setAlpha(150)
-            draw_text(
-                painter,
-                QtCore.QRectF(8, row * self.row_height, self.obj_w - 16, self.row_height),
-                entry,
-                row_color,
-                self.font,
-                align,
-            )
+            row_color = to_color(self.style("text_color", None, Part.SELECTED), color.name()) if is_selected else color
+            draw_text(painter, row.adjusted(8, 0, -8, 0), entry, row_color, self.font, align)
+        painter.restore()
         super().paint(painter, option, widget)

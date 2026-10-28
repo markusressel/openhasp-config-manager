@@ -1,12 +1,12 @@
+import dataclasses
 import math
 
 from PyQt6 import QtCore, QtGui
 
 from openhasp_config_manager.gui.domain.style_parts import Part
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.box import box_style, draw_box
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.default_theme import KNOB_DEFAULTS, TRACK_DEFAULTS
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import (
-    DEFAULT_ACCENT,
-    DEFAULT_KNOB,
-    DEFAULT_TRACK,
     DEFAULT_TEXT,
     draw_text,
     fraction,
@@ -19,8 +19,14 @@ from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable
 # LVGL draws the background arc from 135 to 45 degrees (clockwise from 3 o'clock) if the object says nothing else
 _DEFAULT_START = 135
 _DEFAULT_END = 45
-_DEFAULT_LINE_WIDTH = 12
+_DEFAULT_LINE_WIDTH = 14
 _DEFAULT_KNOB_RADIUS = 8
+# measured on a plate: what is behind the arcs, the arc of the track and the arc of the indicator
+_PLATE_DEFAULTS = {"bg_color": "#505A60", "bg_opa": 255, "radius": 1000}
+_TRACK_COLOR = "#6A6D7B"
+_INDICATOR_COLOR = "#00B6FF"
+# the disc inside of the arcs
+_DISC_DEFAULTS = {**TRACK_DEFAULTS, "border_width": 0, "radius": 1000}
 
 
 class HaspArcItem(EditableWidget):
@@ -61,16 +67,23 @@ class HaspArcItem(EditableWidget):
         )
         (start, sweep), (ind_start, ind_sweep) = self.angles()
 
+        # the plate behind the arcs, and the disc inside of them (the main part: `bg_color`, `border_width`, ...)
+        full = QtCore.QRectF((self.obj_w - side) / 2, (self.obj_h - side) / 2, side, side)
+        draw_box(painter, full, box_style(self, Part.MAIN, _PLATE_DEFAULTS))
+        width = max(track_width, indicator_width)
+        disc = dataclasses.replace(box_style(self, Part.MAIN, _DISC_DEFAULTS), border_width=0, outline_width=0, shadow_width=0)
+        draw_box(painter, full.adjusted(width, width, -width, -width), disc)
+
         def arc(color, width, first, span):
             pen = QtGui.QPen(color, width)
             pen.setCapStyle(QtCore.Qt.PenCapStyle.RoundCap)
             painter.setPen(pen)
             painter.drawArc(rect, int(-first * 16), int(-span * 16))
 
-        arc(to_color(self.style("line_color", DEFAULT_TRACK), DEFAULT_TRACK), track_width, start, sweep)
+        arc(to_color(self.style("line_color", _TRACK_COLOR), _TRACK_COLOR), track_width, start, sweep)
         if ind_sweep > 0:
             arc(
-                to_color(self.style("line_color", DEFAULT_ACCENT, Part.INDICATOR), DEFAULT_ACCENT),
+                to_color(self.style("line_color", _INDICATOR_COLOR, Part.INDICATOR), _INDICATOR_COLOR),
                 indicator_width,
                 ind_start,
                 ind_sweep,
@@ -82,9 +95,11 @@ class HaspArcItem(EditableWidget):
             point = QtCore.QPointF(
                 center.x() + math.cos(angle) * rect.width() / 2, center.y() + math.sin(angle) * rect.height() / 2
             )
-            painter.setPen(QtCore.Qt.PenStyle.NoPen)
-            painter.setBrush(to_color(self.style("bg_color", DEFAULT_KNOB, Part.KNOB), DEFAULT_KNOB))
-            painter.drawEllipse(point, knob_radius, knob_radius)
+            draw_box(
+                painter,
+                QtCore.QRectF(point.x() - knob_radius, point.y() - knob_radius, knob_radius * 2, knob_radius * 2),
+                box_style(self, Part.KNOB, {**KNOB_DEFAULTS, "radius": 1000}),
+            )
 
         text = self.obj_data.get("value_str")
         if text:

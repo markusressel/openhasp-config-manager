@@ -1,3 +1,5 @@
+import dataclasses
+import math
 from pathlib import Path
 from typing import Optional
 
@@ -5,6 +7,7 @@ from PyQt6 import QtCore, QtGui
 from PyQt6.QtGui import QColor, QBrush, QImage
 
 from openhasp_config_manager.gui.domain.preview_images import decode_binary_image
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.box import box_style, draw_box
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import number, to_color
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
 
@@ -65,44 +68,54 @@ class HaspImageItem(EditableWidget):
         return max(number(self.style("radius", 0), 0), 0)
 
     @property
-    def outline_width(self) -> float:
-        return max(number(self.style("outline_width", 0), 0), 0)
+    def angle(self) -> float:
+        """The rotation in degrees (`angle` is in tenths of a degree)."""
+        return number(self.obj_data.get("angle"), 0) / 10
 
-    @property
-    def outline_pad(self) -> float:
-        return max(number(self.style("outline_pad", 0), 0), 0)
+    def _box(self):
+        """The shadow and outline of the object: the plate draws no background or border for an image."""
+        return dataclasses.replace(box_style(self), bg_opa=0, border_width=0)
 
     def boundingRect(self):
-        # the outline is drawn outside of the object
-        reach = self.outline_width + self.outline_pad if self.outline_width > 0 else 0
-        return super().boundingRect().adjusted(-reach, -reach, reach, reach)
-
-    def _paint_outline(self, painter):
-        """Like LVGL: a ring around the object, `outline_pad` away from it, with the corners rounded further out."""
-        width, pad = self.outline_width, self.outline_pad
-        if width <= 0:
-            return
-        color = to_color(self.style("outline_color"), "#000000")
-        color.setAlphaF(max(0.0, min(number(self.style("outline_opa", 255), 255) / 255, 1.0)))
-        # a pen is centered on the line it draws
-        offset = pad + width / 2
-        painter.setBrush(QtCore.Qt.BrushStyle.NoBrush)
-        painter.setPen(QtGui.QPen(color, width))
-        painter.drawRoundedRect(
-            self.obj_rect.adjusted(-offset, -offset, offset, offset), self.radius + offset, self.radius + offset
+        # the shadow and the outline are drawn outside of the object, a zoomed or turned image reaches further
+        box = self._box()
+        reach = max(
+            box.outline_width + box.outline_pad if box.outline_width > 0 else 0,
+            box.shadow_width + max(box.shadow_spread, 0) + max(abs(box.shadow_ofs_x), abs(box.shadow_ofs_y)),
         )
+        rect = super().boundingRect().adjusted(-reach, -reach, reach, reach)
+        if self.image is not None and (self.zoom != 1.0 or self.angle):
+            diagonal = math.hypot(self.image.width(), self.image.height()) * max(self.zoom, 1.0)
+            rect = rect.united(QtCore.QRectF(self.obj_w / 2 - diagonal / 2, self.obj_h / 2 - diagonal / 2, diagonal, diagonal))
+        return rect
 
     def paint(self, painter, option, widget=None):
         local_rect = self.obj_rect
 
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
+        draw_box(painter, local_rect, self._box())
 
         if self.image is not None:
-            # like the plate: the image in its size, cut off by the object
             painter.save()
-            painter.setClipRect(local_rect)
-            painter.scale(self.zoom, self.zoom)
+            transformed = self.zoom != 1.0 or self.angle
+            if transformed:
+                # like the plate: turned and scaled around the middle of the image, it may reach over the edge of the object
+                painter.translate(self.image.width() / 2, self.image.height() / 2)
+                painter.rotate(self.angle)
+                painter.scale(self.zoom, self.zoom)
+                painter.translate(-self.image.width() / 2, -self.image.height() / 2)
+            else:
+                # the image in its size, cut off by the object
+                painter.setClipRect(local_rect)
+            painter.setOpacity(painter.opacity() * max(0.0, min(number(self.style("image_opa", 255), 255) / 255, 1.0)))
             painter.drawImage(0, 0, self.image)
+            recolor_opa = number(self.style("image_recolor_opa", 0), 0)
+            if recolor_opa > 0:
+                # the tint covers only what the image draws
+                tint = to_color(self.style("image_recolor"), "#000000")
+                tint.setAlphaF(max(0.0, min(recolor_opa / 255, 1.0)))
+                painter.setCompositionMode(QtGui.QPainter.CompositionMode.CompositionMode_SourceAtop)
+                painter.fillRect(QtCore.QRectF(0, 0, self.image.width(), self.image.height()), tint)
             painter.restore()
         else:
             # no image the preview knows: a placeholder
@@ -113,8 +126,6 @@ class HaspImageItem(EditableWidget):
 
             painter.setPen(QtGui.QPen(QColor("black"), 1))
             painter.drawText(local_rect, QtCore.Qt.AlignmentFlag.AlignCenter, "IMG")
-
-        self._paint_outline(painter)
 
         super().paint(painter, option, widget)
 

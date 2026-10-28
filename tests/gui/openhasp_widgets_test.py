@@ -294,12 +294,14 @@ class TestImageItem(TestBase):
     def test_png_follows_its_zoom(self, tmp_path):
         from tests.png import png
 
-        item = self._item(tmp_path, "a.png", png((1, 1), [(255, 0, 0)]), zoom=512)
+        item = self._item(tmp_path, "a.png", png((2, 2), [(255, 0, 0)] * 4), zoom=512)
 
         canvas = self._paint(item, 8, 8)
 
-        assert canvas.pixelColor(1, 1).red() == 255
-        assert canvas.pixelColor(2, 2).red() == 0
+        # like on the plate it is scaled around its middle: 4 x 4 pixels around (1, 1)
+        assert canvas.pixelColor(0, 0).red() == 255
+        assert canvas.pixelColor(2, 2).red() == 255
+        assert canvas.pixelColor(3, 3).red() == 0
 
     def test_file_that_can_not_be_read_shows_the_placeholder(self, tmp_path):
         # big and without a radius, so the corner is the color and the "IMG" text in the middle is not in the way

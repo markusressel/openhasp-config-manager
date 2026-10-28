@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, List, Optional
 
 from PyQt6 import QtGui, QtCore, QtWidgets
 from PyQt6.QtWidgets import QGraphicsObject, QGraphicsItem
@@ -12,6 +12,28 @@ from openhasp_config_manager.gui.qt.theme import current_colors
 HIDDEN_OPACITY = 0.3
 # the opacity of objects that are not highlighted, while the objects of a file are (on top of HIDDEN_OPACITY)
 DIMMED_OPACITY = 0.25
+
+
+# the states whose style properties apply in a state, in the order of precedence (like LVGL: the most specific state wins)
+_STATE_FALLBACK: Dict[State, List[State]] = {
+    State.DEFAULT: [State.DEFAULT],
+    State.TOGGLED: [State.TOGGLED, State.DEFAULT],
+    State.PRESSED: [State.PRESSED, State.DEFAULT],
+    State.PRESSED_TOGGLED: [State.PRESSED_TOGGLED, State.PRESSED, State.TOGGLED, State.DEFAULT],
+    State.DISABLED: [State.DISABLED, State.DEFAULT],
+    State.DISABLED_TOGGLED: [State.DISABLED_TOGGLED, State.DISABLED, State.TOGGLED, State.DEFAULT],
+}
+
+
+def state_fallback(state: State) -> List[State]:
+    """:return: the states whose style properties apply in a state, the most specific first"""
+    return _STATE_FALLBACK[state]
+
+
+def _is_true(value, default: bool) -> bool:
+    if value is None:
+        return default
+    return str(value).lower() not in ("false", "0", "")
 
 
 class EditableWidget(QGraphicsObject):
@@ -39,17 +61,46 @@ class EditableWidget(QGraphicsObject):
     def obj_h(self) -> int:
         return geometry_value(self.obj_data, "h")
 
-    def style(self, name: str, default=None, part: Part = Part.MAIN, state: State = State.DEFAULT):
+    @property
+    def is_toggled(self) -> bool:
+        """Whether the object is checked: a switch or checkbox that is on, a button that toggles and is on."""
+        obj = self.obj_data.get("obj")
+        if obj in ("switch", "checkbox"):
+            return _is_true(self.obj_data.get("val"), False)
+        return obj == "btn" and _is_true(self.obj_data.get("toggle"), False) and _is_true(self.obj_data.get("val"), False)
+
+    @property
+    def is_enabled(self) -> bool:
+        return _is_true(self.obj_data.get("enabled"), True)
+
+    @property
+    def state(self) -> State:
+        """The state the plate draws the object in: the style properties of this state (and the ones it falls back to) apply."""
+        if self.is_enabled:
+            return State.TOGGLED if self.is_toggled else State.DEFAULT
+        return State.DISABLED_TOGGLED if self.is_toggled else State.DISABLED
+
+    def own_style(self, name: str, part: Part, state: State):
+        """:return: the value of a style property of the object for exactly this part and state, None if it has none"""
+        data = self.obj_data
+        if part == Part.MAIN and state == State.DEFAULT and name in data:
+            return data[name]
+        return data.get(style_key(name, part, state))
+
+    def style(self, name: str, default=None, part: Part = Part.MAIN, state: Optional[State] = None):
         """
         :param name: a style property without suffix, e.g. `bg_color`
         :param part: the part of the object the style is for: the key is `<name><part><state>`, e.g. `bg_color20` is the color of
             the knob (`Part.KNOB`) in the default state. `radius` and `radius00` are the same, see `style_parts.py`.
+        :param state: the state to look up, the state of the object (`state`) by default. The properties of the states it falls back to
+            apply as well, e.g. `bg_color` for a disabled object without `bg_color04`.
         :return: the value of the property for a part and state, `default` if the object has none
         """
-        data = self.obj_data
-        if part == Part.MAIN and state == State.DEFAULT and name in data:
-            return data[name]
-        return data.get(style_key(name, part, state), default)
+        for candidate in state_fallback(self.state if state is None else state):
+            found = self.own_style(name, part, candidate)
+            if found is not None:
+                return found
+        return default
 
     def __init__(self, obj_data: Dict, parent_widget=None):
         """

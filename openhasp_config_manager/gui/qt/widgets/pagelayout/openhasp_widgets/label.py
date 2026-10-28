@@ -1,7 +1,13 @@
-from PyQt6 import QtCore, QtGui
+from typing import Tuple
+
+from PyQt6 import QtCore, QtGui, QtWidgets
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QGraphicsTextItem
 
 from openhasp_config_manager.gui.domain.fonts import font_size
+from openhasp_config_manager.gui.domain.problems import geometry_value
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.box import box_style, draw_box
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import number, set_line_space, to_color
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
 
 
@@ -13,8 +19,10 @@ class HaspLabelItem(EditableWidget):
         return self.obj_data.get("text", "")
 
     @property
-    def text_color(self) -> str:
-        return self.obj_data.get("text_color", "#FFFFFF")
+    def text_color(self) -> QtGui.QColor:
+        color = to_color(self.style("text_color", None), "#FFFFFF")
+        color.setAlphaF(max(0.0, min(number(self.style("text_opa", 255), 255) / 255, 1.0)))
+        return color
 
     @property
     def text_font(self) -> float:
@@ -22,26 +30,34 @@ class HaspLabelItem(EditableWidget):
 
     @property
     def align(self) -> str:
-        return self.obj_data.get("align", "left")
+        """`left`, `center` or `right`, written as the word or as 0, 1 or 2."""
+        value = self.obj_data.get("align", "left")
+        return {"0": "left", "1": "center", "2": "right"}.get(str(value), str(value))
 
     @property
-    def bg_color(self) -> str:
-        return self.obj_data.get("bg_color", None)
+    def mode(self) -> str:
+        """How text that is too long is shown: `expand` (the default), `break` (wraps), `dots`, `scroll`, `loop` or `crop`."""
+        return str(self.obj_data.get("mode", "expand"))
 
     @property
-    def border_width(self) -> int:
-        return self.obj_data.get("border_width", 0)
+    def padding(self) -> Tuple[float, float, float, float]:
+        """The space between the label and its text: left, top, right, bottom."""
+        return tuple(number(self.style(f"pad_{side}"), 0) for side in ("left", "top", "right", "bottom"))
 
     @property
-    def border_color(self) -> str:
-        return self.obj_data.get("border_color", "#FF0000")
+    def content_rect(self) -> QtCore.QRectF:
+        left, top, right, bottom = self.padding
+        return QtCore.QRectF(0, 0, self.obj_w, self.obj_h).adjusted(left, top, -right, -bottom)
 
     def __init__(self, obj_data, parent_widget=None):
+        # the area of the label: what its size is, unless it grows to its text (see `mode`)
+        self._visual = QtCore.QRectF(0, 0, geometry_value(obj_data, "w"), geometry_value(obj_data, "h"))
         super().__init__(obj_data, parent_widget)
 
         self.setPos(self.obj_x, self.obj_y)
 
         # Child item for text rendering
+        self.setFlag(QtWidgets.QGraphicsItem.GraphicsItemFlag.ItemClipsChildrenToShape, True)
         self.text_item = QGraphicsTextItem(parent=self)
         # without the default margin of 4px around the text, it starts exactly at the top and left of the label
         self.text_item.document().setDocumentMargin(0)
@@ -49,6 +65,7 @@ class HaspLabelItem(EditableWidget):
 
     def _setup_text(self):
         """Processes font, color, icons, and alignment."""
+        self._visual = QtCore.QRectF(0, 0, self.obj_w, self.obj_h)
         raw_text = self.text
         if not raw_text:
             self.text_item.setPlainText("")
@@ -58,7 +75,11 @@ class HaspLabelItem(EditableWidget):
         scaled_pixel_size = int(float(pixel_size) * 0.7)
 
         base_font = QtGui.QFont("Roboto Condensed", scaled_pixel_size)
+        base_font.setLetterSpacing(QtGui.QFont.SpacingType.AbsoluteSpacing, number(self.style("text_letter_space", 0), 0))
         self.text_item.setFont(base_font)
+
+        if self.mode == "dots":
+            raw_text = self._with_dots(raw_text, base_font)
 
         if self.parent_widget and hasattr(self.parent_widget, "_replace_unicode_with_html"):
             processed_html = self.parent_widget._replace_unicode_with_html(raw_text, scaled_pixel_size)
@@ -66,54 +87,69 @@ class HaspLabelItem(EditableWidget):
         else:
             self.text_item.setPlainText(raw_text)
 
+        set_line_space(self.text_item, number(self.style("text_line_space", 0), 0))
+
         # Color
         color = self.text_color
-        self.text_item.setDefaultTextColor(QtGui.QColor(color))
+        self.text_item.setDefaultTextColor(color)
 
         # Alignment logic
         self._align_text()
 
+    def _with_dots(self, text: str, font: QtGui.QFont) -> str:
+        """The first line of the text without what doesn't fit the label, ending with "..." (the `dots` mode)."""
+        metrics = QtGui.QFontMetricsF(font)
+        available = self.content_rect.width()
+        if metrics.horizontalAdvance(text) <= available:
+            return text
+        while text and metrics.horizontalAdvance(text + "...") > available:
+            text = text[:-1]
+        return text.rstrip() + "..."
+
     def _align_text(self):
-        """Positions the child text item based on the 'align' property."""
-        align = self.align
+        """Positions the child text item in the content area, based on the 'align' property and the `mode`."""
+        content = self.content_rect
+        document = self.text_item.document()
+        option = QtGui.QTextOption(
+            {"center": Qt.AlignmentFlag.AlignHCenter, "right": Qt.AlignmentFlag.AlignRight}.get(
+                self.align, Qt.AlignmentFlag.AlignLeft
+            )
+        )
+        option.setWrapMode(QtGui.QTextOption.WrapMode.WordWrap if self.mode == "break" else QtGui.QTextOption.WrapMode.NoWrap)
+        document.setDefaultTextOption(option)
+        self.text_item.setTextWidth(content.width() if self.mode == "break" else max(content.width(), document.idealWidth()))
+        # the label grows to its text: wider with `expand`, higher with `break`
+        left, top, right, bottom = self.padding
+        if self.mode == "expand":
+            self._visual.setWidth(max(self.obj_w, document.idealWidth() + left + right))
+        elif self.mode == "break":
+            self._visual.setHeight(max(self.obj_h, self.text_item.boundingRect().height() + top + bottom))
+        # the text of a label starts at the top of its content area, whatever its height (like in LVGL)
         t_rect = self.text_item.boundingRect()
-
-        # the text of a label starts at its top, whatever its height (like in LVGL)
-        y_pos = 0
-
-        if align == "center":
-            x_pos = (self.obj_w - t_rect.width()) / 2
-        elif align == "right":
-            x_pos = self.obj_w - t_rect.width()
-        else:  # left
-            x_pos = 0
-
-        self.text_item.setPos(x_pos, y_pos)
+        if self.mode == "break" or t_rect.width() <= content.width():
+            x_pos = content.left()
+        else:
+            x_pos = content.left() + {
+                "center": (content.width() - t_rect.width()) / 2,
+                "right": content.width() - t_rect.width(),
+            }.get(self.align, 0)
+        self.text_item.setPos(x_pos, content.top())
 
     def _on_data_changed(self):
         self._setup_text()
 
+    @property
+    def obj_rect(self) -> QtCore.QRectF:
+        return self._visual
+
+    def shape(self):
+        path = QtGui.QPainterPath()
+        path.addRect(self.obj_rect)
+        return path
+
     def paint(self, painter, option, widget=None):
-        """Draws optional backgrounds or borders for the label container."""
-        # Create a rect representing the ACTUAL label size
-        local_rect = self.obj_rect
-
-        # Check for background color (some HASP labels have them)
-        bg_color = self.bg_color
-        if bg_color:
-            painter.setBrush(QtGui.QBrush(QtGui.QColor(bg_color)))
-            painter.setPen(QtCore.Qt.PenStyle.NoPen)
-            painter.drawRect(local_rect)
-
-        # Draw border if specified
-        border_width = self.border_width
-        if border_width > 0:
-            border_color = self.border_color
-            pen = QtGui.QPen(QtGui.QColor(border_color))
-            pen.setWidth(border_width)
-            painter.setPen(pen)
-            painter.drawRect(local_rect)
-
+        """Draws the background, border, outline and shadow of the label: none by default."""
+        draw_box(painter, self.obj_rect, box_style(self))
         super().paint(painter, option, widget)
 
     def mousePressEvent(self, event):
