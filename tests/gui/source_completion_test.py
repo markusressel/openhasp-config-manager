@@ -34,6 +34,7 @@ class TestContext(TestBase):
     def test_other_files(self):
         assert completion_context("x", Language.TEXT) is None
         assert completion_context("run ", Language.CMD) is None
+        assert completion_context('  "name": "{{ a', Language.JSON) is None
 
 
 class TestComplete(TestBase):

@@ -28,7 +28,9 @@ class TestScanFileTree(TestBase):
             "common/dialog/offline.jsonl",
             "common/page_header.jsonl",
             "common/image.png",
+            "common/config.json",
             "devices/plate/0_home/0_header.jsonl",
+            "devices/plate/0_home/config.json",
             "devices/plate/0_home/page.cmd",
             "devices/plate/images/logo.png",
             "devices/plate/boot.cmd",
@@ -46,12 +48,13 @@ class TestScanFileTree(TestBase):
         # THEN
         assert [_names(root) for root in roots] == [
             ("common", [("dialog", ["offline.jsonl"]), "page_header.jsonl"]),
-            ("plate", [("0_home", ["0_header.jsonl", "page.cmd"]), "boot.cmd", "vars.yaml"]),
+            ("plate", [("0_home", ["0_header.jsonl", "page.cmd"]), "boot.cmd", "config.json", "vars.yaml"]),
         ]
         home = roots[1].children[0]
         assert home.kind == FileKind.FOLDER
         assert [child.kind for child in home.children] == [FileKind.JSONL, FileKind.CMD]
-        assert roots[1].children[2].kind == FileKind.VARIABLES
+        # only the config.json of the device folder holds the settings of the plate
+        assert [child.kind for child in roots[1].children[2:]] == [FileKind.CONFIG, FileKind.VARIABLES]
 
     def test_global_variable_files_of_the_config_directory(self, tmp_path):
         # GIVEN
@@ -227,6 +230,29 @@ class TestFileTreeWidget(TestBase):
 
         # THEN
         assert "unused" not in self._visible(widget.tree.topLevelItem(1))
+
+    def test_the_config_of_the_device_is_always_shown_as_its_settings(self, tmp_path):
+        # GIVEN
+        (tmp_path / "devices/plate").mkdir(parents=True)
+        (tmp_path / "devices/plate/config.json").write_text("{}")
+
+        # WHEN
+        widget = self._widget(tmp_path)
+        opened = []
+        widget.openRequested.connect(opened.append)
+
+        # THEN
+        device = widget.tree.topLevelItem(1)
+        assert self._visible(device) == ["0_home", "boot.cmd", "config.json", "vars.yaml"]
+        config = device.child(2)
+        assert config.text(1) == "settings"
+        assert "settings of the plate" in config.toolTip(0)
+
+        # WHEN
+        widget.tree.itemDoubleClicked.emit(config, 0)
+
+        # THEN
+        assert opened == [tmp_path / "devices/plate/config.json"]
 
     def test_selecting_a_file_highlights_it_and_a_folder_ends_the_highlight(self, tmp_path):
         # GIVEN

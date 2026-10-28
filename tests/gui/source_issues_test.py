@@ -45,6 +45,12 @@ class TestJsonl(TestBase):
 
 
 class TestOtherLanguages(TestBase):
+    def test_json(self):
+        assert _issues('{\n  "a": 1,\n}\n', Language.JSON) == [
+            (2, 8, Severity.ERROR, "Invalid JSON: Illegal trailing comma before end of object")
+        ]
+        assert _issues('{\n  "a": {"page": 1}\n}\n', Language.JSON) == []
+
     def test_yaml(self):
         assert _issues("a: 1\nb: [1\n", Language.YAML)[0][2] == Severity.ERROR
         assert _issues("a: 1\nb: 2\n", Language.YAML) == []

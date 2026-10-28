@@ -19,6 +19,9 @@ class TestFormat(TestBase):
     def test_line_ends_and_final_newline(self):
         assert format_text("a  \n\n\n", Language.CMD) == "a\n"
         assert format_text("a: 1  \n  b: 2\t", Language.YAML) == "a: 1\n  b: 2\n"
+
+    def test_json_is_indented_like_jsonl(self):
+        assert format_text('{\n"a": {\n"b": 1\n}\n}', Language.JSON) == '{\n  "a": {\n    "b": 1\n  }\n}\n'
         assert format_text("", Language.JSONL) == ""
         assert format_text("\n\n", Language.CMD) == ""
 

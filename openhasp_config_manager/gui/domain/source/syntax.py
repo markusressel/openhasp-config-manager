@@ -15,6 +15,8 @@ from openhasp_config_manager.processing.template_rendering import template_spans
 
 class Language(Enum):
     JSONL = "jsonl"
+    # plain JSON, like a device's `config.json`: highlighted like JSONL, but not checked as objects
+    JSON = "json"
     CMD = "cmd"
     YAML = "yaml"
     TEXT = "text"
@@ -45,7 +47,13 @@ class Token:
         return line[self.start : self.end]
 
 
-_LANGUAGES = {".jsonl": Language.JSONL, ".cmd": Language.CMD, ".yaml": Language.YAML, ".yml": Language.YAML}
+_LANGUAGES = {
+    ".jsonl": Language.JSONL,
+    ".json": Language.JSON,
+    ".cmd": Language.CMD,
+    ".yaml": Language.YAML,
+    ".yml": Language.YAML,
+}
 
 _NUMBER = re.compile(r"-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?")
 _CONSTANT = re.compile(r"true|false|null")
@@ -60,7 +68,7 @@ def language_of(path: Path) -> Language:
 
 def tokenize_line(line: str, language: Language) -> List[Token]:
     """:return: the highlighted parts of a line, in order. Text between them has no kind."""
-    if language == Language.JSONL:
+    if language in (Language.JSONL, Language.JSON):
         return _tokenize_jsonl(line)
     if language == Language.CMD:
         return _tokenize_cmd(line)

@@ -76,7 +76,8 @@ def completion_context(
     :return: what the text before the cursor asks to complete, None if nothing
     """
     line = line_before_cursor
-    if language == Language.TEXT:
+    # JSON has no templates and no objects with properties
+    if language in (Language.TEXT, Language.JSON):
         return None
     open_template = _open_template(line)
     if open_template is not None:

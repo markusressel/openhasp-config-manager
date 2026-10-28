@@ -20,8 +20,14 @@ class TestLanguage(TestBase):
         assert language_of(Path("boot.cmd")) == Language.CMD
         assert language_of(Path("vars.yaml")) == Language.YAML
         assert language_of(Path("vars.YML")) == Language.YAML
+        assert language_of(Path("config.json")) == Language.JSON
         assert language_of(Path("notes.txt")) == Language.TEXT
         assert tokenize_line("anything", Language.TEXT) == []
+
+
+class TestJson(TestBase):
+    def test_highlighted_like_jsonl(self):
+        assert _kinds('  "ssid": "x", "port": 1883,', Language.JSON) == _kinds('  "ssid": "x", "port": 1883,')
 
 
 class TestJsonl(TestBase):
