@@ -118,6 +118,29 @@ class TestPreviewTouch(TestBase):
         assert widget(view, 3).is_toggled
         assert view.commands == []
 
+    def test_the_knob_of_a_switch_moves_to_the_other_end_in_its_anim_time(self):
+        view = preview({"page": 1, "id": 3, "obj": "switch", "x": 10, "y": 10, "w": 80, "h": 40, "anim_time": 500})
+        item = widget(view, 3)
+        off = item._knob_rect(item.obj_rect).x()
+
+        tap(view, 20, 20)
+
+        # the value is on at once, the knob starts at the off end
+        assert item.is_toggled
+        assert item._anim.duration() == 500
+        assert item._knob_rect(item.obj_rect).x() == off
+        item.finish_animation()
+        assert item.position == 1.0
+        assert item._knob_rect(item.obj_rect).x() > off
+
+    def test_a_switch_with_anim_time_0_does_not_animate(self):
+        view = preview({"page": 1, "id": 3, "obj": "switch", "x": 10, "y": 10, "w": 80, "h": 40, "anim_time": 0})
+
+        tap(view, 20, 20)
+
+        assert widget(view, 3)._anim is None
+        assert widget(view, 3).position == 1.0
+
     def test_a_checkbox_toggles(self):
         view = preview({"page": 1, "id": 4, "obj": "checkbox", "x": 10, "y": 10, "w": 150, "h": 40, "text": "On"})
 
@@ -362,6 +385,25 @@ class TestPreviewRoller(TestBase):
         # 70 pixels up of rows of 45: the option after the next one is nearest to the middle
         assert item.data["val"] == 3
         item.finish_animation()
+
+    def test_the_rows_move_in_the_anim_time_of_the_roller(self):
+        view = preview({**ROLLER, "anim_time": 600})
+        item = widget(view, 8)
+
+        lift(view, 20, 10 + item.row_height * 2.5)
+
+        assert item._anim.duration() == 600
+        item.finish_animation()
+
+    def test_a_roller_with_anim_time_0_moves_the_rows_at_once(self):
+        view = preview({**ROLLER, "anim_time": 0})
+        item = widget(view, 8)
+
+        lift(view, 20, 10 + item.row_height * 2.5)
+
+        assert item.data["val"] == 2
+        assert item._anim is None
+        assert item._offset == 0
 
     def test_a_flicked_roller_keeps_moving_after_it_is_let_go(self):
         view = preview({**ROLLER, "options": "\n".join("ABCDEFGHIJ"), "val": 0})

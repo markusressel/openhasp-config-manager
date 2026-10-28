@@ -42,7 +42,7 @@ class HaspRollerItem(EditableWidget):
     """
     A list of `options` with the selected one (`val`) in the middle, highlighted. With `rows` the height follows the rows and the
     font (`h` is ignored), without it `h` is the height and the list is cut off at the edges. In mode 1 (infinite) the list wraps around.
-    Touched, the rows follow a finger that drags them and snap to the nearest option when it is let go (200 ms, linear); a touch
+    Touched, the rows follow a finger that drags them and snap to the nearest option when it is let go (in `anim_time`, 200 ms by default, linear); a touch
     without dragging selects the row that was touched. Neither sends an action, like on the plate.
     See https://www.openhasp.com/0.7.0/design/objects/roller/
     """
@@ -89,14 +89,17 @@ class HaspRollerItem(EditableWidget):
         self.runtime.set(self.key, "val", option, self.obj_data)
         self.follow_group(option, self.option_count)
         self._stop_animation()
-        self._offset = start
-        animation = QtCore.QVariantAnimation(self)
-        animation.setStartValue(float(start))
-        animation.setEndValue(0.0)
-        animation.setDuration(round(SNAP_TIME * 1000))
-        animation.valueChanged.connect(self._set_offset)
-        self._anim = animation
-        animation.start()
+        # `anim_time` of the object (`refr_position`): 0 puts the rows there at once
+        duration = int(number(self.data.get("anim_time"), round(SNAP_TIME * 1000)))
+        self._offset = start if duration > 0 else 0.0
+        if duration > 0:
+            animation = QtCore.QVariantAnimation(self)
+            animation.setStartValue(float(start))
+            animation.setEndValue(0.0)
+            animation.setDuration(duration)
+            animation.valueChanged.connect(self._set_offset)
+            self._anim = animation
+            animation.start()
         self.runtime_changed()
 
     def finish_animation(self):
