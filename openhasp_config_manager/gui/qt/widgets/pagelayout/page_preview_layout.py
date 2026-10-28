@@ -430,11 +430,29 @@ class PagePreviewWidget(QGraphicsView):
         plate = self.scene().sceneRect()
         return min(max(position.x(), plate.left()), plate.right() - 1), min(max(position.y(), plate.top()), plate.bottom() - 1)
 
+    def finger(self, point: Point, now: float):
+        """The finger is at a point of the plate (pressing, or moving while it presses)."""
+        if not self._indev.is_pressing:
+            self._close_list_unless_touched(point)
+        self._indev.press(point, now)
+
+    def _close_list_unless_touched(self, point: Point):
+        """A new press somewhere else than on the open list of a dropdown closes it (the dropdown loses the focus), the value stays."""
+        key = self.runtime.open_dropdown
+        if key is None:
+            return
+        target = self._touch_target(point)
+        if target is None or target.key != key:
+            self.runtime.open_dropdown = None
+            for item in self.editable_items():
+                if item.key == key:
+                    item.runtime_changed()
+
     def _touch(self, event):
         """The mouse presses or drags in interact mode: it is a finger on the plate."""
         if not self._indev.is_pressing and not self.scene().sceneRect().contains(self.mapToScene(event.position().toPoint())):
             return
-        self._indev.press(self._plate_point(event), time.monotonic())
+        self.finger(self._plate_point(event), time.monotonic())
         self._touch_timer.start()
         self.viewport().update()
 

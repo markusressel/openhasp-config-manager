@@ -5727,5 +5727,132 @@
    "margin_left": 10,
    "margin_right": 10
   }
- ]
+ ],
+ "dd_open_default": {
+  "objects": [
+   {
+    "obj": "dropdown",
+    "x": 10,
+    "y": 10,
+    "w": 200,
+    "h": 40,
+    "options": "One\nTwo\nThree\nFour\nFive\nSix\nSeven",
+    "val": 1
+   },
+   {
+    "obj": "dropdown",
+    "x": 260,
+    "y": 10,
+    "w": 200,
+    "h": 40,
+    "options": "Alpha\nBeta\nGamma",
+    "val": 0
+   }
+  ],
+  "interactions": [
+   {
+    "tap": 1
+   }
+  ]
+ },
+ "dd_open_short": {
+  "objects": [
+   {
+    "obj": "dropdown",
+    "x": 10,
+    "y": 10,
+    "w": 200,
+    "h": 40,
+    "options": "One\nTwo\nThree\nFour\nFive\nSix\nSeven",
+    "val": 1
+   },
+   {
+    "obj": "dropdown",
+    "x": 260,
+    "y": 10,
+    "w": 200,
+    "h": 40,
+    "options": "Alpha\nBeta\nGamma",
+    "val": 2
+   }
+  ],
+  "interactions": [
+   {
+    "tap": 2
+   }
+  ]
+ },
+ "dd_open_bottom": {
+  "objects": [
+   {
+    "obj": "dropdown",
+    "x": 140,
+    "y": 230,
+    "w": 200,
+    "h": 40,
+    "options": "One\nTwo\nThree\nFour\nFive",
+    "val": 3
+   }
+  ],
+  "interactions": [
+   {
+    "tap": 1
+   }
+  ]
+ },
+ "dd_open_styled": {
+  "objects": [
+   {
+    "obj": "dropdown",
+    "x": 10,
+    "y": 10,
+    "w": 220,
+    "h": 50,
+    "options": "Red\nGreen\nBlue\nCyan",
+    "val": 2,
+    "text_font": 16,
+    "max_height": 120,
+    "bg_color": "#26361C",
+    "bg_color40": "#203040",
+    "bg_color50": "#8BC34A",
+    "text_color40": "#FFD54F",
+    "text_color50": "#000000",
+    "radius": 0
+   }
+  ],
+  "interactions": [
+   {
+    "tap": 1
+   }
+  ]
+ },
+ "dd_open_direction": {
+  "objects": [
+   {
+    "obj": "dropdown",
+    "x": 140,
+    "y": 120,
+    "w": 160,
+    "h": 40,
+    "options": "One\nTwo\nThree",
+    "val": 0,
+    "direction": 3
+   },
+   {
+    "obj": "dropdown",
+    "x": 10,
+    "y": 200,
+    "w": 120,
+    "h": 40,
+    "options": "One\nTwo\nThree",
+    "val": 0,
+    "direction": 1
+   }
+  ],
+  "interactions": [
+   {
+    "tap": 1
+   }
+  ]
+ }
 }
