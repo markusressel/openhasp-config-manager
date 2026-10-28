@@ -1,7 +1,10 @@
 from dataclasses import replace
-from typing import Dict, List
+from typing import Dict, List, Set
 
+
+from openhasp_config_manager.deployment import _delete_after_restart
 from openhasp_config_manager.manager import ConfigManager
+from openhasp_config_manager.openhasp_client.webservice_client import FileInUseError
 from openhasp_config_manager.processing.variables import VariableManager
 from openhasp_config_manager.uploader import ConfigUploader
 from tests import TestBase
@@ -20,6 +23,9 @@ class FakeClient:
         # like the plate, which doesn't tell its passwords
         self.mask_passwords = False
         self.applied_live: List[dict] = []
+        # like the plate, which can't delete the TrueType fonts it uses
+        self.in_use: Set[str] = set()
+        self.restarted = False
 
     async def get_files(self) -> List[str]:
         return list(self.files)
@@ -32,8 +38,16 @@ class FakeClient:
         self.uploaded.append(name)
 
     async def delete_file(self, file_name: str):
+        if file_name in self.in_use:
+            raise FileInUseError(file_name)
         del self.files[file_name]
         self.deleted.append(file_name)
+
+    async def wait_for_restart(self) -> bool:
+        # the new pages don't use the files the old ones did
+        self.restarted = True
+        self.in_use = set()
+        return True
 
     async def get_mqtt_config(self):
         return replace(self.mqtt_config, password="********") if self.mask_passwords else self.mqtt_config
@@ -102,6 +116,35 @@ class TestConfigUploader(TestBase):
 
         # THEN
         assert client.deleted == ["old.jsonl"]
+
+    async def test_purge_keeps_a_file_the_plate_uses_and_restarts_it(self, tmp_path):
+        # GIVEN
+        device = self._processed_device(tmp_path)
+        client = FakeClient(device)
+        client.files = {"old.ttf": b"font", "old.jsonl": b"{}", "config.json": b"{}"}
+        client.in_use = {"old.ttf"}
+
+        # WHEN
+        result = await ConfigUploader(tmp_path, client).upload_changes(device, purge=True)
+
+        # THEN
+        assert result.deleted == ["old.jsonl"]
+        assert result.in_use == ["old.ttf"]
+        assert result.needs_restart
+
+    async def test_a_file_the_plate_used_is_deleted_after_it_restarted(self, tmp_path):
+        # GIVEN
+        device = self._processed_device(tmp_path)
+        client = FakeClient(device)
+        client.files = {"old.ttf": b"font", "config.json": b"{}"}
+        client.in_use = {"old.ttf"}
+
+        # WHEN
+        await _delete_after_restart(client, ConfigUploader(tmp_path, client), device, ["old.ttf"])
+
+        # THEN
+        assert client.restarted
+        assert client.deleted == ["old.ttf"]
 
     async def test_upload_changes_tells_what_changed(self, tmp_path):
         # GIVEN

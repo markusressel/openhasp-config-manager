@@ -1,12 +1,13 @@
 import difflib
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from openhasp_config_manager import util
 from openhasp_config_manager.console import print_diff_to_console, info, warn
 from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
+from openhasp_config_manager.openhasp_client.webservice_client import FileInUseError
 
 
 # what the plate reads again when its pages are rebuilt (`OpenHaspClient.restore_from_files`). Anything else, like fonts (`.ttf`, and `.bin`
@@ -28,15 +29,22 @@ class UploadResult:
     config_changed: bool = False
     # settings that were applied to the running plate, see `LIVE_GUI_SETTINGS`
     settings_applied: bool = False
+    # files to delete that the plate uses, like a TrueType font of its old pages (see `FileInUseError`): they can only be deleted
+    # after it restarted with the new pages
+    in_use: List[str] = field(default_factory=list)
 
     @property
     def changed(self) -> bool:
-        return bool(self.files or self.deleted or self.config_changed or self.settings_applied)
+        return bool(self.files or self.deleted or self.config_changed or self.settings_applied or self.in_use)
 
     @property
     def needs_restart(self) -> bool:
         """Whether the plate has to restart to use the change, instead of rebuilding its pages."""
-        return self.config_changed or any(not name.lower().endswith(RELOADABLE_SUFFIXES) for name in self.files + self.deleted)
+        return (
+            self.config_changed
+            or bool(self.in_use)
+            or any(not name.lower().endswith(RELOADABLE_SUFFIXES) for name in self.files + self.deleted)
+        )
 
 
 class ConfigUploader:
@@ -60,7 +68,7 @@ class ConfigUploader:
         result = UploadResult()
 
         if purge:
-            result.deleted = await self.cleanup_device_files(device)
+            result.deleted, result.in_use = await self.delete_files(device, await self._obsolete_files(device))
 
         result.files = await self._upload_files(device, print_diff)
         await self._update_config(device, result)
@@ -174,20 +182,31 @@ class ConfigUploader:
 
     async def cleanup_device_files(self, device: Device) -> List[str]:
         """:return: the names of the files that were deleted from the device, see `cleanup_device`"""
-        result = []
+        deleted, _in_use = await self.delete_files(device, await self._obsolete_files(device))
+        return deleted
 
+    async def _obsolete_files(self, device: Device) -> List[str]:
+        """:return: the files which are on the device, but not present in the generated output"""
         file_names = ["config.json"]
         for file in device.output_dir.iterdir():
             file_names.append(file.name)
+        return [f for f in await self._api_client.get_files() if f not in file_names]
 
-        # cleanup files which are on the device, but not present in the generated output
-        files_on_device = await self._api_client.get_files()
-        for f in files_on_device:
-            if f not in file_names:
-                result.append(f)
-                info(f"Deleting file '{f}' from device '{device.name}'")
-                await self._api_client.delete_file(f)
-        return result
+    async def delete_files(self, device: Device, names: List[str]) -> Tuple[List[str], List[str]]:
+        """
+        Delete files from the device.
+        :return: the files that were deleted, and the ones the plate uses (see `UploadResult.in_use`), which are kept
+        """
+        deleted, in_use = [], []
+        for name in names:
+            info(f"Deleting file '{name}' from device '{device.name}'")
+            try:
+                await self._api_client.delete_file(name)
+                deleted.append(name)
+            except FileInUseError:
+                warn(f"Device '{device.name}' uses '{name}': it is deleted by a purge after the device restarted")
+                in_use.append(name)
+        return deleted, in_use
 
     def _check_if_checksum_will_change(self, file: Path, original_checksum: str, new_content: bytes) -> Optional[str]:
         """

@@ -17,6 +17,11 @@ from openhasp_config_manager.openhasp_client.telnet_client import OpenHaspTelnet
 from openhasp_config_manager.openhasp_client.webservice_client import WebserviceClient
 
 
+# how long a plate may take to restart, and how often it is asked whether it is back
+RESTART_TIMEOUT_SECONDS = 60
+RESTART_POLL_SECONDS = 1
+
+
 class OpenHaspClient:
     LOGGER = logging.getLogger(__name__)
 
@@ -493,6 +498,8 @@ class OpenHaspClient:
         """
         Delete a file on the device
         :param file_name: the name of the file
+        :raises FileInUseError: if the plate uses the file, e.g. a TrueType font of an object (the command `clearfont` would release
+            the fonts, but it crashes the plate)
         """
         await self._webservice_client.delete_file(file_name)
 
@@ -501,6 +508,25 @@ class OpenHaspClient:
         Request a reboot
         """
         await self._webservice_client.reboot()
+
+    async def wait_for_restart(self, timeout: float = RESTART_TIMEOUT_SECONDS) -> bool:
+        """
+        Wait until the plate restarted after `reboot`: until its web server went away and answers again.
+        :return: whether it answers again within the timeout
+        """
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout
+        offline = False
+        while loop.time() < deadline:
+            try:
+                await self.get_files()
+                if offline:
+                    return True
+            except Exception:
+                # gone, or still starting (e.g. an empty answer)
+                offline = True
+            await asyncio.sleep(RESTART_POLL_SECONDS)
+        return False
 
     async def set_hasp_config(self, config: HaspConfig):
         """

@@ -4,7 +4,7 @@ Finds the files that a `.cmd` or `.jsonl` text refers to. Qt-free and independen
 - Images are referenced with a path of the plate's flash: `"src": "L:/home_image.png"`.
 - Fonts are referenced by name, without `L:/` and without the extension (https://www.openhasp.com/0.7.0/design/fonts/): the name of
   a `.bin` font file (`"text_font": "arial_20"` is `arial_20.bin`), or the name of a `.ttf` file followed by the size
-  (`"text_font": "arial20"` is `arial.ttf` in size 20). A number is a built-in font.
+  (`"text_font": "arial20"` or `"arial_20"` is `arial.ttf` in size 20). A number is a built-in font.
 """
 
 import re
@@ -46,7 +46,8 @@ def font_file_name(reference: str, file_names: Iterable[str]) -> Optional[str]:
     if f"{reference}.bin" in names:
         return f"{reference}.bin"
     for name in names:
-        if name.endswith(".ttf") and re.fullmatch(rf"{re.escape(name[:-4])}\d+", reference):
+        # the plate drops an underscore before the size: `arial_20` is `arial.ttf` in size 20 too
+        if name.endswith(".ttf") and re.fullmatch(rf"{re.escape(name[:-4])}_?\d+", reference):
             return name
     return None
 

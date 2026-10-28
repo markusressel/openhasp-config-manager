@@ -2,7 +2,6 @@ import dataclasses
 
 from PyQt6 import QtCore, QtGui
 
-from openhasp_config_manager.gui.domain.fonts import font_size
 from openhasp_config_manager.gui.domain.problems import geometry_value
 from openhasp_config_manager.gui.domain.style_parts import Part, State
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.box import (
@@ -76,9 +75,7 @@ class HaspCheckboxItem(EditableWidget):
 
     @property
     def box_size(self) -> int:
-        return round(
-            font_size(self.style("text_font", DEFAULT_FONT_SIZE), DEFAULT_FONT_SIZE) * _BOX_PER_FONT_PIXEL + _BOX_EXTRA
-        )
+        return round(self.font.pixelSize() * _BOX_PER_FONT_PIXEL + _BOX_EXTRA)
 
     @property
     def obj_w(self) -> int:

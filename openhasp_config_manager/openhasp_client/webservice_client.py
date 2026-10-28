@@ -20,6 +20,13 @@ REQUEST_TIMEOUT_SECONDS = 5
 UPLOAD_BYTES_PER_SECOND = 20_000
 # what the web server of the plate answers to a file it has stored
 UPLOAD_OK_REPLY = "Upload OK"
+# the status the web server of the plate answers with (and the text "RemoveFailed") if it can't delete a file, e.g. a TrueType font
+# it uses: FreeType reads the glyphs from the open file
+REMOVE_FAILED_STATUS = 405
+
+
+class FileInUseError(Exception):
+    """The plate can't delete a file, since it uses it (see `REMOVE_FAILED_STATUS`)."""
 
 
 class WebserviceClient:
@@ -283,12 +290,18 @@ class WebserviceClient:
         """
         Delete a file on the device
         :param file_name: the name of the file
+        :raises FileInUseError: if the plate uses the file
         """
-        await self._do_request(
-            method=DELETE,
-            url=self._base_url + "edit",
-            data={"path": "/" + file_name},
-        )
+        try:
+            await self._do_request(
+                method=DELETE,
+                url=self._base_url + "edit",
+                data={"path": "/" + file_name},
+            )
+        except aiohttp.ClientResponseError as ex:
+            if ex.status == REMOVE_FAILED_STATUS:
+                raise FileInUseError(f"The plate can't delete '{file_name}', it is in use") from ex
+            raise
 
     async def take_screenshot(self) -> bytes:
         """

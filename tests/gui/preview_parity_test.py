@@ -210,6 +210,53 @@ class TestTextAndShapes(TestBase):
         assert plate_font(24).pixelSize() == 24
         assert [line_lead(plate_font(size)) for size in (12, 24, 32)] == [3, 3, 4]
 
+    def test_text_in_a_size_that_is_not_built_into_the_plate_has_no_lead(self):
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import line_lead, line_top, plate_font
+
+        # the plate renders these from a TrueType font: e.g. a label of size 25 that is 30 pixels high shows its descenders
+        assert [line_lead(plate_font(size)) for size in (18, 25, 36)] == [0, 0, 0]
+        assert line_top(plate_font(25)) == 0
+
+    def test_text_in_another_font_starts_at_the_top_of_the_line(self):
+        from PyQt6 import QtGui
+
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import line_lead, line_top
+
+        font = QtGui.QFont("Arial")
+        font.setPixelSize(24)
+
+        assert (line_lead(font), line_top(font)) == (0, 0)
+
+    def test_text_is_drawn_in_the_fonts_of_the_plate_that_are_part_of_the_package(self):
+        from PyQt6 import QtGui
+
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import line_lead, line_top, plate_font
+
+        assert QtGui.QFontInfo(plate_font(24)).family() == "openHASP Roboto Condensed"
+        # the pixel font unscii: a line of 16 pixels, like on the plate
+        pixel = plate_font(8)
+        assert QtGui.QFontInfo(pixel).family() == "openHASP unscii"
+        assert (pixel.pixelSize(), line_lead(pixel), line_top(pixel)) == (8, 8, 3)
+
+    def test_a_truetype_font_file_of_the_device_is_drawn_in_its_font(self, tmp_path):
+        import shutil
+
+        from PyQt6 import QtGui
+
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets import drawing
+
+        # a TrueType font that is not Roboto Condensed, as a font file of the device: the pixel font of the package
+        font_file = shutil.copy(drawing._PIXEL_FONT_FILE, tmp_path / "pixels.ttf")
+        drawing.set_font_files({"pixels.ttf": font_file})
+        try:
+            font = drawing.plate_font("pixels_20")
+        finally:
+            drawing.set_font_files({})
+
+        assert (QtGui.QFontInfo(font).family(), font.pixelSize()) == ("openHASP unscii", 20)
+        # a font file the device doesn't have doesn't change the font, like on the plate
+        assert drawing.plate_font("pixels_20").pixelSize() == 24
+
     def test_lines_are_wrapped_at_words(self):
         from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import plate_font, wrap_lines
 

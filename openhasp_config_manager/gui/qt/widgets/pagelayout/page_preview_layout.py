@@ -17,6 +17,7 @@ from openhasp_config_manager.gui.qt.theme import current_colors
 from openhasp_config_manager.gui.qt.async_bridge import qBridge
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.registry import ITEM_CLASSES
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.button import HaspButtonItem
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import set_font_files
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
 from openhasp_config_manager.gui.qt.widgets.pagelayout.plate_scene import PlateScene
 from openhasp_config_manager.gui.qt.widgets.pagelayout.preview_overlays import OverlayAnchor, overlay_layout
@@ -140,6 +141,10 @@ class PagePreviewWidget(QGraphicsView):
     def set_image_files(self, files: Dict[str, Path]):
         """:param files: the image files of the device: their name on the plate -> the file, see `image_file`"""
         self._image_files = files
+
+    def set_font_files(self, files: Dict[str, Path]):
+        """:param files: the font files of the device (`.ttf`, and `.bin` files, which can be fonts): their name on the plate -> the file"""
+        set_font_files(files)
 
     def image_file(self, src: str) -> Optional[Path]:
         """:return: the file the `src` of an object means, if the device has it"""

@@ -3,7 +3,6 @@ from typing import Dict
 
 from PyQt6 import QtCore, QtGui, QtWidgets
 
-from openhasp_config_manager.gui.domain.fonts import font_size
 from openhasp_config_manager.gui.domain.style_parts import Part
 from openhasp_config_manager.gui.qt.async_bridge import qBridge
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.box import box_style, draw_box, text_color
@@ -51,8 +50,9 @@ class HaspButtonItem(ClickableWidget):
         return self.obj_data.get("text", "")
 
     @property
-    def text_font(self) -> float:
-        return font_size(self.obj_data.get("text_font"), DEFAULT_FONT_SIZE)
+    def text_font(self):
+        """The `text_font` of the object, see `plate_font`."""
+        return self.obj_data.get("text_font", DEFAULT_FONT_SIZE)
 
     def __init__(
         self,
@@ -83,8 +83,7 @@ class HaspButtonItem(ClickableWidget):
             self.text_item.setPlainText("")
             return
 
-        pixel_size = self.text_font
-        base_font = plate_font(pixel_size)
+        base_font = plate_font(self.text_font)
 
         # HTML allows per-character font switching, for the icons
         if self.parent_widget and hasattr(self.parent_widget, "_replace_unicode_with_html"):
