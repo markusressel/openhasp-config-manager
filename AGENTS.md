@@ -78,6 +78,12 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
   edit operation of the editor needs no undo code of its own, only the grouping. Save doesn't load the draft again: the
   draft takes what it wrote as its files (`mark_saved`), so the history continues. It starts anew when the draft is loaded from
   changed files or reverted.
+- **Interact mode** (Edit mode off): touches go through `Indev` (`gui/domain/interaction.py`, a port of the LVGL input device: press lost,
+  long press, release) to the items, which are its targets. What a touch changes is `RuntimeState` of the preview, next to the draft and
+  never in it: items draw from `EditableWidget.data` (the draft plus these values), and when the draft changes a property that was
+  touched, the draft wins. Edit mode and *Reset* clear it, switching pages keeps it. Behavior ported from the firmware and LVGL
+  (which object runs `action`, groups, slider/arc math, dropdown list layout, roller snapping) lives in Qt-free `gui/domain/touch_*.py`,
+  `dropdown_list.py`, `roller_scroll.py` and `lvgl_colors.py`; pressed colors can't be measured and are computed there.
 - **Templates are never replaced implicitly.** Objects whose `x`/`y` is a template or a percentage can't be dragged or nudged; the
   editor explains why, and "Use pixels for x/y" replaces them only when the user asks. Keep this for new edit operations.
 - **Files**: new objects go into the target file chosen in the Files tree (`gui/domain/file_tree.py` follows the folder structure of

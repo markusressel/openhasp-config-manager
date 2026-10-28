@@ -181,6 +181,13 @@ class PageLayoutEditorWidget(QWidget):
             checkable=True,
         )
         self.action_edit_mode.toggled.connect(self._on_edit_mode_toggled)
+        self.action_reset_interactions = create(
+            self,
+            "Reset",
+            "restore",
+            tooltip="Put the objects back as the files say: what touching them changed (toggles, values, open lists, closed message boxes) is forgotten",
+        )
+        self.action_reset_interactions.triggered.connect(lambda: self.page_preview_widget.reset_interactions())
 
         self.action_snap = create(
             self,
@@ -300,6 +307,7 @@ class PageLayoutEditorWidget(QWidget):
         preview.add_overlay(
             floating_bar(
                 [
+                    self.action_reset_interactions,
                     self.action_edit_mode,
                     self.action_snap,
                     None,
@@ -309,7 +317,7 @@ class PageLayoutEditorWidget(QWidget):
                     self.action_duplicate,
                     self.action_delete,
                 ],
-                with_text=[self.action_edit_mode, self.action_snap],
+                with_text=[self.action_reset_interactions, self.action_edit_mode, self.action_snap],
             ),
             OverlayAnchor.TOP_RIGHT,
         )
@@ -551,6 +559,8 @@ class PageLayoutEditorWidget(QWidget):
     def _on_editor_mode_changed(self, mode: PreviewMode):
         edit = mode == PreviewMode.Edit
         self.action_edit_mode.setChecked(edit)
+        # there is nothing to reset while editing: the preview shows the draft
+        self.action_reset_interactions.setVisible(not edit)
         self.widget_picker.setVisible(edit)
         self.property_editor.set_edit_mode(edit)
         self._update_actions()

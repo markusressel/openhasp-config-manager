@@ -1011,3 +1011,51 @@ class TestPageIndicator(TestBase):
 
     def test_it_is_painted(self, editor):
         assert not editor.page_indicator.grab().isNull()
+
+
+class TestInteractMode(TestBase):
+    """What touching the objects of the preview changed lives next to the draft: never in it, and not in edit mode."""
+
+    def _touch(self, editor):
+        editor.page_preview_widget.runtime.set((9, 2), "val", 1, _object(editor, 2))
+        editor.page_preview_widget.runtime.open_dropdown = (9, 5)
+
+    def test_touching_does_not_change_the_draft(self, editor):
+        self._touch(editor)
+
+        assert "val" not in _object(editor, 2)
+        assert not editor.session.is_dirty
+
+    def test_going_to_another_page_keeps_what_was_touched(self, editor):
+        self._touch(editor)
+
+        editor._go_to_page(1)
+        editor._go_to_page(9)
+
+        assert not editor.page_preview_widget.runtime.is_empty
+
+    def test_edit_mode_shows_the_draft_and_forgets_the_touches(self, editor):
+        self._touch(editor)
+
+        editor.set_edit_mode(True)
+
+        assert editor.page_preview_widget.runtime.is_empty
+
+    def test_reset_forgets_the_touches_and_is_only_there_in_interact_mode(self, editor):
+        self._touch(editor)
+
+        editor.action_reset_interactions.trigger()
+        assert editor.page_preview_widget.runtime.is_empty
+        assert editor.action_reset_interactions.isVisible()
+        editor.set_edit_mode(True)
+
+        assert not editor.action_reset_interactions.isVisible()
+        editor.set_edit_mode(False)
+        assert editor.action_reset_interactions.isVisible()
+
+    def test_a_new_value_of_the_draft_wins_over_the_touched_one(self, editor):
+        self._touch(editor)
+
+        editor.session.set_source_value(_object(editor, 2), "val", 0)
+
+        assert editor.page_preview_widget.runtime.get((9, 2), "val", _object(editor, 2)) == 0
