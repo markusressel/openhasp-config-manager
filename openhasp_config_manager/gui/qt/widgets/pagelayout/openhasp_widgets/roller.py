@@ -2,7 +2,6 @@ import dataclasses
 
 from PyQt6 import QtCore, QtGui
 
-from openhasp_config_manager.gui.domain.fonts import font_size
 from openhasp_config_manager.gui.domain.style_parts import Part
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.box import (
     GRADIENT_VERTICAL,
@@ -54,7 +53,7 @@ class HaspRollerItem(EditableWidget):
 
     @property
     def row_height(self) -> float:
-        return font_size(self.style("text_font", DEFAULT_FONT_SIZE), DEFAULT_FONT_SIZE) * _ROW_PER_FONT_PIXEL + _ROW_EXTRA
+        return self.font.pixelSize() * _ROW_PER_FONT_PIXEL + _ROW_EXTRA
 
     @property
     def obj_h(self) -> int:

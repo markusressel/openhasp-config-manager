@@ -3,7 +3,7 @@ The preview against screenshots of a real plate (an openHASP device showing the 
 fitted to the device: a change that makes an object differ more from the screenshot than it did when `baseline.json` was written fails.
 
 After a change that makes the preview better (or an intended change), write the baseline again with `UPDATE_PREVIEW_BASELINE=1`.
-The screenshots show the font Roboto Condensed, which is part of the resources, so the result doesn't depend on the installed fonts.
+The preview draws text in the fonts of the plate, which are part of the package, so the result doesn't depend on the installed fonts.
 """
 
 import io
@@ -32,14 +32,6 @@ TOLERANCE_SHARE = 0.01
 TOLERANCE_FACTOR = 1.1
 # objects that change by themselves
 ANIMATED = ("spinner",)
-
-
-@pytest.fixture(scope="module")
-def plate_fonts(qapp):
-    from PyQt6 import QtGui
-
-    for font_file in (RESOURCES / "fonts").glob("*.ttf"):
-        assert QtGui.QFontDatabase.addApplicationFont(str(font_file)) >= 0, font_file
 
 
 def render(objects: list) -> Image.Image:
@@ -96,7 +88,7 @@ def measured():
         BASELINE_FILE.write_text(json.dumps(result, indent=1) + "\n")
 
 
-@pytest.mark.usefixtures("qapp", "plate_fonts")
+@pytest.mark.usefixtures("qapp")
 @pytest.mark.parametrize("name", CASES)
 def test_the_preview_is_as_close_to_the_plate_as_it_was(name, measured):
     pytest.importorskip("segno")

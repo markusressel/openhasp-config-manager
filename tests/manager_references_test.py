@@ -47,6 +47,12 @@ class TestReferencedFiles(ConfigCopyBase):
         assert "fonts_arial.ttf" in names
         assert "fonts_unused.ttf" not in names
 
+    def test_truetype_font_is_copied_with_an_underscore_before_its_size_in_the_reference(self, cfg, tmp_path):
+        self._add_file(cfg, "fonts/arial.ttf")
+        self._add_object(cfg, page=1, id=20, obj="label", text_font="fonts_arial_20")
+
+        assert "fonts_arial.ttf" in self._relevant_names(cfg, tmp_path)
+
     def test_binary_font_is_copied(self, cfg, tmp_path):
         self._add_file(cfg, "fonts/arial_20.bin")
         self._add_object(cfg, page=1, id=20, obj="label", text_font="fonts_arial_20")

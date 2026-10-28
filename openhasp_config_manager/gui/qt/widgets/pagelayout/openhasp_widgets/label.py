@@ -1,6 +1,5 @@
 from PyQt6 import QtCore, QtGui, QtWidgets
 
-from openhasp_config_manager.gui.domain.fonts import font_size
 from openhasp_config_manager.gui.domain.problems import geometry_value
 from openhasp_config_manager.gui.domain.style_parts import Part
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.box import box_style, draw_box, padding, text_color
@@ -21,8 +20,9 @@ class HaspLabelItem(ClickableWidget):
         return self.obj_data.get("text", "")
 
     @property
-    def text_font(self) -> float:
-        return font_size(self.obj_data.get("text_font"), DEFAULT_FONT_SIZE)
+    def text_font(self):
+        """The `text_font` of the object, see `plate_font`."""
+        return self.obj_data.get("text_font", DEFAULT_FONT_SIZE)
 
     @property
     def align(self) -> str:
