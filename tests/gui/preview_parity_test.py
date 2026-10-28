@@ -217,6 +217,16 @@ class TestTextAndShapes(TestBase):
         assert [line_lead(plate_font(size)) for size in (18, 25, 36)] == [0, 0, 0]
         assert line_top(plate_font(25)) == 0
 
+    def test_text_in_another_font_starts_at_the_top_of_the_line(self):
+        from PyQt6 import QtGui
+
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import line_lead, line_top
+
+        font = QtGui.QFont("Arial")
+        font.setPixelSize(24)
+
+        assert (line_lead(font), line_top(font)) == (0, 0)
+
     def test_text_is_drawn_in_the_fonts_of_the_plate_that_are_part_of_the_package(self):
         from PyQt6 import QtGui
 

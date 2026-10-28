@@ -204,7 +204,7 @@ class ConfigUploader:
                 await self._api_client.delete_file(name)
                 deleted.append(name)
             except FileInUseError:
-                warn(f"Device '{device.name}' uses '{name}', it can only be deleted after it restarted")
+                warn(f"Device '{device.name}' uses '{name}': it is deleted by a purge after the device restarted")
                 in_use.append(name)
         return deleted, in_use
 

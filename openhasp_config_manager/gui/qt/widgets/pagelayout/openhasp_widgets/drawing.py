@@ -2,7 +2,7 @@
 
 import math
 from pathlib import Path
-from typing import Dict, Mapping, Optional
+from typing import Dict, Mapping, Optional, Tuple
 
 from PyQt6 import QtCore, QtGui
 
@@ -23,6 +23,8 @@ _PIXEL_FAMILY = "openHASP unscii"
 # its glyphs are 3 pixels below the top of the line
 _PIXEL_LEAD = 8
 _PIXEL_TOP = 3
+# no text is larger than the screen of a plate: a typo like `"text_font": 2400` would make every repaint slow
+_MAX_PIXEL_SIZE = 480
 # the angle of the scale of a gauge or line meter if the object doesn't say
 DEFAULT_SCALE_ANGLE = 240
 
@@ -40,8 +42,8 @@ def opacity(value, default: float = 255) -> float:
 
 # the font files of the device that is shown: their name on the plate -> the file, see `set_font_files`
 _font_files: Dict[str, Path] = {}
-# the font files that Qt loaded -> the family of their font (none if Qt can't read the file)
-_families: Dict[Path, Optional[str]] = {}
+# the font files that Qt loaded, and when they were changed -> the family of their font
+_families: Dict[Tuple[Path, int], str] = {}
 
 
 def set_font_files(files: Mapping[str, Path]):
@@ -60,17 +62,24 @@ def plate_font(value) -> QtGui.QFont:
         # a `.bin` font is drawn in Roboto Condensed: Qt can't read the format of LVGL
         family = _family(_font_files[plate.file]) or family
     font = QtGui.QFont(family)
-    font.setPixelSize(max(plate.size, 1))
+    font.setPixelSize(min(max(plate.size, 1), _MAX_PIXEL_SIZE))
     return font
 
 
 def _family(file: Path) -> Optional[str]:
-    """:return: the family of the font in a file, which is loaded into Qt the first time"""
-    if file not in _families:
+    """:return: the family of the font in a file, which is loaded into Qt the first time (and again after it changed), none if Qt
+    can't read it"""
+    try:
+        key = (file, file.stat().st_mtime_ns)
+    except OSError:
+        return None
+    if key not in _families:
         font_id = QtGui.QFontDatabase.addApplicationFont(str(file))
         families = QtGui.QFontDatabase.applicationFontFamilies(font_id) if font_id >= 0 else []
-        _families[file] = families[0] if families else None
-    return _families[file]
+        if not families:
+            return None
+        _families[key] = families[0]
+    return _families[key]
 
 
 def draw_text(
@@ -188,7 +197,9 @@ def line_top(font: QtGui.QFont) -> int:
     """:return: how much of `line_lead` is above the glyphs of the first line"""
     if font.family() == _PIXEL_FAMILY:
         return _PIXEL_TOP
-    return line_lead(font) - (1 if font.pixelSize() == 24 else 0)
+    lead = line_lead(font)
+    # the built-in font of size 24 has one of its extra pixels below the glyphs
+    return lead - (1 if lead and font.pixelSize() == 24 else 0)
 
 
 def set_line_space(text_item, space: float):

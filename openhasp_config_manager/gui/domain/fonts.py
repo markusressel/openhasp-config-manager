@@ -53,8 +53,9 @@ def resolve_font(value, font_files: Iterable[str] = (), default: PlateFont = DEF
     if isinstance(value, float) and value.is_integer():
         value = int(value)
     payload = str(value).strip()
-    if payload.isdigit():
-        number = int(payload)
+    if payload.isascii() and payload.isdigit():
+        # the plate reads the number as a byte (`uint8_t`): 280 is 24
+        number = int(payload) % 256
         if number <= _LAST_FONT_ID:
             return _font_id(number, default)
         if number == PIXEL_FONT_SIZE:
@@ -62,11 +63,6 @@ def resolve_font(value, font_files: Iterable[str] = (), default: PlateFont = DEF
         if number in BUILT_IN_FONT_SIZES:
             return PlateFont(number, FontKind.BUILT_IN)
     return _font_file(payload, font_files) or _truetype(payload) or default
-
-
-def font_size(value, font_files: Iterable[str] = (), default: int = DEFAULT_FONT_SIZE) -> int:
-    """:return: the size of the font of a `text_font` (see `resolve_font`), the default if the plate wouldn't change the font"""
-    return resolve_font(value, font_files, PlateFont(default, FontKind.BUILT_IN)).size
 
 
 def _font_id(number: int, default: PlateFont) -> PlateFont:

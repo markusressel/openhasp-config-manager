@@ -1,6 +1,6 @@
 import pytest
 
-from openhasp_config_manager.gui.domain.fonts import DEFAULT_FONT, FontKind, PlateFont, font_size, resolve_font
+from openhasp_config_manager.gui.domain.fonts import DEFAULT_FONT, FontKind, PlateFont, resolve_font
 
 
 @pytest.mark.parametrize(
@@ -20,6 +20,10 @@ from openhasp_config_manager.gui.domain.fonts import DEFAULT_FONT, FontKind, Pla
         (9, PlateFont(9, FontKind.TRUETYPE)),
         ("25", PlateFont(25, FontKind.TRUETYPE)),
         (40, PlateFont(40, FontKind.TRUETYPE)),
+        # the plate reads a number as a byte
+        (280, PlateFont(24, FontKind.BUILT_IN)),
+        # not a number, although Python calls it a digit
+        ("²", DEFAULT_FONT),
         # a font file that is not on the plate doesn't change the font
         ("arial_20", DEFAULT_FONT),
         ("robotocondensed_regular_16_latin1", DEFAULT_FONT),
@@ -44,4 +48,4 @@ def test_a_value_that_does_not_change_the_font_keeps_the_default():
     small = PlateFont(16, FontKind.BUILT_IN)
 
     assert resolve_font(None, default=small) == small
-    assert font_size("arial_20", default=17) == 17
+    assert resolve_font("arial_20", default=small) == small

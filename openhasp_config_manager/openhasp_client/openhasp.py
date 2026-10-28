@@ -2,7 +2,6 @@ import asyncio
 import logging
 from typing import AsyncIterator, Dict, List, Any, Callable, Tuple, Optional, Awaitable
 
-import aiohttp
 import orjson
 
 from openhasp_config_manager.console import info
@@ -523,7 +522,8 @@ class OpenHaspClient:
                 await self.get_files()
                 if offline:
                     return True
-            except (aiohttp.ClientError, asyncio.TimeoutError):
+            except Exception:
+                # gone, or still starting (e.g. an empty answer)
                 offline = True
             await asyncio.sleep(RESTART_POLL_SECONDS)
         return False
