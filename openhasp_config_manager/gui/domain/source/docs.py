@@ -1,12 +1,13 @@
 """Short explanations of the properties of openHASP objects, for the hover text of the text editor. Qt-free."""
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Dict, List, Optional, Tuple
 
 from openhasp_config_manager.gui.domain.object_type_docs import COMMON_PROPERTIES, STYLE_PROPERTIES, TYPE_DOCS
 from openhasp_config_manager.gui.domain.source.objects import SourceObject, object_at_line
 from openhasp_config_manager.gui.domain.source.syntax import Language, TokenKind, tokenize_line
+from openhasp_config_manager.gui.domain.variables.definitions import key_at
 from openhasp_config_manager.gui.domain.style_parts import OBJECT_PARTS, PART_DESCRIPTIONS, STATE_DESCRIPTIONS, Part, State
 
 # https://www.openhasp.com/latest/design/objects/ and https://www.openhasp.com/latest/design/styling/
@@ -206,3 +207,22 @@ def help_at(objects: List[SourceObject], line: str, line_number: int, column: in
         if token.kind == TokenKind.KEY and token.start <= column <= token.end:
             return property_help(token.text(line).strip('"'), object_type_at_line(objects, line_number))
     return None
+
+
+def theme_help_at(text: str, line: int, column: int) -> Optional[PropertyHelp]:
+    """
+    :param text: the text of a variable file (it may not be saved)
+    :param line: starting at 1, `column` starting at 0
+    :return: the help for the key of a default property of the theme of an object type (`theme.obj.btn.bg_color04`), what it means
+        for that type, None if the key is something else or the property is not known
+    """
+    key = key_at(text, line, column)
+    parts = key.name.split(".") if key else []
+    if len(parts) != 4 or parts[:2] != ["theme", "obj"]:
+        return None
+    object_type, name = parts[2], parts[3]
+    found = property_help(name, object_type)
+    if found is None:
+        return None
+    default = ("Default", f"for every `{object_type}` object that doesn't set `{name}` itself")
+    return replace(found, details=[default, *found.details])

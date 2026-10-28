@@ -3,7 +3,7 @@ from PyQt6.QtCore import QObject, QPoint, QRect
 from PyQt6.QtGui import QTextCursor
 from PyQt6.QtWidgets import QPlainTextEdit
 
-from openhasp_config_manager.gui.domain.source.docs import help_at
+from openhasp_config_manager.gui.domain.source.docs import help_at, theme_help_at
 from openhasp_config_manager.gui.domain.source.syntax import Language
 from openhasp_config_manager.gui.qt.widgets.hover_card import CardContent, HoverCard
 
@@ -50,6 +50,8 @@ class EditorHover(QObject):
             found = help_at(editor.objects(), cursor.block().text(), cursor.blockNumber() + 1, cursor.positionInBlock())
             if found is None:
                 found = editor.values.help_at(cursor.block().text(), cursor.positionInBlock())
+        elif editor.language == Language.YAML:
+            found = theme_help_at(editor.toPlainText(), cursor.blockNumber() + 1, cursor.positionInBlock())
         return CardContent(issues, found)
 
     def tip_area_at(self, position: QPoint) -> QRect:

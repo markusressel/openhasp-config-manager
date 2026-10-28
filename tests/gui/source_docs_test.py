@@ -1,4 +1,4 @@
-from openhasp_config_manager.gui.domain.source.docs import help_at, object_type_at_line, property_help
+from openhasp_config_manager.gui.domain.source.docs import help_at, object_type_at_line, property_help, theme_help_at
 from openhasp_config_manager.gui.domain.source.objects import scan_objects
 from tests import TestBase
 
@@ -78,3 +78,35 @@ class TestHelpAt(TestBase):
         assert object_type_at_line(objects, 2) == "slider"
         assert object_type_at_line(objects, 3) is None
         assert object_type_at_line(objects, 9) is None
+
+
+class TestThemeHelpAt(TestBase):
+    THEME = (
+        "theme:\n  text_color: x\n  obj:\n    btn:\n      bg_color04: '#fff'\n      radius: 4\n    label:\n      bogus: 1\n"
+    )
+
+    def test_explains_a_default_property_of_an_object_type(self):
+        # line 5: `      bg_color04: '#fff'`
+        found = theme_help_at(self.THEME, 5, 8)
+        assert found is not None
+        assert found.name == "bg_color04"
+        assert found.kind == "Style property"
+        assert "Background color" in found.summary
+        assert found.details[0] == ("Default", "for every `btn` object that doesn't set `bg_color04` itself")
+        # the part and state of the suffix, for a button
+        assert [label for label, _ in found.details] == ["Default", "Part", "State"]
+        assert found.details[2][1].startswith("4:")
+
+    def test_the_meaning_for_the_type_is_used(self):
+        found = theme_help_at(self.THEME, 6, 8)
+        assert found is not None and found.name == "radius"
+
+    def test_other_keys_have_no_help(self):
+        # a key outside of theme.obj, an object type, a value, an unknown property
+        assert theme_help_at(self.THEME, 2, 4) is None
+        assert theme_help_at(self.THEME, 4, 6) is None
+        assert theme_help_at(self.THEME, 5, 22) is None
+        assert theme_help_at(self.THEME, 8, 8) is None
+
+    def test_a_text_that_is_no_yaml_has_no_help(self):
+        assert theme_help_at("theme: [", 1, 2) is None
