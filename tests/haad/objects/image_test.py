@@ -1,3 +1,4 @@
+import asyncio
 import re
 import socket
 
@@ -78,6 +79,30 @@ async def test_push_image_uses_the_size_of_the_object_by_default(
 
     # the plate is asked once; the 50x50 image is fit into the 20x10 of the object
     assert [read for read in _plate_source if read[1] in ("w", "h")] == [("p1b45", "w"), ("p1b45", "h")]
+    assert [len(data) for data in plate.downloaded_images] == [4 + 10 * 10 * 2] * 2
+
+
+async def test_reads_of_an_object_do_not_overlap(page: PageController, plate: FakePlate, monkeypatch):
+    """The plate answers all reads of an object on one topic: overlapping ones would get each other's answers."""
+    monkeypatch.setattr(image, "OPENHASP_IMAGE_HOST", "127.0.0.1")
+    running = 0
+    most_running = 0
+
+    async def get_object_property(self, obj, prop, timeout=1.0):
+        nonlocal running, most_running
+        running += 1
+        most_running = max(most_running, running)
+        await asyncio.sleep(0.01)
+        running -= 1
+        return {"w": 20, "h": 10}.get(prop, PLACEHOLDER)
+
+    monkeypatch.setattr(OpenHaspClient, "get_object_property", get_object_property)
+    img = await page.add_image(obj_id=45)
+
+    await asyncio.gather(img.push_image(image=str(IMAGE)), img.push_image(image=str(IMAGE)), img.restore_default_source())
+    await plate.settle()
+
+    assert most_running == 1
     assert [len(data) for data in plate.downloaded_images] == [4 + 10 * 10 * 2] * 2
 
 

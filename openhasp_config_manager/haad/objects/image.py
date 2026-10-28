@@ -58,6 +58,8 @@ class ImageObjectController(ObjectController):
         self._default_source_read = False
         # the `w` and `h` the plate was configured with, see `push_image`
         self._size: Optional[Tuple[int, int]] = None
+        # the plate answers every read of this object on the same topic, so reads that overlap get each other's answers
+        self._read_lock = asyncio.Lock()
 
     async def init(self):
         """
@@ -107,13 +109,14 @@ class ImageObjectController(ObjectController):
 
     async def _read_size(self) -> Tuple[int, int]:
         """:return: the `w` and `h` of the object on the plate, which is asked once. :raises ValueError: if it doesn't know them"""
-        if self._size is None:
-            size = [await self.client.get_object_property(self.object_id, prop) for prop in ("w", "h")]
-            try:
-                self._size = (int(size[0]), int(size[1]))
-            except (TypeError, ValueError):
-                raise ValueError(f"The plate did not report the size of {self.object_id}: {size}")
-        return self._size
+        async with self._read_lock:
+            if self._size is None:
+                size = [await self.client.get_object_property(self.object_id, prop) for prop in ("w", "h")]
+                try:
+                    self._size = (int(size[0]), int(size[1]))
+                except (TypeError, ValueError):
+                    raise ValueError(f"The plate did not report the size of {self.object_id}: {size}")
+            return self._size
 
     async def restore_default_source(self) -> bool:
         """
@@ -129,13 +132,14 @@ class ImageObjectController(ObjectController):
         return True
 
     async def _read_default_source(self) -> Optional[str]:
-        if not self._default_source_read:
-            self._default_source_read = True
-            source = await self.client.get_object_property(self.object_id, "src")
-            # an image from an earlier run of haad is still on the plate, and was not configured
-            if isinstance(source, str) and not source.startswith("http"):
-                self._default_source = source
-        return self._default_source
+        async with self._read_lock:
+            if not self._default_source_read:
+                self._default_source_read = True
+                source = await self.client.get_object_property(self.object_id, "src")
+                # an image from an earlier run of haad is still on the plate, and was not configured
+                if isinstance(source, str) and not source.startswith("http"):
+                    self._default_source = source
+            return self._default_source
 
     async def set_offset(self, offset_x: int = 0, offset_y: int = 0):
         """
