@@ -23,6 +23,7 @@ _ICONS = {
     FileKind.JSONL: "code-json",
     FileKind.CMD: "console-line",
     FileKind.VARIABLES: "variable",
+    FileKind.CONFIG: "cog-outline",
 }
 _TARGET_ICON = "plus-circle"
 
@@ -54,6 +55,7 @@ _LEGEND = [
         "no startup script (boot.cmd, online.cmd, offline.cmd) runs it. Shown with the eye button",
     ),
     ("<i>vars.yaml</i> (not used)", "none of its variables is used by a file the plate runs"),
+    ("<b>config.json</b> (settings)", "the settings of the plate (WiFi, MQTT, the screen, ...), sent with every deploy"),
 ]
 _LEGEND_COLUMN = [
     "p1, p2–p4: the pages a .jsonl file has objects on",
@@ -63,6 +65,10 @@ _LEGEND_COLUMN = [
 ]
 
 _VARIABLES_HINT = "Variables for the templates of the files in this folder and its subfolders."
+_CONFIG_HINT = (
+    "The settings of the plate (WiFi, MQTT, the screen, ...). A deploy sends the ones that changed; "
+    "most of them only apply after the plate restarted."
+)
 
 
 class FileTreeWidget(QWidget):
@@ -293,6 +299,12 @@ class FileTreeWidget(QWidget):
                 item.setIcon(0, ThemedIcons.icon(icon))
                 item.setText(1, role)
                 item.setToolTip(0, f"{node.path}\n{explanation}")
+            return item
+
+        if node.kind == FileKind.CONFIG:
+            item.setData(0, _RELEVANT_ROLE, True)
+            item.setText(1, "settings")
+            item.setToolTip(0, f"{node.path}\n{_CONFIG_HINT}")
             return item
 
         path = node.path.resolve()

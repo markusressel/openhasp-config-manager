@@ -12,11 +12,11 @@ _CLOSING = "}]"
 def format_text(text: str, language: Language) -> str:
     """
     :return: the text with the lines indented by the depth of the brackets (JSONL), no spaces at the end of the lines and one
-        line break at the end. The contents of the lines, comments and blank lines stay as they are. Other languages only get
+        line break at the end (JSON too). The contents of the lines, comments and blank lines stay as they are. Other languages only get
         the clean line ends.
     """
     lines = text.split("\n")
-    if language == Language.JSONL:
+    if language in (Language.JSONL, Language.JSON):
         lines = _indent_by_depth(lines)
     else:
         lines = [line.rstrip() for line in lines]

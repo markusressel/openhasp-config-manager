@@ -6,6 +6,7 @@ from typing import Dict, Iterable, List, Optional
 
 from openhasp_config_manager.const import COMMON_FOLDER_NAME
 from openhasp_config_manager.gui.domain.draft.model import ComponentSource
+from openhasp_config_manager.manager import CONFIG_FILE_NAME
 from openhasp_config_manager.openhasp_client.model.component import CmdComponent, JsonlComponent
 
 
@@ -14,6 +15,8 @@ class FileKind(Enum):
     JSONL = "jsonl"
     CMD = "cmd"
     VARIABLES = "variables"
+    # the `config.json` of a device: the settings of the plate
+    CONFIG = "config"
 
 
 # the scripts the plate runs by itself: at startup, and when the network connects or is lost
@@ -46,8 +49,8 @@ def scan_file_tree(device_path: Path) -> List[FileNode]:
     """
     The folders of the config directory that hold the files of a device: the config directory itself with its global
     variable files (`theme.yaml`, `global.vars.yaml`, ...; not its subfolders), `common` (if it exists) and the device
-    folder, with their subfolders. Only .jsonl, .cmd and variable (.yaml) files are listed, folders without any are
-    left out.
+    folder, with their subfolders. Only .jsonl, .cmd and variable (.yaml) files are listed, and the `config.json` of the
+    device folder; folders without any are left out.
     """
     roots = []
     config_root = config_root_of(device_path)
@@ -61,26 +64,35 @@ def scan_file_tree(device_path: Path) -> List[FileNode]:
     common = scan_folder(Path(config_root_of(device_path), COMMON_FOLDER_NAME))
     if common is not None:
         roots.append(common)
-    device = scan_folder(device_path)
+    device = scan_folder(device_path, with_config=True)
     if device is not None:
         roots.append(device)
     return roots
 
 
-def scan_folder(path: Path) -> Optional[FileNode]:
-    """:return: the folder with its relevant files and subfolders, or None if it has none"""
+def scan_folder(path: Path, with_config: bool = False) -> Optional[FileNode]:
+    """
+    :param with_config: whether the folder is a device folder, whose `config.json` is listed too
+    :return: the folder with its relevant files and subfolders, or None if it has none
+    """
     if not path.is_dir():
         return None
     entries = sorted((entry for entry in path.iterdir() if not entry.name.startswith(".")), key=lambda e: e.name)
     folders = [node for node in (scan_folder(entry) for entry in entries if entry.is_dir()) if node is not None]
     files = [
-        FileNode(name=entry.name, path=entry, kind=_KINDS[entry.suffix])
+        FileNode(name=entry.name, path=entry, kind=kind)
         for entry in entries
-        if entry.is_file() and entry.suffix in _KINDS
+        if entry.is_file() and (kind := _kind_of(entry, with_config)) is not None
     ]
     if not folders and not files:
         return None
     return FileNode(name=path.name, path=path, kind=FileKind.FOLDER, children=folders + files)
+
+
+def _kind_of(file: Path, with_config: bool) -> Optional[FileKind]:
+    if with_config and file.name == CONFIG_FILE_NAME:
+        return FileKind.CONFIG
+    return _KINDS.get(file.suffix)
 
 
 def used_files(cmd_components: List[CmdComponent], jsonl_components: List[JsonlComponent]) -> Dict[Path, str]:

@@ -44,6 +44,8 @@ def find_source_issues(text: str, language: Language) -> List[SourceIssue]:
         issues += _duplicate_id_issues(text)
     elif language == Language.YAML:
         issues += _yaml_issues(text)
+    elif language == Language.JSON:
+        issues += _json_issues(text)
     issues += _template_issues(text, language)
     return sorted(issues, key=lambda issue: (issue.line, issue.column))
 
@@ -116,6 +118,14 @@ def _yaml_issues(text: str) -> List[SourceIssue]:
         if mark is None:
             return [SourceIssue(1, 0, 1, Severity.ERROR, f"Invalid YAML: {message}")]
         return [SourceIssue(mark.line + 1, mark.column, 1, Severity.ERROR, f"Invalid YAML: {message}")]
+    return []
+
+
+def _json_issues(text: str) -> List[SourceIssue]:
+    try:
+        json.loads(text)
+    except json.JSONDecodeError as ex:
+        return [SourceIssue(ex.lineno, ex.colno - 1, 1, Severity.ERROR, f"Invalid JSON: {ex.msg}")]
     return []
 
 
