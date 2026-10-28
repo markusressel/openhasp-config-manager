@@ -1,22 +1,23 @@
 from PyQt6 import QtCore
 
-from openhasp_config_manager.gui.domain.style_parts import Part, State
-
 from openhasp_config_manager.gui.domain.button_matrix import matrix_rows
+from openhasp_config_manager.gui.domain.style_parts import Part, State
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.box import box_style, draw_box, padding, resolve
-from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.button import BUTTON_DEFAULTS
-from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.default_theme import TRACK_DEFAULTS
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.button import COMPACT_BUTTON_DEFAULTS
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.default_theme import (
+    INNER_PADDING,
+    TRACK_DEFAULTS,
+    TRACK_PADDING,
+)
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import (
+    DEFAULT_FONT_SIZE,
+    DEFAULT_TEXT,
     draw_text,
     number,
     plate_font,
     to_color,
 )
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
-
-# measured on a plate: the buttons are this far from the edge of the matrix and from each other
-_PADDING = 6
-_ITEM_DEFAULTS = {**BUTTON_DEFAULTS, "radius": 4}
 
 
 class HaspButtonMatrixItem(EditableWidget):
@@ -30,8 +31,8 @@ class HaspButtonMatrixItem(EditableWidget):
     def button_rects(self):
         """:return: the rect of every button with its MatrixButton, in the order of `options`"""
         rows = matrix_rows(self.obj_data.get("options", "Text"))
-        left, top, right, bottom = padding(self, Part.MAIN, _PADDING)
-        gap = number(self.style("pad_inner"), _PADDING)
+        left, top, right, bottom = padding(self, Part.MAIN, TRACK_PADDING)
+        gap = number(self.style("pad_inner"), INNER_PADDING)
         inner = self.obj_rect.adjusted(left, top, -right, -bottom)
         result = []
         for row_index, row in enumerate(rows):
@@ -48,9 +49,11 @@ class HaspButtonMatrixItem(EditableWidget):
         draw_box(painter, self.obj_rect, box_style(self, Part.MAIN, TRACK_DEFAULTS))
         # measured on a plate: neither a `val` nor `enabled` changes how the buttons look
         state = State.DEFAULT
-        font = plate_font(self.style("text_font", 24))
+        font = plate_font(self.style("text_font", DEFAULT_FONT_SIZE))
         for rect, button in self.button_rects():
-            draw_box(painter, rect, box_style(self, Part.ITEMS, _ITEM_DEFAULTS, state))
-            color = to_color(button.color or resolve(self, "text_color", Part.ITEMS, _ITEM_DEFAULTS, state), "#FFFFFF")
+            draw_box(painter, rect, box_style(self, Part.ITEMS, COMPACT_BUTTON_DEFAULTS, state))
+            color = to_color(
+                button.color or resolve(self, "text_color", Part.ITEMS, COMPACT_BUTTON_DEFAULTS, state), DEFAULT_TEXT
+            )
             draw_text(painter, rect, button.text, color, font, self.obj_data.get("align", "center"))
         super().paint(painter, option, widget)

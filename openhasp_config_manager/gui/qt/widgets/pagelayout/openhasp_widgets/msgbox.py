@@ -4,9 +4,10 @@ from openhasp_config_manager.gui.domain.style_parts import Part
 
 from openhasp_config_manager.gui.domain.button_matrix import matrix_rows
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.box import box_style, draw_box
-from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.button import BUTTON_DEFAULTS
-from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.default_theme import TRACK_DEFAULTS
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.button import COMPACT_BUTTON_DEFAULTS
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.default_theme import INNER_PADDING, TRACK_DEFAULTS
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import (
+    DEFAULT_FONT_SIZE,
     DEFAULT_TEXT,
     draw_text,
     line_lead,
@@ -16,15 +17,13 @@ from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing 
 )
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
 
-# measured on a plate: the buttons are this high and this far from the edge of the box and from each other
+# measured on a plate: the buttons are this high and this far from the edge of the box, the text this far from the top
 _PADDING = 12
 _BUTTON_HEIGHT = 50
 _TOP = 6
-_GAP = 6
 _DEFAULT_SCREEN = (480, 320)
 # a track with a white glow around it
 _DEFAULTS = {**TRACK_DEFAULTS, "shadow_width": 30, "shadow_color": "#FFFFFF", "shadow_opa": 90}
-_BUTTON_DEFAULTS = {**BUTTON_DEFAULTS, "radius": 4}
 
 
 class HaspMessageBoxItem(EditableWidget):
@@ -45,7 +44,7 @@ class HaspMessageBoxItem(EditableWidget):
 
     @property
     def font(self) -> QtGui.QFont:
-        return plate_font(self.style("text_font", 24))
+        return plate_font(self.style("text_font", DEFAULT_FONT_SIZE))
 
     @property
     def line_height(self) -> float:
@@ -79,11 +78,11 @@ class HaspMessageBoxItem(EditableWidget):
 
         buttons = self.buttons()
         if buttons:
-            width = (self.obj_w - 2 * _PADDING - _GAP * (len(buttons) - 1)) / len(buttons)
+            width = (self.obj_w - 2 * _PADDING - INNER_PADDING * (len(buttons) - 1)) / len(buttons)
             for index, text in enumerate(buttons):
                 rect = QtCore.QRectF(
-                    _PADDING + index * (width + _GAP), self.obj_h - _PADDING - _BUTTON_HEIGHT, width, _BUTTON_HEIGHT
+                    _PADDING + index * (width + INNER_PADDING), self.obj_h - _PADDING - _BUTTON_HEIGHT, width, _BUTTON_HEIGHT
                 )
-                draw_box(painter, rect, box_style(self, Part.ITEMS, _BUTTON_DEFAULTS))
+                draw_box(painter, rect, box_style(self, Part.ITEMS, COMPACT_BUTTON_DEFAULTS))
                 draw_text(painter, rect, text, to_color(self.style("text_color", None, Part.ITEMS), DEFAULT_TEXT), font)
         super().paint(painter, option, widget)

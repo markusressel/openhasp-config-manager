@@ -5,6 +5,7 @@ from openhasp_config_manager.gui.domain.tabs import tab_texts
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.box import box_style, draw_box
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.default_theme import INDICATOR_DEFAULTS, TRACK_DEFAULTS
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import (
+    DEFAULT_FONT_SIZE,
     DEFAULT_TEXT,
     draw_text,
     number,
@@ -19,6 +20,9 @@ _BUTTON_THICKNESS = 62
 _INDICATOR_THICKNESS = 5
 _BAR_COLOR = "#202839"
 _SIDE_BUTTON_WIDTH = 90
+# the indicator under the active tab is this far from the ends of the tab, and has these corners
+_INDICATOR_MARGIN = 5
+_INDICATOR_RADIUS = 2
 
 
 class HaspTabviewItem(EditableWidget):
@@ -29,12 +33,17 @@ class HaspTabviewItem(EditableWidget):
     See https://www.openhasp.com/0.7.0/design/objects/tabview/
     """
 
+    @property
+    def buttons_position(self) -> int:
+        """:return: where the tab buttons are (`btn_pos`)"""
+        return int(number(self.obj_data.get("btn_pos"), _BUTTONS_TOP))
+
     def tabs(self):
         return tab_texts(getattr(self.parent_widget, "objects", []), self.obj_data)
 
     def button_area(self) -> QtCore.QRectF:
         """:return: where the tab buttons are, an empty rect without buttons"""
-        position = int(number(self.obj_data.get("btn_pos"), _BUTTONS_TOP))
+        position = self.buttons_position
         thickness = (
             _BUTTON_THICKNESS
             + number(self.style("pad_top", 0, Part.ITEMS), 0)
@@ -58,14 +67,11 @@ class HaspTabviewItem(EditableWidget):
         tabs = self.tabs()
         if area.isEmpty() or not tabs:
             return super().paint(painter, option, widget)
-        horizontal = area.width() >= area.height() and int(number(self.obj_data.get("btn_pos"), 1)) in (
-            _BUTTONS_TOP,
-            _BUTTONS_BOTTOM,
-        )
+        horizontal = area.width() >= area.height() and self.buttons_position in (_BUTTONS_TOP, _BUTTONS_BOTTOM)
         # the tab buttons (part 4) are one bar
         draw_box(painter, area, box_style(self, Part.ITEMS, {"bg_color": _BAR_COLOR, "bg_opa": 255, "radius": 0}))
         active = int(number(self.obj_data.get("val"), 0))
-        font = plate_font(self.style("text_font", 24, Part.ITEMS))
+        font = plate_font(self.style("text_font", DEFAULT_FONT_SIZE, Part.ITEMS))
         for index, text in enumerate(tabs):
             if horizontal:
                 button = QtCore.QRectF(
@@ -77,16 +83,20 @@ class HaspTabviewItem(EditableWidget):
             if index == active:
                 # the indicator marks the active tab at the edge of the bar next to the content
                 if horizontal:
-                    edge = _INDICATOR_THICKNESS
-                    top = (
-                        button.bottom() - edge
-                        if int(number(self.obj_data.get("btn_pos"), 1)) == _BUTTONS_TOP
-                        else button.top()
+                    top = button.bottom() - _INDICATOR_THICKNESS if self.buttons_position == _BUTTONS_TOP else button.top()
+                    mark = QtCore.QRectF(
+                        button.left() + _INDICATOR_MARGIN, top, button.width() - 2 * _INDICATOR_MARGIN, _INDICATOR_THICKNESS
                     )
-                    mark = QtCore.QRectF(button.left() + 5, top, button.width() - 10, edge)
                 else:
-                    mark = QtCore.QRectF(button.left(), button.top() + 5, _INDICATOR_THICKNESS, button.height() - 10)
+                    mark = QtCore.QRectF(
+                        button.left(),
+                        button.top() + _INDICATOR_MARGIN,
+                        _INDICATOR_THICKNESS,
+                        button.height() - 2 * _INDICATOR_MARGIN,
+                    )
                 draw_box(
-                    painter, mark, box_style(self, Part.INDICATOR, {**INDICATOR_DEFAULTS, "border_width": 0, "radius": 2})
+                    painter,
+                    mark,
+                    box_style(self, Part.INDICATOR, {**INDICATOR_DEFAULTS, "border_width": 0, "radius": _INDICATOR_RADIUS}),
                 )
         super().paint(painter, option, widget)

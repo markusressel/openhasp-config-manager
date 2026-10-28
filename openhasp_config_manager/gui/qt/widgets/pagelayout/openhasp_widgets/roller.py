@@ -10,18 +10,28 @@ from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.box impo
     capped_radius,
     draw_box,
 )
-from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.default_theme import INDICATOR_DEFAULTS, TRACK_DEFAULTS
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.default_theme import (
+    DEFAULT_RADIUS,
+    INDICATOR_DEFAULTS,
+    TRACK_DEFAULTS,
+)
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import (
+    DEFAULT_FONT_SIZE,
     DEFAULT_TEXT,
     draw_text,
     number,
     option_lines,
     plate_font,
+    selected_index,
     to_color,
 )
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
 
-_DEFAULT_FONT = 24
+# measured on a plate: the height of a row is this many pixels per pixel of the font and this many on top (45 for font 24, 31 for 12)
+_ROW_PER_FONT_PIXEL = 1.167
+_ROW_EXTRA = 17
+# the space between the text and the left and right edge of the roller
+_TEXT_PADDING = 8
 # the selected row (part 5): the blue of the indicator, with square corners
 _SELECTED_DEFAULTS = {**INDICATOR_DEFAULTS, "radius": 0}
 
@@ -40,12 +50,11 @@ class HaspRollerItem(EditableWidget):
 
     @property
     def font(self) -> QtGui.QFont:
-        return plate_font(self.style("text_font", _DEFAULT_FONT))
+        return plate_font(self.style("text_font", DEFAULT_FONT_SIZE))
 
     @property
     def row_height(self) -> float:
-        """Measured on a plate: 45 pixels with the default font (24), 31 with the font 12."""
-        return font_size(self.style("text_font", _DEFAULT_FONT), _DEFAULT_FONT) * 1.167 + 17
+        return font_size(self.style("text_font", DEFAULT_FONT_SIZE), DEFAULT_FONT_SIZE) * _ROW_PER_FONT_PIXEL + _ROW_EXTRA
 
     @property
     def obj_h(self) -> int:
@@ -55,7 +64,7 @@ class HaspRollerItem(EditableWidget):
     def entry_rows(self):
         """:return: (top of the row, entry or None, whether it is the selected one) for every row that is at least partly visible"""
         options = option_lines(self.obj_data.get("options"))
-        selected = int(number(self.obj_data.get("val"), 0))
+        selected = selected_index(self.obj_data)
         infinite = int(number(self.obj_data.get("mode"), 0)) == 1
         middle = self.obj_h / 2 - self.row_height / 2
         reach = int(self.obj_h // self.row_height) + 2
@@ -102,7 +111,7 @@ class HaspRollerItem(EditableWidget):
 
         painter.save()
         clip = QtGui.QPainterPath()
-        clip.addRoundedRect(self.obj_rect, 4, 4)
+        clip.addRoundedRect(self.obj_rect, DEFAULT_RADIUS, DEFAULT_RADIUS)
         painter.setClipPath(clip)
         align = self.obj_data.get("align", "center")
         color = to_color(self.style("text_color"), DEFAULT_TEXT)
@@ -117,7 +126,7 @@ class HaspRollerItem(EditableWidget):
             if entry is None:
                 continue
             row_color = to_color(self.style("text_color", None, Part.SELECTED), color.name()) if is_selected else color
-            draw_text(painter, row.adjusted(8, 0, -8, 0), entry, row_color, self.font, align)
+            draw_text(painter, row.adjusted(_TEXT_PADDING, 0, -_TEXT_PADDING, 0), entry, row_color, self.font, align)
         painter.restore()
         draw_box(painter, self.obj_rect, frame)
         super().paint(painter, option, widget)

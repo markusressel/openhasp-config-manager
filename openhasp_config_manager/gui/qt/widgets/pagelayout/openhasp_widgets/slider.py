@@ -10,6 +10,7 @@ from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.default_
     TRACK_DEFAULTS,
 )
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import fraction
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import SELECTION_MARGIN
 
 
 class HaspSliderItem(HaspBarItem):
@@ -39,10 +40,6 @@ class HaspSliderItem(HaspBarItem):
 
         self._val = self.val  # Internal value to track changes
 
-        # Native OpenHASP coordinates
-        self.setPos(self.obj_x, self.obj_y)
-
-        # Interactivity
         self.setAcceptHoverEvents(True)
 
     def _knob_rect(self) -> QtCore.QRectF:
@@ -58,7 +55,11 @@ class HaspSliderItem(HaspBarItem):
 
     def boundingRect(self) -> QtCore.QRectF:
         """The knob reaches over the track."""
-        return super().boundingRect().united(self._knob_rect().adjusted(-3, -3, 3, 3))
+        return (
+            super()
+            .boundingRect()
+            .united(self._knob_rect().adjusted(-SELECTION_MARGIN, -SELECTION_MARGIN, SELECTION_MARGIN, SELECTION_MARGIN))
+        )
 
     def _on_data_changed(self):
         self._val = self.val
@@ -77,8 +78,6 @@ class HaspSliderItem(HaspBarItem):
 
         # selection outline of the base class
         super(HaspBarItem, self).paint(painter, option, widget)
-
-    # --- Interaction Logic ---
 
     def mousePressEvent(self, event):
         self._update_value_from_pos(event.pos())

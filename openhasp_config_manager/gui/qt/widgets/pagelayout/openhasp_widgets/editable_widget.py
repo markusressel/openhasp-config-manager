@@ -12,6 +12,8 @@ from openhasp_config_manager.gui.qt.theme import current_colors
 HIDDEN_OPACITY = 0.3
 # the opacity of objects that are not highlighted, while the objects of a file are (on top of HIDDEN_OPACITY)
 DIMMED_OPACITY = 0.25
+# the space around an object that is part of its bounding rect, for the pen width of the selection outline (prevents smearing)
+SELECTION_MARGIN = 3
 
 
 # the states whose style properties apply in a state, in the order of precedence (like LVGL: the most specific state wins)
@@ -197,16 +199,17 @@ class EditableWidget(QGraphicsObject):
         return self.isSelected()
 
     def boundingRect(self) -> QtCore.QRectF:
-        # Get the base dimensions
-        rect = self.obj_rect
-
-        # Increase the rect by the pen width of the selection-outline to prevent smearing
-        margin = 3
-        return rect.adjusted(-margin, -margin, margin, margin)
+        return self.obj_rect.adjusted(-SELECTION_MARGIN, -SELECTION_MARGIN, SELECTION_MARGIN, SELECTION_MARGIN)
 
     @property
     def obj_rect(self):
         return QtCore.QRectF(0, 0, self.obj_w, self.obj_h)
+
+    def object_shape(self) -> QtGui.QPainterPath:
+        """:return: the shape of the object itself, without what reaches over its edge (for `shape()`: where it is hit)"""
+        path = QtGui.QPainterPath()
+        path.addRect(self.obj_rect)
+        return path
 
     def paint(self, painter, option, widget=None):
         """
@@ -229,3 +232,13 @@ class EditableWidget(QGraphicsObject):
             # This ensures the drawing is well within the 3px margin.
             widget_rect = self.obj_rect
             painter.drawRect(widget_rect)
+
+
+class ClickableWidget(EditableWidget):
+    """An object that tells when it is pressed (`clicked`, with the id of the object)."""
+
+    clicked = QtCore.pyqtSignal(int)
+
+    def mousePressEvent(self, event):
+        self.clicked.emit(self.obj_id)
+        super().mousePressEvent(event)

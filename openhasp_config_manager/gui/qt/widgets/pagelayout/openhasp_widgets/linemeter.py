@@ -1,26 +1,24 @@
 from PyQt6 import QtCore, QtGui
 
 from openhasp_config_manager.gui.domain.style_parts import Part
-
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.box import box_style, draw_box
-from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.default_theme import TRACK_DEFAULTS
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.default_theme import DISC_DEFAULTS
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import (
-    fraction,
+    DEFAULT_SCALE_ANGLE,
     mix,
     number,
     polar,
     scale_start,
     to_color,
+    value_fraction,
 )
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
 
-_DEFAULT_ANGLE = 240
 _DEFAULT_LINE_COUNT = 18
 _DEFAULT_LINE_WIDTH = 4.15
 # measured on a plate: gray lines, the active ones blue, on a round track
 _INACTIVE = "#8B898B"
 _ACTIVE = "#00B6FF"
-_DISC_DEFAULTS = {**TRACK_DEFAULTS, "radius": 1000}
 # measured on a plate, whatever the size: the lines end this far from the edge, and are this long
 _LINE_INSET = 13
 _LINE_LENGTH = 16
@@ -35,13 +33,13 @@ class HaspLineMeterItem(EditableWidget):
 
     def active_lines(self) -> int:
         count = int(number(self.obj_data.get("line_count"), _DEFAULT_LINE_COUNT))
-        return round(fraction(self.obj_data.get("val", 0), self.obj_data.get("min", 0), self.obj_data.get("max", 100)) * count)
+        return round(value_fraction(self.obj_data) * count)
 
     def paint(self, painter, option, widget=None):
-        draw_box(painter, self.obj_rect, box_style(self, Part.MAIN, _DISC_DEFAULTS))
+        draw_box(painter, self.obj_rect, box_style(self, Part.MAIN, DISC_DEFAULTS))
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
         count = max(int(number(self.obj_data.get("line_count"), _DEFAULT_LINE_COUNT)), 1)
-        angle = number(self.obj_data.get("angle"), _DEFAULT_ANGLE)
+        angle = number(self.obj_data.get("angle"), DEFAULT_SCALE_ANGLE)
         start = scale_start(angle, number(self.obj_data.get("rotation"), 0))
         # measured on a plate: the lines of the value have the `line_width` of the indicator (10, or of the main part), the others
         # are always as wide as the default. The color of the lines of the value goes from `line_color` to `scale_grad_color`.

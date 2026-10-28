@@ -6,10 +6,12 @@ from PyQt6 import QtCore, QtGui
 
 from openhasp_config_manager.gui.domain.fonts import font_size
 
-DEFAULT_ACCENT = "#558B2F"
-DEFAULT_TRACK = "#313131"
-DEFAULT_KNOB = "lightgray"
 DEFAULT_TEXT = "#FFFFFF"
+# the font of the plate if an object doesn't say (measured), and the size of a font without a size in its name
+DEFAULT_FONT_SIZE = 24
+_UNSIZED_FONT_SIZE = 17
+# the angle of the scale of a gauge or line meter if the object doesn't say
+DEFAULT_SCALE_ANGLE = 240
 
 
 def to_color(value, default: str) -> QtGui.QColor:
@@ -18,10 +20,15 @@ def to_color(value, default: str) -> QtGui.QColor:
     return color if color.isValid() else QtGui.QColor(default)
 
 
+def opacity(value, default: float = 255) -> float:
+    """:return: an opacity property (0 to 255) as 0 to 1"""
+    return max(0.0, min(number(value, default) / 255, 1.0))
+
+
 def plate_font(size) -> QtGui.QFont:
     """:return: the font for a `text_font` of the plate, see `font_size`"""
     font = QtGui.QFont("Roboto Condensed")
-    font.setPixelSize(max(int(float(font_size(size, 17))), 1))
+    font.setPixelSize(max(int(float(font_size(size, _UNSIZED_FONT_SIZE))), 1))
     return font
 
 
@@ -85,9 +92,33 @@ def fraction(value, minimum, maximum) -> float:
     return 0.0 if high <= low else max(0.0, min((number(value, low) - low) / (high - low), 1.0))
 
 
+def value_fraction(obj_data: dict) -> float:
+    """:return: where the `val` of an object is between its `min` and `max` (0 to 1)"""
+    return fraction(obj_data.get("val", 0), obj_data.get("min", 0), obj_data.get("max", 100))
+
+
+def selected_index(obj_data: dict) -> int:
+    """:return: the selected entry (`val`) of a dropdown or roller"""
+    return int(number(obj_data.get("val"), 0))
+
+
 def option_lines(options) -> list:
     """:return: the entries of an `options` property (separated by a line break, written `\\n` in the file)"""
     return str(options).split("\n") if options else []
+
+
+def centered_square(width: float, height: float) -> QtCore.QRectF:
+    """:return: the largest square in the middle of a width and height, like the circle objects (arc, spinner) are drawn in"""
+    side = min(width, height)
+    return QtCore.QRectF((width - side) / 2, (height - side) / 2, side, side)
+
+
+def round_pen(color, width: float) -> QtGui.QPen:
+    """:return: a pen with round caps and joins, like the strokes of the plate (arcs, needles, check marks)"""
+    pen = QtGui.QPen(color, width)
+    pen.setCapStyle(QtCore.Qt.PenCapStyle.RoundCap)
+    pen.setJoinStyle(QtCore.Qt.PenJoinStyle.RoundJoin)
+    return pen
 
 
 def polar(center: QtCore.QPointF, radius: float, degrees: float) -> QtCore.QPointF:

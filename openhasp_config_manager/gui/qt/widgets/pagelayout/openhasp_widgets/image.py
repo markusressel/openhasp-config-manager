@@ -4,15 +4,14 @@ from pathlib import Path
 from typing import Optional
 
 from PyQt6 import QtCore, QtGui
-from PyQt6.QtGui import QColor, QBrush, QImage
 
 from openhasp_config_manager.gui.domain.preview_images import decode_binary_image
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.box import box_style, draw_box
-from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import number, to_color
-from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import number, opacity, to_color
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import ClickableWidget
 
 
-def load_image(path: Path) -> Optional[QImage]:
+def load_image(path: Path) -> Optional[QtGui.QImage]:
     """:return: the image of a PNG or a binary image file (`.bin`), None if it can't be read"""
     if path.suffix == ".bin":
         decoded = decode_binary_image(path.read_bytes())
@@ -20,14 +19,12 @@ def load_image(path: Path) -> Optional[QImage]:
             return None
         width, height, rgba = decoded
         # the QImage only references the bytes
-        return QImage(rgba, width, height, width * 4, QImage.Format.Format_RGBA8888).copy()
-    image = QImage(str(path))
+        return QtGui.QImage(rgba, width, height, width * 4, QtGui.QImage.Format.Format_RGBA8888).copy()
+    image = QtGui.QImage(str(path))
     return None if image.isNull() else image
 
 
-class HaspImageItem(EditableWidget):
-    clicked = QtCore.pyqtSignal(int)
-
+class HaspImageItem(ClickableWidget):
     @property
     def src(self) -> str:
         return self.obj_data.get("src", "")
@@ -47,9 +44,7 @@ class HaspImageItem(EditableWidget):
     def __init__(self, obj_data, parent_widget=None):
         super().__init__(obj_data, parent_widget)
 
-        self.setPos(self.obj_x, self.obj_y)
-
-        self.image: Optional[QImage] = None
+        self.image: Optional[QtGui.QImage] = None
         self._load_image()
 
     def _load_image(self):
@@ -107,28 +102,24 @@ class HaspImageItem(EditableWidget):
             else:
                 # the image in its size, cut off by the object
                 painter.setClipRect(local_rect)
-            painter.setOpacity(painter.opacity() * max(0.0, min(number(self.style("image_opa", 255), 255) / 255, 1.0)))
+            painter.setOpacity(painter.opacity() * opacity(self.style("image_opa", 255)))
             painter.drawImage(0, 0, self.image)
             recolor_opa = number(self.style("image_recolor_opa", 0), 0)
             if recolor_opa > 0:
                 # the tint covers only what the image draws
                 tint = to_color(self.style("image_recolor"), "#000000")
-                tint.setAlphaF(max(0.0, min(recolor_opa / 255, 1.0)))
+                tint.setAlphaF(opacity(recolor_opa))
                 painter.setCompositionMode(QtGui.QPainter.CompositionMode.CompositionMode_SourceAtop)
                 painter.fillRect(QtCore.QRectF(0, 0, self.image.width(), self.image.height()), tint)
             painter.restore()
         else:
             # no image the preview knows: a placeholder
             bg_color = self.bg_color
-            painter.setBrush(QBrush(QColor(bg_color)))
+            painter.setBrush(QtGui.QBrush(QtGui.QColor(bg_color)))
             painter.setPen(QtCore.Qt.PenStyle.NoPen)
             painter.drawRoundedRect(local_rect, self.radius, self.radius)
 
-            painter.setPen(QtGui.QPen(QColor("black"), 1))
+            painter.setPen(QtGui.QPen(QtGui.QColor("black"), 1))
             painter.drawText(local_rect, QtCore.Qt.AlignmentFlag.AlignCenter, "IMG")
 
         super().paint(painter, option, widget)
-
-    def mousePressEvent(self, event):
-        self.clicked.emit(self.obj_id)
-        super().mousePressEvent(event)

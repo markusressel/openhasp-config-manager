@@ -281,3 +281,31 @@ class TestTextAndShapes(TestBase):
         item = item_of({"obj": "qrcode", "w": 100, "h": 100, "text": "https://openhasp.com"})
         assert item.obj_w == 100
         assert 100 // (25 + 4) == 3
+
+
+@pytest.mark.usefixtures("qapp")
+class TestDrawingHelpers(TestBase):
+    def test_an_opacity_is_a_share_between_0_and_1(self):
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import opacity
+
+        assert opacity(255) == 1.0
+        assert opacity("0") == 0.0
+        assert opacity(300) == 1.0
+        assert opacity(None) == 1.0
+        assert opacity("{{ not rendered }}", 128) == 128 / 255
+
+    def test_the_value_of_an_object_is_between_its_min_and_max(self):
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import selected_index, value_fraction
+
+        assert value_fraction({"val": 25}) == 0.25
+        assert value_fraction({"val": 5, "min": 0, "max": 10}) == 0.5
+        assert value_fraction({"min": 10, "max": 10}) == 0.0
+        assert selected_index({"val": "2"}) == 2
+        assert selected_index({}) == 0
+
+    def test_a_square_is_centered_in_the_larger_rect(self):
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import centered_square
+
+        square = centered_square(100, 60)
+
+        assert (square.x(), square.y(), square.width(), square.height()) == (20, 0, 60, 60)

@@ -5,15 +5,33 @@ from PyQt6 import QtCore, QtGui
 from openhasp_config_manager.gui.domain.fonts import font_size
 from openhasp_config_manager.gui.domain.problems import geometry_value
 from openhasp_config_manager.gui.domain.style_parts import Part, State
-from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.box import box_style, default_value, draw_box, padding
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.box import (
+    box_style,
+    default_value,
+    draw_box,
+    padding,
+    text_color,
+)
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.default_theme import INDICATOR_DEFAULTS, TRACK_DEFAULTS
-from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import draw_text, number, plate_font, to_color
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import (
+    DEFAULT_FONT_SIZE,
+    DEFAULT_TEXT,
+    draw_text,
+    plate_font,
+    round_pen,
+    to_color,
+)
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
 
 # the space between the box and the text
 _GAP = 0
 _DEFAULT_TEXT = "Checkbox"
-_DEFAULT_FONT = 24
+# measured on a plate: the box is this many pixels per pixel of the font and this many on top, 22 for font 12 and 46 for font 32
+_BOX_PER_FONT_PIXEL = 1.2
+_BOX_EXTRA = 7.6
+# the check mark is a symbol of 11 x 8 pixels, whatever the size of the box: these are its points relative to the middle of the box
+_MARK_POINTS = ((-4.5, 1.5), (-1.5, 4.5), (5.5, -2.5))
+_MARK_LINE_WIDTH = 1.5
 
 # the box (part 1): dark, blue while checked
 BULLET_DEFAULTS = {
@@ -54,12 +72,13 @@ class HaspCheckboxItem(EditableWidget):
 
     @property
     def font(self) -> QtGui.QFont:
-        return plate_font(self.style("text_font", _DEFAULT_FONT))
+        return plate_font(self.style("text_font", DEFAULT_FONT_SIZE))
 
     @property
     def box_size(self) -> int:
-        """Measured on a plate: 22 pixels for font 12, 46 for font 32."""
-        return round(font_size(self.style("text_font", _DEFAULT_FONT), _DEFAULT_FONT) * 1.2 + 7.6)
+        return round(
+            font_size(self.style("text_font", DEFAULT_FONT_SIZE), DEFAULT_FONT_SIZE) * _BOX_PER_FONT_PIXEL + _BOX_EXTRA
+        )
 
     @property
     def obj_w(self) -> int:
@@ -101,21 +120,10 @@ class HaspCheckboxItem(EditableWidget):
         if self.checked:
             painter.save()
             painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
-            pen = QtGui.QPen(QtGui.QColor("#FFFFFF"), 1.5)
-            pen.setCapStyle(QtCore.Qt.PenCapStyle.RoundCap)
-            pen.setJoinStyle(QtCore.Qt.PenJoinStyle.RoundJoin)
-            painter.setPen(pen)
-            # measured on a plate: the mark is a symbol of 11 x 8 pixels, whatever the size of the box
-            origin = box.center() + QtCore.QPointF(-5, -3)
-            painter.drawPolyline(
-                QtGui.QPolygonF(
-                    [origin + QtCore.QPointF(0.5, 4.5), origin + QtCore.QPointF(3.5, 7.5), origin + QtCore.QPointF(10.5, 0.5)]
-                )
-            )
+            painter.setPen(round_pen(QtGui.QColor(DEFAULT_TEXT), _MARK_LINE_WIDTH))
+            painter.drawPolyline(QtGui.QPolygonF([box.center() + QtCore.QPointF(x, y) for x, y in _MARK_POINTS]))
             painter.restore()
 
-        color = to_color(self.style("text_color", None), "#FFFFFF")
-        color.setAlphaF(max(0.0, min(number(self.style("text_opa", 255), 255) / 255, 1.0)))
         text_rect = QtCore.QRectF(left + self.box_size + _GAP, top, self.obj_w - left - self.box_size - _GAP, self.box_size)
-        draw_text(painter, text_rect, self.text, color, self.font, "left")
+        draw_text(painter, text_rect, self.text, text_color(self), self.font, "left")
         super().paint(painter, option, widget)
