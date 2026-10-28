@@ -82,8 +82,10 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
   long press, release) to the items, which are its targets. What a touch changes is `RuntimeState` of the preview, next to the draft and
   never in it: items draw from `EditableWidget.data` (the draft plus these values), and when the draft changes a property that was
   touched, the draft wins. Edit mode and *Reset* clear it, switching pages keeps it. Behavior ported from the firmware and LVGL
-  (which object runs `action`, groups, slider/arc math, dropdown list layout, roller snapping) lives in Qt-free `gui/domain/touch_*.py`,
-  `dropdown_list.py`, `roller_scroll.py` and `lvgl_colors.py`; pressed colors can't be measured and are computed there.
+  (which object runs `action`, groups, slider/arc math, dropdown list layout, roller snapping, dragging and throwing, tabview swipes)
+  lives in Qt-free `gui/domain/touch_*.py`, `dropdown_list.py`, `roller_scroll.py`, `drag_scroll.py`, `tab_swipe.py` and `lvgl_colors.py`;
+  pressed colors can't be measured and are computed there. LVGL does this per read of the touch (every 20 ms), in whole pixels: the
+  items read the finger with a timer, and tests call the read themselves (`ScrollDriver.tick`, `HaspTabviewItem.read_swipe`).
 - **Templates are never replaced implicitly.** Objects whose `x`/`y` is a template or a percentage can't be dragged or nudged; the
   editor explains why, and "Use pixels for x/y" replaces them only when the user asks. Keep this for new edit operations.
 - **Files**: new objects go into the target file chosen in the Files tree (`gui/domain/file_tree.py` follows the folder structure of

@@ -39,7 +39,7 @@ with another editor or an LLM at the same time. Hints, shortcuts and explanation
 use the context menus, and the legend of the file tree).
 
 With *Edit mode* off, the preview is an *Interact mode*: touching the objects looks and behaves like on a plate with openHASP
-0.7 (pressed looks, toggles, dragged sliders and arcs, dropdown lists, rollers, tabs, message boxes, `action` with page
+0.7 (pressed looks, toggles, dragged sliders and arcs, dropdown lists, rollers that are dragged and thrown, tabs that are swiped, message boxes, `action` with page
 navigation and groups). What you touch is only shown and never changes the files; *Reset* (or Edit mode) puts the objects
 back as the files say.
 

@@ -638,6 +638,63 @@ class TestPreviewTabview(TestBase):
 
         assert item.data["val"] == 1
 
+    def test_the_indicator_moves_to_the_active_tab_in_the_anim_time(self):
+        view = preview(TABVIEW, *TABS)
+        item = widget(view, 11)
+
+        lift(view, *center(item, item.button_rects()[2]))
+
+        assert item._anim.duration() == 300
+        assert item.indicator_position == 0
+        item.finish_animation()
+        assert item.indicator_position == 2
+
+    def test_a_tabview_with_anim_time_0_moves_the_indicator_at_once(self):
+        view = preview({**TABVIEW, "anim_time": 0}, *TABS)
+        item = widget(view, 11)
+
+        lift(view, *center(item, item.button_rects()[1]))
+
+        assert item._anim is None
+        assert item.indicator_position == 1
+
+    def test_swiping_the_content_past_the_middle_shows_the_next_tab(self):
+        view = preview(TABVIEW, *TABS)
+        item = widget(view, 11)
+
+        swipe(view, item, *[(250 - 20 * n, 130) for n in range(10)], (70, 130))
+        view._indev.release((70, 130))
+
+        assert item.data["val"] == 1
+        assert item._anim is not None
+        item.finish_animation()
+
+    def test_the_content_can_be_swiped_outside_of_the_tabview(self):
+        view = preview({**TABVIEW, "x": 100}, *TABS)
+        item = widget(view, 11)
+
+        swipe(view, item, *[(350 - 25 * n, 130) for n in range(12)])
+        view._indev.release((50, 130))
+
+        assert item.data["val"] == 1
+        item.finish_animation()
+
+    def test_a_short_swipe_keeps_the_tab(self):
+        view = preview(TABVIEW, *TABS)
+        item = widget(view, 11)
+
+        swipe(view, item, *[(250 - 10 * n, 130) for n in range(6)], (200, 130))
+        view._indev.release((200, 130))
+
+        assert item.data["val"] == 0
+
+
+def swipe(view, item, *points):
+    """The finger touches at the first point (if it is not down yet), then is at each point for one read of the plate (20 ms)."""
+    for point in points:
+        view.finger(point, 0.0)
+        item.read_swipe()
+
 
 @pytest.mark.usefixtures("qapp")
 class TestPreviewColorPicker(TestBase):
