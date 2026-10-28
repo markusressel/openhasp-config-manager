@@ -64,3 +64,12 @@ def polar(center: QtCore.QPointF, radius: float, degrees: float) -> QtCore.QPoin
 def scale_start(angle: float, rotation: float) -> float:
     """:return: where a scale of `angle` degrees starts (clockwise from 3 o'clock): centered at the top, plus the rotation"""
     return 90 + (360 - angle) / 2 + rotation
+
+
+def set_line_space(text_item, space: float):
+    """Put `space` more pixels between the lines of the text of a `QGraphicsTextItem` (`text_line_space`)."""
+    cursor = QtGui.QTextCursor(text_item.document())
+    cursor.select(QtGui.QTextCursor.SelectionType.Document)
+    block_format = QtGui.QTextBlockFormat()
+    block_format.setLineHeight(space, QtGui.QTextBlockFormat.LineHeightTypes.LineDistanceHeight.value)
+    cursor.mergeBlockFormat(block_format)

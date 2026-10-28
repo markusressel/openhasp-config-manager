@@ -1,5 +1,6 @@
 from PyQt6 import QtCore, QtGui
 
+from openhasp_config_manager.gui.domain.problems import geometry_value
 from openhasp_config_manager.gui.domain.qr_code import qr_modules
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import number
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
@@ -10,13 +11,18 @@ _QUIET_ZONE = 4
 
 class HaspQrCodeItem(EditableWidget):
     """
-    A square QR code of `size` pixels (`w` and `h` are ignored) with the code of `text`.
+    A square QR code with the code of `text`, black on white whatever the style says. The plate takes the size from `w` and `h` (the
+    smaller one), or from `size`.
     See https://www.openhasp.com/0.7.0/design/objects/qrcode/
     """
 
     @property
     def obj_w(self) -> int:
-        return int(number(self.obj_data.get("size"), _DEFAULT_SIZE))
+        if "size" in self.obj_data:
+            return int(number(self.obj_data["size"], _DEFAULT_SIZE))
+        if "w" in self.obj_data and "h" in self.obj_data:
+            return min(geometry_value(self.obj_data, "w"), geometry_value(self.obj_data, "h"))
+        return _DEFAULT_SIZE
 
     @property
     def obj_h(self) -> int:

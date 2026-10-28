@@ -1,11 +1,20 @@
-from PyQt6 import QtCore, QtGui
-from PyQt6.QtGui import QColor, QBrush
+from PyQt6 import QtCore
 
 from openhasp_config_manager.gui.domain.style_parts import Part
-from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.bar import HaspBarItem, indicator_rect
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.box import box_style, draw_box, padding
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.default_theme import (
+    INDICATOR_DEFAULTS,
+    KNOB_DEFAULTS,
+    SLIDER_KNOB_PADDING,
+    TRACK_DEFAULTS,
+)
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import fraction
 
 
-class HaspSliderItem(EditableWidget):
+class HaspSliderItem(HaspBarItem):
+    """A bar with a knob (part 2) at the end of the indicator: a square as big as the slider is thick, plus its padding."""
+
     # Signal to notify when the value changes via mouse interaction
     valueChanged = QtCore.pyqtSignal(int, int)  # (object_id, new_value)
 
@@ -22,20 +31,8 @@ class HaspSliderItem(EditableWidget):
         return self.obj_data.get("val", 0)
 
     @property
-    def radius(self) -> int:
-        return self.obj_data.get("radius", 0)
-
-    @property
-    def knob_radius(self) -> int:
-        return self.style("radius", 10, Part.KNOB)
-
-    @property
-    def track_color(self) -> str:
-        return self.obj_data.get("bg_color", "gray")
-
-    @property
-    def knob_color(self) -> str:
-        return self.style("bg_color", "lightgray", Part.KNOB)
+    def progress(self) -> float:
+        return fraction(self._val, self.min_val, self.max_val)
 
     def __init__(self, obj_data, parent_widget=None):
         super().__init__(obj_data, parent_widget)
@@ -48,48 +45,38 @@ class HaspSliderItem(EditableWidget):
         # Interactivity
         self.setAcceptHoverEvents(True)
 
+    def _knob_rect(self) -> QtCore.QRectF:
+        inner = self.inner_rect()
+        left, top, right, bottom = padding(self, Part.KNOB, SLIDER_KNOB_PADDING)
+        thickness = min(self.obj_w, self.obj_h)
+        width, height = thickness + left + right, thickness + top + bottom
+        if self.is_vertical:
+            center = QtCore.QPointF(self.obj_w / 2, inner.bottom() - inner.height() * self.progress)
+        else:
+            center = QtCore.QPointF(inner.left() + inner.width() * self.progress, self.obj_h / 2)
+        return QtCore.QRectF(center.x() - width / 2, center.y() - height / 2, width, height)
+
     def boundingRect(self) -> QtCore.QRectF:
-        """
-        We expand the bounding rect slightly to ensure the knob doesn't
-        get clipped if it is taller than the slider track.
-        """
-        margin = max(0.0, self.knob_radius - (self.obj_h / 2))
-        return QtCore.QRectF(-margin, -margin, self.obj_w + (margin * 2), self.obj_h + (margin * 2))
+        """The knob reaches over the track."""
+        return super().boundingRect().united(self._knob_rect().adjusted(-3, -3, 3, 3))
 
     def _on_data_changed(self):
         self._val = self.val
 
     def paint(self, painter, option, widget=None):
-        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
+        draw_box(painter, self.obj_rect, box_style(self, Part.MAIN, TRACK_DEFAULTS))
 
-        # 1. Draw the Background Track
-        track_rect = QtCore.QRectF(0, 0, self.obj_w, self.obj_h)
-        painter.setPen(QtCore.Qt.PenStyle.NoPen)
-        painter.setBrush(QBrush(QColor(self.track_color)))
-        painter.drawRoundedRect(track_rect, self.radius, self.radius)
+        if self.progress > 0:
+            draw_box(
+                painter,
+                indicator_rect(self.inner_rect(), self.progress, self.is_vertical),
+                box_style(self, Part.INDICATOR, INDICATOR_DEFAULTS),
+            )
 
-        # 2. Calculate Knob Position
-        # Range check to avoid division by zero
-        range_val = self.max_val - self.min_val
-        if range_val <= 0:
-            progress_pct = 0
-        else:
-            progress_pct = (self._val - self.min_val) / range_val
-            progress_pct = max(0.0, min(progress_pct, 1))
+        draw_box(painter, self._knob_rect(), box_style(self, Part.KNOB, KNOB_DEFAULTS))
 
-        # 3. Draw the Knob (The "scaled circle")
-        # Center the knob on the track based on current value
-        knob_center_x = self.obj_w * progress_pct
-        knob_center_y = self.obj_h / 2
-
-        painter.setBrush(QBrush(QColor(self.knob_color)))
-        painter.drawEllipse(
-            QtCore.QPointF(knob_center_x, knob_center_y),
-            self.knob_radius,
-            self.knob_radius,
-        )
-
-        super().paint(painter, option, widget)
+        # selection outline of the base class
+        super(HaspBarItem, self).paint(painter, option, widget)
 
     # --- Interaction Logic ---
 
@@ -103,9 +90,12 @@ class HaspSliderItem(EditableWidget):
 
     def _update_value_from_pos(self, local_pos):
         """Calculates value based on where the mouse is on the track."""
-        # Clamp mouse X between 0 and width
-        rel_x = max(0, min(local_pos.x(), self.obj_w))
-        pct = rel_x / self.obj_w
+        inner = self.inner_rect()
+        if self.is_vertical:
+            pct = (inner.bottom() - local_pos.y()) / inner.height() if inner.height() > 0 else 0
+        else:
+            pct = (local_pos.x() - inner.left()) / inner.width() if inner.width() > 0 else 0
+        pct = max(0.0, min(pct, 1.0))
 
         new_val = int(self.min_val + (pct * (self.max_val - self.min_val)))
 

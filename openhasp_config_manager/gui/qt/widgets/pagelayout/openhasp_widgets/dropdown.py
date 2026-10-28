@@ -1,8 +1,10 @@
 from PyQt6 import QtCore, QtGui
 
+from openhasp_config_manager.gui.domain.style_parts import Part
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.box import box_style, draw_box, padding
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.default_theme import INDICATOR_DEFAULTS, TRACK_DEFAULTS
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import (
     DEFAULT_TEXT,
-    DEFAULT_TRACK,
     draw_text,
     number,
     option_lines,
@@ -11,6 +13,11 @@ from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing 
 )
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
 
+_DEFAULTS = {
+    **TRACK_DEFAULTS,
+    "bg_color@4": INDICATOR_DEFAULTS["bg_color"],
+    "bg_grad_color@4": INDICATOR_DEFAULTS["bg_grad_color"],
+}
 _PADDING = 10
 _ARROW_SIZE = 5
 
@@ -28,30 +35,29 @@ class HaspDropdownItem(EditableWidget):
         return options[index] if 0 <= index < len(options) else ""
 
     def paint(self, painter, option, widget=None):
-        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
-        radius = number(self.style("radius", 4), 4)
-        painter.setBrush(to_color(self.style("bg_color"), DEFAULT_TRACK))
-        painter.setPen(QtGui.QPen(to_color(self.style("border_color"), "#808080"), number(self.style("border_width", 1), 1)))
-        painter.drawRoundedRect(self.obj_rect, radius, radius)
+        # the box is a track, a disabled dropdown has the blue of the indicator
+        draw_box(painter, self.obj_rect, box_style(self, Part.MAIN, _DEFAULTS))
 
-        text_rect = self.obj_rect.adjusted(_PADDING, 0, -(_PADDING * 3), 0)
-        draw_text(
-            painter,
-            text_rect,
-            self.selected_text,
-            to_color(self.style("text_color"), DEFAULT_TEXT),
-            plate_font(self.style("text_font", 25)),
-            "left",
-        )
+        color = to_color(self.style("text_color"), DEFAULT_TEXT)
+        left, top, right, bottom = padding(self, Part.MAIN, 0)
+        text_rect = self.obj_rect.adjusted(_PADDING + left, top, -(_PADDING * 3 + right), -bottom)
+        draw_text(painter, text_rect, self.selected_text, color, plate_font(self.style("text_font", 25)), "left")
 
-        # the arrow points in the direction the list opens (0 down, 1 up, 2 left, 3 right)
-        center = QtCore.QPointF(self.obj_w - _PADDING * 1.5, self.obj_h / 2)
+        # the symbol shows the direction the list opens (0 down, 1 up, 2 left, 3 right)
+        center = QtCore.QPointF(self.obj_w - _PADDING * 1.5 - right, self.obj_h / 2)
         direction = int(number(self.obj_data.get("direction"), 0))
         dx, dy = {0: (0, 1), 1: (0, -1), 2: (-1, 0), 3: (1, 0)}.get(direction, (0, 1))
-        tip = center + QtCore.QPointF(dx, dy) * _ARROW_SIZE
-        back = center - QtCore.QPointF(dx, dy) * _ARROW_SIZE
+        tip = center + QtCore.QPointF(dx, dy) * _ARROW_SIZE * 0.6
+        back = center - QtCore.QPointF(dx, dy) * _ARROW_SIZE * 0.6
         side = QtCore.QPointF(-dy, dx) * _ARROW_SIZE
-        painter.setPen(QtCore.Qt.PenStyle.NoPen)
-        painter.setBrush(to_color(self.style("text_color"), DEFAULT_TEXT))
-        painter.drawPolygon(QtGui.QPolygonF([tip, back + side, back - side]))
+        painter.save()
+        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
+        painter.setPen(
+            QtGui.QPen(
+                color, 1.5, QtCore.Qt.PenStyle.SolidLine, QtCore.Qt.PenCapStyle.RoundCap, QtCore.Qt.PenJoinStyle.RoundJoin
+            )
+        )
+        painter.setBrush(QtCore.Qt.BrushStyle.NoBrush)
+        painter.drawPolyline(QtGui.QPolygonF([back + side, tip, back - side]))
+        painter.restore()
         super().paint(painter, option, widget)

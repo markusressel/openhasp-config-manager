@@ -555,9 +555,11 @@ class PagePreviewWidget(QGraphicsView):
         Wraps icons in HTML font tags so they render with the correct MDI font
         while leaving regular text alone.
         """
+        import html
+
         import qtawesome as qta
 
-        processed_text = text
+        processed_text = html.escape(text).replace("\n", "<br/>")
 
         # Get the actual font name qtawesome uses (usually 'Material Design Icons')
         mdi_font_family = qta.font("mdi6", size).family()

@@ -46,6 +46,10 @@ class TestPreviewItems(TestBase):
                 "val": 50,
                 "bg_color": "#202020",
                 "bg_color10": "#00ff00",
+                "bg_grad_dir": 0,
+                "bg_grad_dir10": 0,
+                "border_width": 0,
+                "border_width10": 0,
                 "radius": 0,
                 "radius10": 0,
                 "pad_left": 6,
@@ -76,6 +80,10 @@ class TestPreviewItems(TestBase):
                 "val": 10,
                 "bg_color": "#202020",
                 "bg_color10": "#00ff00",
+                "bg_grad_dir": 0,
+                "bg_grad_dir10": 0,
+                "border_width": 0,
+                "border_width10": 0,
                 "radius": 0,
                 "radius10": 15,
                 "pad_left": 0,
@@ -149,13 +157,21 @@ class TestPreviewItems(TestBase):
     def test_roller_shows_rows_around_the_selected_option(self):
         from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.roller import HaspRollerItem
 
-        roller = HaspRollerItem({"obj": "roller", "w": 100, "h": 1, "options": "a\nb\nc\nd", "val": 0})
-        assert roller.visible_entries() == [None, "a", "b"]
+        def entries(item):
+            return [entry for _, entry, _ in item.entry_rows()]
+
+        roller = HaspRollerItem({"obj": "roller", "w": 100, "h": 1, "rows": 3, "options": "a\nb\nc\nd", "val": 0})
+        assert entries(roller) == [None, "a", "b"]
+        assert [selected for _, _, selected in roller.entry_rows()] == [False, True, False]
         roller.obj_data["mode"] = 1
-        assert roller.visible_entries() == ["d", "a", "b"]
+        assert entries(roller) == ["d", "a", "b"]
         roller.obj_data["rows"] = 5
-        assert roller.visible_entries() == ["c", "d", "a", "b", "c"]
-        assert roller.obj_h == 5 * roller.row_height
+        assert entries(roller) == ["c", "d", "a", "b", "c"]
+        assert roller.obj_h == round(5 * roller.row_height)
+        # without rows the height is the one of the object
+        del roller.obj_data["rows"]
+        roller.obj_data["h"] = 90
+        assert roller.obj_h == 90
         assert (
             painted(render({"page": 1, "id": 1, "obj": "roller", "x": 5, "y": 5, "w": 100, "options": "a\nb", "val": 1})) > 0
         )
@@ -164,10 +180,12 @@ class TestPreviewItems(TestBase):
         from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.led import HaspLedItem
 
         led = {"page": 1, "id": 1, "obj": "led", "x": 10, "y": 10, "w": 30, "h": 30, "bg_color": "#ff0000"}
-        assert HaspLedItem({**led, "val": 255}).brightness == 1
-        assert HaspLedItem({**led, "val": "{{ x }}"}).brightness == 0
-        assert painted(render({**led, "val": 0})) > 0
+        assert HaspLedItem({**led, "val": 255}).brightness == 255
+        assert HaspLedItem({**led, "val": 100}).brightness == 100
+        # like on the plate an LED without a value is on
+        assert HaspLedItem(led).brightness == 255
         assert render({**led, "val": 255}) != render({**led, "val": 0})
+        assert render({**led, "val": 200}) != render({**led, "val": 100})
 
     def test_spinner_draws_a_ring_and_a_segment(self):
         spinner = {"page": 1, "id": 1, "obj": "spinner", "x": 10, "y": 10, "w": 60, "h": 60, "line_width": 6}
@@ -197,7 +215,15 @@ class TestPreviewItems(TestBase):
         from openhasp_config_manager.gui.domain.line_points import parse_points
         from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.line import HaspLineItem
 
-        line = {"page": 1, "id": 1, "obj": "line", "x": 10, "y": 10, "points": [[10, 25], [100, 25], [100, 0]]}
+        line = {
+            "page": 1,
+            "id": 1,
+            "obj": "line",
+            "x": 10,
+            "y": 10,
+            "points": [[10, 25], [100, 25], [100, 0]],
+            "line_color": "#ffffff",
+        }
         item = HaspLineItem(line)
         assert (item.obj_w, item.obj_h) == (100, 25)
         assert HaspLineItem({**line, "auto_size": False, "w": 7, "h": 8}).obj_w == 7
@@ -248,9 +274,9 @@ class TestPreviewItems(TestBase):
         assert last_tabview_id(objects, 1) == 2 and last_tabview_id(objects, 2) is None
 
         item = HaspTabviewItem(view)
-        assert item.button_area().height() == 40
+        assert item.button_area().height() == 62
         item.obj_data["btn_pos"] = 2
-        assert item.button_area().top() == 160
+        assert item.button_area().top() == 138
         item.obj_data["btn_pos"] = 0
         assert item.button_area().isEmpty()
 
@@ -274,7 +300,7 @@ class TestPreviewItems(TestBase):
         matrix = {"page": 1, "id": 1, "obj": "btnmatrix", "x": 10, "y": 10, "w": 220, "h": 150, "options": options}
         rects = HaspButtonMatrixItem(matrix).button_rects()
         assert len(rects) == 3
-        assert rects[0][0].width() == rects[1][0].width() < rects[2][0].width() == 220
+        assert rects[0][0].width() == rects[1][0].width() < rects[2][0].width() == 220 - 2 * 6
         assert render({**matrix, "toggle": True, "val": 1}) != render(matrix)
 
     def test_msgbox_has_a_button_for_every_option(self):

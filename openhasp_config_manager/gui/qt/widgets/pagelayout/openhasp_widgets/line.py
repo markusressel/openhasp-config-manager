@@ -2,10 +2,12 @@ from PyQt6 import QtCore, QtGui
 
 from openhasp_config_manager.gui.domain.line_points import bounds, parse_points
 from openhasp_config_manager.gui.domain.problems import geometry_value
-from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import DEFAULT_TEXT, number, to_color
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import number, to_color
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
 
 _DEFAULT_LINE_WIDTH = 3
+# measured on a plate: without a `line_color` the line is not visible on the black background
+_DEFAULT_LINE_COLOR = "#000000"
 
 
 class HaspLineItem(EditableWidget):
@@ -43,7 +45,7 @@ class HaspLineItem(EditableWidget):
             top = bounds(points)[1] if self.auto_size else self.obj_h
             points = [(x, top - y) for x, y in points]
         pen = QtGui.QPen(
-            to_color(self.style("line_color"), DEFAULT_TEXT),
+            to_color(self.style("line_color"), _DEFAULT_LINE_COLOR),
             number(self.style("line_width", _DEFAULT_LINE_WIDTH), _DEFAULT_LINE_WIDTH),
         )
         pen.setCapStyle(QtCore.Qt.PenCapStyle.RoundCap if self.style("line_rounded") else QtCore.Qt.PenCapStyle.FlatCap)

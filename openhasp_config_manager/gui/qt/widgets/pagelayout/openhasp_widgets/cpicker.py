@@ -1,10 +1,15 @@
+import math
+
 from PyQt6 import QtCore, QtGui
 
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import number, to_color
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
 
-_DEFAULT_SCALE_WIDTH = 25
-_DEFAULT_PAD_INNER = 10
+# measured on a plate: the ring of colors is 20 pixels wide, then comes a gray ring of 12 pixels, then the disc with the color
+_DEFAULT_SCALE_WIDTH = 20
+_DEFAULT_PAD_INNER = 12
+_RING_COLOR = "#52596A"
+_KNOB_RADIUS = 16
 _DEFAULT_COLOR = "#FF0000"
 
 
@@ -35,6 +40,17 @@ class HaspColorPickerItem(EditableWidget):
             stops.append((position, color))
         return stops
 
+    def position(self) -> float:
+        """:return: where the selected color is on the gradient, 0 to 1"""
+        hue, saturation, value, _ = self.color.getHsvF()
+        mode = str(self.obj_data.get("mode", "hue"))
+        return saturation if mode == "saturation" else value if mode == "value" else max(hue, 0.0)
+
+    def _draw_knob(self, painter, center: QtCore.QPointF):
+        painter.setPen(QtGui.QPen(QtGui.QColor("#838183"), 2))
+        painter.setBrush(self.color)
+        painter.drawEllipse(center, _KNOB_RADIUS, _KNOB_RADIUS)
+
     def paint(self, painter, option, widget=None):
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
         rect = self.obj_rect
@@ -45,22 +61,36 @@ class HaspColorPickerItem(EditableWidget):
             painter.setPen(QtCore.Qt.PenStyle.NoPen)
             painter.setBrush(gradient)
             painter.drawRoundedRect(rect, 4, 4)
+            # the knob is a circle on the bar, a bit bigger than the bar is high
+            self._draw_knob(painter, QtCore.QPointF(rect.left() + rect.width() * self.position(), rect.center().y()))
             return super().paint(painter, option, widget)
 
         side = min(self.obj_w, self.obj_h)
         scale_width = number(self.style("scale_width", _DEFAULT_SCALE_WIDTH), _DEFAULT_SCALE_WIDTH)
         outer = QtCore.QRectF(rect.center().x() - side / 2, rect.center().y() - side / 2, side, side)
-        gradient = QtGui.QConicalGradient(outer.center(), 90)
+        # the colors go counter-clockwise from 6 o'clock (Qt's conical gradient starts at 3 o'clock, counter-clockwise)
+        gradient = QtGui.QConicalGradient(outer.center(), 270)
         for position, color in self.gradient_stops():
-            gradient.setColorAt(1 - position, color)
+            gradient.setColorAt(min(position, 0.999999), color)
         pen = QtGui.QPen(QtGui.QBrush(gradient), scale_width)
         painter.setPen(pen)
         painter.setBrush(QtCore.Qt.BrushStyle.NoBrush)
         painter.drawEllipse(outer.adjusted(scale_width / 2, scale_width / 2, -scale_width / 2, -scale_width / 2))
 
         pad = number(self.obj_data.get("pad_inner"), _DEFAULT_PAD_INNER)
-        inner = outer.adjusted(scale_width + pad, scale_width + pad, -(scale_width + pad), -(scale_width + pad))
+        ring = outer.adjusted(scale_width, scale_width, -scale_width, -scale_width)
         painter.setPen(QtCore.Qt.PenStyle.NoPen)
+        painter.setBrush(QtGui.QColor(_RING_COLOR))
+        painter.drawEllipse(ring)
+        inner = ring.adjusted(pad, pad, -pad, -pad)
         painter.setBrush(self.color)
         painter.drawEllipse(inner)
+
+        # the knob sits in the middle of the ring of colors, where the selected color is
+        angle = math.radians(90 + 360 * self.position())
+        middle = (side - scale_width) / 2
+        self._draw_knob(
+            painter,
+            QtCore.QPointF(outer.center().x() + math.cos(angle) * middle, outer.center().y() + math.sin(angle) * middle),
+        )
         super().paint(painter, option, widget)
