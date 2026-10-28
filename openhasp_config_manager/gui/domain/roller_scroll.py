@@ -7,21 +7,9 @@ An offset is how far the rows are moved from where the selected option is in the
 import math
 from typing import Optional
 
-from openhasp_config_manager.gui.domain.interaction import DRAG_LIMIT
 
 # the time the rows take to snap to an option (`LV_ROLLER_DEF_ANIM_TIME`), the animation is linear
 SNAP_TIME = 0.2
-
-
-def drag_offset(finger_travel: float) -> float:
-    """
-    :param finger_travel: how far the finger moved since it touched the roller, positive downwards
-    :return: how far the rows moved: nothing until the finger left the area where a touch is still a click, then the rows follow
-        the finger, behind it by that area (LVGL moves an object by what the finger moved after it started to drag)
-    """
-    if abs(finger_travel) < DRAG_LIMIT:
-        return 0
-    return finger_travel - math.copysign(DRAG_LIMIT, finger_travel)
 
 
 def settled_option(selected: int, offset: float, row: float, count: int, infinite: bool) -> int:

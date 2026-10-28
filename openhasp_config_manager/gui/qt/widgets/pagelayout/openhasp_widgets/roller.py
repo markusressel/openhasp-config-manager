@@ -2,8 +2,7 @@ import dataclasses
 
 from PyQt6 import QtCore, QtGui
 
-from openhasp_config_manager.gui.domain.interaction import DRAG_LIMIT
-from openhasp_config_manager.gui.domain.roller_scroll import SNAP_TIME, clicked_option, drag_offset, settled_option
+from openhasp_config_manager.gui.domain.roller_scroll import SNAP_TIME, clicked_option, settled_option
 from openhasp_config_manager.gui.domain.style_parts import Part
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.box import (
     GRADIENT_VERTICAL,
@@ -28,6 +27,7 @@ from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing 
     to_color,
 )
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.scrolling import ScrollDriver
 
 # measured on a plate: the height of a row is this many pixels per pixel of the font and this many on top (45 for font 24, 31 for 12)
 _ROW_PER_FONT_PIXEL = 1.167
@@ -48,12 +48,11 @@ class HaspRollerItem(EditableWidget):
     """
 
     def __init__(self, *args, **kwargs):
-        # how far the rows are moved from where the selected option is in the middle, while dragged or snapping
+        # how far the rows are moved from where the selected option is in the middle, while dragged, thrown or snapping
         self._offset = 0.0
-        self._press_y = 0.0
-        self._dragging = False
         self._anim = None
         super().__init__(*args, **kwargs)
+        self._scroll = ScrollDriver(self, moved=self._set_offset, drag_began=lambda: None, drag_ended=self._settle)
 
     @property
     def infinite(self) -> bool:
@@ -101,35 +100,49 @@ class HaspRollerItem(EditableWidget):
         self.runtime_changed()
 
     def finish_animation(self):
-        """Let the rows arrive at once (tests don't wait for time)."""
+        """Let a throw and the rows arrive at once (tests don't wait for time)."""
+        self._scroll.finish()
         self._stop_animation()
         self._offset = 0.0
         self.update()
 
+    def _scroll_range(self):
+        """
+        :return: how far the rows can be moved up (negative) and down from the selected option: like `scrl_reposition` of the page of the
+            roller, the first and the last option can go half a row beyond the middle (half the font and the padding, measured)
+        """
+        count, selected, row = self.option_count, selected_index(self.data), self.row_height
+        if self.infinite:
+            # the options are there `LV_ROLLER_INF_PAGES` (7) times, the selected one in the middle copy
+            selected, count = selected + 3 * count, 7 * count
+        beyond = row / 2
+        return round(-((count - 1 - selected) * row + beyond)), round(selected * row + beyond)
+
+    def _settle(self):
+        """The drag ended (`LV_SIGNAL_DRAG_END`): the option nearest to the middle is selected, and the rows move to it."""
+        count = self.option_count
+        if count:
+            option = settled_option(selected_index(self.data), self._offset, self.row_height, count, self.infinite)
+            self._snap_to(option, self._offset)
+
     def on_press(self, point):
-        # a new touch stops the rows where they are (`lv_anim_del`)
+        # a throw that is still going on ends here (the option is selected), and a new touch stops the rows where they are (`lv_anim_del`)
+        self._scroll.stop_throw()
         self._stop_animation()
-        self._press_y = point[1]
-        self._dragging = False
         self.set_pressed(True)
+        minimum, maximum = self._scroll_range()
+        self._scroll.press(point[1], round(self._offset), minimum, maximum)
 
     def on_pressing(self, point):
-        travel = point[1] - self._press_y
-        if not self._dragging and abs(travel) >= DRAG_LIMIT:
-            self._dragging = True
-        if self._dragging:
-            self._set_offset(drag_offset(travel))
+        self._scroll.move(point[1])
 
     def on_release(self, point, short_click: bool):
         self.set_pressed(False)
         count = self.option_count
-        if not count:
-            self._dragging = False
-            return
-        if self._dragging:
-            self._dragging = False
-            option = settled_option(selected_index(self.data), self._offset, self.row_height, count, self.infinite)
-            self._snap_to(option, self._offset)
+        dragged = self._scroll.dragging
+        # after a drag the option is selected when it ends (`release_handler` does nothing while dragging)
+        self._scroll.release()
+        if not count or dragged:
             return
         local = self.mapFromScene(QtCore.QPointF(point[0], point[1]))
         if not self.hit(local):
@@ -140,7 +153,7 @@ class HaspRollerItem(EditableWidget):
         self._snap_to(option, self._offset)
 
     def on_press_lost(self):
-        self._dragging = False
+        self._scroll.cancel()
         self.set_pressed(False)
 
     @property

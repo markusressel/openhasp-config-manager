@@ -29,6 +29,7 @@ from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing 
     to_color,
 )
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.scrolling import ScrollDriver
 
 _DEFAULTS = {
     **TRACK_DEFAULTS,
@@ -69,13 +70,18 @@ class HaspDropdownItem(EditableWidget):
     A closed dropdown: the selected entry of `options` (by `val`) and an arrow. The open list is not drawn.
     Touched (see `RuntimeState`), the list opens: below the dropdown, or above it if there is no room (`direction` sets another side),
     cut at `max_height` and the screen, scrolled to the selected row, with a scrollbar if it doesn't fit. A row that is touched and
-    released is the new `val` and closes the list.
+    released is the new `val` and closes the list. A finger that drags the list scrolls it (and throws it, like LVGL), selecting nothing.
     See https://www.openhasp.com/0.7.0/design/objects/dropdown/
     """
 
     def __init__(self, *args, **kwargs):
         self._painted_bounds: Optional[QtCore.QRectF] = None
+        # where the first row of the open list is after dragging it, None while it is where it opened
+        self._list_scroll: Optional[int] = None
+        # the finger pressed the open list (not the box of the dropdown)
+        self._on_list = False
         super().__init__(*args, **kwargs)
+        self._scroll = ScrollDriver(self, moved=self._scroll_list, drag_began=self._unpress_row, drag_ended=lambda: None)
 
     @property
     def is_open(self) -> bool:
@@ -95,6 +101,8 @@ class HaspDropdownItem(EditableWidget):
     def open_layout(self) -> Optional[DropdownList]:
         """:return: the open list (in the coordinates of the plate), None if the dropdown is closed"""
         if not self.is_open:
+            # however the list was closed (a row, a touch elsewhere, Reset): it opens scrolled to the selected row again
+            self._list_scroll = None
             return None
         options = option_lines(self.obj_data.get("options"))
         font = self.font
@@ -102,7 +110,7 @@ class HaspDropdownItem(EditableWidget):
         screen = self.scene().sceneRect()
         screen_size = (round(screen.width()), round(screen.height()))
         data = self.data
-        return open_list(
+        opened = open_list(
             (self.obj_x, self.obj_y, self.obj_w, self.obj_h),
             len(options),
             row_height(font.pixelSize()),
@@ -112,6 +120,7 @@ class HaspDropdownItem(EditableWidget):
             selected_index(data),
             screen_size,
         )
+        return opened if self._list_scroll is None else dataclasses.replace(opened, scroll=self._list_scroll)
 
     def _local_list_rect(self) -> Optional[QtCore.QRectF]:
         opened = self.open_layout()
@@ -149,21 +158,45 @@ class HaspDropdownItem(EditableWidget):
         opened = self.open_layout()
         return opened.row_at(point[1]) if opened is not None and opened.contains(point) else None
 
+    @property
+    def keeps_press(self) -> bool:
+        # the scrollable of the list is protected against losing the press (`lv_page`), the box of the dropdown is not
+        return self._on_list
+
+    def _scroll_list(self, position: int):
+        self._list_scroll = position
+        self.runtime_changed()
+
+    def _unpress_row(self):
+        """The finger drags the list (`LV_SIGNAL_DRAG_BEGIN`): the row it pressed is not pressed anymore."""
+        self.runtime.pressed_row = None
+        self.runtime_changed()
+
     def on_press(self, point):
+        self._scroll.stop_throw()
         row = self._row_at(point)
+        self._on_list = row is not None
         self.runtime.pressed_row = row
         self.set_pressed(True, part=None if row is None else 1)
+        opened = self.open_layout()
+        if row is not None and opened is not None:
+            self._scroll.press(point[1], opened.scroll, min(opened.h - opened.content_height, 0), 0)
 
     def on_pressing(self, point):
-        row = self._row_at(point)
-        if self.runtime.pressed_row is not None and row is not None and row != self.runtime.pressed_row:
-            self.runtime.pressed_row = row
-            self.runtime_changed()
+        # the pressed row stays the one that was pressed (`page_press_handler`), until the finger drags the list
+        if self._on_list:
+            self._scroll.move(point[1])
 
     def on_release(self, point, short_click: bool):
         row = self._row_at(point)
         pressed_row, self.runtime.pressed_row = self.runtime.pressed_row, None
+        dragged = self._scroll.dragging
+        self._on_list = False
+        self._scroll.release()
         self.set_pressed(False)
+        if dragged:
+            # `page_release_handler` doesn't run while dragging: nothing is selected, the list stays open
+            return
         if pressed_row is not None and row is not None:
             # `page_release_handler`: the row under the finger is selected, and the list closes
             self.runtime.set(self.key, "val", row, self.obj_data)
@@ -175,12 +208,15 @@ class HaspDropdownItem(EditableWidget):
             self.runtime_changed()
 
     def on_press_lost(self):
+        self._on_list = False
+        self._scroll.cancel()
         self.runtime.pressed_row = None
         self.set_pressed(False)
 
     def close_list(self):
         if self.is_open:
             self.runtime.open_dropdown = None
+        self._scroll.cancel()
         self.runtime_changed()
 
     def _draw_list(self, painter: QtGui.QPainter, opened: DropdownList):

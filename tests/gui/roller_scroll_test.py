@@ -1,16 +1,8 @@
-from openhasp_config_manager.gui.domain.interaction import DRAG_LIMIT
-from openhasp_config_manager.gui.domain.roller_scroll import clicked_option, drag_offset, settled_option
+from openhasp_config_manager.gui.domain.roller_scroll import clicked_option, settled_option
 from tests import TestBase
 
 
 class TestRollerScroll(TestBase):
-    def test_the_rows_start_to_follow_the_finger_after_the_drag_limit(self):
-        assert drag_offset(0) == 0
-        assert drag_offset(DRAG_LIMIT - 1) == 0
-        assert drag_offset(DRAG_LIMIT) == 0
-        assert drag_offset(DRAG_LIMIT + 25) == 25
-        assert drag_offset(-DRAG_LIMIT - 25) == -25
-
     def test_let_go_the_nearest_option_is_in_the_middle(self):
         # rows of 45: moving the rows up by 100 pixels shows the option 2 rows further
         assert settled_option(selected=1, offset=-100, row=45, count=10, infinite=False) == 3
