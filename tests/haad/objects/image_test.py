@@ -29,12 +29,12 @@ async def _image_server(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def _plate_source(monkeypatch):
-    """What the plate answers when asked for the `src` of an object: its configured placeholder."""
+    """What the plate answers when asked for the `src` of an object (its configured placeholder), and for its size."""
     reads = []
 
     async def get_object_property(self, obj, prop, timeout=1.0):
         reads.append((obj, prop))
-        return PLACEHOLDER
+        return {"w": 20, "h": 10}.get(prop, PLACEHOLDER)
 
     monkeypatch.setattr(OpenHaspClient, "get_object_property", get_object_property)
     return reads
@@ -64,6 +64,46 @@ async def test_push_image_serves_the_image_to_the_plate(page: PageController, pl
         assert re.fullmatch(r"p1b45\.src=http://127\.0\.0\.1:\d+/[0-9a-f-]{36}", command), plate.commands
     # RGB565 with a 4 byte header; the 50x50 image is fit into 20x10, keeping its aspect ratio
     assert [len(data) for data in plate.downloaded_images] == [4 + 10 * 10 * 2, 4 + 50 * 50 * 2]
+
+
+async def test_push_image_uses_the_size_of_the_object_by_default(
+    page: PageController, plate: FakePlate, monkeypatch, _plate_source
+):
+    monkeypatch.setattr(image, "OPENHASP_IMAGE_HOST", "127.0.0.1")
+    img = await page.add_image(obj_id=45)
+
+    await img.push_image(image=str(IMAGE))
+    await img.push_image(image=str(IMAGE))
+    await plate.settle()
+
+    # the plate is asked once; the 50x50 image is fit into the 20x10 of the object
+    assert [read for read in _plate_source if read[1] in ("w", "h")] == [("p1b45", "w"), ("p1b45", "h")]
+    assert [len(data) for data in plate.downloaded_images] == [4 + 10 * 10 * 2] * 2
+
+
+async def test_push_image_takes_the_missing_size_from_the_object(page: PageController, plate: FakePlate, monkeypatch):
+    monkeypatch.setattr(image, "OPENHASP_IMAGE_HOST", "127.0.0.1")
+    img = await page.add_image(obj_id=45)
+
+    await img.push_image(image=str(IMAGE), height=4)
+    await plate.settle()
+
+    assert [len(data) for data in plate.downloaded_images] == [4 + 4 * 4 * 2]
+
+
+async def test_push_image_logs_an_error_if_the_plate_does_not_know_the_size(
+    page: PageController, plate: FakePlate, monkeypatch, caplog
+):
+    async def unknown(self, obj, prop, timeout=1.0):
+        return None
+
+    monkeypatch.setattr(OpenHaspClient, "get_object_property", unknown)
+    img = await page.add_image(obj_id=45)
+
+    await img.push_image(image=str(IMAGE))
+
+    assert plate.commands == []
+    assert "did not report the size" in caplog.text
 
 
 async def test_push_image_uses_the_local_ip_by_default(page: PageController, plate: FakePlate, monkeypatch):

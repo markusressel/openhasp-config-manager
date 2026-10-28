@@ -6,7 +6,7 @@ from openhasp_config_manager.haad.objects import ObjectController
 from openhasp_config_manager.openhasp_client.image_server import ImageServer
 
 import os
-from typing import Optional
+from typing import Optional, Tuple
 
 # TODO: make this configurable via config file or env variable, using container_app_conf
 OPENHASP_IMAGE_PORT = int(os.environ.get("OPENHASP_IMAGE_PORT", "0"))
@@ -56,6 +56,8 @@ class ImageObjectController(ObjectController):
         # the `src` the plate was configured with, see `restore_default_source`
         self._default_source: Optional[str] = None
         self._default_source_read = False
+        # the `w` and `h` the plate was configured with, see `push_image`
+        self._size: Optional[Tuple[int, int]] = None
 
     async def init(self):
         """
@@ -65,15 +67,20 @@ class ImageObjectController(ObjectController):
         """
         self.LOGGER.debug(f"Initializing image object {self.object_id}")
 
-    async def push_image(self, image: str, width: int, height: int):
+    async def push_image(self, image: str, width: Optional[int] = None, height: Optional[int] = None):
         """
-        Pushes an image to this image object. The image must be a base64 encoded string, and the width and height must be specified in pixels.
+        Pushes an image to this image object. The image is resized to the given size, keeping its aspect ratio.
 
         :param image: the image to set, can be a URL or anything that can be opened by PIL.Image.open, f.ex. a file path
-        :param width: the width of the image in pixels
-        :param height: the height of the image in pixels
+        :param width: the width of the image in pixels, the `w` of the object on the plate (its JSONL object) if not given
+        :param height: the height of the image in pixels, the `h` of the object on the plate if not given
         """
         try:
+            if width is None or height is None:
+                object_width, object_height = await self._read_size()
+                width = object_width if width is None else width
+                height = object_height if height is None else height
+
             # before the first push replaces it
             await self._read_default_source()
 
@@ -97,6 +104,16 @@ class ImageObjectController(ObjectController):
                 )
         except Exception as e:
             self.LOGGER.error(f"Error pushing image: {e}")
+
+    async def _read_size(self) -> Tuple[int, int]:
+        """:return: the `w` and `h` of the object on the plate, which is asked once. :raises ValueError: if it doesn't know them"""
+        if self._size is None:
+            size = [await self.client.get_object_property(self.object_id, prop) for prop in ("w", "h")]
+            try:
+                self._size = (int(size[0]), int(size[1]))
+            except (TypeError, ValueError):
+                raise ValueError(f"The plate did not report the size of {self.object_id}: {size}")
+        return self._size
 
     async def restore_default_source(self) -> bool:
         """
