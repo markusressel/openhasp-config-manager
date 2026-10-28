@@ -270,6 +270,26 @@ class TestFiles(TestBase):
         assert editor.page_preview_widget.editable_items() == []
         assert editor.property_editor._editable_widgets == []
 
+    def test_the_problems_never_name_removed_objects(self, editor, monkeypatch):
+        # GIVEN: objects with problems (outside of the screen), and a listener that looks them up like SourceEditorSync
+        from PyQt6.QtWidgets import QMessageBox
+
+        editor.set_edit_mode(True)
+        for item in editor.page_preview_widget.editable_items():
+            editor.session.set_source_value(item.obj_data, "x", 1000)
+        assert editor.problems
+        looked_up = []
+        editor.stateChanged.connect(lambda: looked_up.extend(editor.session.line_of(p.obj) for p in editor.problems))
+        for item in editor.page_preview_widget.editable_items():
+            item.setSelected(True)
+        monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *args: QMessageBox.StandardButton.Yes))
+
+        # WHEN (this crashed: rebuilding the page reported the selection while the problems still named the removed objects)
+        editor.object_actions.remove_selected()
+
+        # THEN
+        assert editor.problems == []
+
     def test_removing_an_object_while_its_file_is_highlighted(self, editor, monkeypatch):
         # GIVEN
         from PyQt6.QtWidgets import QMessageBox

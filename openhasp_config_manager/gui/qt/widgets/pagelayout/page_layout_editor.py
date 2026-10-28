@@ -421,8 +421,9 @@ class PageLayoutEditorWidget(QWidget):
         LOGGER.debug(f"Setting page index {index}")
         self.current_index = index
         self.page_objects = get_page_objects(self.working_objects, index=index)
-        self.page_preview_widget.set_objects(self.page_objects)
+        # first: rebuilding the preview reports the selection (`stateChanged`), and the problems must not name removed objects then
         self._update_page_views()
+        self.page_preview_widget.set_objects(self.page_objects)
         self.property_editor.set_editable_widgets([])
 
         pages = get_navigable_page_indices(self.working_objects)
