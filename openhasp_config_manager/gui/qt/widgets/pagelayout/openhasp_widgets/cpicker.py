@@ -164,11 +164,17 @@ class HaspColorPickerItem(EditableWidget):
         painter.setBrush(self.color)
         painter.drawEllipse(inner)
 
-        # the knob sits in the middle of the ring of colors, where the selected color is
-        angle = math.radians(90 + 360 * self.position())
-        middle = (side - scale_width) / 2
-        self._draw_knob(
-            painter,
-            QtCore.QPointF(outer.center().x() + math.cos(angle) * middle, outer.center().y() + math.sin(angle) * middle),
-        )
+        self._draw_knob(painter, self.knob_center())
         super().paint(painter, option, widget)
+
+    def knob_center(self) -> QtCore.QPointF:
+        """
+        :return: where the knob of a disc is: in the middle of the ring of colors, at the selected color. Like `lv_cpicker.c`
+            (`x = r * sin(angle)`, `y = r * cos(angle)`): 0 degrees at 6 o'clock, 90 at 3 o'clock, the way a touch is read.
+        """
+        side = min(self.obj_w, self.obj_h)
+        scale_width = number(self.style("scale_width", _DEFAULT_SCALE_WIDTH), _DEFAULT_SCALE_WIDTH)
+        angle = math.radians(360 * self.position())
+        middle = (side - scale_width) / 2
+        center = self.obj_rect.center()
+        return QtCore.QPointF(center.x() + math.sin(angle) * middle, center.y() + math.cos(angle) * middle)

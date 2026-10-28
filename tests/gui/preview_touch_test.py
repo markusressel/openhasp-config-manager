@@ -1,5 +1,7 @@
 """Touching the preview in Interact mode: the finger is driven through the input device, like the mouse does."""
 
+import math
+
 import pytest
 
 from tests import TestBase
@@ -543,6 +545,24 @@ class TestPreviewColorPicker(TestBase):
         # the colors start at 6 o'clock (red); 3 o'clock is a quarter turn on, the angle counts clockwise from there
         assert item.data["color"] != "#FF0000"
         assert abs(item.color.hue() - 90) <= 1
+        # the knob is where the finger is (it was drawn mirrored, at 9 o'clock)
+        knob = item.mapToScene(item.knob_center())
+        assert abs(knob.x() - 200) <= 2 and abs(knob.y() - 110) <= 2
+
+    @pytest.mark.parametrize("finger", [(110, 200), (110, 20), (20, 110), (180, 50)])
+    def test_the_knob_follows_the_finger_around_the_ring(self, finger):
+        view = preview(self.PICKER)
+        item = widget(view, 13)
+
+        view.finger(finger, 0.0)
+        view._indev.release(finger)
+
+        # the knob is on the ring, in the direction of the finger
+        knob = item.mapToScene(item.knob_center())
+        center = item.mapToScene(item.obj_rect.center())
+        finger_angle = math.atan2(finger[1] - center.y(), finger[0] - center.x())
+        knob_angle = math.atan2(knob.y() - center.y(), knob.x() - center.x())
+        assert abs(math.remainder(finger_angle - knob_angle, math.tau)) < math.radians(2)
 
     def test_the_middle_of_the_disc_changes_nothing_and_a_long_press_there_switches_the_mode(self):
         view = preview(self.PICKER)
