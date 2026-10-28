@@ -25,7 +25,7 @@ class HaspColorPickerItem(EditableWidget):
 
     @property
     def color(self) -> QtGui.QColor:
-        return to_color(self.obj_data.get("color"), _DEFAULT_COLOR)
+        return to_color(self.data.get("color"), _DEFAULT_COLOR)
 
     def gradient_stops(self, steps: int = 12):
         """:return: (position 0 to 1, color) along the gradient of the current mode"""

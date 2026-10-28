@@ -70,7 +70,7 @@ class HaspTabviewItem(EditableWidget):
         horizontal = area.width() >= area.height() and self.buttons_position in (_BUTTONS_TOP, _BUTTONS_BOTTOM)
         # the tab buttons (part 4) are one bar
         draw_box(painter, area, box_style(self, Part.ITEMS, {"bg_color": _BAR_COLOR, "bg_opa": 255, "radius": 0}))
-        active = int(number(self.obj_data.get("val"), 0))
+        active = int(number(self.data.get("val"), 0))
         font = plate_font(self.style("text_font", DEFAULT_FONT_SIZE, Part.ITEMS))
         for index, text in enumerate(tabs):
             if horizontal:

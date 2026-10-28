@@ -12,22 +12,19 @@ from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable
 
 
 class HaspSwitchItem(EditableWidget):
-    toggled = QtCore.pyqtSignal(int, bool)
-
     @property
-    def val(self) -> bool:
-        return bool(self.obj_data.get("val", 0))
+    def keeps_press(self) -> bool:
+        # `lv_obj_add_protect(sw, LV_PROTECT_PRESS_LOST)`: it switches when the finger is released anywhere
+        return True
 
-    @property
-    def is_toggled(self) -> bool:
-        return self._val
+    def on_release(self, point, short_click: bool):
+        """`lv_switch_signal`: the switch changes on release, and `toggle_event_handler` lets the group follow."""
+        self.set_pressed(False)
+        self.toggle()
 
-    def __init__(self, obj_data, parent_widget=None):
-        self._val = bool(obj_data.get("val", 0))  # Store the current state for toggling
-        super().__init__(obj_data, parent_widget)
-
-    def _on_data_changed(self):
-        self._val = self.val
+    def _touch_event(self, event: str):
+        # the toggle handler only reports: no action
+        pass
 
     def _knob_rect(self, inner: QtCore.QRectF) -> QtCore.QRectF:
         """
@@ -37,7 +34,7 @@ class HaspSwitchItem(EditableWidget):
         left, top, right, bottom = padding(self, Part.KNOB, SWITCH_KNOB_PADDING)
         width = self.obj_h + 1 + left + right
         height = self.obj_h + top + bottom
-        if self._val:
+        if self.is_toggled:
             x = inner.right() + right + 1 - width
         else:
             x = inner.left() - left
@@ -52,7 +49,7 @@ class HaspSwitchItem(EditableWidget):
         inner = track.adjusted(left, top, -right, -bottom)
         knob = self._knob_rect(inner)
 
-        if self._val:
+        if self.is_toggled:
             # the indicator fills the track up to the middle of the knob, and the shape of the track cuts it
             indicator = QtCore.QRectF(inner.left(), inner.top(), knob.center().x() - inner.left(), inner.height())
             painter.save()
@@ -71,9 +68,3 @@ class HaspSwitchItem(EditableWidget):
         # the knob reaches over the track
         reach = max(padding(self, Part.KNOB, SWITCH_KNOB_PADDING)) + 1
         return super().boundingRect().adjusted(-reach, -reach, reach, reach)
-
-    def mousePressEvent(self, event):
-        self._val = not self._val
-        self.update()
-        self.toggled.emit(self.obj_id, self._val)
-        super().mousePressEvent(event)

@@ -714,8 +714,8 @@ class TestPageSelection(TestBase):
         editor.session.add_object(key, {"page": 9, "id": 0, "next": 4})
         editor.set_page_index(9)
 
-        # WHEN: a click on a button with the action next
-        editor._PageLayoutEditorWidget__on_preview_layout_button_clicked({"action": "next"})
+        # WHEN: a touch on a button with the action next runs its command
+        editor._PageLayoutEditorWidget__on_preview_command("page next")
 
         # THEN
         assert editor.current_index == 4

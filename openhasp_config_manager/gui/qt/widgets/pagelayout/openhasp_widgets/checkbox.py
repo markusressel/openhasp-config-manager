@@ -42,6 +42,12 @@ BULLET_DEFAULTS = {
     "border_color@1": "#645350",
     "border_opa@1": 61,
     "bg_color@5": "#83898B",
+    # pressed: `COLOR_BTN_PR` at the top and `COLOR_BTN_CHK_GRAD` at the bottom, pressed while checked: `COLOR_BTN_CHK_PR` and
+    # `COLOR_BTN_CHK_PR_GRAD` (`cb_bullet` in lv_theme_hasp.c, computed with the formulas, see `lvgl_colors.py`)
+    "bg_color@2": "#18BEFF",
+    "bg_grad_color@2": "#623C29",
+    "bg_color@3": "#CE7952",
+    "bg_grad_color@3": "#523021",
 }
 
 
@@ -64,6 +70,20 @@ class HaspCheckboxItem(EditableWidget):
     @property
     def checked(self) -> bool:
         return self.is_toggled
+
+    @property
+    def keeps_press(self) -> bool:
+        # `lv_obj_add_protect(cb, LV_PROTECT_PRESS_LOST)`: it switches when the finger is released anywhere
+        return True
+
+    def on_release(self, point, short_click: bool):
+        """`lv_btn_signal`: a checkable button switches on release."""
+        self.set_pressed(False)
+        self.toggle()
+
+    def _touch_event(self, event: str):
+        # the toggle handler only reports: no action
+        pass
 
     @property
     def text(self) -> str:

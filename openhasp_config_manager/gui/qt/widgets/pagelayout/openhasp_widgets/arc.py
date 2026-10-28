@@ -1,9 +1,12 @@
 import dataclasses
 import math
+import time
 
 from PyQt6 import QtCore, QtGui
 
 from openhasp_config_manager.gui.domain.style_parts import Part
+from openhasp_config_manager.gui.domain.touch_values import ArcDrag, arc_last_angle, arc_value
+from openhasp_config_manager.gui.domain.interaction import is_true
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.box import box_style, draw_box
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.default_theme import (
     CIRCLE_RADIUS,
@@ -36,6 +39,10 @@ _INDICATOR_COLOR = "#00B6FF"
 _DISC_DEFAULTS = {**DISC_DEFAULTS, "border_width": 0}
 
 
+# the arc reacts to a finger this far outside of it as well (`lv_obj_set_ext_click_area(arc, LV_DPI / 10, ...)`)
+_CLICK_REACH = 10
+
+
 class HaspArcItem(EditableWidget):
     """
     A ring segment from `start_angle` to `end_angle` (clockwise, 0 is at 3 o'clock, plus `rotation`) whose indicator follows `val`.
@@ -49,7 +56,7 @@ class HaspArcItem(EditableWidget):
         start = number(self.style("start_angle", _DEFAULT_START), _DEFAULT_START) + rotation
         end = number(self.style("end_angle", _DEFAULT_END), _DEFAULT_END) + rotation
         sweep = (end - start) % 360 or 360
-        part = value_fraction(self.obj_data) * sweep
+        part = value_fraction(self.data) * sweep
         kind = int(number(self.obj_data.get("type"), 0))
         if kind == 1:
             if part < sweep / 2:
@@ -66,7 +73,7 @@ class HaspArcItem(EditableWidget):
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
         track_width = number(self.style("line_width", _DEFAULT_LINE_WIDTH), _DEFAULT_LINE_WIDTH)
         indicator_width = number(self.style("line_width", track_width, Part.INDICATOR), track_width)
-        knob_radius = _DEFAULT_KNOB_RADIUS if self.obj_data.get("adjustable") else 0
+        knob_radius = _DEFAULT_KNOB_RADIUS if self.adjustable else 0
         full = centered_square(self.obj_w, self.obj_h)
         inset = max(track_width, indicator_width) / 2 + knob_radius
         rect = full.adjusted(inset, inset, -inset, -inset)
@@ -114,3 +121,97 @@ class HaspArcItem(EditableWidget):
                 plate_font(self.obj_data.get("value_font", DEFAULT_FONT_SIZE)),
             )
         super().paint(painter, option, widget)
+
+    # --- touches ---
+
+    def __init__(self, obj_data, parent_widget=None):
+        super().__init__(obj_data, parent_widget)
+        self._drag = ArcDrag()
+
+    @property
+    def adjustable(self) -> bool:
+        return is_true(self.data.get("adjustable"), False)
+
+    @property
+    def keeps_press(self) -> bool:
+        # `lv_obj_add_protect(arc, LV_PROTECT_PRESS_LOST)`
+        return True
+
+    def hit(self, local: QtCore.QPointF) -> bool:
+        return self.obj_rect.adjusted(-_CLICK_REACH, -_CLICK_REACH, _CLICK_REACH, _CLICK_REACH).contains(local)
+
+    def on_press(self, point):
+        self._drag = ArcDrag()
+        super().on_press(point)
+
+    def on_pressing(self, point):
+        """`LV_SIGNAL_PRESSING` of an adjustable arc: turn the arc to the finger, as fast as LVGL lets it."""
+        if not self.adjustable:
+            return
+        data = self.data
+        minimum, maximum = int(number(data.get("min"), 0)), int(number(data.get("max"), 100))
+        if minimum == maximum:
+            return
+        start = int(number(self.style("start_angle", _DEFAULT_START), _DEFAULT_START))
+        end = int(number(self.style("end_angle", _DEFAULT_END), _DEFAULT_END))
+        rotation = int(number(data.get("rotation"), 0))
+        kind = int(number(data.get("type"), 0))
+        current = int(max(minimum, min(number(data.get("val"), minimum), maximum)))
+        full = centered_square(self.obj_w, self.obj_h)
+        center = full.center()
+        track_width = number(self.style("line_width", _DEFAULT_LINE_WIDTH), _DEFAULT_LINE_WIDTH)
+        indicator_width = number(self.style("line_width", track_width, Part.INDICATOR), track_width)
+        value = arc_value(
+            self._drag,
+            dx=int(point[0]) - int(self.pos().x() + center.x()),
+            dy=int(point[1]) - int(self.pos().y() + center.y()),
+            radius=int(full.width() / 2),
+            indicator_width=int(indicator_width),
+            background_start=start,
+            background_end=end,
+            rotation=rotation,
+            minimum=minimum,
+            maximum=maximum,
+            current_value=current,
+            last_angle=arc_last_angle(kind, current, minimum, maximum, start, end),
+            now=time.monotonic(),
+        )
+        if value is not None and value != current:
+            self.runtime.set(self.key, "val", value, self.obj_data)
+            self.runtime_changed()
+
+    def on_release(self, point, short_click: bool):
+        self._drag = ArcDrag()
+        if self.adjustable:
+            self.set_pressed(False)
+            self._follow_group()
+        else:
+            super().on_release(point, short_click)
+
+    def on_press_lost(self):
+        self._drag = ArcDrag()
+        super().on_press_lost()
+
+    def on_long_press(self):
+        if self.adjustable:
+            self._follow_group()
+        else:
+            super().on_long_press()
+
+    def on_long_press_repeat(self):
+        if self.adjustable:
+            self._follow_group()
+        else:
+            super().on_long_press_repeat()
+
+    def _touch_event(self, event: str):
+        # an adjustable arc is handled by `slider_event_handler`: no action
+        if not self.adjustable:
+            super()._touch_event(event)
+
+    def _follow_group(self):
+        if self.parent_widget is not None:
+            data = self.data
+            minimum, maximum = int(number(data.get("min"), 0)), int(number(data.get("max"), 100))
+            value = int(number(data.get("val"), minimum))
+            self.parent_widget.follow_group(self, power=bool(value), value=value, minimum=minimum, maximum=maximum)

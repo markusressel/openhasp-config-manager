@@ -1,10 +1,12 @@
-from typing import Dict, List, Optional
+from typing import Dict, List, Mapping, Optional
 
 from PyQt6 import QtGui, QtCore, QtWidgets
 from PyQt6.QtWidgets import QGraphicsObject, QGraphicsItem
 
 from openhasp_config_manager.gui.domain.draft.page_objects import is_hidden
+from openhasp_config_manager.gui.domain.interaction import Key, Point, RuntimeState, is_true, object_key
 from openhasp_config_manager.gui.domain.problems import geometry_value
+from openhasp_config_manager.gui.domain.touch_actions import action_commands
 from openhasp_config_manager.gui.domain.style_parts import Part, State, style_key
 from openhasp_config_manager.gui.qt.theme import current_colors
 
@@ -30,12 +32,6 @@ _STATE_FALLBACK: Dict[State, List[State]] = {
 def state_fallback(state: State) -> List[State]:
     """:return: the states whose style properties apply in a state, the most specific first"""
     return _STATE_FALLBACK[state]
-
-
-def _is_true(value, default: bool) -> bool:
-    if value is None:
-        return default
-    return str(value).lower() not in ("false", "0", "")
 
 
 class EditableWidget(QGraphicsObject):
@@ -64,23 +60,44 @@ class EditableWidget(QGraphicsObject):
         return geometry_value(self.obj_data, "h")
 
     @property
+    def key(self) -> Key:
+        return object_key(self.obj_data)
+
+    @property
+    def data(self) -> Mapping:
+        """
+        The properties of the object as they are on the plate after touching it (`val` after a toggle, ...): the draft's properties with
+        what the touches changed on top. Draw from this, never write to it: the draft is only changed through the session.
+        """
+        return self.runtime.effective(self.key, self.obj_data)
+
+    @property
     def is_toggled(self) -> bool:
         """Whether the object is checked: a switch or checkbox that is on, a button that toggles and is on."""
-        obj = self.obj_data.get("obj")
+        data = self.data
+        obj = data.get("obj")
         if obj in ("switch", "checkbox"):
-            return _is_true(self.obj_data.get("val"), False)
-        return obj == "btn" and _is_true(self.obj_data.get("toggle"), False) and _is_true(self.obj_data.get("val"), False)
+            return is_true(data.get("val"), False)
+        return obj == "btn" and is_true(data.get("toggle"), False) and is_true(data.get("val"), False)
 
     @property
     def is_enabled(self) -> bool:
-        return _is_true(self.obj_data.get("enabled"), True)
+        return is_true(self.obj_data.get("enabled"), True)
+
+    @property
+    def is_pressed(self) -> bool:
+        """Whether a finger is pressing the object as a whole (not one of its buttons or rows, see `RuntimeState.pressed_part`)."""
+        return self.runtime.is_pressed(self.key) and self.runtime.pressed_part is None
 
     @property
     def state(self) -> State:
         """The state the plate draws the object in: the style properties of this state (and the ones it falls back to) apply."""
-        if self.is_enabled:
-            return State.TOGGLED if self.is_toggled else State.DEFAULT
-        return State.DISABLED_TOGGLED if self.is_toggled else State.DISABLED
+        toggled = self.is_toggled
+        if not self.is_enabled:
+            return State.DISABLED_TOGGLED if toggled else State.DISABLED
+        if self.is_pressed:
+            return State.PRESSED_TOGGLED if toggled else State.PRESSED
+        return State.TOGGLED if toggled else State.DEFAULT
 
     def own_style(self, name: str, part: Part, state: State):
         """:return: the value of a style property of the object for exactly this part and state, None if it has none"""
@@ -112,6 +129,8 @@ class EditableWidget(QGraphicsObject):
         self._object_data = obj_data
         self._dimmed = False
         self.parent_widget = parent_widget
+        # what touching the objects changed, shared by the objects of the preview (a lone object has its own)
+        self.runtime: RuntimeState = parent_widget.runtime if parent_widget is not None else RuntimeState()
         super().__init__()
 
         # itemChange() is only called for position changes with this flag, it is needed for snapping
@@ -132,6 +151,12 @@ class EditableWidget(QGraphicsObject):
         self._on_data_changed()
         self.update()
 
+    def runtime_changed(self):
+        """The touches changed how the object looks (the runtime state, not the draft): draw it again."""
+        self.prepareGeometryChange()
+        self._update_hidden()
+        self.update()
+
     def set_dimmed(self, dimmed: bool):
         """Dim the object, e.g. while the objects of another file are highlighted."""
         self._dimmed = dimmed
@@ -141,6 +166,8 @@ class EditableWidget(QGraphicsObject):
         # hidden objects stay selectable and editable, but are dimmed
         opacity = HIDDEN_OPACITY if is_hidden(self.obj_data) else 1.0
         self.setOpacity(opacity * (DIMMED_OPACITY if self._dimmed else 1.0))
+        # an object that was closed by touching it (a message box) is gone, not dimmed
+        self.setVisible(not self.runtime.is_closed(self.key))
 
     def _on_data_changed(self):
         """
@@ -233,12 +260,66 @@ class EditableWidget(QGraphicsObject):
             widget_rect = self.obj_rect
             painter.drawRect(widget_rect)
 
+    # --- touches: the item is a `Target` of the input device (`Indev`), in interact mode ---
 
-class ClickableWidget(EditableWidget):
-    """An object that tells when it is pressed (`clicked`, with the id of the object)."""
+    def hit(self, local: QtCore.QPointF) -> bool:
+        """:return: whether a point (in the coordinates of the object) touches it"""
+        return self.obj_rect.contains(local)
 
-    clicked = QtCore.pyqtSignal(int)
+    @property
+    def keeps_press(self) -> bool:
+        """Whether a finger that leaves the object still presses it (`LV_PROTECT_PRESS_LOST`: switch, slider, ...)."""
+        return False
 
-    def mousePressEvent(self, event):
-        self.clicked.emit(self.obj_id)
-        super().mousePressEvent(event)
+    def set_pressed(self, pressed: bool, part: Optional[int] = None):
+        """Show the object (or one of its buttons, `part`) as pressed, or not anymore."""
+        if pressed:
+            self.runtime.pressed, self.runtime.pressed_part = self.key, part
+        elif self.runtime.is_pressed(self.key):
+            self.runtime.pressed, self.runtime.pressed_part = None, None
+        self.runtime_changed()
+
+    def on_press(self, point: Point):
+        self.set_pressed(True)
+        self._touch_event("down")
+
+    def on_pressing(self, point: Point):
+        pass
+
+    def on_release(self, point: Point, short_click: bool):
+        self.set_pressed(False)
+        # a short click is the `up` event, the release after a long press the `release` event
+        self._touch_event("up" if short_click else "release")
+
+    def on_press_lost(self):
+        # no event: the plate sends none for a lost press either
+        self.set_pressed(False)
+
+    def on_long_press(self):
+        self._touch_event("long")
+
+    def on_long_press_repeat(self):
+        self._touch_event("hold")
+
+    def toggle(self):
+        """
+        What happens when an object that switches (a toggle button, a switch, a checkbox) is released: it switches, and the
+        objects of its group follow (`toggle_event_handler`). Such an object has no action.
+        """
+        checked = not self.is_toggled
+        self.runtime.set(self.key, "val", int(checked), self.obj_data)
+        self.runtime_changed()
+        if self.parent_widget is not None:
+            self.parent_widget.follow_group(self, power=checked, value=int(checked), minimum=0, maximum=1)
+
+    def _touch_event(self, event: str):
+        """
+        What the generic event handler of the firmware (`generic_event_handler`) does: run the `action` for the event, and
+        let the objects of the group follow (on while pressed, off after it).
+        """
+        if self.parent_widget is None:
+            return
+        for command in action_commands(self.data.get("action"), event):
+            self.parent_widget.run_command(command)
+        if event in ("down", "up", "release"):
+            self.parent_widget.follow_group(self, power=event == "down", value=int(event == "down"), minimum=0, maximum=1)

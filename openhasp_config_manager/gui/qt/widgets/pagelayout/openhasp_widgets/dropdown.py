@@ -43,7 +43,7 @@ class HaspDropdownItem(EditableWidget):
     @property
     def selected_text(self) -> str:
         options = option_lines(self.obj_data.get("options"))
-        index = selected_index(self.obj_data)
+        index = selected_index(self.data)
         return options[index] if 0 <= index < len(options) else ""
 
     def paint(self, painter, option, widget=None):

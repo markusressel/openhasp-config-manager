@@ -1,10 +1,9 @@
-from collections.abc import Callable
 from typing import Dict
 
 from PyQt6 import QtCore, QtGui, QtWidgets
 
+from openhasp_config_manager.gui.domain.interaction import is_true
 from openhasp_config_manager.gui.domain.style_parts import Part
-from openhasp_config_manager.gui.qt.async_bridge import qBridge
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.box import box_style, draw_box, text_color
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.default_theme import DEFAULT_RADIUS
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import (
@@ -15,7 +14,7 @@ from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing 
     plate_font,
     set_line_space,
 )
-from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import ClickableWidget
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
 
 # how a button looks on the plate without style properties (measured): a blue gradient, orange while toggled, gray while disabled
 BUTTON_DEFAULTS = {
@@ -44,37 +43,49 @@ BUTTON_DEFAULTS = {
 COMPACT_BUTTON_DEFAULTS = {**BUTTON_DEFAULTS, "radius": DEFAULT_RADIUS}
 
 
-class HaspButtonItem(ClickableWidget):
+class HaspButtonItem(EditableWidget):
     @property
     def text(self) -> str:
         return self.obj_data.get("text", "")
+
+    @property
+    def toggles(self) -> bool:
+        """Whether touching the button switches it between two states (`toggle`)."""
+        return is_true(self.data.get("toggle"), False)
 
     @property
     def text_font(self):
         """The `text_font` of the object, see `plate_font`."""
         return self.obj_data.get("text_font", DEFAULT_FONT_SIZE)
 
-    def __init__(
-        self,
-        obj_data: Dict,
-        on_click: Callable[[Dict], None] = None,
-        parent_widget=None,
-    ):
+    def __init__(self, obj_data: Dict, parent_widget=None):
         super().__init__(obj_data, parent_widget)
-        self._on_click = on_click
 
         self.text_item = QtWidgets.QGraphicsTextItem(parent=self)
         self._setup_text()
 
-        self.clicked.connect(self._on_button_clicked)
         self.setFlag(QtWidgets.QGraphicsItem.GraphicsItemFlag.ItemClipsChildrenToShape, True)
 
     def shape(self):
         return self.object_shape()
 
-    @qBridge()
-    def _on_button_clicked(self):
-        self._on_click(self.obj_data)
+    def on_release(self, point, short_click: bool):
+        if self.toggles:
+            # `lv_btn_signal`: the button switches on release, however long it was pressed
+            self.set_pressed(False)
+            self.toggle()
+        else:
+            super().on_release(point, short_click)
+
+    def _touch_event(self, event: str):
+        # the toggle handler of the firmware only reports; the action belongs to the generic handler
+        if not self.toggles:
+            super()._touch_event(event)
+
+    def runtime_changed(self):
+        # the text color follows the state (pressed, toggled)
+        super().runtime_changed()
+        self._setup_text()
 
     def _setup_text(self):
         """Applies Rich Text (HTML) to support both regular fonts and icons."""

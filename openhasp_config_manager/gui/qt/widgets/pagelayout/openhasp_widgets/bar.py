@@ -27,7 +27,7 @@ class HaspBarItem(EditableWidget):
 
     @property
     def progress(self) -> float:
-        return value_fraction(self.obj_data)
+        return value_fraction(self.data)
 
     @property
     def is_vertical(self) -> bool:

@@ -63,7 +63,7 @@ class HaspRollerItem(EditableWidget):
     def entry_rows(self):
         """:return: (top of the row, entry or None, whether it is the selected one) for every row that is at least partly visible"""
         options = option_lines(self.obj_data.get("options"))
-        selected = selected_index(self.obj_data)
+        selected = selected_index(self.data)
         infinite = int(number(self.obj_data.get("mode"), 0)) == 1
         middle = self.obj_h / 2 - self.row_height / 2
         reach = int(self.obj_h // self.row_height) + 2

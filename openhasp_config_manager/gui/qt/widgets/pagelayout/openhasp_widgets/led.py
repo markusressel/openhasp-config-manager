@@ -30,7 +30,7 @@ class HaspLedItem(EditableWidget):
     @property
     def brightness(self) -> float:
         """:return: how bright the LED is, 0 to 255"""
-        return max(0.0, min(number(self.obj_data.get("val"), 255), 255.0))
+        return max(0.0, min(number(self.data.get("val"), 255), 255.0))
 
     def paint(self, painter, option, widget=None):
         style = box_style(self, defaults=LED_DEFAULTS)

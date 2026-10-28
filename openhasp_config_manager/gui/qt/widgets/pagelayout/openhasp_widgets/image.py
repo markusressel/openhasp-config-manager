@@ -8,7 +8,7 @@ from PyQt6 import QtCore, QtGui
 from openhasp_config_manager.gui.domain.preview_images import decode_binary_image
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.box import box_style, draw_box
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import number, opacity, to_color
-from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import ClickableWidget
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
 
 
 def load_image(path: Path) -> Optional[QtGui.QImage]:
@@ -24,7 +24,7 @@ def load_image(path: Path) -> Optional[QtGui.QImage]:
     return None if image.isNull() else image
 
 
-class HaspImageItem(ClickableWidget):
+class HaspImageItem(EditableWidget):
     @property
     def src(self) -> str:
         return self.obj_data.get("src", "")

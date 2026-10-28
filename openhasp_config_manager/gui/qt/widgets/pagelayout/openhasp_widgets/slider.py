@@ -1,6 +1,7 @@
 from PyQt6 import QtCore
 
 from openhasp_config_manager.gui.domain.style_parts import Part
+from openhasp_config_manager.gui.domain.touch_values import slider_value
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.bar import HaspBarItem, indicator_rect
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.box import box_style, draw_box, padding
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.default_theme import (
@@ -8,39 +9,34 @@ from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.default_
     KNOB_DEFAULTS,
     SLIDER_KNOB_PADDING,
     TRACK_DEFAULTS,
+    TRACK_PADDING,
 )
-from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import fraction
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import fraction, number
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import SELECTION_MARGIN
+
+
+# the slider reacts to a finger this far above and below it as well (`lv_obj_set_ext_click_area(slider, 0, 0, LV_DPI / 10, LV_DPI / 10)`)
+_CLICK_REACH = 10
 
 
 class HaspSliderItem(HaspBarItem):
     """A bar with a knob (part 2) at the end of the indicator: a square as big as the slider is thick, plus its padding."""
 
-    # Signal to notify when the value changes via mouse interaction
-    valueChanged = QtCore.pyqtSignal(int, int)  # (object_id, new_value)
-
     @property
     def min_val(self) -> int:
-        return self.obj_data.get("min", 0)
+        return self.data.get("min", 0)
 
     @property
     def max_val(self) -> int:
-        return self.obj_data.get("max", 100)
+        return self.data.get("max", 100)
 
     @property
     def val(self) -> int:
-        return self.obj_data.get("val", 0)
+        return self.data.get("val", 0)
 
     @property
     def progress(self) -> float:
-        return fraction(self._val, self.min_val, self.max_val)
-
-    def __init__(self, obj_data, parent_widget=None):
-        super().__init__(obj_data, parent_widget)
-
-        self._val = self.val  # Internal value to track changes
-
-        self.setAcceptHoverEvents(True)
+        return fraction(self.val, self.min_val, self.max_val)
 
     def _knob_rect(self) -> QtCore.QRectF:
         inner = self.inner_rect()
@@ -61,9 +57,6 @@ class HaspSliderItem(HaspBarItem):
             .united(self._knob_rect().adjusted(-SELECTION_MARGIN, -SELECTION_MARGIN, SELECTION_MARGIN, SELECTION_MARGIN))
         )
 
-    def _on_data_changed(self):
-        self._val = self.val
-
     def paint(self, painter, option, widget=None):
         draw_box(painter, self.obj_rect, box_style(self, Part.MAIN, TRACK_DEFAULTS))
 
@@ -79,26 +72,46 @@ class HaspSliderItem(HaspBarItem):
         # selection outline of the base class
         super(HaspBarItem, self).paint(painter, option, widget)
 
-    def mousePressEvent(self, event):
-        self._update_value_from_pos(event.pos())
-        super().mousePressEvent(event)
+    # --- touches ---
 
-    def mouseMoveEvent(self, event):
-        self._update_value_from_pos(event.pos())
-        super().mouseMoveEvent(event)
+    @property
+    def keeps_press(self) -> bool:
+        # `lv_obj_add_protect(slider, LV_PROTECT_PRESS_LOST)`: the knob follows the finger also outside of the slider
+        return True
 
-    def _update_value_from_pos(self, local_pos):
-        """Calculates value based on where the mouse is on the track."""
-        inner = self.inner_rect()
+    def hit(self, local: QtCore.QPointF) -> bool:
+        return self.obj_rect.adjusted(0, -_CLICK_REACH, 0, _CLICK_REACH).contains(local)
+
+    def on_pressing(self, point):
+        """`LV_SIGNAL_PRESSING`: the value is where the finger is on the track."""
+        local = self.mapFromScene(QtCore.QPointF(int(point[0]), int(point[1])))
+        left, top, right, bottom = padding(self, Part.MAIN, TRACK_PADDING)
+        minimum, maximum = int(number(self.min_val, 0)), int(number(self.max_val, 100))
         if self.is_vertical:
-            pct = (inner.bottom() - local_pos.y()) / inner.height() if inner.height() > 0 else 0
+            value = slider_value(int(local.y()), self.obj_h, top, bottom, minimum, maximum, vertical=True)
         else:
-            pct = (local_pos.x() - inner.left()) / inner.width() if inner.width() > 0 else 0
-        pct = max(0.0, min(pct, 1.0))
+            value = slider_value(int(local.x()), self.obj_w, left, right, minimum, maximum, vertical=False)
+        if value != self.val:
+            self.runtime.set(self.key, "val", value, self.obj_data)
+            self.runtime_changed()
 
-        new_val = int(self.min_val + (pct * (self.max_val - self.min_val)))
+    def on_release(self, point, short_click: bool):
+        self.set_pressed(False)
+        self._follow_group()
 
-        if new_val != self._val:
-            self._val = new_val
-            self.update()  # Triggers repaint
-            self.valueChanged.emit(self.obj_id, self._val)
+    def on_long_press(self):
+        self._follow_group()
+
+    def on_long_press_repeat(self):
+        self._follow_group()
+
+    def _touch_event(self, event: str):
+        # `slider_event_handler` sends the value, there is no action
+        pass
+
+    def _follow_group(self):
+        """The objects in the group take the value on release, and while the finger rests on the slider (`changed`)."""
+        if self.parent_widget is not None:
+            minimum, maximum = int(number(self.min_val, 0)), int(number(self.max_val, 100))
+            value = int(number(self.val, 0))
+            self.parent_widget.follow_group(self, power=bool(value), value=value, minimum=minimum, maximum=maximum)

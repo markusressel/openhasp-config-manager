@@ -11,10 +11,10 @@ from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing 
     plate_font,
     set_line_space,
 )
-from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import ClickableWidget
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
 
 
-class HaspLabelItem(ClickableWidget):
+class HaspLabelItem(EditableWidget):
     @property
     def text(self) -> str:
         return self.obj_data.get("text", "")

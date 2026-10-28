@@ -95,7 +95,7 @@ class HaspGaugeItem(EditableWidget):
                 plate_font(self.style("text_font", DEFAULT_FONT_SIZE)),
             )
 
-        needle = polar(center, radius * _NEEDLE_LENGTH, start + angle * value_fraction(self.obj_data))
+        needle = polar(center, radius * _NEEDLE_LENGTH, start + angle * value_fraction(self.data))
         painter.setPen(
             round_pen(to_color(self.style("line_color", _NEEDLE_COLOR, Part.INDICATOR), _NEEDLE_COLOR), _NEEDLE_WIDTH)
         )
