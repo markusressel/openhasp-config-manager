@@ -17,6 +17,9 @@ from PIL import Image, ImageChops
 RESOURCES = Path(__file__).parent.parent / "resources" / "preview_device"
 IMAGE_FILE = RESOURCES / "image_50x50.png"
 CASES = json.loads((RESOURCES / "cases.json").read_text())
+# a case is the objects, or the objects and what is done with the preview before the screenshot (see `render`)
+OBJECTS = {name: case["objects"] if isinstance(case, dict) else case for name, case in CASES.items()}
+INTERACTIONS = {name: case["interactions"] for name, case in CASES.items() if isinstance(case, dict)}
 BASELINE_FILE = RESOURCES / "baseline.json"
 UPDATE_BASELINE = bool(os.environ.get("UPDATE_PREVIEW_BASELINE"))
 
@@ -34,8 +37,12 @@ TOLERANCE_FACTOR = 1.1
 ANIMATED = ("spinner",)
 
 
-def render(objects: list) -> Image.Image:
-    """:return: the preview of the objects on page 6, like the screenshots show them"""
+def render(objects: list, interactions: list = ()):
+    """
+    :param interactions: what is done with the preview before the screenshot is taken, in order: `{"tap": <id>}` touches the middle of an
+        object of page 6 and lets go
+    :return: the preview of the objects on page 6, like the screenshots show them, and the preview
+    """
     from PyQt6 import QtCore, QtGui
 
     from openhasp_config_manager.gui.qt.widgets.pagelayout.page_preview_layout import PagePreviewWidget
@@ -43,6 +50,11 @@ def render(objects: list) -> Image.Image:
     view = PagePreviewWidget()
     view.set_image_files({"common_page_wz_image_50x50.png": IMAGE_FILE})
     view.set_objects([{"page": 6, "id": index, **obj} for index, obj in enumerate(objects, start=1)])
+    for interaction in interactions:
+        obj = objects[interaction["tap"] - 1]
+        middle = (obj.get("x", 0) + obj.get("w", 100) / 2, obj.get("y", 0) + obj.get("h", 50) / 2)
+        view._indev.press(middle, 0.0)
+        view._indev.release(middle)
     image = QtGui.QImage(*SCREEN, QtGui.QImage.Format.Format_RGB32)
     image.fill(QtGui.QColor("black"))
     painter = QtGui.QPainter(image)
@@ -56,7 +68,7 @@ def render(objects: list) -> Image.Image:
     buffer = QtCore.QBuffer()
     buffer.open(QtCore.QIODevice.OpenModeFlag.WriteOnly)
     image.save(buffer, "PNG")
-    return Image.open(io.BytesIO(bytes(buffer.data()))).convert("RGB")
+    return Image.open(io.BytesIO(bytes(buffer.data()))).convert("RGB"), view
 
 
 def differing_share(device: Image.Image, preview: Image.Image, box: tuple) -> float:
@@ -67,12 +79,19 @@ def differing_share(device: Image.Image, preview: Image.Image, box: tuple) -> fl
     return sum(histogram[PIXEL_THRESHOLD + 1 :]) / ((box[2] - box[0]) * (box[3] - box[1]))
 
 
-def compared_box(obj: dict):
-    """:return: the area of the screen to compare for an object, None if the object isn't compared"""
+def compared_box(obj: dict, opened=None):
+    """
+    :param opened: the open list of a dropdown (`DropdownList`), which is compared with it
+    :return: the area of the screen to compare for an object, None if the object isn't compared
+    """
     x, y, w, h = obj.get("x", 0), obj.get("y", 0), obj.get("w", 100), obj.get("h", 50)
     if obj["obj"] in ANIMATED or y + h > NAVIGATION_TOP:
         return None
-    return max(x - MARGIN, 0), max(y - MARGIN, 0), min(x + w + MARGIN, SCREEN[0]), min(y + h + MARGIN, SCREEN[1])
+    left, top, right, bottom = x, y, x + w, y + h
+    if opened is not None:
+        left, top = min(left, opened.x), min(top, opened.y)
+        right, bottom = max(right, opened.x + opened.w), max(bottom, opened.y + opened.h)
+    return max(left - MARGIN, 0), max(top - MARGIN, 0), min(right + MARGIN, SCREEN[0]), min(bottom + MARGIN, SCREEN[1])
 
 
 def baseline() -> dict:
@@ -89,16 +108,17 @@ def measured():
 
 
 @pytest.mark.usefixtures("qapp")
-@pytest.mark.parametrize("name", CASES)
+@pytest.mark.parametrize("name", OBJECTS)
 def test_the_preview_is_as_close_to_the_plate_as_it_was(name, measured):
     pytest.importorskip("segno")
-    objects = CASES[name]
+    objects = OBJECTS[name]
     device = Image.open(RESOURCES / "screenshots" / f"{name}.png").convert("RGB").crop((0, 0, *SCREEN))
-    preview = render(objects)
+    preview, view = render(objects, INTERACTIONS.get(name, ()))
+    lists = {item.obj_id: item.open_layout() for item in view.editable_items() if item.data.get("obj") == "dropdown"}
 
     shares = []
-    for obj in objects:
-        box = compared_box(obj)
+    for index, obj in enumerate(objects, start=1):
+        box = compared_box(obj, lists.get(index))
         shares.append(None if box is None else round(differing_share(device, preview, box), 4))
     measured[name] = shares
 

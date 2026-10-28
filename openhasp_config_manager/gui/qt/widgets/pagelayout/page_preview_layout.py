@@ -10,8 +10,11 @@ from PyQt6.QtGui import QBrush, QCursor, QPainter, QPainterPath, QColor, QPen, Q
 from PyQt6.QtWidgets import QApplication, QGraphicsView, QWidget
 
 from openhasp_config_manager.gui.dimensions import UiDimensions
+from openhasp_config_manager.gui.domain.interaction import Indev, Point, RuntimeState, is_clickable, object_key
 from openhasp_config_manager.gui.domain.preview_images import find_image_file
 from openhasp_config_manager.gui.domain.ripple import Ripple, active_ripples
+from openhasp_config_manager.gui.domain.touch_actions import object_command
+from openhasp_config_manager.gui.domain.touch_groups import group_values
 from openhasp_config_manager.gui.qt.components import UiComponents
 from openhasp_config_manager.gui.qt.theme import current_colors
 from openhasp_config_manager.gui.qt.async_bridge import qBridge
@@ -34,6 +37,8 @@ MAX_ZOOM = 8.0
 
 # how long a message next to an object stays (see show_message)
 MESSAGE_DURATION_MS = 6000
+# how often the preview looks whether a finger rests on an object for a long press
+TOUCH_TICK_MS = 50
 
 
 class PreviewMode(StrEnum):
@@ -59,7 +64,8 @@ class PagePreviewWidget(QGraphicsView):
     zoomChanged = QtCore.pyqtSignal(float)
     # whether the plate is fitted to the view (it is scaled again when the view changes its size)
     fitChanged = QtCore.pyqtSignal(bool)
-    buttonClicked = QtCore.pyqtSignal(dict)
+    # a command that touching an object ran (the `action` of a button), e.g. `page next`
+    commandRequested = QtCore.pyqtSignal(str)
 
     # Emitted when the selection changes in edit mode, with the selected EditableWidgets
     selectionChanged = QtCore.pyqtSignal(list)
@@ -85,6 +91,16 @@ class PagePreviewWidget(QGraphicsView):
         self._is_dimmed: Callable[[Dict], bool] = lambda _obj: False
         # where the mouse pressed on an object that can't be moved, until it is released
         self._locked_press: Optional[Tuple[QtCore.QPoint, EditableWidget]] = None
+
+        # what touching the objects changed in interact mode: the draft is never changed by it (see RuntimeState)
+        self.runtime = RuntimeState()
+        self._indev = Indev(self._touch_target)
+        # a finger that rests on an object long-presses it
+        self._touch_timer = QtCore.QTimer(self)
+        self._touch_timer.setInterval(TOUCH_TICK_MS)
+        self._touch_timer.timeout.connect(lambda: self._indev.tick(time.monotonic()))
+        # all objects of the plate, for the groups that reach over pages (the objects of the page by default)
+        self._group_objects: Callable[[], List[Dict]] = lambda: self.objects
 
         # click feedback in interact mode, painted in drawForeground (not as scene items: reloading a page clears the scene)
         self._ripples: List[Ripple] = []
@@ -163,7 +179,10 @@ class PagePreviewWidget(QGraphicsView):
         :param mode: the mode to set
         """
         self.mode = mode
-        if mode != PreviewMode.Edit:
+        if mode == PreviewMode.Edit:
+            # the draft is shown again, not what touching the objects changed
+            self.reset_interactions()
+        else:
             self.scene().clearSelection()
         for item in self.scene().items():
             if isinstance(item, EditableWidget):
@@ -212,7 +231,66 @@ class PagePreviewWidget(QGraphicsView):
         self.load_objects()
         self.viewport().update()
 
+    def set_group_objects(self, provider: Callable[[], List[Dict]]):
+        """
+        Where to find the objects of all pages, for objects in a group (`groupid`) that follow each other over pages, and objects that
+        commands change.
+        """
+        self._group_objects = provider
+
+    def reset_interactions(self):
+        """Forget what touching the objects changed: they show the draft again."""
+        self._touch_timer.stop()
+        self._indev.cancel()
+        self.runtime.clear()
+        for item in self.editable_items():
+            item.refresh()
+        self.viewport().update()
+
+    def run_command(self, command: str):
+        """Run a command of an `action`. After the mouse event: a command can change the page, which clears the scene."""
+        QtCore.QTimer.singleShot(0, lambda: self._run_command(command))
+
+    def _run_command(self, command: str):
+        """A command that sets a property of an object (`p1b2.val 1`) changes it like a touch does, on any page."""
+        target = object_command(command)
+        if target is not None:
+            obj = next(
+                (obj for obj in self._group_objects() if obj.get("page") == target.page and obj.get("id") == target.id), None
+            )
+            # the plate warns about an object that doesn't exist
+            if obj is not None:
+                key = object_key(obj)
+                self.runtime.set(key, target.attribute, target.value, obj)
+                for item in self.editable_items():
+                    if item.key == key:
+                        item.runtime_changed()
+        self.commandRequested.emit(command)
+
+    def follow_group(self, source: EditableWidget, power: bool, value: int, minimum: int, maximum: int):
+        """The objects in the group of an object that changed take its value, on every page (`event_update_group`)."""
+        objects = self._group_objects()
+        values = group_values(objects, source.obj_data, power, value, minimum, maximum)
+        by_key = {object_key(obj): obj for obj in objects}
+        for key, member_value in values.items():
+            self.runtime.set(key, "val", member_value, by_key[key])
+        for item in self.editable_items():
+            if item.key in values:
+                item.runtime_changed()
+
+    def _touch_target(self, point: Point) -> Optional[EditableWidget]:
+        """:return: the object a finger at a point of the plate presses: the topmost that is clickable (`lv_indev_search_obj`)"""
+        scene_point = QtCore.QPointF(*point)
+        for item in self.scene().items(Qt.SortOrder.DescendingOrder):
+            if isinstance(item, EditableWidget) and item.isVisible() and is_clickable(item.data):
+                if item.hit(item.mapFromScene(scene_point)):
+                    return item
+        return None
+
     def load_objects(self):
+        # the items the finger was on are gone
+        self._indev.forget()
+        self.runtime.pressed, self.runtime.pressed_part = None, None
         # first, in one go: clearing the scene deselects the items one by one, and the selection would report items whose
         # objects are not in the draft anymore (e.g. after removing several objects)
         self.scene().clearSelection()
@@ -224,7 +302,7 @@ class PagePreviewWidget(QGraphicsView):
 
             item = None
             if obj_type == "btn":
-                item = HaspButtonItem(obj_data=obj_data, on_click=self._on_button_clicked, parent_widget=self)
+                item = HaspButtonItem(obj_data=obj_data, parent_widget=self)
             elif obj_type in ITEM_CLASSES:
                 item = ITEM_CLASSES[obj_type](obj_data=obj_data, parent_widget=self)
 
@@ -366,10 +444,46 @@ class PagePreviewWidget(QGraphicsView):
             self.fit_to_view()
         self._position_add_object_button()
 
+    def _plate_point(self, event) -> Point:
+        """:return: where a mouse event is on the plate, kept on the screen (a finger can't leave it)"""
+        position = self.mapToScene(event.position().toPoint())
+        plate = self.scene().sceneRect()
+        return min(max(position.x(), plate.left()), plate.right() - 1), min(max(position.y(), plate.top()), plate.bottom() - 1)
+
+    def finger(self, point: Point, now: float):
+        """The finger is at a point of the plate (pressing, or moving while it presses)."""
+        if not self._indev.is_pressing:
+            self._close_list_unless_touched(point)
+        self._indev.press(point, now)
+
+    def _close_list_unless_touched(self, point: Point):
+        """A new press somewhere else than on the open list of a dropdown closes it (the dropdown loses the focus), the value stays."""
+        key = self.runtime.open_dropdown
+        if key is None:
+            return
+        target = self._touch_target(point)
+        if target is None or target.key != key:
+            self.runtime.open_dropdown = None
+            for item in self.editable_items():
+                if item.key == key:
+                    item.runtime_changed()
+
+    def _touch(self, event):
+        """The mouse presses or drags in interact mode: it is a finger on the plate."""
+        if not self._indev.is_pressing and not self.scene().sceneRect().contains(self.mapToScene(event.position().toPoint())):
+            return
+        self.finger(self._plate_point(event), time.monotonic())
+        self._touch_timer.start()
+        self.viewport().update()
+
     def mousePressEvent(self, event):
         self._add_ripple(event)
         self._message.hide()
         self._locked_press = None
+        if self.mode == PreviewMode.Interact and event.button() == Qt.MouseButton.LeftButton:
+            self._touch(event)
+            event.accept()
+            return
         if self.mode == PreviewMode.Edit and event.button() == Qt.MouseButton.LeftButton:
             item = self._editable_item_at(event.position().toPoint())
             if item is not None and not item.movable:
@@ -377,6 +491,10 @@ class PagePreviewWidget(QGraphicsView):
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
+        if self._indev.is_pressing:
+            self._touch(event)
+            event.accept()
+            return
         super().mouseMoveEvent(event)
         if self._locked_press is None:
             return
@@ -411,6 +529,9 @@ class PagePreviewWidget(QGraphicsView):
 
     def mouseDoubleClickEvent(self, event):
         # the second press of a fast double click arrives here instead of in mousePressEvent
+        if self.mode == PreviewMode.Interact:
+            self.mousePressEvent(event)
+            return
         self._add_ripple(event)
         super().mouseDoubleClickEvent(event)
 
@@ -428,6 +549,12 @@ class PagePreviewWidget(QGraphicsView):
         self.viewport().update()
 
     def mouseReleaseEvent(self, event):
+        if self._indev.is_pressing and event.button() == Qt.MouseButton.LeftButton:
+            self._touch_timer.stop()
+            self._indev.release(self._plate_point(event))
+            self.viewport().update()
+            event.accept()
+            return
         super().mouseReleaseEvent(event)
         self._locked_press = None
         self.viewport().unsetCursor()
@@ -540,15 +667,6 @@ class PagePreviewWidget(QGraphicsView):
         )
 
     # --- items ---
-
-    def _on_button_clicked(self, obj_data: Dict):
-        if self.mode != PreviewMode.Interact:
-            return
-        # Find the object data for this button
-        if obj_data:
-            # after the mouse event: a click can change the page, which clears the scene and deletes the button that is still
-            # handling the event (a crash)
-            QtCore.QTimer.singleShot(0, lambda: self.buttonClicked.emit(obj_data))
 
     @qBridge()
     def _on_selection_changed(self):

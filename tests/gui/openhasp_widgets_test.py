@@ -77,7 +77,7 @@ class TestOpenHaspWidgets(TestBase):
         switch.refresh()
 
         # THEN
-        assert switch._val == 1
+        assert switch.is_toggled
         assert switch.pos().x() == 25
 
     def test_style_reads_the_property_of_a_part(self):
@@ -225,9 +225,12 @@ class TestImageItem(TestBase):
 
     @staticmethod
     def _item(tmp_path, name, content: bytes, **props):
+        from openhasp_config_manager.gui.domain.interaction import RuntimeState
         from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.image import HaspImageItem
 
         class Preview:
+            runtime = RuntimeState()
+
             def image_file(self, src):
                 return Path(tmp_path, name) if src.endswith(name) else None
 

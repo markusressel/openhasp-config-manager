@@ -33,7 +33,7 @@ class HaspLineMeterItem(EditableWidget):
 
     def active_lines(self) -> int:
         count = int(number(self.obj_data.get("line_count"), _DEFAULT_LINE_COUNT))
-        return round(value_fraction(self.obj_data) * count)
+        return round(value_fraction(self.data) * count)
 
     def paint(self, painter, option, widget=None):
         draw_box(painter, self.obj_rect, box_style(self, Part.MAIN, DISC_DEFAULTS))

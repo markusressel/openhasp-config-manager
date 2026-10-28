@@ -270,6 +270,26 @@ class TestFiles(TestBase):
         assert editor.page_preview_widget.editable_items() == []
         assert editor.property_editor._editable_widgets == []
 
+    def test_the_problems_never_name_removed_objects(self, editor, monkeypatch):
+        # GIVEN: objects with problems (outside of the screen), and a listener that looks them up like SourceEditorSync
+        from PyQt6.QtWidgets import QMessageBox
+
+        editor.set_edit_mode(True)
+        for item in editor.page_preview_widget.editable_items():
+            editor.session.set_source_value(item.obj_data, "x", 1000)
+        assert editor.problems
+        looked_up = []
+        editor.stateChanged.connect(lambda: looked_up.extend(editor.session.line_of(p.obj) for p in editor.problems))
+        for item in editor.page_preview_widget.editable_items():
+            item.setSelected(True)
+        monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *args: QMessageBox.StandardButton.Yes))
+
+        # WHEN (this crashed: rebuilding the page reported the selection while the problems still named the removed objects)
+        editor.object_actions.remove_selected()
+
+        # THEN
+        assert editor.problems == []
+
     def test_removing_an_object_while_its_file_is_highlighted(self, editor, monkeypatch):
         # GIVEN
         from PyQt6.QtWidgets import QMessageBox
@@ -714,8 +734,8 @@ class TestPageSelection(TestBase):
         editor.session.add_object(key, {"page": 9, "id": 0, "next": 4})
         editor.set_page_index(9)
 
-        # WHEN: a click on a button with the action next
-        editor._PageLayoutEditorWidget__on_preview_layout_button_clicked({"action": "next"})
+        # WHEN: a touch on a button with the action next runs its command
+        editor._PageLayoutEditorWidget__on_preview_command("page next")
 
         # THEN
         assert editor.current_index == 4
@@ -1011,3 +1031,51 @@ class TestPageIndicator(TestBase):
 
     def test_it_is_painted(self, editor):
         assert not editor.page_indicator.grab().isNull()
+
+
+class TestInteractMode(TestBase):
+    """What touching the objects of the preview changed lives next to the draft: never in it, and not in edit mode."""
+
+    def _touch(self, editor):
+        editor.page_preview_widget.runtime.set((9, 2), "val", 1, _object(editor, 2))
+        editor.page_preview_widget.runtime.open_dropdown = (9, 5)
+
+    def test_touching_does_not_change_the_draft(self, editor):
+        self._touch(editor)
+
+        assert "val" not in _object(editor, 2)
+        assert not editor.session.is_dirty
+
+    def test_going_to_another_page_keeps_what_was_touched(self, editor):
+        self._touch(editor)
+
+        editor._go_to_page(1)
+        editor._go_to_page(9)
+
+        assert not editor.page_preview_widget.runtime.is_empty
+
+    def test_edit_mode_shows_the_draft_and_forgets_the_touches(self, editor):
+        self._touch(editor)
+
+        editor.set_edit_mode(True)
+
+        assert editor.page_preview_widget.runtime.is_empty
+
+    def test_reset_forgets_the_touches_and_is_only_there_in_interact_mode(self, editor):
+        self._touch(editor)
+
+        editor.action_reset_interactions.trigger()
+        assert editor.page_preview_widget.runtime.is_empty
+        assert editor.action_reset_interactions.isVisible()
+        editor.set_edit_mode(True)
+
+        assert not editor.action_reset_interactions.isVisible()
+        editor.set_edit_mode(False)
+        assert editor.action_reset_interactions.isVisible()
+
+    def test_a_new_value_of_the_draft_wins_over_the_touched_one(self, editor):
+        self._touch(editor)
+
+        editor.session.set_source_value(_object(editor, 2), "val", 0)
+
+        assert editor.page_preview_widget.runtime.get((9, 2), "val", _object(editor, 2)) == 0

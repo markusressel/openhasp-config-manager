@@ -13,6 +13,7 @@ from PyQt6.QtWidgets import (
 
 from openhasp_config_manager.gui.domain.problems import Problem, find_problems
 from openhasp_config_manager.gui.domain.draft.page_objects import (
+    MAX_PAGE,
     OpenHASPWidgetType,
     get_page_objects,
     get_navigable_page_indices,
@@ -26,6 +27,7 @@ from openhasp_config_manager.gui.domain.draft.page_objects import (
 from openhasp_config_manager.gui.domain.file_tree import default_target_component, relative_config_path
 from openhasp_config_manager.gui.domain.draft.model import ChangeKind, DraftChange
 from openhasp_config_manager.gui.domain.draft.session import PlateSession
+from openhasp_config_manager.gui.domain.touch_actions import page_command
 from openhasp_config_manager.gui.domain.ui_session import DeviceSession
 from openhasp_config_manager.gui.qt.components import UiComponents
 from openhasp_config_manager.gui.qt.layouts import frozen
@@ -143,7 +145,10 @@ class PageLayoutEditorWidget(QWidget):
 
         self.page_preview_widget = PagePreviewWidget()
         self.page_preview_widget.set_movable_predicate(lambda obj: self.session is None or self.object_actions.is_movable(obj))
-        self.page_preview_widget.buttonClicked.connect(self.__on_preview_layout_button_clicked)
+        self.page_preview_widget.commandRequested.connect(self.__on_preview_command)
+        self.page_preview_widget.set_group_objects(
+            lambda: [obj for objects in self.session.working_objects.values() for obj in objects] if self.session else []
+        )
         self.page_preview_widget.modeChanged.connect(self._on_editor_mode_changed)
         self.page_preview_widget.selectionChanged.connect(self._on_openhasp_widget_selection_changed)
         self.page_preview_widget.itemsMoved.connect(self.object_actions.on_items_moved)
@@ -176,6 +181,13 @@ class PageLayoutEditorWidget(QWidget):
             checkable=True,
         )
         self.action_edit_mode.toggled.connect(self._on_edit_mode_toggled)
+        self.action_reset_interactions = create(
+            self,
+            "Reset",
+            "restore",
+            tooltip="Put the objects back as the files say: what touching them changed (toggles, values, open lists, closed message boxes) is forgotten",
+        )
+        self.action_reset_interactions.triggered.connect(lambda: self.page_preview_widget.reset_interactions())
 
         self.action_snap = create(
             self,
@@ -295,6 +307,7 @@ class PageLayoutEditorWidget(QWidget):
         preview.add_overlay(
             floating_bar(
                 [
+                    self.action_reset_interactions,
                     self.action_edit_mode,
                     self.action_snap,
                     None,
@@ -304,7 +317,7 @@ class PageLayoutEditorWidget(QWidget):
                     self.action_duplicate,
                     self.action_delete,
                 ],
-                with_text=[self.action_edit_mode, self.action_snap],
+                with_text=[self.action_reset_interactions, self.action_edit_mode, self.action_snap],
             ),
             OverlayAnchor.TOP_RIGHT,
         )
@@ -408,8 +421,9 @@ class PageLayoutEditorWidget(QWidget):
         LOGGER.debug(f"Setting page index {index}")
         self.current_index = index
         self.page_objects = get_page_objects(self.working_objects, index=index)
-        self.page_preview_widget.set_objects(self.page_objects)
+        # first: rebuilding the preview reports the selection (`stateChanged`), and the problems must not name removed objects then
         self._update_page_views()
+        self.page_preview_widget.set_objects(self.page_objects)
         self.property_editor.set_editable_widgets([])
 
         pages = get_navigable_page_indices(self.working_objects)
@@ -499,16 +513,17 @@ class PageLayoutEditorWidget(QWidget):
         if pages:
             self._go_to_page(pages[0])
 
-    @qBridge(dict)
-    def __on_preview_layout_button_clicked(self, obj: dict):
-        LOGGER.debug(f"Clicked on object in preview: {obj}")
-        action = obj.get("action", None)
-        if action in ("next", "prev", "back"):
+    @qBridge(str)
+    def __on_preview_command(self, command: str):
+        """A touch on an object ran a command of its `action`: the preview changed objects itself, the page changes here."""
+        LOGGER.debug(f"Command of an object in the preview: {command}")
+        destination = page_command(command)
+        if destination in ("next", "prev", "back"):
             # like on the plate: the settings of the page limit where the buttons lead (the toolbar can go to any page)
             start_page = self.device_pages_data.device.config.hasp.startpage
-            target = navigate(self.working_objects, self.current_index, action, start_page)
-            if target is not None:
-                self._go_to_page(target)
+            destination = navigate(self.working_objects, self.current_index, destination, start_page)
+        if isinstance(destination, int) and 1 <= destination <= MAX_PAGE:
+            self._go_to_page(destination)
 
     # --- undo ---
 
@@ -545,6 +560,8 @@ class PageLayoutEditorWidget(QWidget):
     def _on_editor_mode_changed(self, mode: PreviewMode):
         edit = mode == PreviewMode.Edit
         self.action_edit_mode.setChecked(edit)
+        # there is nothing to reset while editing: the preview shows the draft
+        self.action_reset_interactions.setVisible(not edit)
         self.widget_picker.setVisible(edit)
         self.property_editor.set_edit_mode(edit)
         self._update_actions()
