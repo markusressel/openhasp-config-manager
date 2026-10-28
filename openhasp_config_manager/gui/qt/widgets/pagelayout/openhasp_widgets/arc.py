@@ -19,7 +19,7 @@ from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable
 # LVGL draws the background arc from 135 to 45 degrees (clockwise from 3 o'clock) if the object says nothing else
 _DEFAULT_START = 135
 _DEFAULT_END = 45
-_DEFAULT_LINE_WIDTH = 14
+_DEFAULT_LINE_WIDTH = 15.5
 _DEFAULT_KNOB_RADIUS = 8
 # measured on a plate: what is behind the arcs, the arc of the track and the arc of the indicator
 _PLATE_DEFAULTS = {"bg_color": "#505A60", "bg_opa": 255, "radius": 1000}
@@ -70,7 +70,8 @@ class HaspArcItem(EditableWidget):
         # the plate behind the arcs, and the disc inside of them (the main part: `bg_color`, `border_width`, ...)
         full = QtCore.QRectF((self.obj_w - side) / 2, (self.obj_h - side) / 2, side, side)
         draw_box(painter, full, box_style(self, Part.MAIN, _PLATE_DEFAULTS))
-        width = max(track_width, indicator_width)
+        # measured on a plate: the disc is as far from the edge as the default arc is wide, whatever the width of the arcs is
+        width = _DEFAULT_LINE_WIDTH
         disc = dataclasses.replace(box_style(self, Part.MAIN, _DISC_DEFAULTS), border_width=0, outline_width=0, shadow_width=0)
         draw_box(painter, full.adjusted(width, width, -width, -width), disc)
 
@@ -108,6 +109,6 @@ class HaspArcItem(EditableWidget):
                 self.obj_rect,
                 str(text),
                 to_color(self.obj_data.get("value_color"), DEFAULT_TEXT),
-                plate_font(self.obj_data.get("value_font", 25)),
+                plate_font(self.obj_data.get("value_font", 24)),
             )
         super().paint(painter, option, widget)

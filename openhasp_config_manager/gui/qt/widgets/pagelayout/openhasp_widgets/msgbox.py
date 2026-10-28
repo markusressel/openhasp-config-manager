@@ -1,4 +1,4 @@
-from PyQt6 import QtCore
+from PyQt6 import QtCore, QtGui
 
 from openhasp_config_manager.gui.domain.style_parts import Part
 
@@ -9,14 +9,17 @@ from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.default_
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import (
     DEFAULT_TEXT,
     draw_text,
+    line_lead,
     plate_font,
     to_color,
+    wrap_lines,
 )
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
 
 # measured on a plate: the buttons are this high and this far from the edge of the box and from each other
 _PADDING = 12
-_BUTTON_HEIGHT = 48
+_BUTTON_HEIGHT = 50
+_TOP = 6
 _GAP = 6
 _DEFAULT_SCREEN = (480, 320)
 # a track with a white glow around it
@@ -36,6 +39,23 @@ class HaspMessageBoxItem(EditableWidget):
         rect = scene.sceneRect() if scene is not None else None
         return (rect.width(), rect.height()) if rect is not None and not rect.isEmpty() else _DEFAULT_SCREEN
 
+    def text_lines(self):
+        """:return: the lines of the text, wrapped at the width of the box"""
+        return wrap_lines(self.font, str(self.obj_data.get("text", "")), self.obj_w - 2 * _PADDING)
+
+    @property
+    def font(self) -> QtGui.QFont:
+        return plate_font(self.style("text_font", 24))
+
+    @property
+    def line_height(self) -> float:
+        return QtGui.QFontMetricsF(self.font).lineSpacing() + line_lead(self.font)
+
+    @property
+    def obj_h(self) -> int:
+        """Measured on a plate: the height follows the text and the buttons (`h` is ignored)."""
+        return round(_TOP + len(self.text_lines()) * self.line_height + _PADDING + _BUTTON_HEIGHT + _PADDING)
+
     @property
     def obj_x(self) -> int:
         return round((self._screen_size()[0] - self.obj_w) / 2)
@@ -51,15 +71,11 @@ class HaspMessageBoxItem(EditableWidget):
     def paint(self, painter, option, widget=None):
         draw_box(painter, self.obj_rect, box_style(self, Part.MAIN, _DEFAULTS))
 
-        font = plate_font(self.style("text_font", 25))
-        text_rect = self.obj_rect.adjusted(_PADDING, _PADDING, -_PADDING, -(_PADDING + _BUTTON_HEIGHT + _GAP))
-        painter.setFont(font)
-        painter.setPen(to_color(self.style("text_color"), DEFAULT_TEXT))
-        painter.drawText(
-            text_rect,
-            int(QtCore.Qt.AlignmentFlag.AlignCenter | QtCore.Qt.TextFlag.TextWordWrap),
-            str(self.obj_data.get("text", "")),
-        )
+        font = self.font
+        color = to_color(self.style("text_color"), DEFAULT_TEXT)
+        for index, line in enumerate(self.text_lines()):
+            line_rect = QtCore.QRectF(_PADDING, _TOP + index * self.line_height, self.obj_w - 2 * _PADDING, self.line_height)
+            draw_text(painter, line_rect, line, color, font, "center", "top")
 
         buttons = self.buttons()
         if buttons:

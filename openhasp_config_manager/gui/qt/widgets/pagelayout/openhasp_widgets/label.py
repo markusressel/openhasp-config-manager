@@ -7,7 +7,14 @@ from PyQt6.QtWidgets import QGraphicsTextItem
 from openhasp_config_manager.gui.domain.fonts import font_size
 from openhasp_config_manager.gui.domain.problems import geometry_value
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.box import box_style, draw_box
-from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import number, set_line_space, to_color
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import (
+    line_lead,
+    line_top,
+    number,
+    plate_font,
+    set_line_space,
+    to_color,
+)
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
 
 
@@ -57,8 +64,11 @@ class HaspLabelItem(EditableWidget):
         self.setPos(self.obj_x, self.obj_y)
 
         # Child item for text rendering
-        self.setFlag(QtWidgets.QGraphicsItem.GraphicsItemFlag.ItemClipsChildrenToShape, True)
-        self.text_item = QGraphicsTextItem(parent=self)
+        # measured on a plate: the text is cut off at the edges of the content area, not of the label
+        self._clip = QtWidgets.QGraphicsRectItem(parent=self)
+        self._clip.setPen(QtGui.QPen(QtCore.Qt.PenStyle.NoPen))
+        self._clip.setFlag(QtWidgets.QGraphicsItem.GraphicsItemFlag.ItemClipsChildrenToShape, True)
+        self.text_item = QGraphicsTextItem(parent=self._clip)
         # without the default margin of 4px around the text, it starts exactly at the top and left of the label
         self.text_item.document().setDocumentMargin(0)
         self._setup_text()
@@ -71,10 +81,7 @@ class HaspLabelItem(EditableWidget):
             self.text_item.setPlainText("")
             return
 
-        pixel_size = self.text_font
-        scaled_pixel_size = int(float(pixel_size) * 0.7)
-
-        base_font = QtGui.QFont("Roboto Condensed", scaled_pixel_size)
+        base_font = plate_font(self.text_font)
         base_font.setLetterSpacing(QtGui.QFont.SpacingType.AbsoluteSpacing, number(self.style("text_letter_space", 0), 0))
         self.text_item.setFont(base_font)
 
@@ -82,12 +89,13 @@ class HaspLabelItem(EditableWidget):
             raw_text = self._with_dots(raw_text, base_font)
 
         if self.parent_widget and hasattr(self.parent_widget, "_replace_unicode_with_html"):
-            processed_html = self.parent_widget._replace_unicode_with_html(raw_text, scaled_pixel_size)
+            processed_html = self.parent_widget._replace_unicode_with_html(raw_text, base_font.pixelSize())
             self.text_item.setHtml(processed_html)
         else:
             self.text_item.setPlainText(raw_text)
 
-        set_line_space(self.text_item, number(self.style("text_line_space", 0), 0))
+        self._lead = line_lead(base_font)
+        set_line_space(self.text_item, number(self.style("text_line_space", 0), 0) + self._lead)
 
         # Color
         color = self.text_color
@@ -123,7 +131,8 @@ class HaspLabelItem(EditableWidget):
         if self.mode == "expand":
             self._visual.setWidth(max(self.obj_w, document.idealWidth() + left + right))
         elif self.mode == "break":
-            self._visual.setHeight(max(self.obj_h, self.text_item.boundingRect().height() + top + bottom))
+            self._visual.setHeight(max(self.obj_h, self.text_item.boundingRect().height() + self._lead + top + bottom))
+        self._clip.setRect(self._visual.adjusted(left, top, -right, -bottom))
         # the text of a label starts at the top of its content area, whatever its height (like in LVGL)
         t_rect = self.text_item.boundingRect()
         if self.mode == "break" or t_rect.width() <= content.width():
@@ -133,7 +142,7 @@ class HaspLabelItem(EditableWidget):
                 "center": (content.width() - t_rect.width()) / 2,
                 "right": content.width() - t_rect.width(),
             }.get(self.align, 0)
-        self.text_item.setPos(x_pos, content.top())
+        self.text_item.setPos(x_pos, content.top() + line_top(self.text_item.font()))
 
     def _on_data_changed(self):
         self._setup_text()

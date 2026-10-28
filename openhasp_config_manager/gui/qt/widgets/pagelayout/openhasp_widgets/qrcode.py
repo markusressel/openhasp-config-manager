@@ -6,7 +6,9 @@ from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing 
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
 
 _DEFAULT_SIZE = 140
-_QUIET_ZONE = 4
+# measured on a plate: the modules are whole pixels, as big as fit into the code and a quiet zone of this many modules on each side,
+# the code is centered in the white square
+_QUIET_ZONE = 2
 
 
 class HaspQrCodeItem(EditableWidget):
@@ -33,10 +35,12 @@ class HaspQrCodeItem(EditableWidget):
         painter.setBrush(QtGui.QColor("white"))
         painter.drawRect(self.obj_rect)
         rows = qr_modules(str(self.obj_data.get("text", "")))
-        module = self.obj_w / ((len(rows) or 1) + 2 * _QUIET_ZONE)
+        count = len(rows) or 1
+        module = max(self.obj_w // (count + 2 * _QUIET_ZONE), 1)
+        offset = (self.obj_w - module * count) // 2
         painter.setBrush(QtGui.QColor("black"))
         for row, line in enumerate(rows):
             for col, dark in enumerate(line):
                 if dark:
-                    painter.drawRect(QtCore.QRectF((col + _QUIET_ZONE) * module, (row + _QUIET_ZONE) * module, module, module))
+                    painter.drawRect(QtCore.QRectF(offset + col * module, offset + row * module, module, module))
         super().paint(painter, option, widget)

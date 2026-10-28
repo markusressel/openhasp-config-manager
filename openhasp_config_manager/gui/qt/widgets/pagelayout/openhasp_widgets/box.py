@@ -174,10 +174,10 @@ def _background_brush(style: BoxStyle, rect: QtCore.QRectF) -> QtGui.QBrush:
 
 def _draw_shadow(painter: QtGui.QPainter, rect: QtCore.QRectF, style: BoxStyle):
     """
-    The shadow: the box moved by the offset and grown by the spread, faded out over `shadow_width` pixels around its edge (measured on a
-    plate: full at half the width inside of the edge, nothing at half the width outside, smoothly in between).
+    The shadow: the box moved by the offset and grown by the spread, faded out around its edge (measured on a plate: over 0.8 times the
+    `shadow_width`, so it reaches 0.4 times the width outside, and is half as strong as set at the edge).
     """
-    blur = style.shadow_width
+    blur = style.shadow_width * 0.8
     base = rect.translated(style.shadow_ofs_x, style.shadow_ofs_y).adjusted(
         *([-style.shadow_spread] * 2), *([style.shadow_spread] * 2)
     )

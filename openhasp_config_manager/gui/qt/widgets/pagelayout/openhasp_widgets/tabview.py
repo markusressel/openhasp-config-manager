@@ -65,7 +65,7 @@ class HaspTabviewItem(EditableWidget):
         # the tab buttons (part 4) are one bar
         draw_box(painter, area, box_style(self, Part.ITEMS, {"bg_color": _BAR_COLOR, "bg_opa": 255, "radius": 0}))
         active = int(number(self.obj_data.get("val"), 0))
-        font = plate_font(self.style("text_font", 25, Part.ITEMS))
+        font = plate_font(self.style("text_font", 24, Part.ITEMS))
         for index, text in enumerate(tabs):
             if horizontal:
                 button = QtCore.QRectF(

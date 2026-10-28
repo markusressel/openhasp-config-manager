@@ -9,7 +9,14 @@ from PyQt6.QtWidgets import QGraphicsTextItem
 from openhasp_config_manager.gui.domain.style_parts import Part
 from openhasp_config_manager.gui.qt.async_bridge import qBridge
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.box import box_style, draw_box, resolve
-from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import number, set_line_space, to_color
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import (
+    line_lead,
+    line_top,
+    number,
+    plate_font,
+    set_line_space,
+    to_color,
+)
 from openhasp_config_manager.gui.domain.fonts import font_size
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
 
@@ -92,22 +99,22 @@ class HaspButtonItem(EditableWidget):
             return
 
         pixel_size = self.text_font
-        scaled_pixel_size = int(float(pixel_size) * 0.7)
+        base_font = plate_font(pixel_size)
 
         # 1. Determine the content and font requirements
         # We use HTML to allow per-character font switching
         if self.parent_widget and hasattr(self.parent_widget, "_replace_unicode_with_html"):
-            processed_html = self.parent_widget._replace_unicode_with_html(raw_text, scaled_pixel_size)
+            processed_html = self.parent_widget._replace_unicode_with_html(raw_text, base_font.pixelSize())
             self.text_item.setHtml(processed_html)
         else:
             self.text_item.setPlainText(raw_text)
 
         # 2. Set the base font for the non-icon text
-        base_font = QFont("Roboto Condensed", scaled_pixel_size)
         base_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, number(self.style("text_letter_space", 0), 0))
         self.text_item.setFont(base_font)
 
-        set_line_space(self.text_item, number(self.style("text_line_space", 0), 0))
+        lead = line_lead(base_font)
+        set_line_space(self.text_item, number(self.style("text_line_space", 0), 0) + lead)
 
         # 3. Apply Styling
         self.text_item.setDefaultTextColor(self.text_color)
@@ -124,7 +131,7 @@ class HaspButtonItem(EditableWidget):
         t_rect = self.text_item.boundingRect()
         self.text_item.setPos(
             (self.obj_w - t_rect.width()) / 2,
-            (self.obj_h - t_rect.height()) / 2,
+            (self.obj_h - t_rect.height()) / 2 + line_top(base_font),
         )
 
     def _on_data_changed(self):

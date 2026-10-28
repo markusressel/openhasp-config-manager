@@ -22,7 +22,7 @@ _ITEM_DEFAULTS = {**BUTTON_DEFAULTS, "radius": 4}
 class HaspButtonMatrixItem(EditableWidget):
     """
     Rows of buttons from `options` (`"\\n"` starts a new row, `#RRGGBB text#` colors a label). Every row has the same height and
-    the buttons of a row share its width. The button `val` is drawn as checked if the buttons toggle. The matrix itself (the main
+    the buttons of a row share its width. The matrix itself (the main
     part) is a track, the buttons are the items (part 4) and `pad_inner` is the space between them.
     See https://www.openhasp.com/0.7.0/design/objects/btnmatrix/
     """
@@ -46,11 +46,10 @@ class HaspButtonMatrixItem(EditableWidget):
 
     def paint(self, painter, option, widget=None):
         draw_box(painter, self.obj_rect, box_style(self, Part.MAIN, TRACK_DEFAULTS))
-        toggles = str(self.obj_data.get("toggle", False)).lower() in ("true", "1")
-        active = int(number(self.obj_data.get("val"), 0))
-        font = plate_font(self.style("text_font", 25))
-        for index, (rect, button) in enumerate(self.button_rects()):
-            state = State.TOGGLED if toggles and index == active else State.DEFAULT
+        # measured on a plate: a `val` doesn't check a button, even if the buttons toggle
+        state = State.DEFAULT if self.is_enabled else State.DISABLED
+        font = plate_font(self.style("text_font", 24))
+        for rect, button in self.button_rects():
             draw_box(painter, rect, box_style(self, Part.ITEMS, _ITEM_DEFAULTS, state))
             color = to_color(button.color or resolve(self, "text_color", Part.ITEMS, _ITEM_DEFAULTS, state), "#FFFFFF")
             draw_text(painter, rect, button.text, color, font, self.obj_data.get("align", "center"))

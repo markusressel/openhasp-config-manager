@@ -1,6 +1,6 @@
 """How the parts of the objects look on the plate without style properties (measured on a plate, it is the default theme of openHASP)."""
 
-_BORDER = {"bg_opa": 255, "border_width": 1, "border_color": "#A0A5B1", "border_opa": 128, "radius": 4}
+_BORDER = {"bg_opa": 255, "border_width": 1, "border_color": "#A0A5B1", "border_opa": 82, "radius": 4}
 
 # the track of a switch, slider or bar: a dark gradient
 TRACK_DEFAULTS = {"bg_color": "#52596A", "bg_grad_color": "#202839", "bg_grad_dir": 1, **_BORDER}

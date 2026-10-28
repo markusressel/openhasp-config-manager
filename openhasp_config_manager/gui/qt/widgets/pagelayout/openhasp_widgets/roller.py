@@ -1,8 +1,15 @@
+import dataclasses
+
 from PyQt6 import QtCore, QtGui
 
 from openhasp_config_manager.gui.domain.fonts import font_size
 from openhasp_config_manager.gui.domain.style_parts import Part
-from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.box import box_style, draw_box
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.box import (
+    GRADIENT_VERTICAL,
+    box_style,
+    capped_radius,
+    draw_box,
+)
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.default_theme import INDICATOR_DEFAULTS, TRACK_DEFAULTS
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import (
     DEFAULT_TEXT,
@@ -14,7 +21,7 @@ from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing 
 )
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
 
-_DEFAULT_FONT = 25
+_DEFAULT_FONT = 24
 # the selected row (part 5): the blue of the indicator, with square corners
 _SELECTED_DEFAULTS = {**INDICATOR_DEFAULTS, "radius": 0}
 
@@ -37,8 +44,8 @@ class HaspRollerItem(EditableWidget):
 
     @property
     def row_height(self) -> float:
-        """Measured on a plate: 45 pixels with the default font, 31 with the font 12."""
-        return font_size(self.style("text_font", _DEFAULT_FONT), _DEFAULT_FONT) * 1.077 + 18
+        """Measured on a plate: 45 pixels with the default font (24), 31 with the font 12."""
+        return font_size(self.style("text_font", _DEFAULT_FONT), _DEFAULT_FONT) * 1.167 + 17
 
     @property
     def obj_h(self) -> int:
@@ -63,8 +70,32 @@ class HaspRollerItem(EditableWidget):
             result.append((top, options[index] if 0 <= index < len(options) else None, offset == 0))
         return result
 
+    def _draw_mirrored_gradient(self, painter, style):
+        """Measured on a plate: the background goes from `bg_color` at the top and at the bottom to `bg_grad_color` in the middle."""
+        rect = self.obj_rect
+        radius = capped_radius(rect, style.radius)
+        painter.save()
+        clip = QtGui.QPainterPath()
+        clip.addRoundedRect(rect, radius, radius)
+        painter.setClipPath(clip)
+        painter.setPen(QtCore.Qt.PenStyle.NoPen)
+        edge, middle = QtGui.QColor(style.bg_color), QtGui.QColor(style.bg_grad_color)
+        edge.setAlphaF(style.bg_opa)
+        middle.setAlphaF(style.bg_opa)
+        for top, bottom, from_top in ((rect.top(), rect.center().y(), True), (rect.center().y(), rect.bottom(), False)):
+            gradient = QtGui.QLinearGradient(0, top if from_top else bottom, 0, bottom if from_top else top)
+            gradient.setColorAt(0, edge)
+            gradient.setColorAt(1, middle)
+            painter.setBrush(QtGui.QBrush(gradient))
+            painter.drawRect(QtCore.QRectF(rect.left(), top, rect.width(), bottom - top))
+        painter.restore()
+
     def paint(self, painter, option, widget=None):
-        draw_box(painter, self.obj_rect, box_style(self, Part.MAIN, TRACK_DEFAULTS))
+        main = box_style(self, Part.MAIN, TRACK_DEFAULTS)
+        if main.bg_grad_dir == GRADIENT_VERTICAL and main.bg_opa > 0:
+            self._draw_mirrored_gradient(painter, main)
+            main = dataclasses.replace(main, bg_opa=0)
+        draw_box(painter, self.obj_rect, main)
 
         painter.save()
         clip = QtGui.QPainterPath()
@@ -72,6 +103,7 @@ class HaspRollerItem(EditableWidget):
         painter.setClipPath(clip)
         align = self.obj_data.get("align", "center")
         color = to_color(self.style("text_color"), DEFAULT_TEXT)
+        # measured on a plate: the text is centered in its row when the height follows the rows, else it is at the top of the row
         for top, entry, is_selected in self.entry_rows():
             row = QtCore.QRectF(0, top, self.obj_w, self.row_height)
             if is_selected:
@@ -79,6 +111,6 @@ class HaspRollerItem(EditableWidget):
             if entry is None:
                 continue
             row_color = to_color(self.style("text_color", None, Part.SELECTED), color.name()) if is_selected else color
-            draw_text(painter, row.adjusted(8, 0, -8, 0), entry, row_color, self.font, align)
+            draw_text(painter, row.adjusted(8, 0, -8, 0), entry, row_color, self.font, align, "center" if self.rows else "top")
         painter.restore()
         super().paint(painter, option, widget)

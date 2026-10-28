@@ -6,6 +6,7 @@ from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.default_
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import (
     DEFAULT_TEXT,
     draw_text,
+    line_lead,
     number,
     option_lines,
     plate_font,
@@ -19,7 +20,6 @@ _DEFAULTS = {
     "bg_grad_color@4": INDICATOR_DEFAULTS["bg_grad_color"],
 }
 _PADDING = 10
-_ARROW_SIZE = 5
 
 
 class HaspDropdownItem(EditableWidget):
@@ -39,17 +39,30 @@ class HaspDropdownItem(EditableWidget):
         draw_box(painter, self.obj_rect, box_style(self, Part.MAIN, _DEFAULTS))
 
         color = to_color(self.style("text_color"), DEFAULT_TEXT)
-        left, top, right, bottom = padding(self, Part.MAIN, 0)
-        text_rect = self.obj_rect.adjusted(_PADDING + left, top, -(_PADDING * 3 + right), -bottom)
-        draw_text(painter, text_rect, self.selected_text, color, plate_font(self.style("text_font", 25)), "left")
+        # measured on a plate: the selected entry starts 6 pixels from the top left corner (the first line of a label does), the symbol
+        # follows the size of the font
+        _, _, right, _ = padding(self, Part.MAIN, 0)
+        left, top = number(self.style("pad_left", 6, Part.MAIN), 6), number(self.style("pad_top", 6, Part.MAIN), 6)
+        font = plate_font(self.style("text_font", 24))
+        draw_text(
+            painter,
+            self.obj_rect.adjusted(left, top, -(_PADDING * 3 + right), 0),
+            self.selected_text,
+            color,
+            font,
+            "left",
+            "top",
+        )
 
-        # the symbol shows the direction the list opens (0 down, 1 up, 2 left, 3 right)
-        center = QtCore.QPointF(self.obj_w - _PADDING * 1.5 - right, self.obj_h / 2)
+        size = font.pixelSize()
+        center = QtCore.QPointF(
+            self.obj_w - 7 - size / 2 - right, top + (QtGui.QFontMetricsF(font).height() + line_lead(font)) / 2
+        )
         direction = int(number(self.obj_data.get("direction"), 0))
         dx, dy = {0: (0, 1), 1: (0, -1), 2: (-1, 0), 3: (1, 0)}.get(direction, (0, 1))
-        tip = center + QtCore.QPointF(dx, dy) * _ARROW_SIZE * 0.6
-        back = center - QtCore.QPointF(dx, dy) * _ARROW_SIZE * 0.6
-        side = QtCore.QPointF(-dy, dx) * _ARROW_SIZE
+        tip = center + QtCore.QPointF(dx, dy) * size / 4 * 0.5
+        back = center - QtCore.QPointF(dx, dy) * size / 4 * 0.5
+        side = QtCore.QPointF(-dy, dx) * size / 4
         painter.save()
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
         painter.setPen(

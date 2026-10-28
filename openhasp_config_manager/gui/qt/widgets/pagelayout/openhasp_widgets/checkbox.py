@@ -3,22 +3,28 @@ import dataclasses
 from PyQt6 import QtCore, QtGui
 
 from openhasp_config_manager.gui.domain.fonts import font_size
-from openhasp_config_manager.gui.domain.style_parts import Part
+from openhasp_config_manager.gui.domain.problems import geometry_value
+from openhasp_config_manager.gui.domain.style_parts import Part, State
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.box import box_style, default_value, draw_box, padding
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.default_theme import INDICATOR_DEFAULTS, TRACK_DEFAULTS
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import draw_text, number, plate_font, to_color
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
 
 # the space between the box and the text
-_GAP = 12
+_GAP = 0
 _DEFAULT_TEXT = "Checkbox"
-_DEFAULT_FONT = 25
+_DEFAULT_FONT = 24
 
 # the box (part 1): dark, blue while checked
 BULLET_DEFAULTS = {
     **TRACK_DEFAULTS,
+    "border_opa": 84,
     "bg_color@1": INDICATOR_DEFAULTS["bg_color"],
     "bg_grad_color@1": INDICATOR_DEFAULTS["bg_grad_color"],
+    "border_width@1": 1,
+    "border_color@1": "#645350",
+    "border_opa@1": 61,
+    "bg_color@5": "#83898B",
 }
 
 
@@ -27,6 +33,16 @@ class HaspCheckboxItem(EditableWidget):
     A box with a check mark and a text. On the plate the size follows the font and the text: `w` and `h` are ignored.
     See https://www.openhasp.com/0.7.0/design/objects/checkbox/
     """
+
+    def own_style(self, name: str, part: Part, state: State):
+        if part != Part.MAIN:
+            return super().own_style(name, part, state)
+        # measured on a plate: every part but the box (1) styles the background behind the box and the text
+        for candidate in (Part.MAIN, Part.KNOB, Part.ITEMS_BACKGROUND, Part.ITEMS, Part.SELECTED):
+            found = super().own_style(name, candidate, state)
+            if found is not None:
+                return found
+        return None
 
     @property
     def checked(self) -> bool:
@@ -42,8 +58,8 @@ class HaspCheckboxItem(EditableWidget):
 
     @property
     def box_size(self) -> int:
-        """Measured on a plate: the box is a third bigger than the font, plus 4 pixels."""
-        return round(font_size(self.style("text_font", _DEFAULT_FONT), _DEFAULT_FONT) * 4 / 3 + 3)
+        """Measured on a plate: 22 pixels for font 12, 46 for font 32."""
+        return round(font_size(self.style("text_font", _DEFAULT_FONT), _DEFAULT_FONT) * 1.2 + 7.6)
 
     @property
     def obj_w(self) -> int:
@@ -55,11 +71,23 @@ class HaspCheckboxItem(EditableWidget):
         _, top, _, bottom = padding(self, Part.MAIN)
         return round(top + bottom + self.box_size)
 
+    @property
+    def _offset_y(self) -> float:
+        """On the plate the checkbox is centered vertically in the `h` of the object (its size follows the font and the text)."""
+        _, top, _, bottom = padding(self, Part.MAIN)
+        # measured: the padding moves the background, a padding on the top up and one on the bottom down
+        return (geometry_value(self.obj_data, "h") - self.obj_h) / 2 + bottom - top
+
+    @property
+    def obj_rect(self) -> QtCore.QRectF:
+        return QtCore.QRectF(0, self._offset_y, self.obj_w, self.obj_h)
+
     def paint(self, painter, option, widget=None):
         # the main part: the background behind the box and the text, there is none by default
         draw_box(painter, self.obj_rect, box_style(self))
 
         left, top, _, _ = padding(self, Part.MAIN)
+        top += self._offset_y
         box = QtCore.QRectF(left, top, self.box_size, self.box_size)
         style = box_style(self, Part.INDICATOR, BULLET_DEFAULTS)
         # measured on a plate: the colors of the box can't be changed with `bg_color1x`, only the rest of its style
@@ -77,13 +105,11 @@ class HaspCheckboxItem(EditableWidget):
             pen.setCapStyle(QtCore.Qt.PenCapStyle.RoundCap)
             pen.setJoinStyle(QtCore.Qt.PenJoinStyle.RoundJoin)
             painter.setPen(pen)
+            # measured on a plate: the mark is a symbol of 11 x 8 pixels, whatever the size of the box
+            origin = box.center() + QtCore.QPointF(-5, -3)
             painter.drawPolyline(
                 QtGui.QPolygonF(
-                    [
-                        box.topLeft() + QtCore.QPointF(box.width() * 0.3, box.height() * 0.52),
-                        box.topLeft() + QtCore.QPointF(box.width() * 0.44, box.height() * 0.66),
-                        box.topLeft() + QtCore.QPointF(box.width() * 0.72, box.height() * 0.36),
-                    ]
+                    [origin + QtCore.QPointF(0.5, 4.5), origin + QtCore.QPointF(3.5, 7.5), origin + QtCore.QPointF(10.5, 0.5)]
                 )
             )
             painter.restore()

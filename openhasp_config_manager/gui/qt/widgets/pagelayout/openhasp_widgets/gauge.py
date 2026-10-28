@@ -26,7 +26,7 @@ _SCALE_COLOR = "#8B898B"
 _CRITICAL_COLOR = "#00B6FF"
 _NEEDLE_COLOR = "#EEEEEE"
 _MINOR_COLOR = "#5A6070"
-_DEFAULT_FONT = 25
+_DEFAULT_FONT = 24
 # the disc behind the dial: a round track, there is no border by default
 _DISC_DEFAULTS = {**TRACK_DEFAULTS, "radius": 1000}
 
