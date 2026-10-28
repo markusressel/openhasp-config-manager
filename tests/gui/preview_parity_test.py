@@ -237,11 +237,14 @@ class TestTextAndShapes(TestBase):
             {"obj": "dropdown", "options": "One\nTwo", "w": 146, "h": 38, "text_font": 24}
         )
 
-    def test_a_roller_centers_its_text_in_the_rows_it_has_and_puts_it_at_the_top_of_a_row_else(self):
-        with_rows = {"obj": "roller", "options": "One\nTwo\nThree", "val": 1, "rows": 3}
+    def test_a_roller_draws_its_border_over_the_selected_row_and_its_text_centered_in_every_row(self):
+        roller = {"x": 10, "y": 10, "w": 100, "h": 120, "obj": "roller", "options": "One\nTwo\nThree", "val": 1}
 
-        without_rows = {key: value for key, value in with_rows.items() if key != "rows"}
-        assert render(with_rows) != render({**without_rows, "h": 135})
+        image = render({**roller, "border_width": 3, "border_color": "#FF0000", "border_opa": 255, "bg_grad_dir": 0})
+
+        # the selected row is in the middle: its left edge is part of the border
+        assert image.pixelColor(11, 70).name() == "#ff0000"
+        assert render({**roller, "rows": 3}) == render({**roller, "h": 135})
 
     def test_a_linemeter_has_18_lines_and_the_lines_of_the_value_follow_the_indicator_width(self):
         from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.linemeter import HaspLineMeterItem

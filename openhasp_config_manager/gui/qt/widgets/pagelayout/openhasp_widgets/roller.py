@@ -92,10 +92,13 @@ class HaspRollerItem(EditableWidget):
 
     def paint(self, painter, option, widget=None):
         main = box_style(self, Part.MAIN, TRACK_DEFAULTS)
+        # the background and shadow are below the rows, the border and outline above them
+        background = dataclasses.replace(main, border_width=0, outline_width=0)
+        frame = dataclasses.replace(main, bg_opa=0, shadow_width=0)
         if main.bg_grad_dir == GRADIENT_VERTICAL and main.bg_opa > 0:
             self._draw_mirrored_gradient(painter, main)
-            main = dataclasses.replace(main, bg_opa=0)
-        draw_box(painter, self.obj_rect, main)
+            background = dataclasses.replace(background, bg_opa=0)
+        draw_box(painter, self.obj_rect, background)
 
         painter.save()
         clip = QtGui.QPainterPath()
@@ -103,14 +106,18 @@ class HaspRollerItem(EditableWidget):
         painter.setClipPath(clip)
         align = self.obj_data.get("align", "center")
         color = to_color(self.style("text_color"), DEFAULT_TEXT)
-        # measured on a plate: the text is centered in its row when the height follows the rows, else it is at the top of the row
         for top, entry, is_selected in self.entry_rows():
             row = QtCore.QRectF(0, top, self.obj_w, self.row_height)
             if is_selected:
-                draw_box(painter, row, box_style(self, Part.SELECTED, _SELECTED_DEFAULTS))
+                draw_box(
+                    painter,
+                    row.adjusted(main.border_width, 0, -main.border_width, 0),
+                    box_style(self, Part.SELECTED, _SELECTED_DEFAULTS),
+                )
             if entry is None:
                 continue
             row_color = to_color(self.style("text_color", None, Part.SELECTED), color.name()) if is_selected else color
-            draw_text(painter, row.adjusted(8, 0, -8, 0), entry, row_color, self.font, align, "center" if self.rows else "top")
+            draw_text(painter, row.adjusted(8, 0, -8, 0), entry, row_color, self.font, align)
         painter.restore()
+        draw_box(painter, self.obj_rect, frame)
         super().paint(painter, option, widget)

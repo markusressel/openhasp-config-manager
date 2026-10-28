@@ -46,8 +46,8 @@ class HaspButtonMatrixItem(EditableWidget):
 
     def paint(self, painter, option, widget=None):
         draw_box(painter, self.obj_rect, box_style(self, Part.MAIN, TRACK_DEFAULTS))
-        # measured on a plate: a `val` doesn't check a button, even if the buttons toggle
-        state = State.DEFAULT if self.is_enabled else State.DISABLED
+        # measured on a plate: neither a `val` nor `enabled` changes how the buttons look
+        state = State.DEFAULT
         font = plate_font(self.style("text_font", 24))
         for rect, button in self.button_rects():
             draw_box(painter, rect, box_style(self, Part.ITEMS, _ITEM_DEFAULTS, state))
