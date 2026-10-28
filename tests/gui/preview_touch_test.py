@@ -794,6 +794,73 @@ class TestPreviewColorPicker(TestBase):
         assert item.data["color"] == "#FF0000"
         assert item.mode == "saturation"
 
+    def test_a_finger_that_moves_in_the_middle_of_the_disc_rests_anew(self):
+        view = preview(self.PICKER)
+        item = widget(view, 13)
+
+        view.finger((110, 110), 0.0)
+        view.finger((116, 110), 0.3)
+        view._indev.tick(0.5)
+
+        assert item.mode == "hue"
+
+        view._indev.tick(0.71)
+
+        assert item.mode == "saturation"
+
+    def test_a_color_picker_with_mode_fixed_keeps_its_mode(self):
+        view = preview({**self.PICKER, "mode_fixed": 1})
+        item = widget(view, 13)
+
+        view.finger((110, 110), 0.0)
+        view._indev.tick(1.0)
+
+        assert item.mode == "hue"
+
+    def test_after_the_mode_changed_the_finger_changes_nothing_until_it_is_let_go(self):
+        view = preview(self.PICKER)
+        item = widget(view, 13)
+        view.finger((110, 110), 0.0)
+        view._indev.tick(0.5)
+
+        view.finger((110, 205), 0.6)
+
+        assert item.data["color"] == "#FF0000"
+
+    def test_a_double_click_puts_the_hue_back_to_0(self):
+        view = preview({**self.PICKER, "color": "#00FF00"})
+        item = widget(view, 13)
+
+        tap(view, 110, 110, now=0.0)
+        view.finger((110, 110), 0.3)
+        # the finger changes nothing until it is let go
+        view.finger((205, 110), 0.35)
+        view._indev.release((205, 110))
+
+        assert item.data["color"] == "#FF0000"
+
+    def test_two_presses_further_apart_are_no_double_click(self):
+        view = preview({**self.PICKER, "color": "#00FF00"})
+        item = widget(view, 13)
+
+        tap(view, 110, 110, now=0.0)
+        tap(view, 110, 110, now=0.5)
+
+        assert item.data["color"] == "#00FF00"
+
+    def test_a_finger_that_rests_on_a_bar_switches_the_mode_after_800_ms(self):
+        view = preview({**self.PICKER, "w": 200, "h": 40})
+        item = widget(view, 13)
+
+        view.finger((20, 30), 0.0)
+        view._indev.tick(0.6)
+
+        assert item.mode == "hue"
+
+        view._indev.tick(0.81)
+
+        assert item.mode == "saturation"
+
     def test_a_touch_outside_the_circle_is_not_a_touch(self):
         view = preview(self.PICKER)
 

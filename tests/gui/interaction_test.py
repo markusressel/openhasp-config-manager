@@ -27,6 +27,11 @@ class FakeTarget:
         self.keeps_press = keeps_press
         self.area = area
         self.calls = []
+        # the times the object was told of, with the number of calls before it
+        self.times = []
+
+    def on_time(self, now):
+        self.times.append((now, len(self.calls)))
 
     def on_press(self, point):
         self.calls.append("press")
@@ -127,6 +132,18 @@ class TestIndev(TestBase):
 
         # the release after a long press is not a short click
         assert first.calls == ["press", "pressing", "long", "repeat", "release short=False"]
+
+    def test_the_pressed_object_knows_the_time_before_every_event_and_while_the_finger_rests(self):
+        first = FakeTarget("first")
+        indev = indev_of(first)
+
+        indev.press((5, 5), now=1.0)
+        indev.tick(1.1)
+        indev.press((6, 5), now=1.2)
+        indev.release((6, 5))
+        indev.tick(1.3)
+
+        assert first.times == [(1.0, 0), (1.0, 1), (1.1, 2), (1.2, 2)]
 
     def test_cancel_loses_the_press_and_forget_does_not_tell_the_object(self):
         first = FakeTarget("first")

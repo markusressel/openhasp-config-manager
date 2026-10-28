@@ -295,6 +295,9 @@ class EditableWidget(QGraphicsObject):
         # no event: the plate sends none for a lost press either
         self.set_pressed(False)
 
+    def on_time(self, now: float):
+        pass
+
     def on_long_press(self):
         self._touch_event("long")
 

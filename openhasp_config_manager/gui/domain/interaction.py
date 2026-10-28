@@ -108,6 +108,9 @@ class Target(Protocol):
     def keeps_press(self) -> bool:
         """Whether a finger that leaves the object still presses it (`LV_PROTECT_PRESS_LOST`, or while it is dragged)."""
 
+    def on_time(self, now: float):
+        """Time passes while the finger is down on the object: before every press event, and between them (e.g. a finger that rests)."""
+
     def on_press(self, point: Point): ...
 
     def on_pressing(self, point: Point):
@@ -161,8 +164,10 @@ class Indev:
                 self.active = found
                 self._press = _Press(started=now)
                 if found is not None:
+                    found.on_time(now)
                     found.on_press(point)
         if self.active is not None:
+            self.active.on_time(now)
             self.active.on_pressing(point)
 
     def release(self, point: Point):
@@ -188,6 +193,7 @@ class Indev:
         press, active = self._press, self.active
         if press is None or active is None:
             return
+        active.on_time(now)
         if not press.long_sent:
             if now - press.started > LONG_PRESS_TIME:
                 press.long_sent = True

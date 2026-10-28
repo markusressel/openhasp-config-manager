@@ -2,6 +2,7 @@ import math
 
 from PyQt6 import QtCore, QtGui
 
+from openhasp_config_manager.gui.domain.interaction import DRAG_LIMIT, LONG_PRESS_TIME
 from openhasp_config_manager.gui.domain.touch_values import lvgl_atan2
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.default_theme import DEFAULT_RADIUS, TRACK_DEFAULTS
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import number, to_color
@@ -18,6 +19,8 @@ _DEFAULT_COLOR = "#FF0000"
 # `LV_DPI / 2` of lv_conf_v7.h: the inner circle of a disc is at least this big when the ring is searched
 _MIN_INNER_RADIUS = 50
 _MODES = ("hue", "saturation", "value")
+# a double click puts the part of the color that the mode changes back to this (`LV_CPICKER_DEF_HUE`, `_SATURATION`, `_VALUE`)
+_DEFAULTS = {"hue": 0, "saturation": 100, "value": 100}
 
 
 class HaspColorPickerItem(EditableWidget):
@@ -25,12 +28,24 @@ class HaspColorPickerItem(EditableWidget):
     A color picker: a gradient ring (a bar if the object is wider than tall) around a circle with the selected `color`. `mode`
     says what the gradient changes: `hue` (default), `saturation` or `value`; the other two stay as in `color`.
     Touched, the color follows a finger that drags on the ring (or the bar), like `lv_cpicker.c`: in the middle of the disc nothing
-    changes, and resting there for a while switches `mode` to the next one. The plate sends no action for it.
+    changes. A finger that rests (moves no more than 5 pixels) in the middle of the disc for 400 ms, or anywhere on the bar for 800 ms,
+    switches `mode` to the next one, unless `mode_fixed`. A second press within 400 ms of the first (a double click) puts the part of
+    the color that the mode changes back to its default (hue 0, saturation and value 100). After either the finger changes nothing until
+    it is let go. The plate sends no action for it.
     See https://www.openhasp.com/0.7.0/design/objects/cpicker/
     """
 
     # the finger is in the middle of the disc, where it doesn't change the color
     _inner = False
+    # the time the input device told of last
+    _now = 0.0
+    # when the last press began (`last_click_time`), for double clicks
+    _last_click = None
+    # where the finger is (rounded, None if it is up) and when it last moved more than half the drag limit (`last_change_time`)
+    _last_point = None
+    _last_change = 0.0
+    # the mode changed or the color was reset: nothing changes until the finger is let go (`lv_indev_wait_release`)
+    _waiting = False
 
     @property
     def mode(self) -> str:
@@ -59,21 +74,57 @@ class HaspColorPickerItem(EditableWidget):
             inner = max(inner - number(self.style("pad_inner", _DEFAULT_PAD_INNER), _DEFAULT_PAD_INNER), _MIN_INNER_RADIUS)
         return dx * dx + dy * dy >= inner * inner
 
+    @property
+    def is_bar(self) -> bool:
+        return self.obj_w > self.obj_h
+
+    def on_time(self, now: float):
+        self._now = now
+        if self._last_point is not None and not self._waiting:
+            # a resting finger is read as well
+            self._switch_mode_after_rest()
+
     def on_press(self, point):
+        """`LV_SIGNAL_PRESSED`"""
         self._inner = False
-        self.on_pressing(point)
+        self._waiting = False
+        self._last_point = None
+        self._last_change = self._now
+        double_click = self._last_click is not None and self._now - self._last_click < LONG_PRESS_TIME
+        self._last_click = self._now
+        if double_click:
+            self._waiting = True
+            self._set_hsv(_DEFAULTS.get(self.mode, 0))
+        else:
+            self.on_pressing(point)
 
     def on_pressing(self, point):
+        """`LV_SIGNAL_PRESSING`"""
+        if self._waiting:
+            return
         local = self.mapFromScene(QtCore.QPointF(point[0], point[1]))
-        if self.obj_w > self.obj_h:
+        finger = (int(local.x()), int(local.y()))
+        if (
+            self._last_point is None
+            or max(abs(finger[0] - self._last_point[0]), abs(finger[1] - self._last_point[1])) > DRAG_LIMIT // 2
+        ):
+            self._last_change = self._now
+            self._last_point = finger
+        if self.is_bar:
+            if self._switch_mode_after_rest():
+                return
             angle = min(max(int(local.x() * 360 // self.obj_w), 0), 359)
         else:
             center = self.obj_rect.center()
             dx, dy = int(local.x() - center.x()), int(local.y() - center.y())
             self._inner = not self._on_ring(dx, dy)
-            if self._inner or (dx == 0 and dy == 0):
+            if self._switch_mode_after_rest() or self._inner or (dx == 0 and dy == 0):
                 return
             angle = lvgl_atan2(dx, dy) % 360
+        self._set_hsv(angle * 100 // 360 if self.mode in ("saturation", "value") else angle)
+
+    def _set_hsv(self, part: int):
+        """Change the part of the color that the mode changes: the hue (0 to 359), or the saturation or value (0 to 100)."""
         color = self.color
         hue, saturation, value = (
             round(max(color.hsvHueF(), 0) * 360) % 360,
@@ -81,22 +132,39 @@ class HaspColorPickerItem(EditableWidget):
             round(color.valueF() * 100),
         )
         if self.mode == "saturation":
-            saturation = angle * 100 // 360
+            saturation = part
         elif self.mode == "value":
-            value = angle * 100 // 360
+            value = part
         else:
-            hue = angle
+            hue = part
         changed = QtGui.QColor.fromHsv(hue, round(saturation * 255 / 100), round(value * 255 / 100)).name().upper()
         if changed != color.name().upper():
             self.runtime.set(self.key, "color", changed, self.obj_data)
             self.runtime_changed()
 
+    def _switch_mode_after_rest(self) -> bool:
+        """:return: whether the finger rested long enough (in the middle of the disc, or on the bar) to go to the next mode"""
+        if number(self.data.get("mode_fixed"), 0) or not (self.is_bar or self._inner):
+            return False
+        if self._now - self._last_change <= (2 * LONG_PRESS_TIME if self.is_bar else LONG_PRESS_TIME):
+            return False
+        mode = _MODES[(_MODES.index(self.mode) + 1) % len(_MODES)] if self.mode in _MODES else _MODES[0]
+        self.runtime.set(self.key, "mode", mode, self.obj_data)
+        self.runtime_changed()
+        self._waiting = True
+        return True
+
+    def on_release(self, point, short_click: bool):
+        self._last_point = None
+        super().on_release(point, short_click)
+
+    def on_press_lost(self):
+        self._last_point = None
+        super().on_press_lost()
+
     def on_long_press(self):
-        # a long press in the middle of the disc (without the color changing) goes to the next mode
-        if self._inner:
-            mode = _MODES[(_MODES.index(self.mode) + 1) % len(_MODES)] if self.mode in _MODES else _MODES[0]
-            self.runtime.set(self.key, "mode", mode, self.obj_data)
-            self.runtime_changed()
+        # the color picker times the rest itself
+        pass
 
     @property
     def color(self) -> QtGui.QColor:
@@ -132,7 +200,7 @@ class HaspColorPickerItem(EditableWidget):
     def paint(self, painter, option, widget=None):
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
         rect = self.obj_rect
-        if self.obj_w > self.obj_h:
+        if self.is_bar:
             gradient = QtGui.QLinearGradient(rect.topLeft(), rect.topRight())
             for position, color in self.gradient_stops():
                 gradient.setColorAt(position, color)
