@@ -32,6 +32,64 @@ class TestPreviewItems(TestBase):
         image = render({"page": 1, "id": 1, "obj": "bar", "x": 10, "y": 10, "w": 100, "h": 20, "val": 50})
         assert painted(image) > 0
 
+    def test_a_bar_draws_the_track_and_an_indicator_with_its_own_color_inside_of_it(self):
+        # GIVEN: a track of 100 x 30, its indicator (part 1) at half, and 6 pixels of padding
+        image = render(
+            {
+                "page": 1,
+                "id": 1,
+                "obj": "bar",
+                "x": 10,
+                "y": 10,
+                "w": 100,
+                "h": 30,
+                "val": 50,
+                "bg_color": "#202020",
+                "bg_color10": "#00ff00",
+                "radius": 0,
+                "radius10": 0,
+                "pad_left": 6,
+                "pad_right": 6,
+                "pad_top": 6,
+                "pad_bottom": 6,
+            }
+        )
+
+        # THEN: the track has the color of the object, the indicator its own, starting at the padding and half as wide as the rest
+        assert image.pixelColor(12, 25).name() == "#202020"
+        assert image.pixelColor(20, 25).name() == "#00ff00"
+        assert image.pixelColor(20, 14).name() == "#202020"
+        assert image.pixelColor(10 + 6 + 40, 25).name() == "#00ff00"
+        assert image.pixelColor(10 + 6 + 44, 25).name() == "#202020"
+
+    def test_the_radius_of_a_bar_is_at_most_half_of_its_height(self):
+        # GIVEN: an indicator of 10 x 20 with a radius of 15, which has to be a half circle (radius 5 on the short side)
+        image = render(
+            {
+                "page": 1,
+                "id": 1,
+                "obj": "bar",
+                "x": 0,
+                "y": 0,
+                "w": 100,
+                "h": 20,
+                "val": 10,
+                "bg_color": "#202020",
+                "bg_color10": "#00ff00",
+                "radius": 0,
+                "radius10": 15,
+                "pad_left": 0,
+                "pad_right": 0,
+                "pad_top": 0,
+                "pad_bottom": 0,
+            }
+        )
+
+        # THEN: the corner of the indicator is cut away, the middle of its end is not
+        assert image.pixelColor(0, 0).name() == "#202020"
+        assert image.pixelColor(1, 10).name() == "#00ff00"
+        assert image.pixelColor(9, 10).name() == "#00ff00"
+
     def test_every_type_gets_its_item(self):
         from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.button import HaspButtonItem
         from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.registry import ITEM_CLASSES

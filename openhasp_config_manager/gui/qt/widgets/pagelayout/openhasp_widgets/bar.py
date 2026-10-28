@@ -3,7 +3,25 @@ from PyQt6.QtGui import QColor, QBrush, QPen, QFont
 from PyQt6.QtWidgets import QGraphicsTextItem
 
 from openhasp_config_manager.gui.domain.fonts import font_size
+from openhasp_config_manager.gui.domain.style_parts import Part
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import (
+    DEFAULT_ACCENT,
+    DEFAULT_TRACK,
+    number,
+    to_color,
+)
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
+
+
+# measured on a plate: the indicator of a bar is this far from the edges of its track (the real default is in the theme of openHASP)
+_DEFAULT_PADDING = 6
+_DEFAULT_RADIUS = 6
+
+
+def _draw_rounded(painter, rect: QtCore.QRectF, radius: float):
+    """Like LVGL, a radius is never more than half of the shorter side (Qt would stretch the corners to ellipses)."""
+    radius = min(radius, rect.width() / 2, rect.height() / 2)
+    painter.drawRoundedRect(rect, radius, radius)
 
 
 class HaspBarItem(EditableWidget):
@@ -32,12 +50,21 @@ class HaspBarItem(EditableWidget):
         return font_size(self.obj_data.get("text_font"))
 
     @property
-    def bg_color(self) -> str:
-        return self.obj_data.get("bg_color", "#558B2F")
+    def bg_color(self) -> QColor:
+        """The color of the track (the main part)."""
+        return to_color(self.style("bg_color"), DEFAULT_TRACK)
 
     @property
-    def radius(self) -> int:
-        return self.obj_data.get("radius", 6)
+    def indicator_color(self) -> QColor:
+        return to_color(self.style("bg_color", None, Part.INDICATOR), DEFAULT_ACCENT)
+
+    @property
+    def radius(self) -> float:
+        return max(number(self.style("radius", _DEFAULT_RADIUS), _DEFAULT_RADIUS), 0)
+
+    @property
+    def indicator_radius(self) -> float:
+        return max(number(self.style("radius", self.radius, Part.INDICATOR), self.radius), 0)
 
     @property
     def border_width(self) -> int:
@@ -46,6 +73,11 @@ class HaspBarItem(EditableWidget):
     @property
     def border_color(self) -> str:
         return self.obj_data.get("border_color", "#FFFFFF")
+
+    def _indicator_rect(self) -> QtCore.QRectF:
+        """The place of the indicator at 100%: the object without the padding of the main part, like LVGL."""
+        padding = [number(self.style(f"pad_{side}"), _DEFAULT_PADDING) for side in ("left", "top", "right", "bottom")]
+        return self.obj_rect.adjusted(padding[0], padding[1], -padding[2], -padding[3])
 
     def __init__(self, obj_data, parent_widget=None):
         super().__init__(obj_data, parent_widget)
@@ -91,27 +123,21 @@ class HaspBarItem(EditableWidget):
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
 
         # 1. Draw Background (The Track)
-        bg_color = self.bg_color
-        # Your logic used 'radius' or 'height' for full rounding
-        radius = self.radius
-
         painter.setPen(QtCore.Qt.PenStyle.NoPen)
-        # Background is usually a dimmer version or specific color
-        painter.setBrush(QBrush(QColor(bg_color).lighter(50)))
-        painter.drawRoundedRect(local_rect, radius, radius)
+        painter.setBrush(QBrush(self.bg_color))
+        _draw_rounded(painter, local_rect, self.radius)
 
-        # 2. Draw Progress (The Indicator)
-        # Calculate width based on value percentage
+        # 2. Draw Progress (The Indicator), inside of the track
         range_val = self.max_val - self.min_val
         if range_val > 0:
             progress_pct = (self.val - self.min_val) / range_val
             progress_pct = max(0.0, min(progress_pct, 1))  # Clamp 0.0 - 1.0
 
-            indicator_w = self.obj_w * progress_pct
-            if indicator_w > 0:
-                indicator_rect = QtCore.QRectF(0, 0, indicator_w, self.obj_h)
-                painter.setBrush(QBrush(QColor(bg_color)))
-                painter.drawRoundedRect(indicator_rect, radius, radius)
+            full = self._indicator_rect()
+            indicator_rect = QtCore.QRectF(full.x(), full.y(), full.width() * progress_pct, full.height())
+            if indicator_rect.width() > 0:
+                painter.setBrush(QBrush(self.indicator_color))
+                _draw_rounded(painter, indicator_rect, self.indicator_radius)
 
         # 3. Draw Border if exists
         border_width = self.border_width
@@ -120,6 +146,6 @@ class HaspBarItem(EditableWidget):
             pen.setWidth(border_width)
             painter.setPen(pen)
             painter.setBrush(QtCore.Qt.BrushStyle.NoBrush)
-            painter.drawRoundedRect(local_rect, radius, radius)
+            _draw_rounded(painter, local_rect, self.radius)
 
         super().paint(painter, option, widget)
