@@ -2,14 +2,17 @@ import math
 
 from PyQt6 import QtCore, QtGui
 
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.default_theme import DEFAULT_RADIUS, TRACK_DEFAULTS
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import number, to_color
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
 
 # measured on a plate: the ring of colors is 20 pixels wide, then comes a gray ring of 12 pixels, then the disc with the color
 _DEFAULT_SCALE_WIDTH = 20
 _DEFAULT_PAD_INNER = 12
-_RING_COLOR = "#52596A"
+_RING_COLOR = TRACK_DEFAULTS["bg_color"]
 _KNOB_RADIUS = 16
+_KNOB_BORDER_COLOR = "#838183"
+_KNOB_BORDER_WIDTH = 2
 _DEFAULT_COLOR = "#FF0000"
 
 
@@ -47,7 +50,7 @@ class HaspColorPickerItem(EditableWidget):
         return saturation if mode == "saturation" else value if mode == "value" else max(hue, 0.0)
 
     def _draw_knob(self, painter, center: QtCore.QPointF):
-        painter.setPen(QtGui.QPen(QtGui.QColor("#838183"), 2))
+        painter.setPen(QtGui.QPen(QtGui.QColor(_KNOB_BORDER_COLOR), _KNOB_BORDER_WIDTH))
         painter.setBrush(self.color)
         painter.drawEllipse(center, _KNOB_RADIUS, _KNOB_RADIUS)
 
@@ -60,7 +63,7 @@ class HaspColorPickerItem(EditableWidget):
                 gradient.setColorAt(position, color)
             painter.setPen(QtCore.Qt.PenStyle.NoPen)
             painter.setBrush(gradient)
-            painter.drawRoundedRect(rect, 4, 4)
+            painter.drawRoundedRect(rect, DEFAULT_RADIUS, DEFAULT_RADIUS)
             # the knob is a circle on the bar, a bit bigger than the bar is high
             self._draw_knob(painter, QtCore.QPointF(rect.left() + rect.width() * self.position(), rect.center().y()))
             return super().paint(painter, option, widget)

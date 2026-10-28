@@ -43,8 +43,10 @@ class TestOpenHaspWidgets(TestBase):
         label.obj_data["h"] = 60
         label.refresh()
 
-        # THEN
-        assert label.text_item.pos().y() == 0
+        # THEN the text is at the top, below the pixels a line has above its glyphs on the plate
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import line_top
+
+        assert label.text_item.pos().y() == line_top(label.text_item.font())
 
     def test_label_text_has_no_margin_around_it(self):
         # GIVEN
@@ -55,9 +57,14 @@ class TestOpenHaspWidgets(TestBase):
         # WHEN
         label = HaspLabelItem(obj_data={"obj": "label", "x": 0, "y": 0, "w": 200, "h": 30, "text": "Desk", "text_font": 25})
 
-        # THEN the text is as tall as its line, not 8px taller (Qt's default margin), so it is not pushed down in a small label
+        # THEN the text is as tall as its line (and the lead of the plate), not 8px taller (Qt's default margin)
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import line_lead
+
         text_item = label.text_item
-        assert text_item.boundingRect().height() < QtGui.QFontMetricsF(text_item.font()).height() + 1
+        assert (
+            text_item.boundingRect().height()
+            < QtGui.QFontMetricsF(text_item.font()).height() + line_lead(text_item.font()) + 1
+        )
 
     def test_switch_value_and_position_follow_its_data(self):
         # GIVEN

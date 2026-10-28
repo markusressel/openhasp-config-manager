@@ -4,15 +4,16 @@ from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.box impo
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import number
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
 
-# measured on a plate: a round light with a glow (its shadow, which doesn't follow `bg_color`) and a faint border
+# measured on a plate: a round light with a glow (its shadow, which doesn't follow `bg_color`) and a light blue border
 LED_DEFAULTS = {
     "bg_color": "#00B6FF",
     "bg_opa": 255,
     "radius": 1000,
-    "border_width": 1,
-    "border_color": "#FFFFFF",
-    "border_opa": 30,
-    "shadow_width": 15,
+    "border_width": 2,
+    "border_color": "#44C8FA",
+    "border_opa": 128,
+    "shadow_width": 11,
+    "shadow_spread": 3,
     "shadow_color": "#00B6FF",
 }
 # below this brightness the LED doesn't glow (LV_LED_BRIGHT_MIN)

@@ -3,7 +3,7 @@ from PyQt6 import QtCore, QtGui
 from openhasp_config_manager.gui.domain.line_points import bounds, parse_points
 from openhasp_config_manager.gui.domain.problems import geometry_value
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import number, to_color
-from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import SELECTION_MARGIN, EditableWidget
 
 _DEFAULT_LINE_WIDTH = 3
 # measured on a plate: without a `line_color` the line is not visible on the black background
@@ -35,7 +35,7 @@ class HaspLineItem(EditableWidget):
 
     def boundingRect(self) -> QtCore.QRectF:
         # the line is wider than the object by its width
-        margin = number(self.style("line_width", _DEFAULT_LINE_WIDTH), _DEFAULT_LINE_WIDTH) / 2 + 3
+        margin = number(self.style("line_width", _DEFAULT_LINE_WIDTH), _DEFAULT_LINE_WIDTH) / 2 + SELECTION_MARGIN
         return self.obj_rect.adjusted(-margin, -margin, margin, margin)
 
     def paint(self, painter, option, widget=None):

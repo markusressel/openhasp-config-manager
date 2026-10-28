@@ -26,8 +26,6 @@ class HaspSwitchItem(EditableWidget):
         self._val = bool(obj_data.get("val", 0))  # Store the current state for toggling
         super().__init__(obj_data, parent_widget)
 
-        self.setPos(self.obj_x, self.obj_y)
-
     def _on_data_changed(self):
         self._val = self.val
 

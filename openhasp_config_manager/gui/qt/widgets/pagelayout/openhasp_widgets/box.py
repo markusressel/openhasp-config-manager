@@ -6,7 +6,7 @@ from typing import Any, Dict, Optional, Tuple
 from PyQt6 import QtCore, QtGui
 
 from openhasp_config_manager.gui.domain.style_parts import Part, State
-from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import number, to_color
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import DEFAULT_TEXT, number, opacity, to_color
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget, state_fallback
 
 # the properties of a box, with their value if neither the object nor the defaults of its type set them
@@ -107,8 +107,8 @@ def box_style(
     def value(name: str):
         return resolve(item, name, part, defaults, state)
 
-    def opacity(name: str) -> float:
-        return max(0.0, min(number(value(name), 255) / 255, 1.0))
+    def opa(name: str) -> float:
+        return opacity(value(name))
 
     return BoxStyle(
         bg_color=to_color(value("bg_color"), "#FFFFFF"),
@@ -116,23 +116,30 @@ def box_style(
         bg_grad_dir=int(number(value("bg_grad_dir"), 0)),
         bg_main_stop=int(number(value("bg_main_stop"), 0)),
         bg_grad_stop=int(number(value("bg_grad_stop"), 255)),
-        bg_opa=opacity("bg_opa"),
+        bg_opa=opa("bg_opa"),
         radius=max(number(value("radius"), 0), 0),
         border_width=max(number(value("border_width"), 0), 0),
         border_color=to_color(value("border_color"), "#000000"),
-        border_opa=opacity("border_opa"),
+        border_opa=opa("border_opa"),
         border_side=int(number(value("border_side"), BORDER_ALL)),
         outline_width=max(number(value("outline_width"), 0), 0),
         outline_color=to_color(value("outline_color"), "#000000"),
-        outline_opa=opacity("outline_opa"),
+        outline_opa=opa("outline_opa"),
         outline_pad=number(value("outline_pad"), 0),
         shadow_width=max(number(value("shadow_width"), 0), 0),
         shadow_color=to_color(value("shadow_color"), "#000000"),
-        shadow_opa=opacity("shadow_opa"),
+        shadow_opa=opa("shadow_opa"),
         shadow_ofs_x=number(value("shadow_ofs_x"), 0),
         shadow_ofs_y=number(value("shadow_ofs_y"), 0),
         shadow_spread=number(value("shadow_spread"), 0),
     )
+
+
+def text_color(item: EditableWidget, part: Part = Part.MAIN, defaults: Optional[Dict[str, Any]] = None) -> QtGui.QColor:
+    """:return: the `text_color` of a part with its `text_opa`"""
+    color = to_color(resolve(item, "text_color", part, defaults or {}), DEFAULT_TEXT)
+    color.setAlphaF(opacity(item.style("text_opa", 255, part)))
+    return color
 
 
 def padding(item: EditableWidget, part: Part, default: float = 0) -> Tuple[float, float, float, float]:
@@ -150,9 +157,9 @@ def draw_rounded(painter: QtGui.QPainter, rect: QtCore.QRectF, radius: float):
     painter.drawRoundedRect(rect, radius, radius)
 
 
-def _with_opacity(color: QtGui.QColor, opacity: float) -> QtGui.QColor:
+def _with_opacity(color: QtGui.QColor, amount: float) -> QtGui.QColor:
     color = QtGui.QColor(color)
-    color.setAlphaF(color.alphaF() * opacity)
+    color.setAlphaF(color.alphaF() * amount)
     return color
 
 
@@ -174,10 +181,10 @@ def _background_brush(style: BoxStyle, rect: QtCore.QRectF) -> QtGui.QBrush:
 
 def _draw_shadow(painter: QtGui.QPainter, rect: QtCore.QRectF, style: BoxStyle):
     """
-    The shadow: the box moved by the offset and grown by the spread, faded out over `shadow_width` pixels around its edge (measured on a
-    plate: full at half the width inside of the edge, nothing at half the width outside, smoothly in between).
+    The shadow: the box moved by the offset and grown by the spread, faded out around its edge (measured on a plate: over 0.8 times the
+    `shadow_width`, so it reaches 0.4 times the width outside, and is half as strong as set at the edge).
     """
-    blur = style.shadow_width
+    blur = style.shadow_width * 0.8
     base = rect.translated(style.shadow_ofs_x, style.shadow_ofs_y).adjusted(
         *([-style.shadow_spread] * 2), *([style.shadow_spread] * 2)
     )

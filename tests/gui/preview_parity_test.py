@@ -151,7 +151,16 @@ class TestGeometry(TestBase):
     def test_a_message_box_is_in_the_middle_of_the_screen_whatever_its_position(self):
         box = item_of({"obj": "msgbox", "x": 5, "y": 7, "w": 200, "h": 100})
 
-        assert (box.obj_x, box.obj_y) == (140, 110)
+        assert (box.obj_x, box.obj_y) == (140, round((320 - box.obj_h) / 2))
+
+    def test_a_message_box_is_as_high_as_its_text_and_buttons_and_ignores_h(self):
+        one_line = item_of({"obj": "msgbox", "w": 300, "h": 250, "text": "Message"})
+        two_lines = item_of({"obj": "msgbox", "w": 300, "h": 250, "text": "Message\nover two lines"})
+
+        # measured on a plate with its font (112 and 144): 6 above the text, 12 + 50 + 12 for the buttons
+        assert one_line.obj_h == round(6 + one_line.line_height + 74)
+        assert two_lines.obj_h == round(6 + 2 * two_lines.line_height + 74)
+        assert two_lines.obj_h > one_line.obj_h
 
     def test_a_roller_is_as_high_as_its_rows_if_it_has_them_and_else_as_high_as_it_says(self):
         assert item_of({"obj": "roller", "h": 60}).obj_h == 60
@@ -191,3 +200,112 @@ class TestBox(TestBase):
         image = render({**box, "radius": 500})
 
         assert image.pixelColor(50, 10).name() == "#ff0000" and image.pixelColor(0, 0).name() == "#000000"
+
+
+@pytest.mark.usefixtures("qapp")
+class TestTextAndShapes(TestBase):
+    def test_text_is_set_in_pixels_of_the_font_size_and_has_the_lead_of_the_plate(self):
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import line_lead, plate_font
+
+        assert plate_font(24).pixelSize() == 24
+        assert [line_lead(plate_font(size)) for size in (12, 24, 32)] == [3, 3, 4]
+
+    def test_lines_are_wrapped_at_words(self):
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import plate_font, wrap_lines
+
+        assert wrap_lines(plate_font(24), "a b", 1000) == ["a b"]
+        assert wrap_lines(plate_font(24), "one\ntwo", 1000) == ["one", "two"]
+        assert wrap_lines(plate_font(24), "one two three", 1) == ["one", "two", "three"]
+
+    def test_a_checkbox_is_centered_in_its_height_and_its_box_follows_the_font(self):
+        small = item_of({"obj": "checkbox", "text_font": 12, "h": 40})
+        big = item_of({"obj": "checkbox", "text_font": 32, "h": 40})
+
+        assert (small.box_size, big.box_size) == (22, 46)
+        assert small.obj_rect.top() == (40 - small.obj_h) / 2
+
+    def test_a_checkbox_styles_its_background_with_every_part_but_the_box(self):
+        from openhasp_config_manager.gui.domain.style_parts import Part, State
+
+        checkbox = item_of({"obj": "checkbox", "bg_color20": "#FF0000", "bg_color10": "#00FF00"})
+
+        assert checkbox.own_style("bg_color", Part.MAIN, State.DEFAULT) == "#FF0000"
+
+    def test_a_dropdown_text_starts_at_the_top_left_and_its_symbol_follows_the_font(self):
+        assert painted(render({"obj": "dropdown", "options": "One\nTwo", "w": 146, "h": 38, "text_font": 12})) > 0
+        assert render({"obj": "dropdown", "options": "One\nTwo", "w": 146, "h": 38, "text_font": 12}) != render(
+            {"obj": "dropdown", "options": "One\nTwo", "w": 146, "h": 38, "text_font": 24}
+        )
+
+    def test_a_roller_draws_its_border_over_the_selected_row_and_its_text_centered_in_every_row(self):
+        roller = {"x": 10, "y": 10, "w": 100, "h": 120, "obj": "roller", "options": "One\nTwo\nThree", "val": 1}
+
+        image = render({**roller, "border_width": 3, "border_color": "#FF0000", "border_opa": 255, "bg_grad_dir": 0})
+
+        # the selected row is in the middle: its left edge is part of the border
+        assert image.pixelColor(11, 70).name() == "#ff0000"
+        assert render({**roller, "rows": 3}) == render({**roller, "h": 135})
+
+    def test_a_linemeter_has_18_lines_and_the_lines_of_the_value_follow_the_indicator_width(self):
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.linemeter import HaspLineMeterItem
+
+        meter = item_of({"obj": "linemeter", "w": 86, "h": 86, "val": 50})
+
+        assert isinstance(meter, HaspLineMeterItem) and meter.active_lines() == 9
+        thin = render({"obj": "linemeter", "w": 86, "h": 86, "val": 100, "line_width10": 1})
+        wide = render({"obj": "linemeter", "w": 86, "h": 86, "val": 100, "line_width10": 8})
+        assert thin != wide
+
+    def test_a_button_matrix_ignores_val(self):
+        matrix = {"obj": "btnmatrix", "options": ["A", "B"], "w": 200, "h": 60, "toggle": True}
+
+        assert render({**matrix, "val": 1}) == render(matrix)
+
+    def test_a_spinner_turns(self):
+        from PyQt6 import QtTest
+
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.spinner import HaspSpinnerItem
+
+        spinner = HaspSpinnerItem({"obj": "spinner", "w": 60, "h": 60, "speed": 400})
+        start = spinner.rotation_degrees
+        QtTest.QTest.qWait(150)
+
+        assert start < 5
+        assert spinner.rotation_degrees > 20
+
+    def test_a_qr_code_has_whole_pixel_modules_and_a_quiet_zone_of_two(self):
+        pytest.importorskip("segno")
+        from openhasp_config_manager.gui.domain.qr_code import qr_modules
+
+        assert len(qr_modules("https://openhasp.com")) == 25
+        item = item_of({"obj": "qrcode", "w": 100, "h": 100, "text": "https://openhasp.com"})
+        assert item.obj_w == 100
+        assert 100 // (25 + 4) == 3
+
+
+@pytest.mark.usefixtures("qapp")
+class TestDrawingHelpers(TestBase):
+    def test_an_opacity_is_a_share_between_0_and_1(self):
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import opacity
+
+        assert opacity(255) == 1.0
+        assert opacity("0") == 0.0
+        assert opacity(300) == 1.0
+        assert opacity(None) == 1.0
+        assert opacity("{{ not rendered }}", 128) == 128 / 255
+
+    def test_the_value_of_an_object_is_between_its_min_and_max(self):
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import selected_index, value_fraction
+
+        assert value_fraction({"val": 25}) == 0.25
+        assert value_fraction({"val": 5, "min": 0, "max": 10}) == 0.5
+        assert value_fraction({"min": 10, "max": 10}) == 0.0
+        assert selected_index({"val": "2"}) == 2
+        assert selected_index({}) == 0
+
+    def test_a_square_is_centered_in_the_larger_rect(self):
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import centered_square
+
+        square = centered_square(100, 60)
+
+        assert (square.x(), square.y(), square.width(), square.height()) == (20, 0, 60, 60)

@@ -7,7 +7,7 @@ from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.default_
     TRACK_DEFAULTS,
     TRACK_PADDING,
 )
-from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import fraction
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import value_fraction
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
 
 
@@ -27,7 +27,7 @@ class HaspBarItem(EditableWidget):
 
     @property
     def progress(self) -> float:
-        return fraction(self.obj_data.get("val", 0), self.obj_data.get("min", 0), self.obj_data.get("max", 100))
+        return value_fraction(self.obj_data)
 
     @property
     def is_vertical(self) -> bool:

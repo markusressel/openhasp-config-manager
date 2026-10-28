@@ -301,7 +301,8 @@ class TestPreviewItems(TestBase):
         rects = HaspButtonMatrixItem(matrix).button_rects()
         assert len(rects) == 3
         assert rects[0][0].width() == rects[1][0].width() < rects[2][0].width() == 220 - 2 * 6
-        assert render({**matrix, "toggle": True, "val": 1}) != render(matrix)
+        # measured on a plate: `val` doesn't check a button of a matrix
+        assert render({**matrix, "toggle": True, "val": 1}) == render(matrix)
 
     def test_msgbox_has_a_button_for_every_option(self):
         from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.msgbox import HaspMessageBoxItem
