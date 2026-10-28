@@ -405,3 +405,23 @@ class TestTouchValues(TestBase):
         value = self._drag(drag, -5, 90, current=100, now=10.0, last_angle=405)
 
         assert value == 100
+
+
+class TestObjectCommands(TestBase):
+    def test_a_command_sets_a_property_of_an_object_like_the_plate_reads_it(self):
+        from openhasp_config_manager.gui.domain.touch_actions import ObjectCommand, object_command
+
+        assert object_command("p1b2.val 1") == ObjectCommand(1, 2, "val", 1)
+        assert object_command("p1b2.text=Hello world") == ObjectCommand(1, 2, "text", "Hello world")
+        assert object_command("  P[2].b[10].TEXT Hi=there") == ObjectCommand(2, 10, "text", "Hi=there")
+        assert object_command("p1b2.text=") == ObjectCommand(1, 2, "text", "")
+        assert object_command("p1b2.val -5") == ObjectCommand(1, 2, "val", -5)
+
+    def test_other_commands_and_questions_set_nothing(self):
+        from openhasp_config_manager.gui.domain.touch_actions import object_command
+
+        assert object_command("page 2") is None
+        assert object_command("p1b2.val") is None
+        assert object_command("p1b2.val ") is None
+        assert object_command("backlight=on") is None
+        assert object_command("p1b2 1") is None

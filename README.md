@@ -40,7 +40,7 @@ use the context menus, and the legend of the file tree).
 
 With *Edit mode* off, the preview is an *Interact mode*: touching the objects looks and behaves like on a plate with openHASP
 0.7 (pressed looks, toggles, dragged sliders and arcs, dropdown lists, rollers that are dragged and thrown, tabs that are swiped, message boxes, `action` with page
-navigation and groups). What you touch is only shown and never changes the files; *Reset* (or Edit mode) puts the objects
+navigation, groups and commands like `p1b2.val 1`). What you touch is only shown and never changes the files; *Reset* (or Edit mode) puts the objects
 back as the files say.
 
 The GUI has additional dependencies (PyQt6) and is optional:

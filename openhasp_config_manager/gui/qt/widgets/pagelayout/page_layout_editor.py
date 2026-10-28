@@ -515,7 +515,7 @@ class PageLayoutEditorWidget(QWidget):
 
     @qBridge(str)
     def __on_preview_command(self, command: str):
-        """A touch on an object ran a command of its `action`: only the ones that change the page are known."""
+        """A touch on an object ran a command of its `action`: the preview changed objects itself, the page changes here."""
         LOGGER.debug(f"Command of an object in the preview: {command}")
         destination = page_command(command)
         if destination in ("next", "prev", "back"):

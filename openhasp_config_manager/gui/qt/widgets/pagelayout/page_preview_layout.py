@@ -13,6 +13,7 @@ from openhasp_config_manager.gui.dimensions import UiDimensions
 from openhasp_config_manager.gui.domain.interaction import Indev, Point, RuntimeState, is_clickable, object_key
 from openhasp_config_manager.gui.domain.preview_images import find_image_file
 from openhasp_config_manager.gui.domain.ripple import Ripple, active_ripples
+from openhasp_config_manager.gui.domain.touch_actions import object_command
 from openhasp_config_manager.gui.domain.touch_groups import group_values
 from openhasp_config_manager.gui.qt.components import UiComponents
 from openhasp_config_manager.gui.qt.theme import current_colors
@@ -231,7 +232,10 @@ class PagePreviewWidget(QGraphicsView):
         self.viewport().update()
 
     def set_group_objects(self, provider: Callable[[], List[Dict]]):
-        """Where to find the objects of all pages, for objects in a group (`groupid`) that follow each other over pages."""
+        """
+        Where to find the objects of all pages, for objects in a group (`groupid`) that follow each other over pages, and objects that
+        commands change.
+        """
         self._group_objects = provider
 
     def reset_interactions(self):
@@ -245,7 +249,23 @@ class PagePreviewWidget(QGraphicsView):
 
     def run_command(self, command: str):
         """Run a command of an `action`. After the mouse event: a command can change the page, which clears the scene."""
-        QtCore.QTimer.singleShot(0, lambda: self.commandRequested.emit(command))
+        QtCore.QTimer.singleShot(0, lambda: self._run_command(command))
+
+    def _run_command(self, command: str):
+        """A command that sets a property of an object (`p1b2.val 1`) changes it like a touch does, on any page."""
+        target = object_command(command)
+        if target is not None:
+            obj = next(
+                (obj for obj in self._group_objects() if obj.get("page") == target.page and obj.get("id") == target.id), None
+            )
+            # the plate warns about an object that doesn't exist
+            if obj is not None:
+                key = object_key(obj)
+                self.runtime.set(key, target.attribute, target.value, obj)
+                for item in self.editable_items():
+                    if item.key == key:
+                        item.runtime_changed()
+        self.commandRequested.emit(command)
 
     def follow_group(self, source: EditableWidget, power: bool, value: int, minimum: int, maximum: int):
         """The objects in the group of an object that changed take its value, on every page (`event_update_group`)."""

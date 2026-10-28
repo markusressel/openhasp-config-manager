@@ -80,6 +80,20 @@ class TestPreviewTouch(TestBase):
 
         assert view.commands == ["page 2", "page 5"]
 
+    def test_an_action_sets_properties_of_other_objects(self):
+        label = {"page": 1, "id": 2, "obj": "label", "x": 10, "y": 100, "w": 100, "h": 30, "text": "Off"}
+        switch = {"page": 2, "id": 3, "obj": "switch", "x": 10, "y": 10, "w": 80, "h": 40}
+        action = '{"up": ["p1b2.text=On air", "p2b3.val 1", "p1b9.val 1", "p1b2.val"]}'
+        view = preview({**BUTTON, "action": action}, label)
+        view.set_group_objects(lambda: [BUTTON, label, switch])
+
+        tap(view, 20, 20)
+
+        assert widget(view, 2).data["text"] == "On air"
+        assert view.runtime.get((2, 3), "val", switch) == 1
+        # an object that doesn't exist changes nothing, and a command without a value only asks
+        assert "val" not in widget(view, 2).data
+
     def test_a_toggle_button_changes_its_state_and_runs_no_action(self):
         view = preview({**BUTTON, "toggle": True, "action": "next"})
 
