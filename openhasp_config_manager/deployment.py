@@ -1,6 +1,6 @@
 import asyncio
 
-from openhasp_config_manager.console import info
+from openhasp_config_manager.console import info, warn
 from openhasp_config_manager.manager import ConfigManager
 from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
@@ -27,16 +27,30 @@ async def deploy_device(
         raise Exception(f"Error generating output for {device.name}: {ex.__class__.__name__} {ex}") from ex
 
     client = OpenHaspClient(device)
+    uploader = ConfigUploader(config_manager.output_root, client)
     info(f"Uploading files to device '{device.name}'...")
-    result = await ConfigUploader(config_manager.output_root, client).upload_changes(device, purge, show_diff)
+    result = await uploader.upload_changes(device, purge, show_diff)
     if not result.changed:
         info(f"No changes detected for {device.name}, device is already up-to-date")
     elif restart or result.needs_restart:
         info(f"Rebooting {device.name} to apply changes")
         await client.reboot()
+        if result.in_use:
+            await _delete_after_restart(client, uploader, device, result.in_use)
     elif result.files or result.deleted:
         info(f"Reloading the pages of {device.name} to apply changes")
         await client.restore_from_files()
     else:
         info(f"Applied the settings of {device.name} to the running device")
     return result.changed
+
+
+async def _delete_after_restart(client: OpenHaspClient, uploader: ConfigUploader, device: Device, names: list):
+    """Delete the files the plate used before it restarted: the new pages don't use them anymore."""
+    info(f"Waiting for {device.name} to restart, to delete {', '.join(names)}")
+    if not await client.wait_for_restart():
+        warn(f"{device.name} didn't come back after the restart, {', '.join(names)} could not be deleted")
+        return
+    _deleted, in_use = await uploader.delete_files(device, names)
+    if in_use:
+        warn(f"{device.name} still uses {', '.join(in_use)}, they are not deleted")
