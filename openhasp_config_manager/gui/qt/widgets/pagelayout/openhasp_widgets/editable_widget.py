@@ -301,6 +301,11 @@ class EditableWidget(QGraphicsObject):
     def on_long_press_repeat(self):
         self._touch_event("hold")
 
+    def follow_group(self, option: int, count: int):
+        """A selector (dropdown, roller, tabview) changed: the objects in its group follow (`selector_event_handler`, only if it has options)."""
+        if self.parent_widget is not None and count > 1:
+            self.parent_widget.follow_group(self, power=bool(option), value=option, minimum=0, maximum=count - 1)
+
     def toggle(self):
         """
         What happens when an object that switches (a toggle button, a switch, a checkbox) is released: it switches, and the

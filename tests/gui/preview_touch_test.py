@@ -338,3 +338,262 @@ class TestPreviewRoller(TestBase):
         assert widget(view, 8).is_pressed
         view._indev.release((20, 60))
         widget(view, 8).finish_animation()
+
+
+def color_at(view, x, y) -> str:
+    from PyQt6 import QtCore, QtGui
+
+    image = QtGui.QImage(480, 320, QtGui.QImage.Format.Format_RGB32)
+    image.fill(QtGui.QColor("black"))
+    painter = QtGui.QPainter(image)
+    view.scene().render(painter, QtCore.QRectF(0, 0, 480, 320), QtCore.QRectF(0, 0, 480, 320))
+    painter.end()
+    return image.pixelColor(x, y).name().upper()
+
+
+MATRIX = {
+    "page": 1,
+    "id": 9,
+    "obj": "btnmatrix",
+    "x": 10,
+    "y": 10,
+    "w": 300,
+    "h": 60,
+    "options": ["A", "B", "C"],
+    "toggle": True,
+}
+
+
+@pytest.mark.usefixtures("qapp")
+class TestPreviewLook(TestBase):
+    def test_a_pressed_button_has_the_pressed_colors_of_the_theme(self):
+        view = preview({**BUTTON, "bg_grad_dir": 0})
+        normal = color_at(view, 60, 20)
+
+        view.finger((60, 20), 0.0)
+        pressed = color_at(view, 60, 20)
+        view._indev.release((60, 20))
+
+        assert pressed != normal
+        assert color_at(view, 60, 20) == normal
+
+
+@pytest.mark.usefixtures("qapp")
+class TestPreviewButtonMatrix(TestBase):
+    def test_the_button_under_the_finger_is_pressed_and_follows_it(self):
+        view = preview(MATRIX)
+        item = widget(view, 9)
+        rects = [rect for rect, _ in item.button_rects()]
+        first, second = ((rect.center().x() + 10, rect.center().y() + 10) for rect in rects[:2])
+
+        view.finger(first, 0.0)
+        assert item.runtime.pressed_part == 0
+        view.finger(second, 0.1)
+        assert item.runtime.pressed_part == 1
+        view._indev.release(second)
+
+        assert item.runtime.pressed_part is None
+
+    def test_a_released_button_of_a_toggling_matrix_is_checked_and_released_again_unchecked(self):
+        view = preview(MATRIX)
+        item = widget(view, 9)
+        rects = [rect for rect, _ in item.button_rects()]
+        points = [(rect.center().x() + 10, rect.center().y() + 10) for rect in rects]
+
+        lift(view, *points[0])
+        lift(view, *points[2])
+        assert item.checked_buttons() == (0, 2)
+        lift(view, *points[0])
+
+        assert item.checked_buttons() == (2,)
+
+    def test_with_one_check_only_the_last_button_is_checked_and_it_is_the_value(self):
+        view = preview({**MATRIX, "one_check": True, "val": 0})
+        item = widget(view, 9)
+        rects = [rect for rect, _ in item.button_rects()]
+        points = [(rect.center().x() + 10, rect.center().y() + 10) for rect in rects]
+        assert item.checked_buttons() == (0,)
+        # `val` before `one_check` is not taken by the plate
+        assert preview({**MATRIX, "val": 0, "one_check": True}).editable_items()[0].checked_buttons() == ()
+
+        lift(view, *points[1])
+
+        assert item.checked_buttons() == (1,)
+        assert item.data["val"] == 1
+
+    def test_a_matrix_without_toggle_checks_nothing(self):
+        view = preview({**MATRIX, "toggle": False})
+        item = widget(view, 9)
+        rect = item.button_rects()[0][0]
+
+        lift(view, rect.center().x() + 10, rect.center().y() + 10)
+
+        assert item.checked_buttons() == ()
+
+
+def center(item, rect):
+    point = item.mapToScene(rect.center())
+    return point.x(), point.y()
+
+
+@pytest.mark.usefixtures("qapp")
+class TestPreviewMessageBox(TestBase):
+    BOX = {"page": 1, "id": 10, "obj": "msgbox", "w": 300, "text": "Hello", "options": ["Yes", "No"]}
+
+    def test_a_pressed_button_looks_pressed_and_releasing_it_closes_the_box(self):
+        view = preview(self.BOX)
+        item = widget(view, 10)
+        yes = center(item, item.button_rects()[0])
+
+        view.finger(yes, 0.0)
+        assert item.runtime.pressed_part == 0
+        view._indev.release(yes)
+
+        assert item.runtime.is_closed(item.key)
+        assert not item.isVisible()
+
+    def test_the_box_stays_if_the_finger_is_let_go_beside_the_buttons(self):
+        view = preview(self.BOX)
+        item = widget(view, 10)
+        yes = center(item, item.button_rects()[0])
+        text = item.mapToScene(QtCore_point(150, 10))
+
+        view.finger(yes, 0.0)
+        view.finger((text.x(), text.y()), 0.1)
+        view._indev.release((text.x(), text.y()))
+
+        assert item.isVisible()
+
+    def test_the_button_under_the_finger_at_the_release_is_the_one_that_closes_the_box(self):
+        view = preview(self.BOX)
+        item = widget(view, 10)
+        yes, no = (center(item, rect) for rect in item.button_rects())
+
+        view.finger(yes, 0.0)
+        view.finger(no, 0.1)
+        assert item.runtime.pressed_part == 1
+        view._indev.release(no)
+
+        assert not item.isVisible()
+
+    def test_the_text_of_the_box_does_not_close_it(self):
+        view = preview(self.BOX)
+        item = widget(view, 10)
+        point = item.mapToScene(QtCore_point(150, 10))
+
+        lift(view, point.x(), point.y())
+
+        assert item.isVisible()
+
+    def test_reset_brings_the_box_back(self):
+        view = preview(self.BOX)
+        item = widget(view, 10)
+        lift(view, *center(item, item.button_rects()[0]))
+
+        view.reset_interactions()
+
+        assert widget(view, 10).isVisible()
+
+
+def QtCore_point(x, y):
+    from PyQt6 import QtCore
+
+    return QtCore.QPointF(x, y)
+
+
+TABVIEW = {"page": 1, "id": 11, "obj": "tabview", "x": 0, "y": 0, "w": 300, "h": 200, "val": 0}
+TABS = [{"page": 1, "id": 12 + n, "obj": "tab", "parentid": 11, "text": f"T{n}"} for n in range(3)]
+
+
+@pytest.mark.usefixtures("qapp")
+class TestPreviewTabview(TestBase):
+    def test_releasing_a_tab_button_makes_its_tab_active(self):
+        view = preview(TABVIEW, *TABS)
+        item = widget(view, 11)
+
+        lift(view, *center(item, item.button_rects()[2]))
+
+        assert item.data["val"] == 2
+
+    def test_a_pressed_tab_button_is_not_active_until_released(self):
+        view = preview(TABVIEW, *TABS)
+        item = widget(view, 11)
+        second = center(item, item.button_rects()[1])
+
+        view.finger(second, 0.0)
+        assert item.data["val"] == 0
+        assert item.runtime.pressed_part == 1
+        view._indev.release(second)
+
+        assert item.data["val"] == 1
+
+
+@pytest.mark.usefixtures("qapp")
+class TestPreviewColorPicker(TestBase):
+    PICKER = {"page": 1, "id": 13, "obj": "cpicker", "x": 10, "y": 10, "w": 200, "h": 200, "color": "#FF0000"}
+
+    def test_the_color_follows_the_finger_on_the_ring(self):
+        view = preview(self.PICKER)
+        item = widget(view, 13)
+
+        # the ring is the outer 20 pixels: at the right edge of the circle, 3 o'clock
+        view.finger((10 + 200 - 10, 110), 0.0)
+        view._indev.release((10 + 200 - 10, 110))
+
+        # the colors start at 6 o'clock (red); 3 o'clock is a quarter turn on, the angle counts clockwise from there
+        assert item.data["color"] != "#FF0000"
+        assert abs(item.color.hue() - 90) <= 1
+
+    def test_the_middle_of_the_disc_changes_nothing_and_a_long_press_there_switches_the_mode(self):
+        view = preview(self.PICKER)
+        item = widget(view, 13)
+
+        view.finger((110, 110), 0.0)
+        view._indev.tick(0.5)
+        view._indev.release((110, 110))
+
+        assert item.data["color"] == "#FF0000"
+        assert item.mode == "saturation"
+
+    def test_a_touch_outside_the_circle_is_not_a_touch(self):
+        view = preview(self.PICKER)
+
+        view.finger((12, 12), 0.0)
+
+        assert view._indev.active is None
+
+    def test_the_finger_can_leave_the_ring_while_dragging(self):
+        view = preview(self.PICKER)
+        item = widget(view, 13)
+
+        view.finger((200, 110), 0.0)
+        view.finger((450, 300), 0.1)
+        view._indev.release((450, 300))
+
+        assert item.data["color"] != "#FF0000"
+
+
+@pytest.mark.usefixtures("qapp")
+class TestPreviewSelectorGroups(TestBase):
+    def test_a_dropdown_makes_the_group_follow(self):
+        dropdown = {**DROPDOWN, "groupid": 3, "options": "A\nB\nC", "val": 0}
+        slider = {
+            "page": 1,
+            "id": 5,
+            "obj": "slider",
+            "x": 10,
+            "y": 200,
+            "w": 200,
+            "h": 20,
+            "min": 0,
+            "max": 100,
+            "val": 0,
+            "groupid": 3,
+        }
+        view = preview(dropdown, slider)
+        view.set_group_objects(lambda: [dropdown, slider])
+        lift(view, 20, 20)
+
+        lift(view, 20, 50 + 45 * 2 + 5)
+
+        assert widget(view, 5).data["val"] == 100

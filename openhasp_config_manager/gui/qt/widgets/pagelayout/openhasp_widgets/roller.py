@@ -88,6 +88,7 @@ class HaspRollerItem(EditableWidget):
         else:
             start = from_offset + (option - selected) * self.row_height
         self.runtime.set(self.key, "val", option, self.obj_data)
+        self.follow_group(option, self.option_count)
         self._stop_animation()
         self._offset = start
         animation = QtCore.QVariantAnimation(self)

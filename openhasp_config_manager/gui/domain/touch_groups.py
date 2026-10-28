@@ -38,6 +38,9 @@ def value_range(obj: Mapping, objects: Iterable[Mapping] = ()) -> Optional[Tuple
             return int(obj.get("min", _DEFAULT_RANGE[0])), int(obj.get("max", _DEFAULT_RANGE[1]))
         except (TypeError, ValueError):
             return _DEFAULT_RANGE
+    if kind in ("dropdown", "roller"):
+        count = len(str(obj["options"]).split("\n")) if obj.get("options") else 0
+        return (0, count - 1) if count > 1 else None
     if kind == "tabview":
         count = len(tab_texts(list(objects), dict(obj)))
         return (0, count - 1) if count > 1 else None

@@ -168,6 +168,7 @@ class HaspDropdownItem(EditableWidget):
             # `page_release_handler`: the row under the finger is selected, and the list closes
             self.runtime.set(self.key, "val", row, self.obj_data)
             self.close_list()
+            self.follow_group(row, len(option_lines(self.obj_data.get("options"))))
         elif pressed_row is None:
             # `LV_SIGNAL_RELEASED` of the dropdown itself
             self.runtime.open_dropdown = None if self.is_open else self.key

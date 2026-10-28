@@ -32,6 +32,11 @@ BUTTON_DEFAULTS = {
     "bg_grad_color@1": "#623C29",
     "border_color@1": "#596972",
     "text_color@1": "#FFFFFF",
+    # pressed, and pressed while toggled: computed with the formulas of the theme (`lvgl_colors.py`), they can't be measured
+    "bg_color@2": "#18BEFF",
+    "bg_grad_color@2": "#005D84",
+    "bg_color@3": "#CE7952",
+    "bg_grad_color@3": "#523021",
     "bg_color@4": "#4ACAFF",
     "bg_grad_color@4": "#0081B4",
     "border_color@4": "#444444",

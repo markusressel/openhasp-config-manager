@@ -1,4 +1,6 @@
-from PyQt6 import QtCore
+from typing import Optional
+
+from PyQt6 import QtCore, QtGui
 
 from openhasp_config_manager.gui.domain.style_parts import Part
 from openhasp_config_manager.gui.domain.tabs import tab_texts
@@ -23,6 +25,9 @@ _SIDE_BUTTON_WIDTH = 90
 # the indicator under the active tab is this far from the ends of the tab, and has these corners
 _INDICATOR_MARGIN = 5
 _INDICATOR_RADIUS = 2
+# a pressed tab button: `#888` at this opacity over the bar (`tabview_btns` of lv_theme_hasp.c, computed, not measured)
+_PRESSED_COLOR = "#888888"
+_PRESSED_OPA = 127
 
 
 class HaspTabviewItem(EditableWidget):
@@ -30,8 +35,52 @@ class HaspTabviewItem(EditableWidget):
     A container with a row (or column) of tab buttons at `btn_pos`: 0 none, 1 top, 2 bottom, 3 left, 4 right. The buttons are the
     `tab` objects that have the tabview as their `parentid`; `val` is the active one. Objects on a tab are not drawn inside of it.
     The height of the button row is `pad_top40` + `pad_bottom40` on top of the default.
+    Touched, a tab button looks pressed (a gray overlay), and releasing it makes its tab the active one (`val`). Swiping the content
+    and the 300 ms slide of the content are not shown: the objects on a tab are not drawn inside of it either.
     See https://www.openhasp.com/0.7.0/design/objects/tabview/
     """
+
+    def button_rects(self):
+        """:return: the rect of every tab button, in the order of the tabs"""
+        area = self.button_area()
+        tabs = self.tabs()
+        if area.isEmpty() or not tabs:
+            return []
+        horizontal = area.width() >= area.height() and self.buttons_position in (_BUTTONS_TOP, _BUTTONS_BOTTOM)
+        if horizontal:
+            return [
+                QtCore.QRectF(
+                    area.left() + area.width() * index / len(tabs), area.top(), area.width() / len(tabs), area.height()
+                )
+                for index in range(len(tabs))
+            ]
+        return [
+            QtCore.QRectF(area.left(), area.top() + _BUTTON_THICKNESS * index, area.width(), _BUTTON_THICKNESS)
+            for index in range(len(tabs))
+        ]
+
+    def button_at(self, point) -> Optional[int]:
+        local = self.mapFromScene(QtCore.QPointF(point[0], point[1]))
+        return next((index for index, rect in enumerate(self.button_rects()) if rect.contains(local)), None)
+
+    def on_press(self, point):
+        index = self.button_at(point)
+        self.set_pressed(True, part=-1 if index is None else index)
+
+    def on_pressing(self, point):
+        index = self.button_at(point)
+        part = -1 if index is None else index
+        if self.runtime.is_pressed(self.key) and part != self.runtime.pressed_part:
+            self.runtime.pressed_part = part
+            self.runtime_changed()
+
+    def on_release(self, point, short_click: bool):
+        index = self.runtime.pressed_part
+        self.set_pressed(False)
+        if index is not None and index >= 0 and self.button_at(point) == index:
+            self.runtime.set(self.key, "val", index, self.obj_data)
+            self.runtime_changed()
+            self.follow_group(index, len(self.tabs()))
 
     @property
     def buttons_position(self) -> int:
@@ -79,6 +128,10 @@ class HaspTabviewItem(EditableWidget):
                 )
             else:
                 button = QtCore.QRectF(area.left(), area.top() + _BUTTON_THICKNESS * index, area.width(), _BUTTON_THICKNESS)
+            if self.runtime.is_pressed(self.key) and self.runtime.pressed_part == index:
+                overlay = QtGui.QColor(_PRESSED_COLOR)
+                overlay.setAlpha(_PRESSED_OPA)
+                painter.fillRect(button, overlay)
             draw_text(painter, button, text, to_color(self.style("text_color", None, Part.ITEMS), DEFAULT_TEXT), font)
             if index == active:
                 # the indicator marks the active tab at the edge of the bar next to the content

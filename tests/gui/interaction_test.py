@@ -276,6 +276,8 @@ class TestGroups(TestBase):
         assert group_values(self.OBJECTS, self.OBJECTS[0], True, 1, 5, 5) == {}
         assert value_range({"obj": "label"}) is None
         assert value_range({"obj": "dropdown"}) is None
+        assert value_range({"obj": "dropdown", "options": "A\nB\nC"}) == (0, 2)
+        assert value_range({"obj": "roller", "options": "A"}) is None
         assert value_range({"obj": "btn"}) is None
         assert value_range({"obj": "btn", "toggle": 1}) == (0, 1)
 
