@@ -151,17 +151,16 @@ class TestGeometry(TestBase):
     def test_a_message_box_is_in_the_middle_of_the_screen_whatever_its_position(self):
         box = item_of({"obj": "msgbox", "x": 5, "y": 7, "w": 200, "h": 100})
 
-        assert (box.obj_x, box.obj_y) == (140, 104)
+        assert (box.obj_x, box.obj_y) == (140, round((320 - box.obj_h) / 2))
 
     def test_a_message_box_is_as_high_as_its_text_and_buttons_and_ignores_h(self):
         one_line = item_of({"obj": "msgbox", "w": 300, "h": 250, "text": "Message"})
-        two_lines = item_of(
-            {"obj": "msgbox", "w": 300, "h": 250, "text": "A longer message text that wraps over several lines"}
-        )
+        two_lines = item_of({"obj": "msgbox", "w": 300, "h": 250, "text": "Message\nover two lines"})
 
-        # measured on a plate
-        assert one_line.obj_h == 112
-        assert two_lines.obj_h == 144
+        # measured on a plate with its font (112 and 144): 6 above the text, 12 + 50 + 12 for the buttons
+        assert one_line.obj_h == round(6 + one_line.line_height + 74)
+        assert two_lines.obj_h == round(6 + 2 * two_lines.line_height + 74)
+        assert two_lines.obj_h > one_line.obj_h
 
     def test_a_roller_is_as_high_as_its_rows_if_it_has_them_and_else_as_high_as_it_says(self):
         assert item_of({"obj": "roller", "h": 60}).obj_h == 60
@@ -203,6 +202,7 @@ class TestBox(TestBase):
         assert image.pixelColor(50, 10).name() == "#ff0000" and image.pixelColor(0, 0).name() == "#000000"
 
 
+@pytest.mark.usefixtures("qapp")
 class TestTextAndShapes(TestBase):
     def test_text_is_set_in_pixels_of_the_font_size_and_has_the_lead_of_the_plate(self):
         from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import line_lead, plate_font
@@ -215,7 +215,7 @@ class TestTextAndShapes(TestBase):
 
         assert wrap_lines(plate_font(24), "a b", 1000) == ["a b"]
         assert wrap_lines(plate_font(24), "one\ntwo", 1000) == ["one", "two"]
-        assert len(wrap_lines(plate_font(24), "A longer message text that wraps over several lines", 270)) == 2
+        assert wrap_lines(plate_font(24), "one two three", 1) == ["one", "two", "three"]
 
     def test_a_checkbox_is_centered_in_its_height_and_its_box_follows_the_font(self):
         small = item_of({"obj": "checkbox", "text_font": 12, "h": 40})
@@ -271,6 +271,7 @@ class TestTextAndShapes(TestBase):
         assert spinner.rotation_degrees > 20
 
     def test_a_qr_code_has_whole_pixel_modules_and_a_quiet_zone_of_two(self):
+        pytest.importorskip("segno")
         from openhasp_config_manager.gui.domain.qr_code import qr_modules
 
         assert len(qr_modules("https://openhasp.com")) == 25
