@@ -80,3 +80,22 @@ class LivePlate:
 
 def _key(obj: Dict[str, Any]) -> ObjectKey:
     return obj.get("page"), obj.get("id")
+
+
+# Live preview runs on at most this many devices at once (see docs/tabs-and-shared-drafts.md, "Decisions")
+MAX_LIVE_PREVIEWS = 10
+
+
+def live_preview_refusal(device: str, live_devices: List[str]) -> Optional[str]:
+    """
+    :param device: the device to turn Live preview on for
+    :param live_devices: the other devices with Live preview on
+    :return: why Live preview can't be turned on for the device, None if it can. Nothing is turned off by itself: the user
+        chooses which one to turn off.
+    """
+    if len(live_devices) < MAX_LIVE_PREVIEWS:
+        return None
+    return (
+        f"Live preview runs on at most {MAX_LIVE_PREVIEWS} devices at once. Turn it off for one of them first, "
+        f"to turn it on for {device}: {', '.join(sorted(live_devices))}."
+    )

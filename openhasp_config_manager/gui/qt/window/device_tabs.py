@@ -4,8 +4,10 @@ from typing import Callable, List, Optional, Set, Tuple
 from PyQt6 import QtCore
 from PyQt6.QtWidgets import QTabBar
 
+from openhasp_config_manager.gui.domain.connection import ConnectionStatus
 from openhasp_config_manager.gui.domain.draft.files import LoadedDevice
 from openhasp_config_manager.gui.domain.draft.session import PlateSession
+from openhasp_config_manager.gui.qt.window.status_bar import connection_icon
 from openhasp_config_manager.gui.qt.widgets.message_panel import MessagePanel
 from openhasp_config_manager.gui.qt.widgets.pagelayout import OpenHaspDevicePagesData
 from openhasp_config_manager.gui.qt.widgets.pagelayout.page_layout_editor import PageLayoutEditorWidget
@@ -41,6 +43,9 @@ class DeviceTab:
         self.page_before_part_alone: Optional[int] = None
         # files that changed on disk while the tab was in the background: applied when it is shown again
         self.changed_files: Set[Path] = set()
+        # what the title of the tab shows (see `DeviceTabs.update_title`)
+        self.dirty = False
+        self.connection = ConnectionStatus()
 
 
 class DeviceTabs(QtCore.QObject):
@@ -52,6 +57,8 @@ class DeviceTabs(QtCore.QObject):
 
     # (the active tab, the one that was active before), each None if there is none
     activated = QtCore.pyqtSignal(object, object)
+    # a tab was opened, before it becomes the active one
+    opened = QtCore.pyqtSignal(object)
     # the × of a tab was clicked: the window decides (see `close`)
     closeRequested = QtCore.pyqtSignal(object)
 
@@ -97,9 +104,10 @@ class DeviceTabs(QtCore.QObject):
         self.tabs.append(tab)
         self.bar.blockSignals(True)
         self.bar.addTab(name)
-        self.bar.setTabToolTip(len(self.tabs) - 1, name)
         self.bar.blockSignals(False)
+        self.update_title(tab)
         self.bar.show()
+        self.opened.emit(tab)
         self.activate(tab)
         return tab
 
@@ -137,9 +145,36 @@ class DeviceTabs(QtCore.QObject):
 
     def set_dirty(self, tab: DeviceTab, dirty: bool):
         """Mark the title of a tab whose drafts have unsaved changes."""
+        tab.dirty = dirty
+        self.update_title(tab)
+
+    def set_connection(self, tab: DeviceTab, status: ConnectionStatus):
+        """Show the connection to the plate of a tab in its dot."""
+        tab.connection = status
+        self.update_title(tab)
+
+    def update_title(self, tab: DeviceTab):
+        """
+        The title of a tab: its device, marked if its drafts have unsaved changes, with a dot for the connection to the plate
+        (the Live preview icon while it is on), the details in the tooltip.
+        """
         index = self.tabs.index(tab)
-        self.bar.setTabText(index, f"{tab.name} {DIRTY_MARK}" if dirty else tab.name)
-        self.bar.setTabToolTip(index, f"{tab.name}: unsaved changes" if dirty else tab.name)
+        live = tab.editor.plate.live
+        self.bar.setTabText(index, f"{tab.name} {DIRTY_MARK}" if tab.dirty else tab.name)
+        self.bar.setTabIcon(index, connection_icon(tab.connection, live))
+        lines = [
+            f"{tab.name}: unsaved changes" if tab.dirty else tab.name,
+            "",
+            tab.connection.summary[0],
+            tab.connection.details,
+        ]
+        if live:
+            lines.append("Live preview is on: the draft is sent to the plate while you edit it, also from other tabs.")
+        self.bar.setTabToolTip(index, "\n".join(lines))
+
+    def refresh_theme(self):
+        for tab in self.tabs:
+            self.update_title(tab)
 
     def title(self, tab: DeviceTab) -> str:
         return self.bar.tabText(self.tabs.index(tab))

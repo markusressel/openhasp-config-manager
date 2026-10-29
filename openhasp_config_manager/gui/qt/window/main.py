@@ -21,7 +21,8 @@ from openhasp_config_manager.gui.domain.draft.files import (
     load_part_alone,
 )
 from openhasp_config_manager.gui.domain.config_changes import OwnWrites
-from openhasp_config_manager.gui.domain.connection import LinkState
+from openhasp_config_manager.gui.domain.connection import ConnectionStatus, LinkState
+from openhasp_config_manager.gui.domain.live_preview import live_preview_refusal
 from openhasp_config_manager.gui.domain.gui_state import (
     GuiStateFile,
     now,
@@ -42,7 +43,7 @@ from openhasp_config_manager.gui.qt.window.log_colors import LogColors
 from openhasp_config_manager.gui.qt.window.menus import create_menus, show_editor_actions
 from openhasp_config_manager.gui.qt.window.source_sync import SourceEditorSync
 from openhasp_config_manager.gui.qt.window.status_bar import StatusBarController
-from openhasp_config_manager.gui.qt.connection import ConnectionController
+from openhasp_config_manager.gui.qt.connection import ConnectionController, PlateConnections
 from openhasp_config_manager.gui.qt.log_stream import LogStreamController
 from openhasp_config_manager.gui.qt.widgets.log_view import LogView
 from openhasp_config_manager.gui.qt.operations import OperationStatus, error_text
@@ -54,6 +55,7 @@ from openhasp_config_manager.gui.qt.widgets.source.rendered_view import FileRend
 from openhasp_config_manager.gui.qt.widgets.device_list import DeviceListWidget
 from openhasp_config_manager.gui.qt.widgets.source.file_tree import FileTreeWidget
 from openhasp_config_manager.gui.qt.widgets.message_panel import MessagePanel, DiskConflictBanner, file_list_text
+from openhasp_config_manager.gui.qt.widgets.plates_panel import PlateRow, PlatesPanel
 from openhasp_config_manager.gui.qt.widgets.pagelayout import OpenHaspDevicePagesData
 from openhasp_config_manager.gui.qt.widgets.pagelayout.page_layout_editor import PageLayoutEditorWidget
 from openhasp_config_manager.gui.qt.widgets.source.source_editor import SourceEditorWidget
@@ -138,6 +140,7 @@ class MainWindow(QMainWindow):
         self.center_stack.addWidget(self.message_panel)
         # one tab per open device, each with its own editor
         self.device_tabs = DeviceTabs(self._create_editor, parent=self)
+        self.device_tabs.opened.connect(self._on_tab_opened)
         self.device_tabs.activated.connect(self._on_tab_activated)
         self.device_tabs.closeRequested.connect(self.close_tab)
         self._toolbar = self.page_layout_editor_widget.toolbar
@@ -232,23 +235,32 @@ class MainWindow(QMainWindow):
         self.logs_dock.hide()
         # open, also while another dock of its tab group is raised
         self.logs_dock.toggleViewAction().toggled.connect(self.device_logs.set_open)
+
+        # the plates of the open devices: their connection, Live preview, the page they show and what is wrong
+        self.plates_panel = PlatesPanel()
+        self.plates_panel.deviceClicked.connect(lambda name: self.device_tabs.activate(self.device_tabs.find(name)))
+        self.plates_panel.liveToggled.connect(self.set_live_preview)
+        self.plates_dock = self._add_dock("Plates", "plates_dock", self.plates_panel)
+        self.tabifyDockWidget(self.jsonl_dock, self.plates_dock)
+        self.jsonl_dock.raise_()
         self._size_docks()
 
         self.status_bar = StatusBarController(
             self, self.status, on_resync=lambda index: self.page_layout_editor_widget.resync_page(index)
         )
 
-        # the connection to the plate of the active tab
-        self.connection = ConnectionController(self)
-        self.connection.changed.connect(self.status_bar.set_connection)
-        self.connection.changed.connect(lambda _: self._state_publisher.request())
-        # a plate that went offline (e.g. restarted) shows its files again, not what Live preview sent
-        self.connection.changed.connect(
-            lambda status: (
-                self.page_layout_editor_widget.plate.forget_sent() if status.link == LinkState.PLATE_OFFLINE else None
-            )
-        )
-        self.status_bar.set_connection(self.connection.status)
+        # one connection per open device, also while its tab is in the background
+        self.connections = PlateConnections(self)
+        self.connections.changed.connect(self._on_connection_changed)
+        # what the status bar shows without a tab
+        self._no_connection = ConnectionController(self)
+        self.status_bar.set_connection(self._no_connection.status)
+
+    @property
+    def connection(self) -> ConnectionController:
+        """The connection to the plate of the active tab (one without a device if there is no tab)."""
+        tab = self.device_tabs.active
+        return self._no_connection if tab is None else self.connections.get(tab.name)
 
     @property
     def log_view(self) -> LogView:
@@ -283,11 +295,14 @@ class MainWindow(QMainWindow):
         editor.editPartAloneRequested.connect(active(self.edit_part_alone))
         editor.partAloneDone.connect(active(self.close_part_alone))
         editor.action_edit_mode.toggled.connect(active(self._on_edit_mode_toggled))
-        editor.plate.pageOutOfSync.connect(active(lambda *args: self.connection.page_out_of_sync(*args)))
-        editor.plate.pageDeployed.connect(active(lambda *args: self.connection.page_deployed(*args)))
-        editor.plate.plateRestored.connect(active(lambda *args: self.connection.plate_restored(*args)))
+        # what is sent to a plate counts for its device, also from a tab in the background
+        editor.plate.pageOutOfSync.connect(lambda page: self._with_connection(editor, lambda c: c.page_out_of_sync(page)))
+        editor.plate.pageDeployed.connect(lambda page: self._with_connection(editor, lambda c: c.page_deployed(page)))
+        editor.plate.plateRestored.connect(lambda: self._with_connection(editor, lambda c: c.plate_restored()))
+        editor.plate.liveChanged.connect(lambda _: self._on_live_changed(editor))
+        editor.plate.set_live_guard(lambda: self._live_preview_refusal(editor))
         for busy in [editor.busy, editor.device_controls.busy]:
-            busy.changed.connect(active(lambda _: self._update_sending()))
+            busy.changed.connect(lambda _: self._update_sending(editor))
             busy.changed.connect(active(lambda _: self._update_draft_actions()))
         self.center_stack.addWidget(editor)
         self.properties_stack.addWidget(editor.property_editor)
@@ -317,7 +332,6 @@ class MainWindow(QMainWindow):
         self.page_jsonl_stack.setCurrentWidget(editor.jsonl_preview)
         self.properties_dock.setVisible(editor.edit_mode)
         self.source_sync.set_page_editor(editor)
-        self._update_sending()
 
     def _on_edit_mode_toggled(self, enabled: bool):
         # the properties can only be changed in edit mode
@@ -343,10 +357,16 @@ class MainWindow(QMainWindow):
         if self.page_layout_editor_widget.session is not None:
             self.file_tree_widget.update_state(*self.page_layout_editor_widget.file_state())
 
-    def _update_sending(self):
-        self.connection.set_sending(
-            self.page_layout_editor_widget.busy.busy or self.page_layout_editor_widget.device_controls.busy.busy
+    def _update_sending(self, editor: PageLayoutEditorWidget):
+        self._with_connection(
+            editor, lambda connection: connection.set_sending(editor.busy.busy or editor.device_controls.busy.busy)
         )
+
+    def _with_connection(self, editor: PageLayoutEditorWidget, action):
+        """Do something with the connection of the device of an editor; nothing for the editor without a tab."""
+        tab = self.device_tabs.tab_of(editor)
+        if tab is not None:
+            action(self.connections.get(tab.name))
 
     def set_theme(self, mode: ThemeMode):
         apply_theme(mode)
@@ -356,6 +376,8 @@ class MainWindow(QMainWindow):
         self.file_rendered.view.refresh_theme()
         self.source_editor.refresh_theme()
         self.device_logs.refresh_theme()
+        self.device_tabs.refresh_theme()
+        self.plates_panel.refresh_theme()
         for editor in self.device_tabs.editors:
             editor.jsonl_preview.refresh_theme()
             editor.problems_panel.refresh_theme()
@@ -386,6 +408,7 @@ class MainWindow(QMainWindow):
             self.jsonl_dock,
             self.page_jsonl_dock,
             self.logs_dock,
+            self.plates_dock,
         ]:
             dock.setFloating(False)
         self.restoreState(self._default_dock_state, DOCK_STATE_VERSION)
@@ -425,7 +448,7 @@ class MainWindow(QMainWindow):
             if answer != QMessageBox.StandardButton.Discard:
                 event.ignore()
                 return
-        self.connection.stop()
+        self.connections.stop()
         self.device_logs.stop()
         self._watcher.stop()
         self._state_publisher.stop()
@@ -537,7 +560,7 @@ class MainWindow(QMainWindow):
         tab.editor.clear()
         tab.message = lambda panel: panel.show_loading(f"Loading {name}…", "Rendering the templates of the device's pages")
         if tab is self.device_tabs.active:
-            self._show_tab(tab, keep_connection=True)
+            self._show_tab(tab)
 
         def __current() -> bool:
             # not if the tab was closed or loads again in the meantime
@@ -566,17 +589,23 @@ class MainWindow(QMainWindow):
                 retry=lambda: self._load_device(tab),
             )
             if tab is self.device_tabs.active:
-                self._show_tab(tab, keep_connection=True)
+                self._show_tab(tab)
 
         run_async(__load(), on_success=__on_success, on_error=__on_error)
 
     # --- tabs ---
 
+    def _on_tab_opened(self, tab: DeviceTab):
+        """The connection to the plate of the device, shared by its tabs, until the last of them closes."""
+        self.connections.open(tab.name, tab)
+        self._update_plates()
+
     def _on_tab_activated(self, tab: Optional[DeviceTab], previous: Optional[DeviceTab]):
-        """Another tab is the active one: the panels, the connection and the log follow it, nothing is loaded again."""
+        """
+        Another tab is the active one: the panels, the status bar and the log follow it, nothing is loaded again. The
+        connection and Live preview of the previous one keep running.
+        """
         if previous is not None:
-            # like selecting another device: Live preview and the connection stay with the active tab (for now)
-            previous.editor.plate.stop_live_preview()
             previous.editor.device_controls.set_device(None)
             if not self.disk_changes_banner.isHidden():
                 # offered again when the tab is shown again
@@ -588,15 +617,12 @@ class MainWindow(QMainWindow):
             changed, tab.changed_files = tab.changed_files, set()
             self._apply_changes_to_draft(changed)
 
-    def _show_tab(self, tab: Optional[DeviceTab], keep_connection: bool = False):
-        """
-        Point the panels at the device of a tab: the Files tree, the status bar, the connection, the log.
-        :param keep_connection: the device of the tab loads again: the connection and the log stay while it loads
-        """
+    def _show_tab(self, tab: Optional[DeviceTab]):
+        """Point the panels at the device of a tab: the Files tree, the status bar, the Plates panel, the log."""
         editor = self.page_layout_editor_widget
         device = None if tab is None else tab.device
-        if device is not None or not keep_connection:
-            self.connection.set_device(device)
+        self.status_bar.set_connection(self.connection.status)
+        self._update_plates()
         self.device_logs.show(tab)
         editor.device_controls.set_device(device)
         self.status_bar.set_device(None if tab is None else tab.name)
@@ -648,7 +674,55 @@ class MainWindow(QMainWindow):
         editor = self.device_tabs.close(tab)
         if editor is not None:
             self._delete_editor(editor)
+        self.connections.close(tab.name, tab)
+        self._update_plates()
         return True
+
+    # --- plates ---
+
+    def _on_connection_changed(self, name: str, status: ConnectionStatus):
+        """The connection to the plate of an open device changed: its tabs, the Plates panel and the status bar show it."""
+        for tab in self.device_tabs.tabs:
+            if tab.name == name:
+                self.device_tabs.set_connection(tab, status)
+                if status.link == LinkState.PLATE_OFFLINE:
+                    # a plate that went offline (e.g. restarted) shows its files again, not what Live preview sent
+                    tab.editor.plate.forget_sent()
+        if self._selected_name == name:
+            self.status_bar.set_connection(status)
+            self._state_publisher.request()
+        self._update_plates()
+
+    def _on_live_changed(self, editor: PageLayoutEditorWidget):
+        tab = self.device_tabs.tab_of(editor)
+        if tab is not None:
+            self.device_tabs.update_title(tab)
+        self._update_plates()
+
+    def _live_preview_refusal(self, editor: PageLayoutEditorWidget) -> Optional[str]:
+        """:return: why Live preview can't be turned on in an editor, None if it can"""
+        name = self.device_tabs.tab_of(editor).name
+        others = {tab.name for tab in self.device_tabs.tabs if tab.name != name and tab.editor.plate.live}
+        return live_preview_refusal(name, sorted(others))
+
+    def set_live_preview(self, name: str, on: bool):
+        """Turn Live preview of an open device on or off (e.g. in the Plates panel), as its action in the toolbar does."""
+        action = self.device_tabs.find(name).editor.plate.action_live_preview
+        if action.isEnabled():
+            action.setChecked(on)
+        # also if it was refused, or the device isn't loaded yet: the panel shows how it is
+        self._update_plates()
+
+    def _update_plates(self):
+        rows = [
+            PlateRow(
+                device=name,
+                connection=self.connections.get(name).status,
+                live=any(tab.editor.plate.live for tab in self.device_tabs.tabs if tab.name == name),
+            )
+            for name in self.connections.names
+        ]
+        self.plates_panel.set_rows(rows, active=self._selected_name)
 
     def _update_tab_title(self, tab: Optional[DeviceTab]):
         """The title of a tab marks unsaved changes of its drafts."""
@@ -866,8 +940,9 @@ class MainWindow(QMainWindow):
         self.load_error = None
         tab.session_key = key
         tab.pages_data = pages_data
-        # each open device keeps its log, also in the background
+        # each open device keeps its log and its connection, also in the background
         self.device_logs.log_of(tab).stream.set_device(loaded.device)
+        self.connections.get(tab.name).set_device(loaded.device)
         if tab.part_alone is not None:
             # a part on its own without changes follows the files on disk too, if it is still a file of the device
             alone = tab.part_alone

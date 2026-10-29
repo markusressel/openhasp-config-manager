@@ -91,6 +91,8 @@ class DraftActions:
 
         # the plate shows its files after the deploy, not the draft
         self._window.page_layout_editor_widget.plate.stop_live_preview()
+        # of the device deployed to, also if another tab is active when it is done
+        connection = self._window.connection
         # its own ConfigManager: the editor may analyze the config directory at the same time (after Save)
         config_manager = ConfigManager(
             cfg_root=self._window.config_manager.cfg_root,
@@ -108,7 +110,7 @@ class DraftActions:
         def __on_success(changed: bool):
             if changed:
                 self._window.status.succeeded.emit(f"Deployed {name}: the plate loaded the new files")
-                self._window.connection.plate_restored()
+                connection.plate_restored()
             else:
                 self._window.status.succeeded.emit(f"{name} is already up to date")
 

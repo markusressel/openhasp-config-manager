@@ -1,4 +1,4 @@
-from openhasp_config_manager.gui.domain.live_preview import LivePlate, LiveUpdate
+from openhasp_config_manager.gui.domain.live_preview import MAX_LIVE_PREVIEWS, LivePlate, LiveUpdate, live_preview_refusal
 from tests import TestBase
 
 
@@ -136,3 +136,16 @@ class TestLivePlate(TestBase):
         # THEN
         assert update == LiveUpdate(objects=[_button(2, page=2)])
         assert plate.update(1, []) == LiveUpdate(deletions=[(1, 2)])
+
+
+class TestLivePreviewLimit(TestBase):
+    def test_up_to_ten_devices(self):
+        # GIVEN
+        others = [f"plate_{index}" for index in range(MAX_LIVE_PREVIEWS)]
+
+        # THEN
+        assert MAX_LIVE_PREVIEWS == 10
+        assert live_preview_refusal("new", others[:-1]) is None
+        refusal = live_preview_refusal("new", others)
+        assert refusal is not None
+        assert all(name in refusal for name in others)

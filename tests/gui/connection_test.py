@@ -67,3 +67,28 @@ class TestConnectionStatus(TestBase):
 
         # THEN
         assert status.summary[1] == Severity.ERROR
+
+    def test_the_page_the_plate_shows(self):
+        # GIVEN
+        status = ConnectionStatus.connecting().with_broker(True).with_lwt("online")
+
+        # WHEN
+        status = status.with_page("3")
+
+        # THEN
+        assert status.page == 3
+
+        # WHEN: it restarts on its home page
+        status = status.with_lwt("offline")
+
+        # THEN
+        assert status.page is None
+
+    def test_problems(self):
+        # GIVEN
+        status = ConnectionStatus.connecting().with_broker(False, "refused").with_send_failed(4).with_send_failed(2)
+
+        # THEN
+        assert status.problems == ["refused", "Out of sync: page 2, 4"]
+        assert status.link_summary == ("Broker unreachable", Severity.ERROR)
+        assert status.with_broker(True).problems == ["Out of sync: page 2, 4"]
