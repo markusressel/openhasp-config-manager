@@ -1,6 +1,7 @@
 import os
 import shlex
 from importlib import metadata
+from pathlib import Path
 from typing import Any, Dict, List
 
 from openhasp_config_manager.gui.domain.gui_state import (
@@ -11,6 +12,7 @@ from openhasp_config_manager.gui.domain.gui_state import (
     describe_editor,
     describe_files,
     describe_object,
+    describe_part_mode,
     describe_problems,
     now,
     relative,
@@ -42,7 +44,13 @@ def collect_gui_state(window, running: bool = True) -> Dict[str, Any]:
             ],
             "new_objects_file": None
             if editor.target_component is None
-            else relative(next(c.path for c in session.components if c.key == editor.target_component), root),
+            else relative(
+                Path(editor.target_component)
+                if session.part_mode is not None
+                else next(c.path for c in session.components if c.key == editor.target_component),
+                root,
+            ),
+            "part_mode": describe_part_mode(session, root),
             "draft": describe_draft(session, root),
         }
         problems = describe_problems(session, editor.problems, root, window.devices)

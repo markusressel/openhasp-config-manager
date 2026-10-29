@@ -5,7 +5,7 @@ import pytest
 
 from openhasp_config_manager.cli.common import _create_config_manager
 from openhasp_config_manager.gui.domain.draft.files import load_device, plan_save
-from openhasp_config_manager.gui.domain.draft.session import PlateSession, ReadOnlyObjectError
+from openhasp_config_manager.gui.domain.draft.session import InvalidDirectiveError, PlateSession, ReadOnlyObjectError
 from openhasp_config_manager.gui.domain.problems import object_name
 
 DEVICE = "devices/test_device"
@@ -244,3 +244,193 @@ class TestSave:
         assert change.content == '{"!include": "common/parts/nope.jsonl"}\n{"page": 9, "id": 1, "obj": "obj", "x": 3}\n'
         [error] = session.include_errors()[component.key]
         assert (error.line, error.message) == (1, "The file to include doesn't exist: common/parts/nope.jsonl")
+
+
+DIRECTIVE_PAGE_JSONL = """// tiles below an anchor
+{"page": 9, "id": 1, "obj": "obj", "y": 10, "h": 20}
+{"page": 9, "id": 2, "obj": "obj", "y": 50, "h": 30}
+{
+  // the tiles
+  "!include": "common/parts/tile.jsonl",
+  "vars": {"anchor": 1},
+  "for": {"id": [20, 30]}
+}
+{"page": 9, "id": 3, "obj": "label", "x": "{{ b20.x + 5 }}", "y": "{{ b20.y }}"}
+"""
+
+
+class TestDirectiveEdits:
+    @pytest.fixture
+    def session(self, cfg_root) -> PlateSession:
+        _write_page(cfg_root, DIRECTIVE_PAGE_JSONL)
+        return _load(cfg_root)
+
+    def test_a_var_edit_renders_the_instances_again_and_is_saved_into_the_directive(self, session):
+        # GIVEN
+        objects = _objects(session)
+        tile = objects["p9b30"]
+        assert session.directive_of(tile)["vars"] == {"anchor": 1}
+        changes = []
+        session.add_listener(changes.append)
+
+        # WHEN
+        session.set_directive_value(tile, "vars", {"anchor": 2})
+
+        # THEN: the objects stay, with the new values
+        after = _objects(session)
+        assert all(after[name] is objects[name] for name in objects)
+        assert [after[name]["y"] for name in ("p9b20", "p9b30")] == [80, 80]
+        assert session.directive_of(tile)["vars"] == {"anchor": 2}
+        assert session.origin_of(tile).includes[0].vars == {"anchor": 2}
+        assert session.is_dirty is True
+        [change] = changes
+        assert change.selected == [tile] and not change.adds_or_removes
+        # the scope of every object of the instances changed, and p9b3 refers to p9b20
+        assert {object_name(obj) for obj in change.objects} == {"p9b20", "p9b21", "p9b30", "p9b31"}
+        assert after["p9b3"]["y"] == 80
+
+        # WHEN
+        [change] = plan_save(session)
+
+        # THEN: only the vars changed
+        assert change.content == DIRECTIVE_PAGE_JSONL.replace('"vars": {"anchor": 1}', '"vars": {"anchor": 2}')
+
+    def test_an_object_that_refers_to_an_included_object_follows_a_var_edit(self, session):
+        # GIVEN
+        label = _objects(session)["p9b3"]
+        assert label["y"] == 30
+
+        # WHEN
+        session.set_directive_value(_objects(session)["p9b20"], "vars", {"anchor": 2})
+
+        # THEN
+        assert label["y"] == 80
+
+    def test_a_for_edit_adds_and_removes_instances_and_undo_restores_them(self, session):
+        # GIVEN
+        [component] = session.components
+        objects = _objects(session)
+        tile = objects["p9b30"]
+
+        # WHEN
+        session.set_directive_value(tile, "for", {"id": [30, 40]})
+
+        # THEN: the instance of 30 stays, 20 is gone, 40 is new, in the place of the directive
+        names = [object_name(obj) for obj in session.working_objects[component.key]]
+        assert names == ["p9b1", "p9b2", "p9b30", "p9b31", "p9b40", "p9b41", "p9b3"]
+        assert _objects(session)["p9b30"] is tile
+        assert _objects(session)["p9b41"]["text"] == "40"
+        assert session.origin_of(_objects(session)["p9b40"]).includes[0].loop == {"id": 40}
+
+        # WHEN
+        session.undo()
+
+        # THEN
+        names = [object_name(obj) for obj in session.working_objects[component.key]]
+        assert names == ["p9b1", "p9b2", "p9b20", "p9b21", "p9b30", "p9b31", "p9b3"]
+        restored = _objects(session)
+        assert restored["p9b30"] is tile and restored["p9b1"] is objects["p9b1"]
+        assert session.origin_of(restored["p9b20"]).includes[0].loop == {"id": 20}
+        assert restored["p9b3"]["x"] == 45
+        assert session.is_dirty is False
+        assert session.changes() == []
+
+        # WHEN
+        session.redo()
+
+        # THEN
+        assert [object_name(obj) for obj in session.working_objects[component.key]][2:6] == [
+            "p9b30",
+            "p9b31",
+            "p9b40",
+            "p9b41",
+        ]
+        assert session.directive_of(tile)["for"] == {"id": [30, 40]}
+
+    def test_an_instance_that_is_gone_is_not_selected(self, session):
+        # GIVEN
+        changes = []
+        session.add_listener(changes.append)
+
+        # WHEN
+        session.set_directive_value(_objects(session)["p9b20"], "for", {"id": [30]})
+
+        # THEN
+        assert changes[0].selected == [] and changes[0].removed
+
+    def test_an_edit_that_collides_ids_is_refused(self, session):
+        # GIVEN
+        before = {name: dict(obj) for name, obj in _objects(session).items()}
+        tile = _objects(session)["p9b20"]
+
+        # WHEN
+        error = session.check_directive_value(tile, "for", {"id": [1, 20]})
+
+        # THEN
+        assert "p9b1 of common/parts/tile.jsonl:2 (id=1) is also the id of" in error
+        with pytest.raises(InvalidDirectiveError, match="p9b2 of common/parts/tile.jsonl:3"):
+            session.set_directive_value(tile, "for", {"id": [1, 20]})
+        assert {name: dict(obj) for name, obj in _objects(session).items()} == before
+        assert session.undo_description is None
+        assert session.is_dirty is False
+
+    @pytest.mark.parametrize(
+        "key, value, error",
+        [
+            ("for", {"id": "{{ range(2000) }}"}, "'for' of 'id' has 2000 values, more than 1000"),
+            ("vars", {"anchor": "{{ nope + 1 }}"}, "Can't render 'anchor'"),
+            ("vars", {"id": 3}, "id is in 'vars' and in 'for': use one of them"),
+        ],
+    )
+    def test_an_edit_with_an_error_is_refused(self, session, key, value, error):
+        tile = _objects(session)["p9b20"]
+
+        assert error in session.check_directive_value(tile, key, value)
+
+    def test_a_template_value_is_rendered_with_the_including_file(self, session):
+        # WHEN
+        session.set_directive_value(_objects(session)["p9b20"], "for", {"id": "{{ [20, 25] }}"})
+
+        # THEN
+        assert {"p9b25", "p9b26"} <= set(_objects(session))
+
+    def test_after_a_save_the_directive_has_its_new_place(self, session, cfg_root):
+        # GIVEN: an object before the directive is removed and saved
+        tile = _objects(session)["p9b20"]
+        session.remove_object(_objects(session)["p9b1"])
+        [change] = plan_save(session)
+        change.path.write_text(change.content)
+        session.mark_saved({change.path: change.content})
+
+        # WHEN
+        session.set_directive_value(tile, "vars", {"anchor": 2})
+        [change] = plan_save(session)
+
+        # THEN
+        assert session.line_of(tile) == 3 and session.origin_of(tile).includes[0].line == 3
+        assert '"vars": {"anchor": 2}' in change.content
+        change.path.write_text(change.content)
+        session.mark_saved({change.path: change.content})
+
+        # WHEN: undoing the var edit and the removal from before the saves
+        session.undo()
+        session.undo()
+
+        # THEN
+        assert session.origin_of(tile).includes[0].line == 3
+        [change] = plan_save(session)
+        assert '"vars": {"anchor": 1}' in change.content
+        assert change.content.endswith('{"page": 9, "id": 1, "obj": "obj", "y": 10, "h": 20}\n')
+
+    def test_an_object_added_after_a_directive_that_includes_nothing(self, cfg_root):
+        # GIVEN: the directive is at the start of the file, and the draft has its objects in another order
+        _write_page(cfg_root, '{"!include": "common/parts/nope.jsonl"}\n{"page": 9, "id": 1, "obj": "obj"}\n')
+        session = _load(cfg_root)
+        [component] = session.components
+
+        # WHEN: the draft writes the directive after the new object, the expansion finds its line (it raised an IndexError)
+        session.add_object(component.key, {"page": 9, "id": 3, "obj": "label", "text": "{{ p9b1.x }}"})
+        session.set_source_value(_objects(session)["p9b1"], "x", 4)
+
+        # THEN
+        assert _objects(session)["p9b3"]["text"] == "4"

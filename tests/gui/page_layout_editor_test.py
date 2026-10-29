@@ -62,7 +62,13 @@ def editor_files():
 
 
 @pytest.fixture
-def editor(qapp, async_loop, plate, tmp_path, monkeypatch, editor_files):
+def boot_cmd():
+    """:return: the startup script of the device (classes override it)"""
+    return "run L:/home_page.jsonl\nrun L:/editor.jsonl\n"
+
+
+@pytest.fixture
+def editor(qapp, async_loop, plate, tmp_path, monkeypatch, editor_files, boot_cmd):
     from openhasp_config_manager.gui.qt.operations import OperationStatus
     from openhasp_config_manager.gui.qt.widgets.pagelayout import OpenHaspDevicePagesData, plate_link
     from openhasp_config_manager.gui.qt.widgets.pagelayout.page_layout_editor import PageLayoutEditorWidget
@@ -75,7 +81,7 @@ def editor(qapp, async_loop, plate, tmp_path, monkeypatch, editor_files):
     for name, content in editor_files.items():
         (root / name).parent.mkdir(parents=True, exist_ok=True)
         (root / name).write_text(content)
-    (device_dir / "boot.cmd").write_text("run L:/home_page.jsonl\nrun L:/editor.jsonl\n")
+    (device_dir / "boot.cmd").write_text(boot_cmd)
     loaded = load_device(_create_config_manager(root, tmp_path / "output"), "test_device")
     session = PlateSession(device=loaded.device)
     session.load(loaded.components, loaded.renderer)
@@ -84,7 +90,10 @@ def editor(qapp, async_loop, plate, tmp_path, monkeypatch, editor_files):
     widget.set_data(
         session=session,
         device_pages_data=OpenHaspDevicePagesData(
-            device=loaded.device, name=loaded.cmd_component.name, jsonl_components=loaded.jsonl_components
+            device=loaded.device,
+            name=loaded.cmd_component.name,
+            jsonl_components=loaded.jsonl_components,
+            part_includers=loaded.part_includers,
         ),
         page=9,
     )
@@ -629,13 +638,16 @@ class TestLockedPosition(TestBase):
         assert offered() is True
 
 
+DOT_JSONL = '{"page": 9, "id": "{{ id }}", "obj": "label", "x": "{{ id * 10 }}", "text": "{{ prefix }}{{ id }}"}\n'
+DOT_INCLUDE = '{"!include": "common/parts/dot.jsonl", "vars": {"prefix": ""}, "for": {"id": [20, 21]}}\n'
+
+
 class TestIncludedObjects(TestBase):
     @pytest.fixture
     def editor_files(self):
         return {
-            "common/parts/dot.jsonl": '{"page": 9, "id": "{{ id }}", "obj": "label", "x": "{{ id * 10 }}", "text": "{{ id }}"}\n',
-            "devices/test_device/editor.jsonl": EDITOR_JSONL
-            + '{"!include": "common/parts/dot.jsonl", "for": {"id": [20, 21]}}\n',
+            "common/parts/dot.jsonl": DOT_JSONL,
+            "devices/test_device/editor.jsonl": EDITOR_JSONL + DOT_INCLUDE,
         }
 
     def _select(self, editor, obj_id: int):
@@ -717,10 +729,373 @@ class TestIncludedObjects(TestBase):
         root = tmp_path / "cfg"
         assert requested == [(root / "common/parts/dot.jsonl", 1), (root / "devices/test_device/editor.jsonl", 4)]
         assert "Remove Object" not in buttons and "Duplicate Object" not in buttons
-        assert editor.property_editor.findChildren(QLineEdit) == []
+        # only the vars and for of the !include can be changed
+        assert {field.objectName(): field.text() for field in editor.property_editor.findChildren(QLineEdit)} == {
+            "vars.prefix": "",
+            "for.id": "[20, 21]",
+        }
         texts = [label.text() for label in editor.property_editor.findChildren(QLabel)]
-        assert {"p9b21", "label", "common/parts/dot.jsonl:1", "included"} <= set(texts)
+        assert {"p9b21", "label", "common/parts/dot.jsonl:1", "included", "This instance: 21"} <= set(texts)
+        assert "The !include at devices/test_device/editor.jsonl:4" in texts
+        assert "shared" not in texts
         assert "210" in texts
+
+    def _field(self, editor, name: str):
+        from PyQt6.QtWidgets import QLineEdit
+
+        return editor.property_editor.findChild(QLineEdit, name)
+
+    def _error(self, field) -> str:
+        from PyQt6.QtWidgets import QLabel
+
+        [label] = [label for label in field.parentWidget().findChildren(QLabel) if label.property("role") == "error"]
+        return label.text()
+
+    def test_a_var_edit_renders_the_instances_again_without_making_the_panel_again(self, editor):
+        from PyQt6.QtWidgets import QLabel
+
+        # GIVEN
+        obj = self._select(editor, 21)
+        field = self._field(editor, "vars.prefix")
+
+        # WHEN
+        field.setText("#")
+
+        # THEN
+        assert (_object(editor, 20)["text"], obj["text"]) == ("#20", "#21")
+        assert self._field(editor, "vars.prefix") is field
+        assert "#21" in [label.text() for label in editor.property_editor.findChildren(QLabel)]
+        assert editor.session.is_dirty is True
+        assert editor.action_undo.text() == "Undo Change vars.prefix of the !include"
+
+        # WHEN: typing on is the same step
+        field.setText("#:")
+        editor.undo()
+
+        # THEN
+        assert obj["text"] == "21"
+
+    def test_a_for_edit_adds_instances_and_keeps_the_selection(self, editor):
+        # GIVEN
+        obj = self._select(editor, 21)
+
+        # WHEN
+        self._field(editor, "for.id").setText("[20, 21, 22]")
+
+        # THEN
+        assert _object(editor, 22)["x"] == 220
+        assert [item.obj_data for item in editor.page_preview_widget.selected_items()] == [obj]
+        assert self._field(editor, "for.id").text() == "[20, 21, 22]"
+
+    def test_an_invalid_value_is_shown_and_not_applied(self, editor):
+        # GIVEN
+        self._select(editor, 21)
+        field = self._field(editor, "for.id")
+
+        # WHEN: not JSON yet
+        field.setText("[20,")
+
+        # THEN
+        assert self._error(field) == "Write a JSON list of values, e.g. [1, 2, 3], or use a template."
+
+        # WHEN: an id that another object has
+        field.setText("[1, 21]")
+
+        # THEN
+        assert self._error(field).startswith("p9b1 of common/parts/dot.jsonl:1 (id=1) is also the id of")
+        assert editor.session.is_dirty is False
+        assert [obj.get("id") for obj in editor.page_objects if obj.get("page") == 9] == [1, 2, 20, 21]
+
+    def test_a_template_value(self, editor):
+        from PyQt6.QtWidgets import QToolButton
+
+        # GIVEN
+        self._select(editor, 21)
+        toggle = self._field(editor, "for.id").parentWidget().findChild(QToolButton)
+
+        # WHEN
+        toggle.setChecked(True)
+        self._field(editor, "for.id").setText("{{ range(21, 24) }}")
+
+        # THEN
+        assert {21, 22, 23} <= {obj.get("id") for obj in editor.page_objects}
+        assert editor.session.source_of(_object(editor, 21))["text"] == "{{ prefix }}{{ id }}"
+
+    def test_the_live_preview_deletes_the_removed_instances(self, editor, plate):
+        # GIVEN
+        editor.plate.action_live_preview.setChecked(True)
+        wait_until(lambda: plate.calls and plate.calls[-1] == ("set_page", 9))
+        self._select(editor, 20)
+        plate.clear()
+
+        # WHEN
+        self._field(editor, "for.id").setText("[20]")
+
+        # THEN
+        wait_until(lambda: plate.calls)
+        assert plate.calls == [("delete_object_id", 9, 21)]
+
+
+class TestNestedVars(TestBase):
+    @pytest.fixture
+    def editor_files(self):
+        return {
+            "common/parts/bar.jsonl": '{"page": 9, "id": "{{ bar.id }}", "obj": "label", "text": "{{ bar.text }}"}\n',
+            "devices/test_device/editor.jsonl": EDITOR_JSONL
+            + '{"!include": "common/parts/bar.jsonl", "vars": {"bar": {"id": 30, "text": "2:35"}}}\n',
+        }
+
+    def test_a_var_that_is_a_mapping_has_a_field_for_each_value(self, editor):
+        from PyQt6.QtWidgets import QLineEdit
+
+        # GIVEN
+        editor.set_edit_mode(True)
+        obj = _object(editor, 30)
+        editor.page_preview_widget.select_object(obj)
+        fields = {field.objectName(): field for field in editor.property_editor.findChildren(QLineEdit)}
+        assert {name: field.text() for name, field in fields.items()} == {"vars.bar.id": "30", "vars.bar.text": "2:35"}
+
+        # WHEN: the text stays a text, also when it looks like a number
+        fields["vars.bar.text"].setText("12")
+
+        # THEN
+        assert obj["text"] == "12"
+        assert editor.session.directive_of(obj)["vars"] == {"bar": {"id": 30, "text": "12"}}
+
+        # WHEN: the id is JSON
+        fields["vars.bar.id"].setText("31")
+
+        # THEN
+        assert editor.session.directive_of(_object(editor, 31))["vars"] == {"bar": {"id": 31, "text": "12"}}
+
+
+class TestSharedInclude(TestBase):
+    @pytest.fixture
+    def editor_files(self):
+        return {"common/parts/dot.jsonl": DOT_JSONL, "common/editor.jsonl": EDITOR_JSONL + DOT_INCLUDE}
+
+    @pytest.fixture
+    def boot_cmd(self):
+        return "run L:/common_editor.jsonl\n"
+
+    def test_a_directive_in_the_common_folder_is_marked_as_shared(self, editor):
+        from PyQt6.QtWidgets import QLabel
+
+        # WHEN
+        editor.set_edit_mode(True)
+        editor.page_preview_widget.select_object(_object(editor, 20))
+
+        # THEN
+        texts = [label.text() for label in editor.property_editor.findChildren(QLabel)]
+        assert "shared" in texts
+        assert "The !include is in a shared file: saving a change changes the pages of every device that loads it." in texts
+
+
+# a part with pixel positions, two instances
+PIN_JSONL = '{"page": 9, "id": "{{ id }}", "obj": "label", "x": 5, "y": 7, "text": "{{ id }}"}\n'
+PIN_INCLUDE = '{"!include": "common/parts/pin.jsonl", "for": {"id": [40, 41]}}\n'
+
+
+class TestPartMode(TestBase):
+    @pytest.fixture
+    def editor_files(self):
+        return {
+            "common/parts/dot.jsonl": DOT_JSONL,
+            "common/parts/pin.jsonl": PIN_JSONL,
+            "devices/test_device/editor.jsonl": EDITOR_JSONL + DOT_INCLUDE + PIN_INCLUDE,
+        }
+
+    def _select(self, editor, obj_id: int):
+        editor.set_edit_mode(True)
+        obj = _object(editor, obj_id)
+        editor.page_preview_widget.select_object(obj)
+        return obj
+
+    def _items(self, editor):
+        return {item.obj_data.get("id"): item for item in editor.page_preview_widget.editable_items()}
+
+    def _edit_part_of(self, editor, obj_id: int):
+        from PyQt6.QtWidgets import QPushButton
+
+        self._select(editor, obj_id)
+        [button] = [button for button in editor.property_editor.findChildren(QPushButton) if button.text() == "Edit the part"]
+        button.click()
+
+    def test_the_panel_leads_into_part_mode_where_only_the_instance_can_be_changed(self, editor, tmp_path):
+        # WHEN
+        self._edit_part_of(editor, 21)
+
+        # THEN
+        assert editor.session.part_mode.part == (tmp_path / "cfg/common/parts/dot.jsonl").resolve()
+        assert not editor.part_bar.isHidden()
+        assert "Editing part common/parts/dot.jsonl, instance at" in editor.part_bar.title.text().replace("\u200b", "")
+        assert editor.part_bar.instances.currentIndex() == 1
+        items = self._items(editor)
+        assert (items[21].editable, items[20].editable, items[1].editable, items[40].editable) == (True, False, False, False)
+        # the objects around the instance are dimmed
+        dimmed = [obj.get("id") for obj in editor.page_objects if editor.page_preview_widget._is_dimmed(obj)]
+        assert dimmed == [1, 2, 20, 40, 41]
+        assert editor.target_component == str(editor.session.part_mode.part)
+
+    def test_an_edit_in_the_instance_changes_every_instance_and_done_ends_part_mode(self, editor):
+        # GIVEN
+        self._edit_part_of(editor, 21)
+
+        # WHEN
+        editor.session.set_source_value(_object(editor, 21), "text", "-{{ id }}")
+
+        # THEN
+        assert (_object(editor, 20)["text"], _object(editor, 21)["text"]) == ("-20", "-21")
+        assert editor.session.is_dirty is True
+
+        # WHEN
+        editor.part_bar.done.click()
+
+        # THEN: the change stays in the draft
+        assert editor.session.part_mode is None
+        assert editor.part_bar.isHidden()
+        assert _object(editor, 20)["text"] == "-20"
+        # included objects can be selected (to see where they come from) but not changed
+        assert self._items(editor)[41].movable is False
+
+    def test_another_instance_can_be_chosen(self, editor):
+        # GIVEN
+        self._edit_part_of(editor, 21)
+
+        # WHEN
+        editor.part_bar.instances.setCurrentIndex(0)
+
+        # THEN
+        items = self._items(editor)
+        assert (items[20].editable, items[21].editable) == (True, False)
+
+    def test_nudging_moves_the_objects_of_every_instance(self, editor):
+        # GIVEN
+        self._edit_part_of(editor, 41)
+        assert self._items(editor)[41].movable is True
+
+        # WHEN
+        editor.page_preview_widget.select_object(_object(editor, 41))
+        editor.object_actions.nudge_selected(3, 0)
+
+        # THEN
+        assert (_object(editor, 40)["x"], _object(editor, 41)["x"]) == (8, 8)
+
+    def test_using_pixels_asks_first_because_every_instance_gets_them(self, editor, monkeypatch):
+        from PyQt6.QtWidgets import QMessageBox
+
+        # GIVEN
+        self._edit_part_of(editor, 21)
+        editor.page_preview_widget.select_object(_object(editor, 21))
+        answers = [QMessageBox.StandardButton.Cancel, QMessageBox.StandardButton.Yes]
+        questions = []
+
+        def question(_parent, title, text, *args):
+            questions.append(title)
+            return answers.pop(0)
+
+        monkeypatch.setattr(QMessageBox, "question", question)
+
+        # WHEN: cancelled
+        editor.object_actions.use_pixel_positions()
+
+        # THEN
+        assert questions == ["Use pixels in the part"]
+        assert editor.session.is_dirty is False
+
+        # WHEN
+        editor.object_actions.use_pixel_positions()
+
+        # THEN: the pixels of this instance, in every instance
+        assert editor.session.source_of(_object(editor, 21))["x"] == 210
+        assert _object(editor, 20)["x"] == 210
+
+    def test_copying_is_refused(self, editor):
+        from PyQt6.QtWidgets import QApplication
+
+        # GIVEN
+        failures = []
+        editor.status.failed.connect(lambda *args: failures.append(args))
+        QApplication.clipboard().setText("nothing")
+        self._edit_part_of(editor, 21)
+        editor.page_preview_widget.select_object(_object(editor, 21))
+
+        # WHEN
+        editor.object_actions.copy_selected()
+
+        # THEN
+        assert failures == [
+            ("Copying p9b21", "the objects of a part need the variables of their instance: duplicate them instead")
+        ]
+        assert QApplication.clipboard().text() == "nothing"
+
+    def test_the_objects_outside_of_the_instance_cant_be_selected(self, editor):
+        # GIVEN
+        self._edit_part_of(editor, 21)
+        editor.page_preview_widget.select_object(_object(editor, 21))
+
+        # WHEN: the selection can't hold an object of another instance
+        editor.page_preview_widget.select_object(_object(editor, 1))
+
+        # THEN
+        assert editor.page_preview_widget.selected_items() == []
+
+    def test_edit_part_from_elsewhere_shows_the_page_of_the_first_instance(self, editor, tmp_path):
+        # GIVEN
+        editor.set_page_index(1)
+
+        # WHEN: e.g. from the Files tree
+        editor.edit_part(tmp_path / "cfg/common/parts/pin.jsonl")
+
+        # THEN
+        assert editor.current_index == 9
+        assert editor.edit_mode is True
+        items = self._items(editor)
+        assert (items[40].editable, items[41].editable) == (True, False)
+        assert editor.part_bar.hint.isHidden() is False
+
+    def test_a_part_that_is_not_included_is_asked_for_on_its_own(self, editor, tmp_path):
+        # GIVEN
+        requested = []
+        editor.editPartAloneRequested.connect(requested.append)
+        (tmp_path / "cfg/common/parts/other.jsonl").write_text(PIN_JSONL)
+
+        # WHEN
+        editor.edit_part(tmp_path / "cfg/common/parts/other.jsonl")
+
+        # THEN: the window shows it on its own
+        assert requested == [tmp_path / "cfg/common/parts/other.jsonl"]
+        assert editor.session.part_mode is None
+
+    def test_pasting_into_the_part(self, editor):
+        from PyQt6.QtWidgets import QApplication
+
+        # GIVEN: a plain object copied
+        editor.set_edit_mode(True)
+        editor.page_preview_widget.select_object(_object(editor, 1))
+        editor.object_actions.copy_selected()
+        self._edit_part_of(editor, 21)
+
+        # WHEN
+        editor.object_actions.paste()
+
+        # THEN: in every instance, selected in the one that is shown
+        assert "label" in QApplication.clipboard().text()
+        [pasted] = [item.obj_data for item in editor.page_preview_widget.selected_items()]
+        assert editor.session.source_of(pasted)["id"] == "{{ id + 1 }}"
+        assert editor.session.instance_of(pasted) == editor.session.part_mode
+        assert (pasted["id"], _object(editor, 21)["id"]) == (22, 21)
+        assert editor.action_undo.text() == "Undo Paste 1 object into the part"
+
+    def test_a_shared_part_says_which_devices_saving_changes(self, editor):
+        # WHEN
+        self._edit_part_of(editor, 21)
+
+        # THEN
+        assert editor.part_bar.hint.text() == (
+            "A shared part: saving it changes every device that includes it (1 file of 1 device: test_device). "
+            "Only the instances of test_device are shown."
+        )
 
 
 class TestPropertyDocs(TestBase):

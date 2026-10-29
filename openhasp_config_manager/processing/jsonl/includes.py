@@ -14,7 +14,7 @@ import re
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Protocol, Set, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Protocol, Set, Tuple
 
 import orjson
 
@@ -169,6 +169,13 @@ class PartFile:
     content: str
     # the objects of the file as written (see `DeviceProcessor.parse_jsonl_objects`)
     sources: List[Dict[str, Any]]
+    # the line of each of the sources in `content`, None for one that is not in it; for sources that differ from the file
+    # (e.g. a part changed in the editor), None if they are those of the file
+    lines: Optional[Tuple[Optional[int], ...]] = None
+
+    def line(self, index: int) -> Optional[int]:
+        """:return: the line (starting at 1) of the source with this index, None if it is not in the file"""
+        return _line_of(self.content, index) if self.lines is None else self.lines[index]
 
 
 class IncludeLookupError(Exception):
@@ -265,17 +272,18 @@ class _Expander:
     def expand(
         self,
         file: Path,
-        content: str,
+        lines: Callable[[int], Optional[int]],
         sources: List[Dict[str, Any]],
         scope: Dict[str, Any],
         includes: Tuple[IncludeStep, ...],
         visiting: Set[Path],
     ):
+        """:param lines: the line of a source in the file, by its index"""
         for index, source in enumerate(sources):
             if is_directive(source):
-                self._include(file, content, index, source, scope, includes, visiting)
+                self._include(file, lines, index, source, scope, includes, visiting)
             elif includes:
-                self._add_included(file, content, index, source, scope, includes)
+                self._add_included(file, lines, index, source, scope, includes)
             else:
                 # its line is the session's business: the objects of a draft are not where they are in the file
                 self.objects.append(ExpandedObject(source, ObjectOrigin(file, index, None)))
@@ -283,8 +291,8 @@ class _Expander:
     def _error(self, message: str, file: Path, line: int, includes: Tuple[IncludeStep, ...]):
         self.errors.append(IncludeError(message, file, line, includes))
 
-    def _add_included(self, file: Path, content: str, index: int, source: Dict[str, Any], scope: Dict[str, Any], includes):
-        line = _line_of(content, index)
+    def _add_included(self, file: Path, lines, index: int, source: Dict[str, Any], scope: Dict[str, Any], includes):
+        line = lines(index)
         try:
             page, object_id = (_number(evaluate_template(str(source.get(key, 0)), scope)) for key in ("page", "id"))
         except Exception as ex:
@@ -301,14 +309,14 @@ class _Expander:
     def _include(
         self,
         file: Path,
-        content: str,
+        lines: Callable[[int], Optional[int]],
         index: int,
         source: Dict[str, Any],
         scope: Dict[str, Any],
         includes: Tuple[IncludeStep, ...],
         visiting: Set[Path],
     ):
-        line = _line_of(content, index)
+        line = lines(index)
         error = directive_error(source)
         if error is not None:
             self._error(error, file, line, includes)
@@ -339,7 +347,7 @@ class _Expander:
                 return
             step = IncludeStep(file, index, line, variables, loop)
             self.expand(
-                part.path, part.content, part.sources, part_scope, includes + (step,), visiting | {Path(part.path).resolve()}
+                part.path, part.line, part.sources, part_scope, includes + (step,), visiting | {Path(part.path).resolve()}
             )
 
     @staticmethod
@@ -461,7 +469,7 @@ def expand_includes(
     :return: the objects in their order, and what went wrong (a directive with an error includes nothing)
     """
     expander = _Expander(resolver)
-    expander.expand(Path(file), content, sources, scope, (), {Path(file).resolve()})
+    expander.expand(Path(file), lambda index: _line_of(content, index), sources, scope, (), {Path(file).resolve()})
     expansion = Expansion(expander.objects, expander.errors)
     _check_names(expansion, scope, resolver.config_dir)
     return expansion

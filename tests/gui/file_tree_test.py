@@ -209,6 +209,29 @@ class TestFileTreeWidget(TestBase):
         assert "devices/plate/0_home/content.jsonl" in self._child(common, "parts", "card.jsonl").toolTip(0)
         assert self._visible(self._child(common, "parts")) == ["card.jsonl", "label.jsonl"]
 
+    def test_a_jsonl_file_that_is_no_page_file_can_be_edited_as_a_part(self, tmp_path):
+        # GIVEN
+        widget = self._widget(tmp_path)
+        widget.set_show_all(True)
+        requested = []
+        widget.editPartRequested.connect(requested.append)
+        parts = self._child(widget.tree.topLevelItem(0), "parts")
+
+        # WHEN
+        [edit] = [
+            action
+            for action in widget._context_menu(self._child(parts, "label.jsonl")).actions()
+            if action.text() == "Edit the part"
+        ]
+        edit.trigger()
+
+        # THEN: also a part that no page includes (it is shown on its own), not a page file or another file
+        assert requested == [tmp_path / "common/parts/label.jsonl"]
+        assert "Edit the part" in [action.text() for action in widget._context_menu(self._child(parts, "old.jsonl")).actions()]
+        device = widget.tree.topLevelItem(1)
+        for item in [widget._items_by_key["content"], self._child(device, "boot.cmd"), self._child(device, "vars.yaml")]:
+            assert "Edit the part" not in [action.text() for action in widget._context_menu(item).actions()]
+
     def test_a_part_that_only_unused_files_include_is_not_used(self, tmp_path):
         # GIVEN
         widget = self._widget(tmp_path)

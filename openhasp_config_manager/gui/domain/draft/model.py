@@ -2,10 +2,16 @@
 
 from dataclasses import dataclass, field
 from enum import Enum
+from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Protocol, Set, Tuple
+from typing import Any, Dict, List, NamedTuple, Optional, Protocol, Set, Tuple
 
-from openhasp_config_manager.processing.jsonl.includes import Expansion, ObjectOrigin
+from openhasp_config_manager.processing.jsonl.includes import Expansion, ObjectOrigin, PartFile
+from openhasp_config_manager.processing.jsonl.source_editor import JsonlSourceEditor
+
+# one `!include` on the way to an included object, as the draft tells it apart: the file with the directive, the directive
+# (its index in a file of the draft, the uid of its `PartObject` in a part) and the loop values of the instance (as JSON)
+StepKey = Tuple[Path, int, str]
 
 
 class DraftRenderer(Protocol):
@@ -28,6 +34,14 @@ class DraftRenderer(Protocol):
         """
         ...
 
+    def set_draft_parts(self, parts: Dict[Path, PartFile]):
+        """The `!include`s include these parts instead of their files (the parts as the draft has them)."""
+        ...
+
+    def part_source(self, path: Path) -> "ComponentSource":
+        """:return: a part (the path of an included object's origin) as it is on disk, its key is its path"""
+        ...
+
     def referenced_objects(
         self, component: str, source: Dict[str, Any], page: Any = None, scope: Optional[Dict[str, Any]] = None
     ) -> Set[str]:
@@ -40,8 +54,11 @@ class DraftRenderer(Protocol):
         """:return: why the template can't be rendered (in the object `name`, for `this` and `bY`), or None if it can"""
         ...
 
-    def template_suggestions(self, component: str) -> List[Tuple[str, Any]]:
-        """:return: (template, its current value) for the variables available in the component"""
+    def template_suggestions(self, component: str, scope: Optional[Dict[str, Any]] = None) -> List[Tuple[str, Any]]:
+        """
+        :param scope: the variables of the instance of a part, for an included object
+        :return: (template, its current value) for the variables available in the component
+        """
         ...
 
     def variable_value(self, component: str, name: str) -> Any:
@@ -74,6 +91,8 @@ class ComponentSource:
     is_common: bool
     # the objects as written in the file (templates not rendered), in the order of the file
     sources: List[Dict[str, Any]]
+    # a component that is in no file: the `!include` that shows a part on its own (see `load_part_alone`), never saved
+    is_scratch: bool = False
 
 
 @dataclass
@@ -90,14 +109,81 @@ class DraftEntry:
     origin: Optional[ObjectOrigin] = None
     # the variables of the instance of the part, for an included object
     scope: Optional[Dict[str, Any]] = None
+    # what tells an included object apart, also after its part or its directives changed: the `!include`s on the way to it
+    # and the uid of its `PartObject`
+    instance: Optional[Tuple[Tuple[StepKey, ...], int]] = None
 
     @property
     def is_included(self) -> bool:
         return self.origin is not None
 
 
-# the objects of the draft, for undo: per component key (uid, index in the source file, source) of its objects, in order
-DraftState = Dict[str, Tuple[Tuple[int, Optional[int], Dict[str, Any]], ...]]
+@dataclass
+class PartObject:
+    """An object of a part (or an `!include` in it) in the draft: the included objects of all its instances share it."""
+
+    # tells it apart while its index changes
+    uid: int
+    # the index in the part file, None for an object added in the draft
+    index: Optional[int]
+    # as written in the part, with its templates, changed by the draft
+    source: Dict[str, Any]
+
+
+@dataclass
+class PartDraft:
+    """A part that the files of the draft include, with its objects as the draft has them."""
+
+    # the part as read from disk (its key is its path)
+    component: ComponentSource
+    objects: List[PartObject]
+
+    def part_file(self) -> PartFile:
+        """:return: the part for the expansion (see `DraftRenderer.set_draft_parts`)"""
+        editor = _source_editor(self.component.content)
+        return PartFile(
+            path=self.component.path,
+            content=self.component.content,
+            sources=[obj.source for obj in self.objects],
+            lines=tuple(None if obj.index is None else editor.line_of(obj.index) for obj in self.objects),
+        )
+
+
+@lru_cache(maxsize=64)
+def _source_editor(content: str) -> JsonlSourceEditor:
+    return JsonlSourceEditor(content)
+
+
+@dataclass(frozen=True)
+class PartInstance:
+    """One instance of a part in the draft: the `!include`s that lead to it (the last one includes the part)."""
+
+    part: Path
+    steps: Tuple[StepKey, ...]
+
+
+class DraftItem(NamedTuple):
+    """An object of the draft in an undo state, see `DraftEntry`."""
+
+    uid: int
+    index: Optional[int]
+    # None for an included object: its source is the one of its `PartObject` in the state
+    source: Optional[Dict[str, Any]]
+    origin: Optional[ObjectOrigin]
+    scope: Optional[Dict[str, Any]]
+    instance: Optional[Tuple[Tuple[StepKey, ...], int]]
+
+
+@dataclass(frozen=True)
+class DraftState:
+    """The draft, for undo. The sources in it are shared with other states: never change them."""
+
+    # per component key: its objects, in order
+    objects: Dict[str, Tuple[DraftItem, ...]]
+    # per component key: the index of a directive (`!include`) in the source file -> the directive as the draft has it
+    directives: Dict[str, Dict[int, Dict[str, Any]]]
+    # per part key: (uid, index in the part file, source) of its objects, in order
+    parts: Dict[str, Tuple[Tuple[int, Optional[int], Dict[str, Any]], ...]] = field(default_factory=dict)
 
 
 class ChangeKind(Enum):
@@ -126,6 +212,9 @@ class DraftChange:
     removed: bool
     # the pages of the changed and added objects; for an undo or redo also of the removed ones and where objects were before
     pages: Set[Any]
+    # the objects to select afterwards instead of the added ones, e.g. the object whose `!include` was changed (empty if it
+    # is gone); None selects the added ones
+    selected: Optional[List[Dict]] = None
 
     @property
     def adds_or_removes(self) -> bool:

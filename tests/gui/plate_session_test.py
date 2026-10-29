@@ -6,7 +6,7 @@ from jinja2 import TemplateSyntaxError
 
 from openhasp_config_manager.gui.domain.draft.model import ChangeKind, ComponentSource
 from openhasp_config_manager.gui.domain.draft.session import PlateSession
-from openhasp_config_manager.processing.jsonl.includes import ExpandedObject, Expansion, ObjectOrigin
+from openhasp_config_manager.processing.jsonl.includes import ExpandedObject, Expansion, ObjectOrigin, PartFile
 from tests import TestBase
 
 
@@ -37,6 +37,12 @@ class FakeRenderer:
     def set_draft_sources(self, sources: Dict[str, List[Dict[str, Any]]]):
         pass
 
+    def set_draft_parts(self, parts: Dict[Path, PartFile]):
+        pass
+
+    def part_source(self, path: Path) -> ComponentSource:
+        raise AssertionError(f"no directives, so no parts: {path}")
+
     def referenced_objects(
         self, component: str, source: Dict[str, Any], page: Any = None, scope: Optional[Dict[str, Any]] = None
     ) -> Set[str]:
@@ -47,7 +53,7 @@ class FakeRenderer:
     ) -> Optional[str]:
         return None if template.strip("{} ") in self.variables else "Unknown variable"
 
-    def template_suggestions(self, component: str) -> List[Tuple[str, Any]]:
+    def template_suggestions(self, component: str, scope: Optional[Dict[str, Any]] = None) -> List[Tuple[str, Any]]:
         return [(f"{{{{ {name} }}}}", value) for name, value in self.variables.items()]
 
 
@@ -522,9 +528,9 @@ class TestUndo(TestBase):
 
         # THEN only the changed source is a new copy
         after = session._state()
-        assert after["a.jsonl"][0][2] is before["a.jsonl"][0][2]
-        assert after["a.jsonl"][1][2] is not before["a.jsonl"][1][2]
-        assert before["a.jsonl"][1][2]["text"] == "B"
+        assert after.objects["a.jsonl"][0][2] is before.objects["a.jsonl"][0][2]
+        assert after.objects["a.jsonl"][1][2] is not before.objects["a.jsonl"][1][2]
+        assert before.objects["a.jsonl"][1][2]["text"] == "B"
 
 
 class TestListeners(TestBase):

@@ -183,8 +183,30 @@ of the directive in the open file):
 - **Preview and draft** (`PlateSession`): included objects are shown like all others, but are read-only as objects of the
   page: they can't be dragged, nudged, resized, edited, deleted, cut or duplicated. The editor explains why (like it does
   for templates) and offers to open the part file or to go to the directive. Save never writes included objects into the
-  including file: the session keeps the directives of a file as they are and only saves its plain objects. Undo/redo, Live
-  preview (the included objects are sent like all others) and the Files tree keep working.
+  including file: the session keeps the directives of a file and only saves its plain objects and the changed `vars` and
+  `for` of its directives. Undo/redo, Live preview (the included objects are sent like all others) and the Files tree keep
+  working.
+- **The instance of an included object** (the "Instance" group in the Properties panel): the `vars` and `for` of the
+  outermost `!include` (the one in the file of the draft) are fields, a literal value or a template (`{ }`), with the
+  values of the selected instance next to them. A var that is a mapping has a field for each of its values
+  (`progress_bar.id`). A change (`PlateSession.set_directive_value`) writes the directive in the draft and includes it
+  again: every object of its instances is rendered again (with `for`, of all instances), objects that refer to them follow,
+  and instances can be added or removed. The `!include`s inside of parts are listed read-only, with a button to go to them.
+  A directive in the common folder is marked "shared".
+- **Part mode** (editing a part itself): "Edit the part" in the Properties panel of an included object, or in the context
+  menu of a part in the Files tree or in the text editor, shows one instance of the part (`PlateSession.enter_part_mode`): its objects can be
+  changed like plain objects (moved, nudged, edited, added, duplicated, removed), the objects around it are dimmed and
+  can't be selected. A change is written into the part in the draft, and every instance follows (also those on other
+  pages). A bar above the preview names the part and the instance, chooses another instance, and ends part mode ("Done");
+  the changes stay in the draft until it is saved, which writes the part file. For a part in the common folder, the bar
+  says how many files of which devices include it. New and pasted objects go into the part, with a `page` and an `id`
+  template like those of its other objects (`{{ base + n }}`).
+- **A part on its own**: a part that no page of the device includes (e.g. a new one) is shown on its own instead of the
+  pages (`load_part_alone`): as the objects of one `!include` that is in no file, rendered for the device. Its `vars`
+  start with a placeholder (`1`) for each variable the part uses that its folders don't define (`placeholder_vars`), and
+  are changed in the "Instance" group of the Properties panel; they are not saved. Part mode works as above, Save writes
+  only the part, and "Done" goes back to the pages of the device (asking to save the part first if it has changes).
+  Every `.jsonl` file of the device that is not one of its page files can be edited as a part.
 - **Text editor**: directive keys (`"!include"`, and `"vars"`/`"for"` of a directive) have their own token kind
   (`TokenKind.DIRECTIVE`); Ctrl+click on the path opens the part; hover explains `!include`, `vars` and `for`; the path is
   completed after `"!include": "`; the errors of the file's directives are marked in it; a directive is one object for
@@ -246,11 +268,91 @@ These were not settled beforehand. Each names the alternative that was not taken
 - **Errors that need the config** (a missing part, a cycle, templates of `vars`) are marked from the draft (as loaded), errors of
   the text alone (`directive_error`) while typing.
 
+### Editing the `vars` and `for` of an instance
+
+- **The draft keeps a copy of each directive**, by its component and its index in the file, next to the objects, and the
+  undo states have it. Alternative: a `DraftEntry` for each directive among the objects, which every reader of the objects
+  would have had to skip. `changes()` writes the changed keys of a directive (the whole `vars` or `for` mapping) with the
+  `JsonlSourceEditor`, so the rest of the file keeps its text and comments.
+- **A change expands the whole file again**, with the changed directive in its place, and takes the objects of that
+  directive. Objects of the same instance (same part file and index, same loop values and directives on the way) keep their
+  rendered dict, with the new scope; the others are added or removed. Alternative: new objects for every instance, which
+  would lose the selection and the items of the preview on every keystroke. The undo states hold the origin and scope of
+  included objects, so undo gives back the instances as they were.
+- **Only errors the change makes block it**: the errors of the expansion with the change that the file doesn't have
+  without it (an error of another directive doesn't block it). They are shown at the field, not in the problems: the
+  draft doesn't change, so it has no problem. Alternative: refuse any change while the file has an error.
+- **Literal values**: a var whose value is a text stays a text (typing `12` gives `"12"`), every other value is JSON, a
+  loop variable a JSON list. A template is what the `{ }` button switches to, like for properties. Alternative: JSON for
+  all values, which makes every text need quotes.
+- **Fields apply while typing**, like the property fields, and the panel isn't made again for it (only the values that
+  changed are updated). An edit that adds or removes objects reloads the page; the edited object stays selected if it is
+  still included, and its field gets the focus back.
+- **The draft writes its directives in the order of the file** (also those that include nothing), so a directive is never
+  further down in the draft than in the file. The expansion finds the line of a directive in the file by its place, which
+  raised an `IndexError` for a directive that includes nothing after objects were added.
+- **No cache per directive.** On the user's config an edit of `vars` takes as long as an edit of a property (about 0.45 s,
+  most of it the object references of every file, see TODO.md); checking the change takes milliseconds.
+- **Names of `vars` can't be added or removed in the panel** (the session takes any mapping): see TODO.md.
+
+### Part mode
+
+- **The draft keeps a copy of every part** its files include (`PartDraft`: the part's objects with a uid each), loaded with
+  the draft, and the expansion takes the parts from it (`DeviceProcessor.set_draft_parts`). The included objects of a part
+  object share its source, so an edit in one instance is the edit of the part. Alternative: load a part only when part mode
+  starts, which would need a second way to render the instances when the draft is undone past it.
+- **Instances are known by their directives**: a key of the file and index of the outermost `!include`, the uid of the part
+  object of each `!include` inside of parts, and the loop values. Objects whose key stays keep their rendered dict when
+  the draft includes the parts again. Alternative: the lines of the directives, which change with every edit of a part.
+- **One routine includes everything again** (`_reinclude`): after an edit of a part, of `vars` or `for`, and after a save.
+  It renders the objects whose part or scope changed, and keeps the others. Alternative: a routine per kind of change.
+- **Only the objects of the part itself can be changed** in part mode, not those of the parts it includes: those are
+  edited in part mode of their own part. Alternative: write each change into the part it comes from, which would make a
+  change in one place change other parts unseen.
+- **"Use pixels for x/y" asks first** in part mode: the pixels of the instance that is shown are written into the part, so
+  every instance gets the same x and y.
+- **Copying is refused** in part mode: the objects of a part need the variables of their instance. Duplicating works (the
+  copy gets the next id template).
+- **Pasted objects become objects of the part**: each gets the `page` template of the part and the next `id` template,
+  their `parentid` follows the new id of their parent, and they are rendered with the variables of the instance that is
+  shown, to place them where the mouse is (that position is written in pixels, like a paste on a page). The paste is one
+  undo step. `parentid` is a number after rendering now, like `id`, so a template of it nests the objects in the preview.
+  Alternative: refuse it, which made a part the only place without paste.
+- **Part mode is not in the undo history**: undo changes the objects, not the mode. Undoing the addition of a part's only
+  objects ends nothing; the bar then names no instance. Alternative: undo steps for entering and leaving part mode.
+- **Part mode survives a reload** (a save, a change on disk) if the instance is still included, found by its description
+  (file, line and loop values of its directives); otherwise it ends.
+- **A part that is also a page file of the device** (run by the `.cmd`) can't be edited in part mode: its objects are
+  plain objects of that file too, and one edit would have to go to both.
+- **The defaults of a part are cached** in the `DeviceProcessor` (they only change with the files): including the parts
+  again after an edit took 0.45 s on the user's config, 0.36 s with the cache. An edit in part mode takes 0.4 to 0.8 s there
+  (see TODO.md).
+
+### A part on its own
+
+- **A draft of its own**: the window keeps a second `PlateSession` for the part (`MainWindow.part_alone`), with one
+  component that is in no file (`ComponentSource.is_scratch`): an `!include` of the part next to it, so it has the
+  variables of the part's folders. The draft of the pages of the device is not touched, and comes back with "Done".
+  Alternative: the `!include` as a hidden component of the draft of the device, which would mix the part into the pages
+  (their object references, problems, Save and the Live preview).
+- **It is rendered alone**: its object references (`pXbY`, `bY`) see only its own objects, not those of the pages
+  (`ProcessorDraftRenderer(alone=True)`), and it has a `DeviceProcessor` of its own, so its draft parts don't change the
+  rendering of the device's draft. A part that refers to an object of the page it is on (e.g. `b4.w` of a card) shows that
+  template unresolved. Alternative: render it with the pages of the device, where an id of the part can be an object of
+  a page.
+- **Placeholders, not the vars of another device**: every variable the templates use that the folders don't have is `1`
+  (a page, an id and a number), and a value missing from a mapping of the defaults (`tile.id`) is added to it. Alternative:
+  the `vars` of an `!include` of another device, which may need variables of that device and that file.
+- **The vars are in the "Instance" group** of the Properties panel, like the vars of an `!include` of a page, and are never
+  saved: changing them makes no change of a file. Alternative: fields in the bar above the preview.
+- **"Done" asks to save** a part with changes (Save, Discard, Cancel), and so does selecting another device: the draft of
+  a part on its own goes away with it. It follows changes on disk like the draft of the pages, and is loaded again if the
+  device is.
+- **A page file of the device is refused**: its objects are edited on the page.
+
 ## Later
 
 - `!extends`: an object that takes the properties of a part object and overrides some of them.
-- Editing the `vars` of an instance in the properties panel.
-- Editing a part "definition" in a mode of its own (show one instance, write changes into the part file).
 - Templates in the `!include` path.
 - `vars` values that refer to objects (`"x": "{{ b4.x + 10 }}"`): they would have to be rendered per object, after the
   objects; today pass the id of the object and refer to it in the part, e.g. `{{ b{{ anchor }}.x }}`.

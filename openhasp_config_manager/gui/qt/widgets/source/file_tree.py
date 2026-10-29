@@ -102,6 +102,8 @@ class FileTreeWidget(QWidget):
     openRequested = QtCore.pyqtSignal(object)
     # (NEW_FILE, ..., the path of the file or folder)
     fileActionRequested = QtCore.pyqtSignal(str, object)
+    # the path of a part to edit in part mode
+    editPartRequested = QtCore.pyqtSignal(object)
 
     def __init__(self):
         super().__init__()
@@ -364,7 +366,7 @@ class FileTreeWidget(QWidget):
             item.setText(1, "part")
             names = ", ".join(self._display_path(including) for including in includers)
             shown = (
-                "The preview shows its objects with the files that include them, read-only: change them in this file."
+                'The preview shows its objects with the files that include them: change them with "Edit the part".'
                 if self._in_preview(path)
                 else "The preview doesn't show its objects: no file of the draft includes it."
             )
@@ -473,12 +475,25 @@ class FileTreeWidget(QWidget):
         item = self._tree.itemAt(position)
         if item is None:
             return
+        self._context_menu(item).exec(self._tree.viewport().mapToGlobal(position))
+
+    def is_part_file(self, path: Path) -> bool:
+        """
+        :return: whether a file can be edited as a part: a .jsonl file that is not a page file of the device (the preview
+            shows it on its own if no page includes it)
+        """
+        return path.suffix == ".jsonl" and path.is_file() and path.resolve() not in self._keys
+
+    def _context_menu(self, item: QTreeWidgetItem) -> QMenu:
         menu = QMenu(self)
         key = item.data(0, _KEY_ROLE)
         path = Path(item.data(0, _PATH_ROLE))
         if path.is_file():
             edit = menu.addAction(ThemedIcons.icon("file-edit-outline"), "Edit as text")
             edit.triggered.connect(lambda: self.openRequested.emit(path))
+        if self.is_part_file(path):
+            edit_part = menu.addAction(ThemedIcons.icon("puzzle-edit-outline"), "Edit the part")
+            edit_part.triggered.connect(lambda: self.editPartRequested.emit(path))
         if key is not None:
             target = menu.addAction(ThemedIcons.icon(_TARGET_ICON), "Add new objects here")
             target.setCheckable(True)
@@ -491,7 +506,7 @@ class FileTreeWidget(QWidget):
         copy_path.triggered.connect(lambda: QApplication.clipboard().setText(item.data(0, _PATH_ROLE)))
         reveal = menu.addAction(ThemedIcons.icon("folder-open-outline"), "Show in the file manager")
         reveal.triggered.connect(lambda: self.fileActionRequested.emit(REVEAL, path))
-        menu.exec(self._tree.viewport().mapToGlobal(position))
+        return menu
 
     def file_actions(self, path: Path) -> List[Tuple[str, str, str, Optional[str]]]:
         """:return: the file operations of the context menu of a file or folder: (action, title, icon, why it is not possible)"""

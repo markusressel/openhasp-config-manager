@@ -10,12 +10,13 @@ from openhasp_config_manager.gui.domain.file_tree import FileNode, including_fil
 from openhasp_config_manager.gui.domain.variables.unused import UnusedVariables, find_unused_variables
 from openhasp_config_manager.gui.domain.variables.usages import DeviceFiles, VariableUsages
 from openhasp_config_manager.gui.domain.draft.model import ComponentSource
+from openhasp_config_manager.gui.domain.draft.part_alone import placeholder_vars
 from openhasp_config_manager.gui.domain.draft.session import ANY_OBJECT, PlateSession
 from openhasp_config_manager.manager import ConfigManager
 from openhasp_config_manager.openhasp_client.model.component import CmdComponent, JsonlComponent
 from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.processing.device_processor import DeviceProcessor
-from openhasp_config_manager.processing.jsonl.includes import Expansion
+from openhasp_config_manager.processing.jsonl.includes import INCLUDE, VARS, Expansion, PartFile
 from openhasp_config_manager.processing.jsonl.source_editor import JsonlSourceEditor, verify_jsonl_source
 from openhasp_config_manager.processing.template_rendering import (
     check_template,
@@ -34,11 +35,14 @@ class ProcessorDraftRenderer:
     would send, and suggests the template variables a deployment would provide.
     """
 
-    def __init__(self, processor: DeviceProcessor, components: List[JsonlComponent]):
+    def __init__(self, processor: DeviceProcessor, components: List[JsonlComponent], alone: bool = False):
         """
         :param components: the jsonl components of the draft, in the order of the deployment
+        :param alone: the object references see only the objects of the draft, not those of the files of the device (see
+            `load_part_alone`)
         """
         self._processor = processor
+        self._alone = alone
         self._components = {str(component.path): component for component in components}
         # component key -> the template variables of the component, computed when needed
         self._template_var_cache: Dict[str, Dict[str, Any]] = {}
@@ -56,7 +60,7 @@ class ProcessorDraftRenderer:
     def _vars_of(self, key: str) -> Dict[str, Any]:
         if key not in self._template_var_cache:
             self._template_var_cache[key] = self._processor.jsonl_template_variables(
-                self._components[key], self._draft_objects
+                self._components[key], self._draft_objects, alone=self._alone
             )
         return self._template_var_cache[key]
 
@@ -65,6 +69,23 @@ class ProcessorDraftRenderer:
 
     def expand_objects(self, component: str, sources: List[Dict[str, Any]]) -> Expansion:
         return self._processor.expand_jsonl_objects(self._components[component], sources)
+
+    def set_draft_parts(self, parts: Dict[Path, PartFile]):
+        self._processor.set_draft_parts(parts)
+        self._template_var_cache = {}
+        self._suggestions = {}
+
+    def part_source(self, path: Path) -> ComponentSource:
+        """:return: a part as it is on disk, as a component of the draft (its key is its path)"""
+        part = self._processor.part(str(path))
+        common_dir = Path(self._processor.config_dir, COMMON_FOLDER_NAME).resolve()
+        return ComponentSource(
+            key=str(part.path),
+            path=Path(part.path),
+            content=part.content,
+            is_common=Path(part.path).resolve().is_relative_to(common_dir),
+            sources=part.sources,
+        )
 
     def referenced_objects(
         self, component: str, source: Dict[str, Any], page: Any = None, scope: Optional[Dict[str, Any]] = None
@@ -130,7 +151,10 @@ class ProcessorDraftRenderer:
         """:return: a text with templates, rendered with the variables of a file that has no objects in the draft"""
         return render_template_or_keep(text, self._processor.path_variables(path))
 
-    def template_suggestions(self, component: str) -> List[Tuple[str, Any]]:
+    def template_suggestions(self, component: str, scope: Optional[Dict[str, Any]] = None) -> List[Tuple[str, Any]]:
+        """:param scope: the variables of the instance of a part, for an included object"""
+        if scope:
+            return sorted(flatten_template_variables({**self._vars_of(component), **scope}))
         if component not in self._suggestions:
             self._suggestions[component] = sorted(flatten_template_variables(self._vars_of(component)))
         return self._suggestions[component]
@@ -230,6 +254,8 @@ class LoadedDevice:
     used_files: Dict[Path, str]
     # the parts -> the files that include them (see `including_files`)
     includers: Dict[Path, List[Path]]
+    # the parts of all devices -> (device, file) of every file that includes them, for what saving a part changes
+    part_includers: Dict[Path, List[Tuple[str, Path]]]
     # where the variables of the YAML files are used, by all devices
     variable_usages: VariableUsages
     # the variable files the device uses -> the names of the variables (see `VariableUsages.used_names`)
@@ -280,6 +306,12 @@ def load_analyzed_device(config_manager: ConfigManager, devices: List[Device], d
 
     files = scan_file_tree(device.path)
     used = used_files(device.cmd, device.jsonl, config_manager.cfg_root)
+    includers = including_files(device.jsonl, config_manager.cfg_root)
+    part_includers: Dict[Path, List[Tuple[str, Path]]] = {}
+    for other in devices:
+        for part, paths in including_files(other.jsonl, config_manager.cfg_root).items():
+            known = part_includers.setdefault(part, [])
+            known += [(other.name, path) for path in paths if (other.name, path) not in known]
     variable_usages = VariableUsages(
         config_manager.cfg_root,
         [DeviceFiles(d.path, list(used_files(d.cmd, d.jsonl, config_manager.cfg_root))) for d in devices],
@@ -293,8 +325,38 @@ def load_analyzed_device(config_manager: ConfigManager, devices: List[Device], d
         renderer=ProcessorDraftRenderer(device_processor, jsonl_components),
         files=files,
         used_files=used,
-        includers=including_files(device.jsonl, config_manager.cfg_root),
+        includers=includers,
+        part_includers=part_includers,
         variable_usages=variable_usages,
         used_variable_files=variable_usages.used_names(device.path),
         unused_variables=find_unused_variables(variable_usages),
     )
+
+
+def load_part_alone(
+    config_manager: ConfigManager, device: Device, part: Path
+) -> Tuple[ComponentSource, ProcessorDraftRenderer]:
+    """
+    A draft of a part on its own, for part mode without a file that includes it: one `!include` of the part, in no file
+    (`ComponentSource.is_scratch`), with a placeholder for each variable the part needs (see `placeholder_vars`). Its
+    objects are rendered for the device, but see none of the objects of its pages (see `ProcessorDraftRenderer`).
+    :param part: a jsonl file of the device
+    :return: the component of the `!include`, and how to render it (a processor of its own, so the parts of the drafts of
+        the device are not changed)
+    :raises IncludeLookupError: if the part is not a file of the device
+    """
+    processor = config_manager.create_device_processor(device)
+    part_file = processor.part(str(part))
+    path = Path(part_file.path)
+    directive: Dict[str, Any] = {INCLUDE: path.resolve().relative_to(Path(processor.config_dir).resolve()).as_posix()}
+    variables = placeholder_vars(part_file.sources, processor.path_variables(path))
+    if variables:
+        directive[VARS] = variables
+    # next to the part, so it has the variables of the part's folders; no file has this name
+    scratch = path.with_name(f"{path.stem} (alone).jsonl")
+    content = json.dumps(directive, ensure_ascii=False) + "\n"
+    component = JsonlComponent(name=scratch.name, type="jsonl", path=scratch, content=content)
+    source = ComponentSource(
+        key=str(scratch), path=scratch, content=content, is_common=False, sources=[directive], is_scratch=True
+    )
+    return source, ProcessorDraftRenderer(processor, [component], alone=True)

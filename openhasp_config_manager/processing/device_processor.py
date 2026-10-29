@@ -68,6 +68,10 @@ class DeviceProcessor:
         self._expansions: Dict[str, Expansion] = {}
         # path -> the file as a part, see `part`
         self._parts: Dict[str, PartFile] = {}
+        # path -> the defaults of a part, see `defaults`
+        self._defaults: Dict[str, Dict[str, Any]] = {}
+        # resolved path -> a part to include instead of its file, see `set_draft_parts`
+        self._draft_parts: Dict[str, PartFile] = {}
         self._part_paths: Optional[Set[Path]] = None
         # the jsonl files the plate runs (resolved), see `set_run_paths`; None: all of them
         self._run_paths: Optional[Set[Path]] = None
@@ -146,14 +150,26 @@ class DeviceProcessor:
     def _expand(self, component: JsonlComponent, sources: List[Dict[str, Any]]) -> Expansion:
         return expand_includes(component.path, component.content, sources, self.path_variables(component.path), self)
 
+    def set_draft_parts(self, parts: Dict[Path, PartFile]):
+        """
+        Include these parts instead of their files (e.g. parts changed in the editor), also in the object references of
+        `jsonl_template_variables`. They replace those set before.
+        :param parts: path -> the part, whose sources are not changed
+        """
+        self._draft_parts = {str(Path(path).resolve()): part for path, part in parts.items()}
+        # the expansions of the files on disk include the parts
+        self._expansions = {}
+
     def part(self, path: str) -> PartFile:
         """
-        :param path: the path of an `!include`, relative to the config directory
-        :return: the file, if it is a jsonl file of this device
+        :param path: the path of an `!include`, relative to the config directory (or absolute)
+        :return: the file, if it is a jsonl file of this device (the draft part, see `set_draft_parts`)
         :raises IncludeLookupError: if it is not
         """
         file = Path(self.config_dir, path)
         key = str(file.resolve())
+        if key in self._draft_parts:
+            return self._draft_parts[key]
         if key not in self._parts:
             component = next((c for c in self._jsonl_components if str(Path(c.path).resolve()) == key), None)
             if component is None:
@@ -167,8 +183,14 @@ class DeviceProcessor:
         return self._parts[key]
 
     def defaults(self, path: Path) -> Dict[str, Any]:
-        """:return: the variables of the YAML files of the folders of a part, not computed (see `instance_scope`)"""
-        return self._variable_manager.get_raw_vars(path)
+        """
+        :return: the variables of the YAML files of the folders of a part, not computed (see `instance_scope`). Shared by the
+            instances: don't change it.
+        """
+        key = str(path)
+        if key not in self._defaults:
+            self._defaults[key] = self._variable_manager.get_raw_vars(path)
+        return self._defaults[key]
 
     def part_paths(self) -> Set[Path]:
         """:return: the files that a jsonl component of the device includes (resolved), even if a directive has an error"""
@@ -181,15 +203,21 @@ class DeviceProcessor:
         return self._part_paths
 
     def jsonl_template_variables(
-        self, component: JsonlComponent, draft_objects: Optional[Dict[Path, List[Dict[str, Any]]]] = None
+        self,
+        component: JsonlComponent,
+        draft_objects: Optional[Dict[Path, List[Dict[str, Any]]]] = None,
+        alone: bool = False,
     ) -> Dict[str, Any]:
         """
-        :param component: the component, which must have been added to this processor
+        :param component: the component, which must have been added to this processor, unless it is `alone`
         :param draft_objects: component path -> its source objects (see parse_jsonl_objects), to use instead of the
             objects in the files of those components
+        :param alone: only the objects of the component are in the object references (`pXbY`), not those of the files of
+            the device: for objects that are shown on their own (e.g. a part, see `load_part_alone`). Its objects must be in
+            `draft_objects`.
         :return: the variables the templates of the component's objects are rendered with
         """
-        return self._compute_jsonl_template_variables(self._device, component, draft_objects)
+        return self._compute_jsonl_template_variables(self._device, component, draft_objects, alone=alone)
 
     def render_jsonl_object(
         self,
@@ -297,6 +325,7 @@ class DeviceProcessor:
         component: Component,
         draft_objects: Optional[Dict[Path, List[Dict[str, Any]]]] = None,
         replaced_page: Optional[int] = None,
+        alone: bool = False,
     ) -> Dict[str, Any]:
         """
         Computes a map of "variable" -> "evaluated value in the given path context" for the given component.
@@ -304,12 +333,14 @@ class DeviceProcessor:
         :param component: the component to use as a context for evaluating template variables; one that was not added to
             this processor (see `render_sources`) needs its objects in `draft_objects`
         :param replaced_page: leaves the objects of the other components on this page out (see `render_sources`)
+        :param alone: leaves the objects of the other components out (see `jsonl_template_variables`)
         :return: map of "variable" -> "evaluated value in the given path context"
         """
         result = {}
 
         # object specific variables for all components that the processor currently knows about, the component itself last
-        sorted_components = [c for c in self._jsonl_components if c != component] + [component]
+        sorted_components = [] if alone else [c for c in self._jsonl_components if c != component]
+        sorted_components.append(component)
         part_paths = self.part_paths()
         if component not in self._jsonl_components:
             # the parts of objects that are in no file only count through them, like the parts of the files

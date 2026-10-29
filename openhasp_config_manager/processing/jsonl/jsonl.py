@@ -12,7 +12,7 @@ LOGGER.setLevel(logging.DEBUG)
 
 # the properties whose values are converted to int (e.g. after rendering a template), as a regex alternation of whole names:
 # `radius` and `border_width` with the digits of the part and the state of a style (`radius10`), `pad_*` and `margin_*` with them too
-NUMERIC_PROPERTY_NAMES = r"page|id|x|y|w|h|radius\d{0,2}|pad_.+|margin_.+|border_width\d{0,2}|min|max|prev|next"
+NUMERIC_PROPERTY_NAMES = r"page|id|parentid|x|y|w|h|radius\d{0,2}|pad_.+|margin_.+|border_width\d{0,2}|min|max|prev|next"
 NUMERIC_PROPERTY = re.compile(f"(?:{NUMERIC_PROPERTY_NAMES})")
 # the font properties (`text_font`, `value_font10`, ...): a number for a built-in font, or the name of a font file on the plate
 FONT_PROPERTY = re.compile(r"^\w*_font\d*$")

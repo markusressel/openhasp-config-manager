@@ -60,6 +60,8 @@ class SourceEditorWidget(QWidget):
     openFailed = QtCore.pyqtSignal(object, str)
     # the user moved the cursor into another object of a file: the path and the index of the object (-1: none)
     objectAtCursorChanged = QtCore.pyqtSignal(object, int)
+    # "Edit the part" in the context menu of a part: its path
+    editPartRequested = QtCore.pyqtSignal(object)
 
     def __init__(self, config_dir: Path, parent=None):
         super().__init__(parent)
@@ -74,6 +76,7 @@ class SourceEditorWidget(QWidget):
         self._usages: Callable[[Path, str], List[Usage]] = lambda path, name: []
         self._variable_value: Callable[[Path, str], Any] = _no_value
         self._render_text: Callable[[Path, str], Optional[str]] = lambda path, text: None
+        self._is_part: Callable[[Path], bool] = lambda path: False
         self._show_values = False
         self._history = NavigationHistory()
         # resolved path -> the hints and the text they were found in
@@ -168,6 +171,10 @@ class SourceEditorWidget(QWidget):
         self._show_values = show
         for page in self._pages.values():
             page.editor.values.set_show(show)
+
+    def set_part_check(self, is_part: Callable[[Path], bool]):
+        """Which files are parts, whose context menu offers to edit them in part mode (`editPartRequested`)."""
+        self._is_part = is_part
 
     def set_usages_finder(self, finder: Callable[[Path, str], List[Usage]]):
         """Where a variable defined in a YAML file is used, for Ctrl+click on its key."""
@@ -267,6 +274,8 @@ class SourceEditorWidget(QWidget):
         editor.findRequested.connect(self.find_bar.open_bar)
         editor.issuesChanged.connect(self._update_status)
         editor.renameRequested.connect(lambda path=path: self._rename_id(path))
+        editor.is_part = lambda path=path: self._is_part(path)
+        editor.editPartRequested.connect(lambda path=path: self.editPartRequested.emit(path))
         editor.linkRequested.connect(lambda target, path=path: self._open_link(path, target))
         editor.includeRequested.connect(self._open_include)
         editor.definitionRequested.connect(lambda name, path=path: self._open_definition(path, name))

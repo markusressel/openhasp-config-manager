@@ -55,6 +55,12 @@ Read the file before and after you edit, and trust it only while it is current:
   - `selection`: the selected objects: `name` (`p<page>b<id>`), `id`, `page`, `type`, `file`, `line` (`null` if only in the draft),
     and where it is drawn: `rendered` and `source` (see `problems`), and `include` for an included object (see `problems`).
   - `new_objects_file`: the file new objects of the user go into.
+  - `part_mode`: `null`, or the part the user edits in part mode: `part` (the file), `instance` (the `!include` whose objects
+    are shown and changed, `null` once they are all removed) and `shared` (in `common/`). A change to the objects of the
+    instance changes the part, so every instance (and every device that includes a shared part) follows. `alone` is
+    `true` if no page of the device includes the part: the GUI then shows the part on its own (instead of the pages, with
+    `vars` the user enters, which are not saved), `files` is empty, and the `file` of an object is the
+    `!include` that shows the part (`<part> (alone).jsonl`, a file that doesn't exist).
   - `draft`: `modified` is `true` if the user has unsaved changes in the GUI. They are not in the files yet, and a file the user
     changed on disk meanwhile can't be saved over. `files` lists, per file, the `changed`, `added` and `deleted` objects.
 - `editor`: the text editor of the GUI, where files are edited as text. `mode` (`source`, `split`, `rendered`: which of the text editor and the
@@ -70,7 +76,8 @@ Read the file before and after you edit, and trust it only while it is current:
   - `include`: only for an object that an `!include` directive puts into the file. `file` and `line` of the object are then the
     ones of the directive, `source` is the object as written in the part. `include` has the `file` and `line` of the object in
     the part (the file to change), and `chain`: the directives that lead to it, outermost first, each with its `file`, `line`,
-    `vars` and `loop` (the values of its `for` variables for this instance). The object is read-only in the GUI.
+    `vars` and `loop` (the values of its `for` variables for this instance). The object is read-only in the GUI, except in
+    part mode (see `part_mode`).
 - `load_error`: why the device could not be loaded (e.g. invalid JSON in a file), or `null`. The GUI keeps showing the last good
   state until the files can be loaded again.
 - `files_changed_on_disk`: files that changed while the draft has unsaved changes (the GUI asks the user what to do), else `[]`.
@@ -154,6 +161,20 @@ def describe_problems(
     return result
 
 
+def describe_part_mode(session: PlateSession, config_dir: Path) -> Optional[Dict[str, Any]]:
+    """:return: the part that is edited in part mode, and the instance that is shown, or None"""
+    mode = session.part_mode
+    if mode is None:
+        return None
+    return {
+        "part": relative(mode.part, config_dir),
+        # an instance whose objects were all removed is not in the draft anymore
+        "instance": session.describe_instance(mode) if session.objects_of_instance(mode) else None,
+        "shared": session.part_source(mode.part).is_common,
+        "alone": session.is_part_alone,
+    }
+
+
 def describe_draft(session: PlateSession, config_dir: Path) -> Dict[str, Any]:
     """:return: whether the draft has unsaved changes, and which objects of which files they are about"""
     files = []
@@ -178,6 +199,8 @@ def describe_files(components: List[ComponentSource], working_objects: Dict[str,
             "pages": sorted({obj["page"] for obj in working_objects.get(component.key, []) if obj.get("page") is not None}),
         }
         for component in components
+        # what shows a part on its own is in no file
+        if not component.is_scratch
     ]
 
 
