@@ -59,6 +59,8 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
 - Fail fast: no defensive fallbacks that hide configuration or programming errors.
 - GUI: keep logic that does not need Qt in `gui/domain/` so it can be tested without a display. Long-running work (config analysis,
   device communication) runs through `run_async` (`gui/qt/async_bridge.py`) so the window stays responsive; never block the Qt main thread.
+  The automatic garbage collection is off: `MainThreadGarbageCollector` (`gui/qt/garbage_collection.py`) collects in the main thread,
+  because a collection in the asyncio thread would delete widgets in reference cycles there and crash Qt. Don't turn it back on.
 - Templates: everything that renders or inspects a Jinja2 template goes through `processing/template_rendering.py` (nested templates,
   unknown variables staying as written, ...). Don't use `jinja2` directly elsewhere; test new cases there.
 - Directives (`!include`, README "Including objects", design in `docs/include-directive.md`): `processing/jsonl/includes.py` expands

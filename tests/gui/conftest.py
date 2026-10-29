@@ -10,7 +10,12 @@ def qapp():
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     from PyQt6.QtWidgets import QApplication
 
-    return QApplication.instance() or QApplication([])
+    from openhasp_config_manager.gui.qt.garbage_collection import MainThreadGarbageCollector
+
+    app = QApplication.instance() or QApplication([])
+    # like the app: the asyncio thread of the tests must never delete the widgets of earlier tests
+    MainThreadGarbageCollector(app)
+    return app
 
 
 @pytest.fixture

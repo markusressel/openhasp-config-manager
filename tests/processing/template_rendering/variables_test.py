@@ -164,12 +164,15 @@ class TestErrorsReleaseTheCallers:
                 pass
             return weakref.ref(held)
 
+        # the GUI tests turn the automatic collection off for good (`MainThreadGarbageCollector`)
+        was_enabled = gc.isenabled()
         gc.disable()
         try:
             ref = caller()
             return ref() is not None
         finally:
-            gc.enable()
+            if was_enabled:
+                gc.enable()
 
     def test_an_unknown_variable_that_is_kept_as_written(self):
         assert render_template_or_keep("{{ p3b20.y + 5 }}", {}) == "{{ p3b20.y + 5 }}"
