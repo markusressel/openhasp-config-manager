@@ -1,6 +1,6 @@
 import copy
-import itertools
 import json
+import logging
 import re
 from collections import OrderedDict
 from contextlib import contextmanager
@@ -12,13 +12,13 @@ from typing import List, Dict, Optional, Any, Set, Tuple, Hashable, Iterator, Ca
 
 from jinja2 import TemplateError
 
+from openhasp_config_manager.gui.domain.draft.config_draft import ConfigDraft, FileDraft, with_directives
 from openhasp_config_manager.gui.domain.draft.model import (
     ChangeKind,
     ComponentChanges,
     ComponentSource,
     DraftChange,
     DraftEntry,
-    DraftItem,
     DraftRenderer,
     DraftState,
     PartDraft,
@@ -26,7 +26,6 @@ from openhasp_config_manager.gui.domain.draft.model import (
     PartObject,
     StepKey,
 )
-from openhasp_config_manager.gui.domain.draft.edit_history import EditHistory
 from openhasp_config_manager.gui.domain.draft.page_objects import next_free_id
 from openhasp_config_manager.gui.domain.draft.part_ids import new_part_object_ids
 from openhasp_config_manager.gui.domain.file_tree import config_root_of
@@ -51,6 +50,8 @@ from openhasp_config_manager.processing.template_rendering import THIS, has_nest
 from openhasp_config_manager.processing.jsonl.jsonl import ObjectDimensionsProcessor, is_numeric_property
 from openhasp_config_manager.processing.jsonl.source_editor import JsonlSourceEditor
 
+LOGGER = logging.getLogger(__name__)
+
 # stands for every object: the objects a template refers to can't be told
 ANY_OBJECT = "*"
 # the object itself in its templates
@@ -58,17 +59,28 @@ _THIS = re.compile(rf"\b{THIS}\b")
 
 
 class _Rendered(NamedTuple):
-    """A draft rendered from the files on disk (see `PlateSession._render_from_disk`)."""
+    """A draft rendered from the drafts of its files (see `PlateSession._render_from_disk`)."""
 
     working_objects: OrderedDict[str, List[Dict]]
     # by id of the rendered object
     entries: Dict[int, DraftEntry]
     # component key -> the errors of its directives
     include_errors: Dict[str, List[IncludeError]]
-    # component key -> index in the file -> the copy of a directive
-    directives: Dict[str, Dict[int, Dict[str, Any]]]
-    # part key -> the copy of the part
-    parts: OrderedDict[str, PartDraft]
+
+
+class _Reincluded(NamedTuple):
+    """What including the directives again changed (see `PlateSession._reinclude`)."""
+
+    # the names (before and after) of the objects that were added, removed or rendered again
+    names: Set[str]
+    # the objects that were added or rendered again
+    rendered: List[Dict]
+    # the objects that were added (also in `rendered`)
+    added: List[Dict]
+    # the objects that were removed
+    removed: List[Dict]
+    # the pages of these objects, before and after
+    pages: Set[Any]
 
 
 class ReadOnlyObjectError(ValueError):
@@ -87,11 +99,14 @@ def _source_editor(content: str) -> JsonlSourceEditor:
 
 class PlateSession:
     """
-    The draft of a device's pages (of one cmd component) during an app session.
+    The draft of a device's pages (of one cmd component) during an app session: how the device sees the files of a
+    `ConfigDraft`, which several devices share.
 
     The draft keeps every object twice: rendered (`working_objects`, shown in the preview) and as written in its source
     file, with templates. Edits change the source and render the object again, so the draft can be saved back into the
-    source files without losing templates (see `changes()`).
+    source files without losing templates (see `changes()`). The sources are those of the `ConfigDraft`: an edit of a file
+    that another device shows too (a common file, a part) is seen there (it renders the file again). The rendered objects
+    are per device, because a device renders a shared object with its own variables.
 
     The directives of a file (`!include`) are replaced by the objects they include. Those are shown like the others, but are
     read-only: they are written in another file (the part), once for all of its instances. The `vars` and `for` of a directive
@@ -103,146 +118,213 @@ class PlateSession:
     instance follows, and saving writes the part.
     """
 
-    def __init__(self, device: Device):
+    def __init__(self, device: Device, config: Optional[ConfigDraft] = None):
+        """:param config: the files of the config directory as the draft has them, shared with other devices (a new one by default)"""
         self.device = device
-        self._components: OrderedDict[str, ComponentSource] = OrderedDict()
+        self._config = ConfigDraft() if config is None else config
+        # the keys of the components whose objects the device shows, in the order of the deployment
+        self._keys: List[str] = []
         self._renderer: Optional[DraftRenderer] = None
         self._working_objects: OrderedDict[str, List[Dict]] = OrderedDict()
         # id(rendered object) -> its source
         self._entries: Dict[int, DraftEntry] = {}
-        self._uids = itertools.count()
         self._loaded = False
-        self._history: EditHistory[DraftState] = EditHistory()
-        # uid -> the copy of its source in the last state taken: states share the sources that didn't change (memory)
-        self._frozen_sources: Dict[int, Dict[str, Any]] = {}
-        # the edit that is running (see `edit`): its description, merge key and the state before it
-        self._edit: Optional[Tuple[str, Optional[Hashable], DraftState]] = None
+        # the edit that is running (see `edit`): its description, merge key, the state before it and the included objects then
+        self._edit: Optional[Tuple[str, Optional[Hashable], DraftState, Dict[int, Tuple[int, Any]]]] = None
         self._listeners: List[Callable[[DraftChange], None]] = []
         # component key -> the errors of its directives, when it was loaded
         self._include_errors: Dict[str, List[IncludeError]] = {}
-        # component key -> index of a directive in the source file -> the directive as the draft has it
-        self._directives: Dict[str, Dict[int, Dict[str, Any]]] = {}
-        # (component key, index) -> the copy of a directive in the last state taken (see `_frozen_sources`)
-        self._frozen_directives: Dict[Tuple[str, int], Dict[str, Any]] = {}
         # the objects to select after the running edit (see `DraftChange.selected`)
         self._selected_after_edit: Optional[List[Dict]] = None
         # the last expansion of a changed directive (see `_expand_directive`): its key, and the result
         self._last_expansion: Optional[Tuple[Tuple[str, int, str], Tuple[List[ExpandedObject], List[str]]]] = None
-        # part key (its path as the origins of the included objects have it) -> the part as the draft has it
+        # part key (its path as the origins of the included objects have it) -> the part (of the `ConfigDraft`) that the
+        # files of the device include
         self._parts: OrderedDict[str, PartDraft] = OrderedDict()
-        self._part_uids = itertools.count()
-        # part object uid -> the copy of its source in the last state taken (see `_frozen_sources`)
-        self._frozen_part_sources: Dict[int, Dict[str, Any]] = {}
         # the instance of a part whose objects can be changed, None outside of part mode
         self._part_mode: Optional[PartInstance] = None
 
-        self._dirty = False
         # when the draft was read from the files on disk the last time (loaded, reverted)
         self.loaded_at: Optional[datetime] = None
 
+    @property
+    def config(self) -> ConfigDraft:
+        """The files of the config directory as the draft has them, shared with the drafts of other devices."""
+        return self._config
+
     def load(self, components: List[ComponentSource], renderer: DraftRenderer):
         """
-        Initializes the draft from the components as they are on disk. If they can't be rendered, this raises and the
-        draft stays as it was.
+        Initializes the draft from the components as they are on disk. A file (or part) that the `ConfigDraft` has already is
+        taken from there if it has changes or didn't change on disk; otherwise it is loaded again, and the other devices that
+        show it render it again. If they can't be rendered, this raises and the draft stays as it was.
         """
-        components = OrderedDict((component.key, component) for component in components)
-        rendered = self._render_from_disk(components, renderer)
-        self._components = components
+        rendered, files, parts = self._render_from_disk(components, renderer, False)
         self._renderer = renderer
-        self._replace_with(rendered)
+        self._keys = list(files)
+        self._install(rendered, files, parts)
         self._loaded = True
 
     def reset_to_disk(self):
         """
-        Discards all changes of the draft and its undo history. The rendered objects are new objects afterwards. Part mode
-        goes on in the instance that is included at the same place, if there is one. If the files can't be rendered, this
-        raises and the draft stays as it was.
+        Discards all changes of the files of the draft and their undo history, also for the other devices that show them.
+        The rendered objects are new objects afterwards. Part mode goes on in the instance that is included at the same place,
+        if there is one. If the files can't be rendered, this raises and the draft stays as it was.
         """
         mode = self._part_mode
         # the uids of the parts are new afterwards
         described = None if mode is None or not self._objects_of_instance(mode) else self.describe_instance(mode)
         try:
-            rendered = self._render_from_disk(self._components, self._renderer)
+            rendered, files, parts = self._render_from_disk(self.components, self._renderer, True)
         except Exception:
             # the renderer sees the objects and parts of the draft again
             self._set_draft_sources()
             raise
-        self._replace_with(rendered)
+        self._install(rendered, files, parts)
+        self._continue_part_mode(mode, described)
+
+    def discard(self):
+        """
+        Discards all changes of the files of the draft (also for the other devices that show them), and leaves the
+        `ConfigDraft`: the draft is not used anymore (e.g. it is loaded anew from disk).
+        """
+        self._config.discard(self)
+        self._loaded = False
+
+    def _render_again(self):
+        """
+        The `ConfigDraft` has new drafts of files the device shows (another device loaded or reverted them): render the
+        device again from it, like `load`. If that fails, the draft is not loaded anymore (see `is_loaded`), and doesn't
+        follow the `ConfigDraft` until it is loaded again.
+        """
+        mode = self._part_mode
+        described = None
+        try:
+            if mode is not None and self._objects_of_instance(mode):
+                described = self.describe_instance(mode)
+            rendered, files, parts = self._render_from_disk(self.components, self._renderer, False, False)
+        except Exception:
+            LOGGER.exception(f"Could not render {self.device.name if self.device else 'the draft'} again")
+            self._config.detach(self)
+            self._loaded = False
+            return
+        self._install(rendered, files, parts)
+        self._continue_part_mode(mode, described)
+
+    def _install(self, rendered: "_Rendered", files: Dict[str, FileDraft], parts: Dict[str, PartDraft]):
+        replaced = self._config.install(self, files, parts)
+        self._replace_with(rendered, parts)
+        self._config.render_again(*replaced, skip=self)
+
+    def _continue_part_mode(self, mode: Optional[PartInstance], described: Optional[str]):
+        """Part mode goes on in the instance that is included at the same place as before (described), if there is one."""
         if described is not None:
             self._part_mode = next(
                 (instance for instance in self.part_instances(mode.part) if self.describe_instance(instance) == described),
                 None,
             )
 
-    def _render_from_disk(self, components: OrderedDict[str, ComponentSource], renderer: DraftRenderer) -> _Rendered:
-        """:return: the draft as the files are on disk (nothing of the session is changed, except for the renderer)"""
+    def _render_from_disk(
+        self, components: List[ComponentSource], renderer: DraftRenderer, fresh: bool, refresh_parts: bool = True
+    ) -> Tuple["_Rendered", OrderedDict[str, FileDraft], OrderedDict[str, PartDraft]]:
+        """
+        Render the components with the drafts of their files: those of the `ConfigDraft`, unless they are new, or have no
+        changes and are different on disk (in the components, for the parts as the renderer reads them). Nothing of the
+        session or the `ConfigDraft` is changed, except for the renderer.
+        :param fresh: all files and parts as they are on disk, also those with changes
+        :param refresh_parts: the parts without changes that the `ConfigDraft` has as they are on disk too
+        :return: the rendered draft, and the drafts of its files and parts
+        """
+        config = self._config
+        files: OrderedDict[str, FileDraft] = OrderedDict()
+        for component in components:
+            existing = config.files.get(component.key)
+            keep = existing is not None and (existing.component.content == component.content or config.is_dirty(component.key))
+            files[component.key] = existing if keep and not fresh else config.file_from_disk(component)
+        layouts = {key: draft.indexed_sources() for key, draft in files.items()}
+        sources = {key: [source for _index, source, _obj in layout] for key, layout in layouts.items()}
         working_objects: OrderedDict[str, List[Dict]] = OrderedDict()
         entries: Dict[int, DraftEntry] = {}
         include_errors: Dict[str, List[IncludeError]] = {}
-        directives = {
-            component.key: {
-                index: copy.deepcopy(source) for index, source in enumerate(component.sources) if is_directive(source)
-            }
-            for component in components.values()
-        }
         parts: OrderedDict[str, PartDraft] = OrderedDict()
-        renderer.set_draft_parts({})
-        renderer.set_draft_sources({component.key: component.sources for component in components.values()})
-        expansions = {key: renderer.expand_objects(key, component.sources) for key, component in components.items()}
+        # the parts with changes include what the draft has
+        renderer.set_draft_parts(
+            {}
+            if fresh
+            else {
+                Path(key): part.part_file() for key, part in config.parts.items() if config.is_dirty(key) or not refresh_parts
+            }
+        )
+        renderer.set_draft_sources(sources)
+        expansions = {key: renderer.expand_objects(key, sources[key]) for key in files}
         # the parts the files include, also those that only have directives
         for expansion in expansions.values():
             for expanded in expansion.objects:
                 for file in [expanded.origin.file, *(step.file for step in expanded.origin.includes[1:])]:
                     if expanded.origin.is_included and str(file) not in parts:
-                        parts[str(file)] = self._load_part(renderer, file)
+                        parts[str(file)] = self._load_part(renderer, file, fresh, refresh_parts)
         # from now on the expansions include the parts of the draft, whose objects the included objects share
         renderer.set_draft_parts({Path(key): part.part_file() for key, part in parts.items()})
-        for key, component in components.items():
-            expansion = renderer.expand_objects(key, component.sources)
+        for key, draft in files.items():
+            layout = layouts[key]
+            expansion = renderer.expand_objects(key, sources[key])
             include_errors[key] = expansion.errors
+            lines = _source_editor(draft.component.content)
             objects = []
             for expanded in expansion.objects:
                 origin = expanded.origin
                 if origin.is_included:
-                    instance = _instance_key(origin, origin.includes[0].index, parts)
+                    # the expansion has the place of the directive in the objects of the draft, which can differ from the file
+                    index = layout[origin.includes[0].index][0]
+                    origin = _moved_origin(origin, index, lines.line_of(index))
+                    instance = _instance_key(origin, index, parts)
                     entry = DraftEntry(
                         key,
-                        origin.includes[0].index,
+                        index,
                         _part_object(parts, origin.file, instance[1]).source,
-                        0,
+                        config.new_uid(),
                         origin=origin,
                         scope=expanded.scope,
                         instance=instance,
                     )
                 else:
-                    entry = DraftEntry(key, origin.index, copy.deepcopy(expanded.source), 0)
-                entry.uid = next(self._uids)
-                obj = renderer.render_object(entry.component, entry.source, entry.scope)
-                entries[id(obj)] = entry
-                objects.append(obj)
+                    obj = layout[origin.index][2]
+                    entry = DraftEntry(key, obj.index, obj.source, obj.uid)
+                rendered = renderer.render_object(entry.component, entry.source, entry.scope)
+                entries[id(rendered)] = entry
+                objects.append(rendered)
             working_objects[key] = objects
-        return _Rendered(working_objects, entries, include_errors, directives, parts)
+        return _Rendered(working_objects, entries, include_errors), files, parts
 
-    def _replace_with(self, rendered: _Rendered):
-        self._working_objects, self._entries, self._include_errors, self._directives, self._parts = rendered
-        self._history.clear()
-        self._frozen_sources = {}
-        self._frozen_directives = {}
-        self._frozen_part_sources = {}
+    def _replace_with(self, rendered: "_Rendered", parts: OrderedDict[str, PartDraft]):
+        self._working_objects, self._entries, self._include_errors = rendered
+        self._parts = parts
         self._last_expansion = None
         self._part_mode = None
-        self._dirty = False
         self.loaded_at = datetime.now(timezone.utc)
+
+    @property
+    def file_keys(self) -> List[str]:
+        """The keys of the components (page files) the device shows."""
+        return list(self._keys)
+
+    @property
+    def part_keys(self) -> List[str]:
+        """The keys of the parts the files of the device include."""
+        return list(self._parts)
+
+    def shows(self, files: Set[str], parts: Set[str]) -> bool:
+        """:return: whether the device shows one of the files or parts (by their keys)"""
+        return any(key in files for key in self._keys) or any(key in parts for key in self._parts)
 
     @property
     def is_part_alone(self) -> bool:
         """Whether the draft shows a part on its own (see `load_part_alone`), not the pages of a device."""
-        return any(component.is_scratch for component in self._components.values())
+        return any(component.is_scratch for component in self.components)
 
     @property
     def is_dirty(self) -> bool:
-        """Whether the draft differs from the files it was loaded from."""
-        return self._dirty
+        """Whether a file the draft shows differs from the file it was loaded from (also by an edit of another device)."""
+        return any(self._config.is_dirty(key) for key in self._keys) or any(self._config.is_dirty(key) for key in self._parts)
 
     @property
     def is_loaded(self) -> bool:
@@ -256,7 +338,7 @@ class PlateSession:
 
     @property
     def components(self) -> List[ComponentSource]:
-        return list(self._components.values())
+        return [self._file(key).component for key in self._keys]
 
     # --- reading ---
 
@@ -265,7 +347,7 @@ class PlateSession:
         return self._entry(obj).source
 
     def component_of(self, obj: Dict) -> ComponentSource:
-        return self._components[self._entry(obj).component]
+        return self._file(self._entry(obj).component).component
 
     def source_index(self, obj: Dict) -> Optional[int]:
         """:return: the index of the object in its source file, None for an object added in the draft"""
@@ -398,7 +480,7 @@ class PlateSession:
         entry = self._entry(obj)
         if not entry.is_included:
             raise ValueError(f"{object_name(obj)} is not included by an {INCLUDE}")
-        return self._directives[entry.component][entry.index]
+        return self._file(entry.component).directives[entry.index]
 
     def include_errors(self) -> Dict[str, List[IncludeError]]:
         """:return: component key -> what is wrong with the directives of its file (as loaded from disk)"""
@@ -407,7 +489,7 @@ class PlateSession:
     def component_at(self, path: Path) -> Optional[ComponentSource]:
         """:return: the component of a file (the path in any spelling), None if the draft has no objects of that file"""
         resolved = path.resolve()
-        return next((component for component in self._components.values() if component.path.resolve() == resolved), None)
+        return next((component for component in self.components if component.path.resolve() == resolved), None)
 
     def objects_of_file(self, path: Path) -> Optional[List[Dict]]:
         """:return: the rendered objects of a file of the draft, in the order of the file; None if the draft has none of that file"""
@@ -547,7 +629,7 @@ class PlateSession:
         entry = self._entry(obj)
         loop = dict(entry.origin.includes[0].loop)
         with self.edit(f"Change {key} of the {INCLUDE} at line {self.line_of(obj)}"):
-            self._directives[entry.component][entry.index] = self._changed_directive(obj, key, value)
+            self._file(entry.component).directives[entry.index] = self._changed_directive(obj, key, value)
             self._reinclude_and_render(set())
             successor = obj if id(obj) in self._entries else self._successor(entry, loop)
             self._selected_after_edit = [] if successor is None else [successor]
@@ -755,28 +837,34 @@ class PlateSession:
     def edit(self, description: str, merge_key: Optional[Hashable] = None) -> Iterator[None]:
         """
         Changes of the draft in this block are one step of the undo history (the changing methods of the session make a step
-        each on their own). Edits inside of an edit are part of the outer one.
+        each on their own). Edits inside of an edit are part of the outer one. The other devices that show a changed file
+        render it again afterwards.
         :param description: what the edit does, e.g. "Move 3 objects"
         :param merge_key: steps with the same key, one right after the other, are merged into one (see `EditHistory.push`)
         """
         if self._edit is not None:
             yield
             return
-        self._edit = (description, merge_key, self._state())
+        self._edit = (description, merge_key, self._config.state(), self._included_items())
         try:
             yield
         finally:
-            description, merge_key, before = self._edit
+            description, merge_key, before, included_before = self._edit
             self._edit = None
             selected, self._selected_after_edit = self._selected_after_edit, None
-            after = self._state()
-            self._dirty = self._differs_from_files()
+            self._publish()
+            after = self._config.state()
             if after != before:
-                self._history.push(description, before, after, merge_key)
-                self._notify(replace(self._change_between(before, after, description), selected=selected))
+                self._config.edited(description, before, after, merge_key)
+                change = self._change_between(before, included_before, after, description)
+                self._notify(replace(change, selected=selected))
+                self._config.sync_others(self, before, after, description)
 
     def add_listener(self, listener: Callable[[DraftChange], None]):
-        """Call the listener after every edit, undo and redo that changed the draft (not when it is loaded)."""
+        """
+        Call the listener after every edit, undo and redo that changed the draft (not when it is loaded), also after an edit
+        through another device of a file that this one shows.
+        """
         if listener not in self._listeners:
             self._listeners.append(listener)
 
@@ -787,198 +875,82 @@ class PlateSession:
     @property
     def undo_description(self) -> Optional[str]:
         """:return: what `undo` undoes, None if there is nothing to undo"""
-        return self._history.undo_description
+        return self._config.history.undo_description
 
     @property
     def redo_description(self) -> Optional[str]:
         """:return: what `redo` redoes, None if there is nothing to redo"""
-        return self._history.redo_description
+        return self._config.history.redo_description
 
     def end_merging(self):
         """The next edit is a step of its own, even with the merge key of the last one (e.g. another object was selected)."""
-        self._history.seal()
+        self._config.history.seal()
 
     def object_uid(self, obj: Dict) -> int:
         """:return: what tells the object apart for the whole session, e.g. for a merge key of `edit`"""
         return self._entry(obj).uid
 
     def undo(self) -> Optional[DraftChange]:
-        """:return: what was undone (the listeners get it too), None if there was nothing to undo"""
-        step = self._history.undo()
-        return None if step is None else self._restore(step.before, step.description, ChangeKind.UNDO)
+        """
+        Undo the last edit of the `ConfigDraft` (one history for all devices, for now).
+        :return: what was undone (the listeners get it too; no objects if the edit was in files that the device doesn't
+            show), None if there was nothing to undo
+        """
+        return self._config.undo(self)
 
     def redo(self) -> Optional[DraftChange]:
-        """:return: what was redone (the listeners get it too), None if there was nothing to redo"""
-        step = self._history.redo()
-        return None if step is None else self._restore(step.after, step.description, ChangeKind.REDO)
+        """:return: what was redone (see `undo`), None if there was nothing to redo"""
+        return self._config.redo(self)
 
     # --- saving ---
 
     def changes(self) -> List[ComponentChanges]:
         """
-        :return: what to change in the source files to save the draft, for every component and part that has changes
+        :return: what to change in the source files to save the draft, for every component and part the device shows that
+            has changes (also changes made through another device)
         """
-        result = [
-            self._component_changes(
-                component,
-                self._directives[component.key],
-                [
-                    (entry.index, entry.source)
-                    for entry in map(self._entry, self._working_objects[component.key])
-                    if not entry.is_included
-                ],
-            )
-            for component in self._components.values()
-            # what shows a part on its own is in no file
-            if not component.is_scratch
-        ]
-        result += [
-            self._component_changes(part.component, {}, [(obj.index, obj.source) for obj in part.objects])
-            for part in self._parts.values()
-        ]
-        return [changes for changes in result if changes.changes or changes.removals or changes.deletions or changes.additions]
-
-    @staticmethod
-    def _component_changes(
-        component: ComponentSource,
-        directives: Dict[int, Dict[str, Any]],
-        objects: List[Tuple[Optional[int], Dict[str, Any]]],
-    ) -> ComponentChanges:
-        """
-        :param directives: index in the file -> a directive as the draft has it (they stay where they are)
-        :param objects: (index in the file, None for a new one; source) of the other objects of the file, in the order of the
-            draft
-        """
-        component_changes = ComponentChanges(component=component)
-        kept: Dict[int, Dict[str, Any]] = dict(directives)
-        for index, directive in directives.items():
-            removed = set(component.sources[index]) - set(directive)
-            if removed:
-                component_changes.removals[index] = removed
-            changed = {key: value for key, value in directive.items() if component.sources[index].get(key) != value}
-            if changed:
-                component_changes.changes[index] = copy.deepcopy(changed)
-        for index, source in objects:
-            if index is None:
-                component_changes.additions.append(copy.deepcopy(source))
-                continue
-            kept[index] = source
-            original = component.sources[index]
-            removed = set(original) - set(source)
-            if removed:
-                raise AssertionError(f"Removing properties from a source object is not supported: {removed}")
-            changed = {key: value for key, value in source.items() if key not in original or original[key] != value}
-            if changed:
-                component_changes.changes[index] = copy.deepcopy(changed)
-
-        component_changes.deletions = set(range(len(component.sources))) - set(kept)
-        component_changes.expected_sources = [
-            copy.deepcopy(kept[index]) for index in range(len(component.sources)) if index in kept
-        ] + component_changes.additions
-        return component_changes
+        return self._config.changes_of(self._keys, self._parts)
 
     def mark_saved(self, written: Dict[Path, str]):
         """
         The draft was saved: its files have this content now (see `changes`), with the objects of the draft in their order.
         The draft has no changes afterwards, and the undo history goes on: undoing a saved edit changes the draft again.
         Objects that were removed before saving come back as new objects (at the end of their file) when that is undone.
+        The other devices that show a written file follow.
         :param written: the new content of every file that was written
         """
-        new_indices: Dict[int, int] = {}
-        rewritten = set()
-        # component key -> the old index of a kept source -> its new one
-        moved: Dict[str, Dict[int, int]] = {}
-        lines: Dict[str, JsonlSourceEditor] = {}
-        for key, component in list(self._components.items()):
-            if component.path not in written:
-                continue
-            rewritten.add(key)
-            entries = [self._entry(obj) for obj in self._working_objects[key]]
-            # the file keeps its directives and the objects that were not removed in their order, the new ones are at its end
-            kept = dict(self._directives[key])
-            kept |= {entry.index: entry.source for entry in entries if entry.index is not None and not entry.is_included}
-            moved[key] = {old: new for new, old in enumerate(sorted(kept))}
-            added = [entry for entry in entries if entry.index is None]
-            new_index = {entry.uid: len(kept) + position for position, entry in enumerate(added)}
-            for entry in entries:
-                entry.index = moved[key][entry.index] if entry.index is not None else new_index[entry.uid]
-                new_indices[entry.uid] = entry.index
-            sources = [kept[old] for old in sorted(kept)] + [entry.source for entry in added]
-            self._components[key] = replace(
-                component, content=written[component.path], sources=[copy.deepcopy(source) for source in sources]
-            )
-            self._directives[key] = {moved[key][index]: directive for index, directive in self._directives[key].items()}
-            lines[key] = _source_editor(written[component.path])
-            for entry in entries:
+        self._config.mark_saved(self, written)
+
+    def _saved(self, moved: Dict[str, Dict[int, int]], parts: Set[str], notify: bool):
+        """
+        Files of the `ConfigDraft` were saved (see `ConfigDraft.mark_saved`).
+        :param moved: component key -> the old index of a kept source -> its new one, for the files that were written
+        :param parts: the keys of the parts that were written
+        :param notify: tell the listeners also if the device shows none of the files
+        """
+        written = [key for key in self._keys if key in moved]
+        parts = {key for key in self._parts if key in parts}
+        for key in written:
+            indices = {obj.uid: obj.index for obj in self._file(key).objects}
+            lines = _source_editor(self._file(key).component.content)
+            for entry in map(self._entry, self._working_objects[key]):
                 if entry.is_included:
-                    entry.origin = _moved_origin(entry.origin, entry.index, lines[key].line_of(entry.index))
+                    # of a directive, which stays in the file
+                    entry.index = moved[key][entry.index]
+                    entry.origin = _moved_origin(entry.origin, entry.index, lines.line_of(entry.index))
                     entry.instance = _moved_instance(entry.instance, entry.index)
-        self._frozen_directives = {}
-
-        # part key -> uid of a part object -> its new index
-        part_indices: Dict[str, Dict[int, int]] = {}
-        # part key -> uid of a part object -> its new line
-        part_lines: Dict[str, Dict[int, int]] = {}
-        for key, part in self._parts.items():
-            if part.component.path not in written:
-                continue
-            # like a file: the objects that were not removed in their order, then the new ones
-            kept = sorted(obj.index for obj in part.objects if obj.index is not None)
-            moved_part = {old: new for new, old in enumerate(kept)}
-            added = [obj for obj in part.objects if obj.index is None]
-            part_indices[key] = {}
-            for obj in part.objects:
-                obj.index = moved_part[obj.index] if obj.index is not None else len(kept) + added.index(obj)
-                part_indices[key][obj.uid] = obj.index
-            sources = sorted(part.objects, key=lambda obj: obj.index)
-            part.component = replace(
-                part.component,
-                content=written[part.component.path],
-                sources=[copy.deepcopy(obj.source) for obj in sources],
-            )
-            editor = _source_editor(written[part.component.path])
-            part_lines[key] = {obj.uid: editor.line_of(obj.index) for obj in part.objects}
-
-        def translate(state: DraftState) -> DraftState:
-            def item(key: str, values: DraftItem) -> DraftItem:
-                if values.origin is None:
-                    return values._replace(index=new_indices.get(values.uid)) if key in rewritten else values
-                if key in rewritten:
-                    # included: of a directive, which stays in the file
-                    new = moved[key][values.index]
-                    values = values._replace(
-                        index=new,
-                        origin=_moved_origin(values.origin, new, lines[key].line_of(new)),
-                        instance=_moved_instance(values.instance, new),
-                    )
-                return values._replace(origin=_relined_origin(values.origin, values.instance, part_lines))
-
-            return DraftState(
-                objects={key: tuple(item(key, values) for values in objects) for key, objects in state.objects.items()},
-                directives={
-                    key: {moved[key][index]: directive for index, directive in directives.items()}
-                    if key in rewritten
-                    else directives
-                    for key, directives in state.directives.items()
-                },
-                parts={
-                    key: tuple((uid, part_indices[key].get(uid), source) for uid, _index, source in objects)
-                    if key in part_indices
-                    else objects
-                    for key, objects in state.parts.items()
-                },
-            )
-
-        self._history = self._history.mapped(translate)
+                else:
+                    entry.index = indices[entry.uid]
+        self._last_expansion = None
         mode = self._part_mode
-        if mode is not None and str(mode.steps[0][0]) in moved:
+        if mode is not None and str(mode.steps[0][0]) in written:
             file, index, loop = mode.steps[0]
             self._part_mode = replace(mode, steps=((file, moved[str(file)][index], loop),) + mode.steps[1:])
-        if part_indices:
+        if parts:
             # the lines of the included objects in their parts
             self._reinclude(set())
-        self._dirty = self._differs_from_files()
-        self._notify(DraftChange(ChangeKind.SAVE, "Save", objects=[], added=[], removed=False, pages=set()))
+        if notify or written or parts:
+            self._notify(DraftChange(ChangeKind.SAVE, "Save", objects=[], added=[], removed=False, pages=set()))
 
     # --- internals ---
 
@@ -986,7 +958,7 @@ class PlateSession:
         return self._create_entry(DraftEntry(component=component, index=index, source=source, uid=0), uid)
 
     def _create_entry(self, entry: DraftEntry, uid: Optional[int] = None) -> Dict:
-        entry.uid = next(self._uids) if uid is None else uid
+        entry.uid = self._config.new_uid() if uid is None else uid
         obj = self._rendered(entry)
         self._entries[id(obj)] = entry
         return obj
@@ -1037,15 +1009,25 @@ class PlateSession:
             would write them (see `_file_sources`). The directives are in the order of the file, also those that include
             nothing, so none of them is further down than in the file: the expansion finds their lines in the file.
         """
-        directives = sorted(self._directives[key].items())
-        result = []
-        for entry in map(self._entry, self._working_objects[key]):
-            if entry.is_included:
-                continue
-            while directives and (entry.index is None or directives[0][0] < entry.index):
-                result.append(directives.pop(0))
-            result.append((entry.index, entry.source))
-        return result + directives
+        plain = [
+            (entry.index, entry.source, None)
+            for entry in map(self._entry, self._working_objects[key])
+            if not entry.is_included
+        ]
+        return [(index, source) for index, source, _ in with_directives(self._file(key).directives, plain)]
+
+    def _file(self, key: str) -> FileDraft:
+        """:return: the draft of a file of the device in the `ConfigDraft`"""
+        return self._config.files[key]
+
+    def _publish(self):
+        """Put the objects of the files of the device into the `ConfigDraft`, in their order (an edit changed them)."""
+        for key in self._keys:
+            self._file(key).objects = [
+                PartObject(entry.uid, entry.index, entry.source)
+                for entry in map(self._entry, self._working_objects[key])
+                if not entry.is_included
+            ]
 
     def _changed_directive(self, obj: Dict, key: str, value: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -1081,7 +1063,7 @@ class PlateSession:
             known = {error.message for error in self._renderer.expand_objects(component, sources).errors}
             errors = [error for error in errors if error not in known]
         # the expansion has the place of the directive in the objects of the draft, which can differ from the file
-        line = _source_editor(self._components[component].content).line_of(index)
+        line = _source_editor(self._file(component).component.content).line_of(index)
         objects = [
             replace(obj, origin=_moved_origin(obj.origin, index, line))
             for obj in expansion.objects
@@ -1112,7 +1094,7 @@ class PlateSession:
         Add objects to the end of a part (in a running edit), and select them in the instance that is shown.
         :return: their objects in that instance (none if the instance doesn't include them, e.g. a template of the page)
         """
-        uids = [next(self._part_uids) for _ in sources]
+        uids = [self._config.new_part_uid() for _ in sources]
         self._parts[key].objects.extend(PartObject(uid, None, source) for uid, source in zip(uids, sources))
         self._reinclude_and_render({key})
         by_uid = {self._entry(obj).instance[1]: obj for obj in self._objects_of_instance(self._part_mode)}
@@ -1126,26 +1108,25 @@ class PlateSession:
         the objects that changed.
         :param changed_parts: the keys of the parts whose objects changed
         """
-        names, rendered = self._reinclude(changed_parts)
-        self._render_referring(names, skip=rendered)
+        reincluded = self._reinclude(changed_parts)
+        self._render_referring(reincluded.names, skip=reincluded.rendered)
 
-    def _reinclude(self, changed_parts: Set[str]) -> Tuple[Set[str], List[Dict]]:
+    def _reinclude(self, changed_parts: Set[str], keys: Optional[Set[str]] = None) -> _Reincluded:
         """
         Expand the directives of every file of the draft again, with the directives and parts of the draft. Included objects
         that stay (see `DraftEntry.instance`) keep their rendered dict and are rendered again if their scope or their part
         changed; the others are added or removed, in the place of their directive.
         :param changed_parts: the keys of the parts whose objects changed
-        :return: the names (before and after) of the objects that were added, removed or rendered again, and those rendered
+        :param keys: only the files with these component keys, by default all
         """
         self._set_draft_sources()
-        names: Set[str] = set()
-        rendered: List[Dict] = []
+        result = _Reincluded(set(), [], [], [], set())
         for key in self._working_objects:
-            if not self._directives[key]:
+            if not self._file(key).directives or (keys is not None and key not in keys):
                 continue
             indexed = self._indexed_file_sources(key)
             expansion = self._renderer.expand_objects(key, [source for _index, source in indexed])
-            lines = _source_editor(self._components[key].content)
+            lines = _source_editor(self._file(key).component.content)
             staying = {self._entry(obj).instance: obj for obj in self._working_objects[key] if self._entry(obj).is_included}
             blocks: Dict[int, List[Dict]] = {}
             for expanded in expansion.objects:
@@ -1159,42 +1140,65 @@ class PlateSession:
                 obj = staying.pop(instance, None)
                 if obj is None:
                     obj = self._create_entry(DraftEntry(key, index, source, 0, origin, expanded.scope, instance))
-                    names.add(object_name(obj))
-                    rendered.append(obj)
+                    result.names.add(object_name(obj))
+                    result.rendered.append(obj)
+                    result.added.append(obj)
+                    result.pages.add(obj.get("page"))
                 else:
                     entry = self._entry(obj)
                     entry.index, entry.origin, entry.source = index, origin, source
                     if entry.scope != expanded.scope or str(origin.file) in changed_parts:
                         entry.scope = expanded.scope
-                        names.add(object_name(obj))
+                        result.names.add(object_name(obj))
+                        result.pages.add(obj.get("page"))
                         self._render(obj)
-                        names.add(object_name(obj))
-                        rendered.append(obj)
+                        result.names.add(object_name(obj))
+                        result.pages.add(obj.get("page"))
+                        result.rendered.append(obj)
                 blocks.setdefault(index, []).append(obj)
             for removed in staying.values():
-                names.add(object_name(removed))
+                result.names.add(object_name(removed))
+                result.pages.add(removed.get("page"))
+                result.removed.append(removed)
                 del self._entries[id(removed)]
-            # the plain objects in their order, with the objects of each directive in its place
-            directives = sorted(self._directives[key])
-            result = []
-            for obj in self._working_objects[key]:
-                entry = self._entry(obj) if id(obj) in self._entries else None
-                if entry is None or entry.is_included:
-                    continue
-                while directives and (entry.index is None or directives[0] < entry.index):
-                    result += blocks.get(directives.pop(0), [])
-                result.append(obj)
-            for index in directives:
-                result += blocks.get(index, [])
-            self._working_objects[key] = result
-        return names, rendered
+            plain = [
+                obj for obj in self._working_objects[key] if id(obj) in self._entries and not self._entry(obj).is_included
+            ]
+            self._working_objects[key] = self._arranged(key, plain, blocks)
+        return result
 
-    def _load_part(self, renderer: DraftRenderer, file: Path) -> PartDraft:
+    def _arranged(self, key: str, plain: List[Dict], blocks: Dict[int, List[Dict]]) -> List[Dict]:
+        """
+        :param plain: the objects of a file that are not included, in their order
+        :param blocks: the index of a directive in the file -> the objects it includes
+        :return: the objects of the file: the plain objects, with the objects of each directive in its place (before the
+            first object that is further down in the file, or before the objects added at the end)
+        """
+        directives = sorted(self._file(key).directives)
+        indices = [self._entry(obj).index for obj in plain]
+        last_in_file = max((position for position, index in enumerate(indices) if index is not None), default=-1)
+        result = []
+        for position, obj in enumerate(plain):
+            index = indices[position]
+            while directives and (position > last_in_file if index is None else directives[0] < index):
+                result += blocks.get(directives.pop(0), [])
+            result.append(obj)
+        for index in directives:
+            result += blocks.get(index, [])
+        return result
+
+    def _load_part(self, renderer: DraftRenderer, file: Path, fresh: bool, refresh: bool) -> PartDraft:
+        """
+        :return: the draft of a part: that of the `ConfigDraft` if it has changes (or `refresh` is off) or is the same on disk,
+            else (or if `fresh`) as it is on disk
+        """
+        existing = self._config.parts.get(str(file))
+        if existing is not None and not fresh and (not refresh or self._config.is_dirty(str(file))):
+            return existing
         component = renderer.part_source(file)
-        objects = [
-            PartObject(next(self._part_uids), index, copy.deepcopy(source)) for index, source in enumerate(component.sources)
-        ]
-        return PartDraft(component, objects)
+        if existing is not None and not fresh and existing.component.content == component.content:
+            return existing
+        return self._config.part_from_disk(component)
 
     def _part_at(self, part: Path) -> PartDraft:
         """:return: a part of the draft, the path in any spelling :raises KeyError: if the draft has no such part"""
@@ -1261,164 +1265,111 @@ class PlateSession:
         obj.update(rendered)
 
     def _state(self) -> DraftState:
-        """The sources in it are shared with other states: never change them."""
-        return DraftState(
-            objects={
-                key: tuple(
-                    DraftItem(
-                        entry.uid,
-                        entry.index,
-                        # the source of an included object is that of its part object
-                        None if entry.is_included else self._frozen_source(entry.uid, entry.source, self._frozen_sources),
-                        entry.origin,
-                        entry.scope,
-                        entry.instance,
-                    )
-                    for entry in map(self._entry, objects)
-                )
-                for key, objects in self._working_objects.items()
-            },
-            directives={
-                key: {index: self._frozen_directive(key, index) for index in directives}
-                for key, directives in self._directives.items()
-            },
-            parts={
-                key: tuple(
-                    (obj.uid, obj.index, self._frozen_source(obj.uid, obj.source, self._frozen_part_sources))
-                    for obj in part.objects
-                )
-                for key, part in self._parts.items()
-            },
-        )
+        """The state of the `ConfigDraft`. The sources in it are shared with other states: never change them."""
+        return self._config.state()
 
-    def _frozen_directive(self, key: str, index: int) -> Dict[str, Any]:
-        """:return: a copy of a directive of the draft, the one of the last state if it didn't change since"""
-        directive = self._directives[key][index]
-        frozen = self._frozen_directives.get((key, index))
-        if frozen is None or frozen != directive:
-            frozen = copy.deepcopy(directive)
-            self._frozen_directives[(key, index)] = frozen
-        return frozen
+    def _included_items(self) -> Dict[int, Tuple[int, Any]]:
+        """:return: uid -> (the uid of its part object, its scope) of the included objects, see `_change_between`"""
+        return {
+            entry.uid: (entry.instance[1], entry.scope) for entry in map(self._entry, self._all_objects()) if entry.is_included
+        }
 
-    @staticmethod
-    def _frozen_source(uid: int, source: Dict[str, Any], frozen_sources: Dict[int, Dict[str, Any]]) -> Dict[str, Any]:
-        """:return: a copy of the source of an object, the one of the last state if the source didn't change since"""
-        frozen = frozen_sources.get(uid)
-        if frozen is None or frozen != source:
-            frozen = copy.deepcopy(source)
-            frozen_sources[uid] = frozen
-        return frozen
+    def _compared_items(
+        self, state: DraftState, included: Dict[int, Tuple[int, Any]]
+    ) -> Dict[int, Tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]]]]:
+        """:return: uid -> what tells whether an object of the device changed: its source, and the scope of an included object"""
+        result: Dict[int, Tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]]]] = {
+            uid: (source, None) for key in self._keys for uid, _index, source in state.files[key].objects
+        }
+        part_sources = {uid: source for key in self._parts for uid, _index, source in state.parts[key].objects}
+        result.update({uid: (part_sources[part_uid], scope) for uid, (part_uid, scope) in included.items()})
+        return result
 
-    def _differs_from_files(self) -> bool:
-        for component in self._components.values():
-            if component.is_scratch:
-                # its vars are not saved
-                continue
-            if any(directive != component.sources[index] for index, directive in self._directives[component.key].items()):
-                return True
-            # the included objects follow their directives, which stay
-            entries = [entry for entry in map(self._entry, self._working_objects[component.key]) if not entry.is_included]
-            indices = [index for index, source in enumerate(component.sources) if not is_directive(source)]
-            if len(entries) != len(indices) or any(
-                entry.index != index or entry.source != component.sources[index] for index, entry in zip(indices, entries)
-            ):
-                return True
-        for part in self._parts.values():
-            if [obj.index for obj in part.objects] != list(range(len(part.component.sources))) or any(
-                obj.source != source for obj, source in zip(part.objects, part.component.sources)
-            ):
-                return True
-        return False
-
-    def _restore(self, state: DraftState, description: str, kind: ChangeKind) -> DraftChange:
-        """Change the draft to a state of the undo history. Objects that stay keep their rendered dict."""
-        current = {self._entry(obj).uid: obj for objects in self._working_objects.values() for obj in objects}
+    def _sync(self, before: DraftState, after: DraftState, kind: ChangeKind, description: str) -> Optional[DraftChange]:
+        """
+        Follow a change of the `ConfigDraft` (an undo or redo, or an edit through another device): render the files and parts
+        of the device that changed again, and tell the listeners. Objects that stay keep their rendered dict.
+        :return: what changed for the device, None if it shows none of the changed files
+        """
+        changed_files, changed_parts = before.changed(after)
+        keys = [key for key in self._keys if key in changed_files]
+        parts = {key for key in self._parts if key in changed_parts}
+        if not keys and not parts:
+            return None
+        self._last_expansion = None
         changed: List[Dict] = []
         added: List[Dict] = []
+        removed: List[Dict] = []
         names: Set[str] = set()
         pages: Set[Any] = set()
-        self._directives = {
-            key: {index: copy.deepcopy(directive) for index, directive in directives.items()}
-            for key, directives in state.directives.items()
-        }
-        # the part objects whose source changed: their included objects are rendered again
-        changed_part_objects = set()
-        for key, items in state.parts.items():
-            part = self._parts[key]
-            existing = {obj.uid: obj for obj in part.objects}
-            objects = []
-            for uid, index, source in items:
-                obj = existing.get(uid)
-                if obj is None:
-                    obj = PartObject(uid, index, copy.deepcopy(source))
-                    changed_part_objects.add(uid)
-                elif obj.source != source:
-                    # the included objects share it
-                    obj.source.clear()
-                    obj.source.update(copy.deepcopy(source))
-                    changed_part_objects.add(uid)
-                obj.index = index
-                objects.append(obj)
-            part.objects = objects
-        for key, items in state.objects.items():
-            objects = []
-            for item in items:
-                source = (
-                    copy.deepcopy(item.source)
-                    if item.origin is None
-                    else _part_object(self._parts, item.origin.file, item.instance[1]).source
-                )
-                obj = current.pop(item.uid, None)
-                if obj is None:
-                    entry = DraftEntry(key, item.index, source, 0, item.origin, item.scope, item.instance)
-                    obj = self._create_entry(entry, uid=item.uid)
-                    added.append(obj)
-                    objects.append(obj)
-                    continue
+        # every file with directives includes them again if a part changed
+        reinclude: Optional[Set[str]] = None if parts else set()
+        for key in keys:
+            old_sources = {uid: source for uid, _index, source in before.files[key].objects}
+            new_sources = {uid: source for uid, _index, source in after.files[key].objects}
+            current: Dict[int, Dict] = {}
+            blocks: Dict[int, List[Dict]] = {}
+            for obj in self._working_objects[key]:
                 entry = self._entry(obj)
-                part_changed = item.instance is not None and item.instance[1] in changed_part_objects
-                if (
-                    (item.origin is None and entry.source != item.source)
-                    or part_changed
-                    or entry.origin != item.origin
-                    or entry.scope is not item.scope
-                ):
-                    names.add(object_name(obj))
-                    pages.add(obj.get("page"))
-                    entry.source = source
-                    entry.index, entry.origin, entry.scope, entry.instance = item.index, item.origin, item.scope, item.instance
-                    changed.append(obj)
+                if entry.is_included:
+                    blocks.setdefault(entry.index, []).append(obj)
                 else:
-                    entry.index = item.index
-                objects.append(obj)
-            self._working_objects[key] = objects
-        for removed in current.values():
-            names.add(object_name(removed))
-            pages.add(removed.get("page"))
-            del self._entries[id(removed)]
+                    current[entry.uid] = obj
+            plain = []
+            for part_object in self._file(key).objects:
+                obj = current.pop(part_object.uid, None)
+                if obj is None:
+                    # rendered below, with the sources of the draft
+                    obj = {}
+                    self._entries[id(obj)] = DraftEntry(key, part_object.index, part_object.source, part_object.uid)
+                    added.append(obj)
+                else:
+                    entry = self._entry(obj)
+                    entry.source, entry.index = part_object.source, part_object.index
+                    if old_sources.get(part_object.uid) != new_sources[part_object.uid]:
+                        names.add(object_name(obj))
+                        pages.add(obj.get("page"))
+                        changed.append(obj)
+                plain.append(obj)
+            for obj in current.values():
+                names.add(object_name(obj))
+                pages.add(obj.get("page"))
+                removed.append(obj)
+                del self._entries[id(obj)]
+            self._working_objects[key] = self._arranged(key, plain, blocks)
+            if reinclude is not None and before.files[key].directives != after.files[key].directives:
+                reinclude.add(key)
 
-        # with the restored sources: templates can refer to other objects
-        self._set_draft_sources()
+        # with the sources of the draft: templates can refer to other objects
+        if reinclude is None or reinclude:
+            reincluded = self._reinclude(parts, reinclude)
+        else:
+            self._set_draft_sources()
+            reincluded = _Reincluded(set(), [], [], [], set())
         for obj in changed + added:
             self._render(obj)
-        names |= {object_name(obj) for obj in changed + added}
-        pages |= {obj.get("page") for obj in changed + added}
-        self._render_referring(names, skip=changed + added)
-        self._dirty = self._differs_from_files()
-        restored = DraftChange(
+        names |= {object_name(obj) for obj in changed + added} | reincluded.names
+        pages |= {obj.get("page") for obj in changed + added} | reincluded.pages
+        rendered = changed + added + reincluded.rendered
+        self._render_referring(names, skip=rendered)
+        rendered_ids = {id(obj) for obj in rendered}
+        result = DraftChange(
             kind=kind,
             description=description,
-            objects=[obj for obj in self._all_objects() if any(obj is other for other in changed + added)],
-            added=added,
-            removed=bool(current),
+            objects=[obj for obj in self._all_objects() if id(obj) in rendered_ids],
+            added=added + reincluded.added,
+            removed=bool(removed or reincluded.removed),
             pages=pages,
         )
-        self._notify(restored)
-        return restored
+        self._notify(result)
+        return result
 
-    def _change_between(self, before: DraftState, after: DraftState, description: str) -> DraftChange:
-        old = _compared_items(before)
-        new = _compared_items(after)
+    def _change_between(
+        self, before: DraftState, included_before: Dict[int, Tuple[int, Any]], after: DraftState, description: str
+    ) -> DraftChange:
+        """:return: what an edit of the device changed, from the state (and the included objects) before it to the state after it"""
+        old = self._compared_items(before, included_before)
+        new = self._compared_items(after, self._included_items())
         objects = [obj for obj in self._all_objects() if old.get(self._entry(obj).uid) != new[self._entry(obj).uid]]
         return DraftChange(
             kind=ChangeKind.EDIT,
@@ -1438,16 +1389,6 @@ class PlateSession:
 
     def _entry(self, obj: Dict) -> DraftEntry:
         return self._entries[id(obj)]
-
-
-def _compared_items(state: DraftState) -> Dict[int, Tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]]]]:
-    """:return: uid -> what tells whether an object of the state changed: its source, and the scope of an included object"""
-    part_sources = {uid: source for objects in state.parts.values() for uid, _index, source in objects}
-    return {
-        item.uid: (item.source if item.instance is None else part_sources[item.instance[1]], item.scope)
-        for objects in state.objects.values()
-        for item in objects
-    }
 
 
 @lru_cache(maxsize=256)
@@ -1497,22 +1438,3 @@ def _moved_origin(origin: ObjectOrigin, index: int, line: int) -> ObjectOrigin:
     """:return: the origin of an included object whose outermost directive is at another index and line of its file"""
     step: IncludeStep = replace(origin.includes[0], index=index, line=line)
     return replace(origin, includes=(step,) + origin.includes[1:])
-
-
-def _relined_origin(
-    origin: ObjectOrigin, instance: Tuple[Tuple[StepKey, ...], int], part_lines: Dict[str, Dict[int, int]]
-) -> ObjectOrigin:
-    """
-    :param part_lines: part key -> uid of a part object -> its line, for the parts that were saved
-    :return: the origin of an included object with the lines its part objects and inner directives have in the saved parts
-    (None for those that are not in their file anymore)
-    """
-    steps, uid = instance
-    includes = tuple(
-        replace(step, line=part_lines[str(step.file)].get(steps[position][1]))
-        if position > 0 and str(step.file) in part_lines
-        else step
-        for position, step in enumerate(origin.includes)
-    )
-    line = part_lines[str(origin.file)].get(uid) if str(origin.file) in part_lines else origin.line
-    return replace(origin, line=line, includes=includes)

@@ -128,3 +128,17 @@ class TestEditHistory(TestBase):
         assert [mapped.undo().before, mapped.undo().before] == [10, 0]
         # the original is unchanged
         assert history.redo().after == 2
+
+    def test_drop_forgets_the_steps_to_undo_and_to_redo(self):
+        # GIVEN
+        history = EditHistory()
+        history.push("first", 0, 1)
+        history.push("second", 1, 2)
+        history.push("third", 2, 3)
+        history.undo()
+
+        # WHEN
+        history.drop(lambda step: step.description != "first")
+
+        # THEN
+        assert (history.redo(), history.undo().description, history.undo()) == (None, "first", None)
