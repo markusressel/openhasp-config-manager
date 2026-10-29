@@ -8,11 +8,18 @@ from dataclasses import replace
 from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
-from typing import List, Dict, Optional, Any, Set, Tuple, Hashable, Iterator, Callable, NamedTuple
+from typing import List, Dict, Optional, Any, Set, Tuple, Hashable, Iterator, Callable, NamedTuple, Iterable
 
 from jinja2 import TemplateError
 
-from openhasp_config_manager.gui.domain.draft.config_draft import ConfigDraft, FileDraft, with_directives
+from openhasp_config_manager.gui.domain.draft.config_draft import (
+    ConfigDraft,
+    FileDraft,
+    HistoryStep,
+    UndoRefusedError,
+    with_directives,
+)
+from openhasp_config_manager.gui.domain.draft.edit_history import BlockedStepError
 from openhasp_config_manager.gui.domain.draft.model import (
     ChangeKind,
     ComponentChanges,
@@ -875,12 +882,29 @@ class PlateSession:
     @property
     def undo_description(self) -> Optional[str]:
         """:return: what `undo` undoes, None if there is nothing to undo"""
-        return self._config.history.undo_description
+        step = self.next_undo
+        return None if step is None else step.description
 
     @property
     def redo_description(self) -> Optional[str]:
         """:return: what `redo` redoes, None if there is nothing to redo"""
-        return self._config.history.redo_description
+        step = self.next_redo
+        return None if step is None else step.description
+
+    @property
+    def next_undo(self) -> Optional[HistoryStep]:
+        """What `undo` undoes (the newest step that changed a file the device shows), None if nothing; also if it is refused."""
+        return self._config.next_undo(self)
+
+    @property
+    def next_redo(self) -> Optional[HistoryStep]:
+        """What `redo` redoes, None if nothing; also if it is refused."""
+        return self._config.next_redo(self)
+
+    def display_paths(self, keys: Iterable[str]) -> List[str]:
+        """:return: the paths of files and parts (by their keys, e.g. of a `HistoryStep`), relative to the config directory"""
+        config_dir = config_root_of(self.device.path)
+        return sorted(display_path(Path(key), config_dir) for key in keys)
 
     def end_merging(self):
         """The next edit is a step of its own, even with the merge key of the last one (e.g. another object was selected)."""
@@ -892,15 +916,31 @@ class PlateSession:
 
     def undo(self) -> Optional[DraftChange]:
         """
-        Undo the last edit of the `ConfigDraft` (one history for all devices, for now).
-        :return: what was undone (the listeners get it too; no objects if the edit was in files that the device doesn't
-            show), None if there was nothing to undo
+        Undo the newest edit of a file the device shows, also one made through another device (a shared file), like in
+        IntelliJ: edits of files of other devices only are not undone. An edit of several files is undone in all of them.
+        :return: what was undone (the listeners get it too), None if there was nothing to undo
+        :raise UndoRefusedError: if the edit changed several files and some of them changed since (in files the device
+            doesn't show): it can only be undone as a whole
         """
-        return self._config.undo(self)
+        try:
+            return self._config.undo(self)
+        except BlockedStepError as ex:
+            raise self._refused("undo", ex) from None
 
     def redo(self) -> Optional[DraftChange]:
-        """:return: what was redone (see `undo`), None if there was nothing to redo"""
-        return self._config.redo(self)
+        """:return: what was redone, None if there was nothing to redo (see `undo`)"""
+        try:
+            return self._config.redo(self)
+        except BlockedStepError as ex:
+            raise self._refused("redo", ex) from None
+
+    def _refused(self, verb: str, blocked: BlockedStepError) -> UndoRefusedError:
+        changed = ", ".join(self.display_paths(blocked.files))
+        return UndoRefusedError(
+            f"Can't {verb} \"{blocked.step.description}\": it changed {', '.join(self.display_paths(blocked.step.files))} "
+            f"as one step, and {changed} changed since. {verb.capitalize()} the newer changes of {changed} first, in the "
+            "tab of a device that shows it."
+        )
 
     # --- saving ---
 
