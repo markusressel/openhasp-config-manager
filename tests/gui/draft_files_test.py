@@ -69,6 +69,23 @@ class TestDraftFiles(TestBase):
         # THEN
         assert rendered == "test_device_value"
 
+    def test_parts_of_a_relative_config_directory_are_loaded(self, cfg_root, monkeypatch):
+        # GIVEN: the config directory relative to the working directory (`gui -c ./cfg`), and a file that includes a part
+        (cfg_root / "common" / "parts").mkdir()
+        (cfg_root / "common" / "parts" / "box.jsonl").write_text('{"page": 9, "id": 5, "obj": "obj", "x": 3}\n')
+        (cfg_root / "devices" / "test_device" / "editor.jsonl").write_text(
+            EDITOR_JSONL + '{"!include": "common/parts/box.jsonl"}\n'
+        )
+        monkeypatch.chdir(cfg_root.parent)
+
+        # WHEN
+        session = _load(Path(".", cfg_root.name))
+
+        # THEN
+        [component] = session.components
+        assert [obj["id"] for obj in session.working_objects[component.key]] == [1, 2, 5]
+        assert session.include_errors()[component.key] == []
+
     def test_save_patches_the_source_and_keeps_comments_and_templates(self, cfg_root):
         # GIVEN
         session = _load(cfg_root)

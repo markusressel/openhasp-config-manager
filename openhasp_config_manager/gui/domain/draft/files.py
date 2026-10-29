@@ -76,8 +76,12 @@ class ProcessorDraftRenderer:
         self._suggestions = {}
 
     def part_source(self, path: Path) -> ComponentSource:
-        """:return: a part as it is on disk, as a component of the draft (its key is its path)"""
-        part = self._processor.part(str(path))
+        """
+        :param path: the file (not relative to the config directory, like the path of an `!include` is)
+        :return: a part as it is on disk, as a component of the draft (its key is its path)
+        """
+        # resolved: the config directory can be relative to the working directory too (`gui -c ./cfg`)
+        part = self._processor.part(str(Path(path).resolve()))
         common_dir = Path(self._processor.config_dir, COMMON_FOLDER_NAME).resolve()
         return ComponentSource(
             key=str(part.path),
@@ -346,7 +350,7 @@ def load_part_alone(
     :raises IncludeLookupError: if the part is not a file of the device
     """
     processor = config_manager.create_device_processor(device)
-    part_file = processor.part(str(part))
+    part_file = processor.part(str(Path(part).resolve()))
     path = Path(part_file.path)
     directive: Dict[str, Any] = {INCLUDE: path.resolve().relative_to(Path(processor.config_dir).resolve()).as_posix()}
     variables = placeholder_vars(part_file.sources, processor.path_variables(path))
