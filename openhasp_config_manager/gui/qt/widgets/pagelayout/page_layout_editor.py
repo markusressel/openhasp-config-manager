@@ -1,7 +1,7 @@
 import logging
 from collections import Counter, OrderedDict
 from pathlib import Path
-from typing import List, Dict, Optional, Any, Callable, Set, Tuple
+from typing import List, Dict, Optional, Any, Callable, Set, Tuple, Union
 
 from PyQt6 import QtCore
 from PyQt6.QtCore import Qt
@@ -28,6 +28,7 @@ from openhasp_config_manager.gui.domain.draft.page_objects import (
 from openhasp_config_manager.gui.domain.file_tree import default_target_component, relative_config_path
 from openhasp_config_manager.gui.domain.draft.config_draft import UndoRefusedError
 from openhasp_config_manager.gui.domain.draft.model import ChangeKind, DraftChange, PartInstance
+from openhasp_config_manager.gui.domain.draft.part_focus import PartFocus
 from openhasp_config_manager.gui.domain.draft.session import PlateSession
 from openhasp_config_manager.gui.domain.touch_actions import page_command
 from openhasp_config_manager.gui.domain.ui_session import DeviceSession
@@ -92,6 +93,10 @@ class PageLayoutEditorWidget(QWidget):
         self.busy.changed.connect(lambda _: self._update_actions())
 
         self.session: Optional[PlateSession] = None
+        # part mode: the instance of a part whose objects are edited, None outside of part mode
+        self.part_focus: Optional[PartFocus] = None
+        # the part mode of the draft of the pages, while a part on its own is shown instead (it goes on after it)
+        self._parked_part_focus: Optional[PartFocus] = None
         self.device_pages_data: Optional[OpenHaspDevicePagesData] = None
         self.current_index = 1
         self.page_objects: List[Dict] = []
@@ -136,6 +141,16 @@ class PageLayoutEditorWidget(QWidget):
         return self.session.working_objects
 
     @property
+    def part_mode(self) -> Optional[PartInstance]:
+        """The instance of a part whose objects are edited (see `edit_part`), None outside of part mode."""
+        return None if self.part_focus is None else self.part_focus.instance
+
+    @property
+    def editing(self) -> Union[PlateSession, PartFocus]:
+        """What changes the objects, depending on the mode: the part mode, or the draft outside of it."""
+        return self.session if self.part_focus is None else self.part_focus
+
+    @property
     def edit_mode(self) -> bool:
         return self.page_preview_widget.mode == PreviewMode.Edit
 
@@ -161,7 +176,7 @@ class PageLayoutEditorWidget(QWidget):
         self.page_preview_widget = PagePreviewWidget()
         self.page_preview_widget.set_movable_predicate(lambda obj: self.session is None or self.object_actions.is_movable(obj))
         # in part mode only the objects of the part
-        self.page_preview_widget.set_selectable_predicate(lambda obj: self.session is None or self.session.is_selectable(obj))
+        self.page_preview_widget.set_selectable_predicate(lambda obj: self.session is None or self.editing.is_selectable(obj))
         self.page_preview_widget.commandRequested.connect(self.__on_preview_command)
         self.page_preview_widget.set_group_objects(
             lambda: [obj for objects in self.session.working_objects.values() for obj in objects] if self.session else []
@@ -398,6 +413,8 @@ class PageLayoutEditorWidget(QWidget):
     def clear(self):
         if self.session is not None:
             self.session.remove_listener(self._on_draft_changed)
+        self._set_part_focus(None)
+        self._close_parked_part_focus()
         self.session = None
         self.device_pages_data = None
         self.current_index = 1
@@ -411,15 +428,25 @@ class PageLayoutEditorWidget(QWidget):
         self._update_actions()
         self.stateChanged.emit()
 
-    def set_data(self, session: PlateSession, device_pages_data: OpenHaspDevicePagesData, page: Optional[int] = None):
+    def set_data(
+        self,
+        session: PlateSession,
+        device_pages_data: OpenHaspDevicePagesData,
+        page: Optional[int] = None,
+        part: Optional[PartInstance] = None,
+    ):
         """
         :param session: the draft, loaded
         :param page: the page to show, defaults to the first one (also if the draft has no such page anymore)
+        :param part: edit this instance of a part (see `edit_part`) if the editor isn't in part mode of it already
         """
         if self.session is not None and self.session is not session:
             self.session.remove_listener(self._on_draft_changed)
             # the objects of the preview are those of the other draft
             self.page_preview_widget.set_objects([])
+            self._switch_part_focus(session)
+        if part is not None and self.part_mode != part:
+            self._set_part_focus(PartFocus(session, part))
         self.session = session
         session.add_listener(self._on_draft_changed)
         self.device_pages_data = device_pages_data
@@ -493,7 +520,7 @@ class PageLayoutEditorWidget(QWidget):
             self.page_preview_widget.refresh_items()
             self._update_page_views()
             self.property_editor.refresh_after_change()
-        if self.session.part_mode is not None:
+        if self.part_mode is not None:
             # the instances of the part can change
             self._update_part_bar()
         self.dirtyChanged.emit(self.session.is_dirty)
@@ -640,8 +667,8 @@ class PageLayoutEditorWidget(QWidget):
         """
         if self.session is None:
             return None
-        if self.session.part_mode is not None:
-            return str(self.session.part_mode.part)
+        if self.part_mode is not None:
+            return self.part_focus.component
         chosen = self._device_ui_session().target_file
         for component in self.session.components:
             if relative_config_path(component.path, self.session.device.path) == chosen:
@@ -670,9 +697,10 @@ class PageLayoutEditorWidget(QWidget):
         self._update_jsonl_dimming()
 
     def _dimmed_predicate(self) -> Callable[[Dict], bool]:
-        if self.session is not None and self.session.part_mode is not None:
+        if self.session is not None and self.part_mode is not None:
             # the objects around the instance of the part
-            return lambda obj: not self.session.is_selectable(obj)
+            focus = self.part_focus
+            return lambda obj: not focus.is_selectable(obj)
         return self._outside_of(self._highlighted_component)
 
     # --- part mode ---
@@ -691,10 +719,11 @@ class PageLayoutEditorWidget(QWidget):
             return
         instance = instance or instances[0]
         try:
-            self.session.enter_part_mode(instance)
+            focus = PartFocus(self.session, instance)
         except ValueError as ex:
             self.status.failed.emit(f"Editing the part {part.name}", str(ex))
             return
+        self._set_part_focus(focus)
         if not self.edit_mode:
             self.set_edit_mode(True)
         self._update_part_mode()
@@ -702,12 +731,12 @@ class PageLayoutEditorWidget(QWidget):
 
     def leave_part_mode(self):
         """Back to the objects of the files: the changes of the part stay in the draft."""
-        if self.session is None or self.session.part_mode is None:
+        if self.session is None or self.part_mode is None:
             return
         if self.session.is_part_alone:
             self.partAloneDone.emit()
             return
-        self.session.leave_part_mode()
+        self._set_part_focus(None)
         self._update_part_mode()
         self._reload_page()
 
@@ -716,12 +745,16 @@ class PageLayoutEditorWidget(QWidget):
         self.edit_part(instance.part, instance)
 
     def _on_part_instance_chosen(self, index: int):
-        mode = self.session.part_mode
+        mode = self.part_mode
         self.edit_part(mode.part, self.session.part_instances(mode.part)[index])
 
     def _update_part_mode(self):
-        """Show whether the draft is in part mode: the bar, what is dimmed and can be selected."""
-        mode = self.session.part_mode
+        """Show whether the editor is in part mode: the bar, what is dimmed and can be selected."""
+        if self.part_focus is not None and not self.part_focus.is_active:
+            # the draft was loaded again without the instance
+            self._set_part_focus(None)
+        self.property_editor.set_part_focus(self.part_focus)
+        mode = self.part_mode
         if mode is None:
             self.part_bar.hide()
         else:
@@ -733,8 +766,31 @@ class PageLayoutEditorWidget(QWidget):
         self.fileStateChanged.emit()
         self.stateChanged.emit()
 
+    def _set_part_focus(self, focus: Optional[PartFocus]):
+        """Part mode in another instance (None: outside of part mode); the draft keeps the changes of the part."""
+        if self.part_focus is not None and self.part_focus is not focus:
+            self.part_focus.close()
+        self.part_focus = focus
+
+    def _switch_part_focus(self, session: PlateSession):
+        """
+        Another draft is shown: part mode ends, except that the part mode of the pages goes on after a part on its own (it is
+        put aside meanwhile).
+        """
+        parked, self._parked_part_focus = self._parked_part_focus, None
+        if self.part_focus is not None and not self.part_focus.session.is_part_alone:
+            self._parked_part_focus, self.part_focus = self.part_focus, None
+        self._set_part_focus(parked if parked is not None and parked.session is session else None)
+        if parked is not None and parked is not self.part_focus:
+            parked.close()
+
+    def _close_parked_part_focus(self):
+        if self._parked_part_focus is not None:
+            self._parked_part_focus.close()
+            self._parked_part_focus = None
+
     def _update_part_bar(self):
-        mode = self.session.part_mode
+        mode = self.part_mode
         instances = self.session.part_instances(mode.part)
         part = self.session.part_source(mode.part)
         alone = self.session.is_part_alone

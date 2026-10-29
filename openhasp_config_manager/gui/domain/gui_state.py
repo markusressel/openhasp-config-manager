@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional, Sequence
 from openhasp_config_manager.gui.domain.connection import ConnectionStatus
 from openhasp_config_manager.gui.domain.draft.model import ComponentSource
 from openhasp_config_manager.gui.domain.draft.page_objects import get_navigable_page_indices
+from openhasp_config_manager.gui.domain.draft.part_focus import PartFocus
 from openhasp_config_manager.gui.domain.draft.session import PlateSession
 from openhasp_config_manager.gui.domain.problems import Problem, object_name
 from openhasp_config_manager.openhasp_client.model.device import Device
@@ -192,16 +193,19 @@ def describe_problems(
     return result
 
 
-def describe_part_mode(session: PlateSession, config_dir: Path) -> Optional[Dict[str, Any]]:
-    """:return: the part that is edited in part mode, and the instance that is shown, or None"""
-    mode = session.part_mode
-    if mode is None:
+def describe_part_mode(focus: Optional[PartFocus], config_dir: Path) -> Optional[Dict[str, Any]]:
+    """
+    :param focus: the part mode of the preview, None outside of part mode
+    :return: the part that is edited in part mode, and the instance that is shown, or None
+    """
+    if focus is None or not focus.is_active:
         return None
+    session = focus.session
     return {
-        "part": relative(mode.part, config_dir),
+        "part": relative(focus.part, config_dir),
         # an instance whose objects were all removed is not in the draft anymore
-        "instance": session.describe_instance(mode) if session.objects_of_instance(mode) else None,
-        "shared": session.part_source(mode.part).is_common,
+        "instance": focus.describe(),
+        "shared": session.part_source(focus.part).is_common,
         "alone": session.is_part_alone,
     }
 
@@ -232,12 +236,14 @@ def describe_device(
     selection: List[Dict[str, Any]],
     target_component: Optional[str],
     config_dir: Path,
+    part_focus: Optional[PartFocus] = None,
 ) -> Dict[str, Any]:
     """
     :param cmd: the startup script the device is loaded with
     :param page: the page in the preview
     :param selection: the selected objects
     :param target_component: the key of the file new objects go into (in part mode: the path of the part), None without one
+    :param part_focus: the part mode of the preview, None outside of part mode
     :return: the `device` part of the state (see README), without `preview`
     """
     screen = device.config.openhasp_config_manager.device.screen
@@ -256,11 +262,11 @@ def describe_device(
         if target_component is None
         else relative(
             Path(target_component)
-            if session.part_mode is not None
+            if part_focus is not None and part_focus.is_active
             else next(c.path for c in session.components if c.key == target_component),
             config_dir,
         ),
-        "part_mode": describe_part_mode(session, config_dir),
+        "part_mode": describe_part_mode(part_focus, config_dir),
         "draft": describe_draft(session, config_dir),
         "loaded": session.loaded_at.isoformat(timespec="milliseconds"),
     }

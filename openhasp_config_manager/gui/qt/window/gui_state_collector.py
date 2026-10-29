@@ -32,6 +32,7 @@ def collect_gui_state(window, running: bool = True) -> Dict[str, Any]:
             selection=[item.obj_data for item in editor.page_preview_widget.selected_items()],
             target_component=editor.target_component,
             config_dir=root,
+            part_focus=editor.part_focus,
         )
         problems = describe_problems(session, editor.problems, root, window.devices)
     return {

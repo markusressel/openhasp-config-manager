@@ -4,6 +4,7 @@ import pytest
 
 from openhasp_config_manager.gui.domain.draft.files import SaveConflictError, load_device, load_part_alone, plan_save
 from openhasp_config_manager.gui.domain.draft.part_alone import placeholder_vars
+from openhasp_config_manager.gui.domain.draft.part_focus import PartFocus
 from openhasp_config_manager.gui.domain.draft.part_ids import new_part_object_ids
 from openhasp_config_manager.gui.domain.draft.session import PlateSession, ReadOnlyObjectError
 from openhasp_config_manager.gui.domain.problems import object_name
@@ -53,7 +54,7 @@ def _objects(session: PlateSession):
 
 
 def _edit_the_part(session: PlateSession, name: str = "p9b20"):
-    session.enter_part_mode(session.instance_of(_objects(session)[name]))
+    return PartFocus(session, session.instance_of(_objects(session)[name]))
 
 
 class TestPartMode:
@@ -77,26 +78,57 @@ class TestPartMode:
         assert session.read_only_reason(objects["p9b20"]) is not None
 
         # WHEN
-        _edit_the_part(session)
+        focus = _edit_the_part(session)
 
         # THEN
-        assert session.part_mode.part == tile
-        assert session.read_only_reason(objects["p9b20"]) is None
-        assert [name for name, obj in objects.items() if session.is_selectable(obj)] == ["p9b20", "p9b21"]
-        assert session.read_only_reason(objects["p9b30"]) == (
+        assert focus.instance.part == tile
+        assert focus.read_only_reason(objects["p9b20"]) is None
+        assert [name for name, obj in objects.items() if focus.is_selectable(obj)] == ["p9b20", "p9b21"]
+        assert focus.read_only_reason(objects["p9b30"]) == (
             "In part mode only the objects of the part common/parts/tile.jsonl (of the instance that is shown) can be changed."
         )
         with pytest.raises(ReadOnlyObjectError):
-            session.set_source_value(objects["p9b1"], "x", 3)
+            focus.set_source_value(objects["p9b1"], "x", 3)
+
+    def test_two_views_of_the_draft_can_be_in_different_modes_at_once(self, session, tile):
+        # GIVEN: one view edits the part in its first instance, another one in its third, and one the pages
+        first = _edit_the_part(session)
+        third = PartFocus(session, session.part_instances(tile)[2])
+        objects = _objects(session)
+
+        # THEN: each can change only its own objects
+        assert [name for name, obj in objects.items() if first.read_only_reason(obj) is None] == ["p9b20", "p9b21"]
+        assert [name for name, obj in objects.items() if third.read_only_reason(obj) is None] == ["p8b50", "p8b51"]
+        assert [name for name, obj in objects.items() if session.read_only_reason(obj) is None] == ["p9b1", "p9b2"]
+        assert all(session.is_selectable(obj) for obj in objects.values())
+        with pytest.raises(ReadOnlyObjectError):
+            session.set_source_value(objects["p9b21"], "text", "w")
+        with pytest.raises(ReadOnlyObjectError):
+            first.set_source_value(objects["p9b1"], "x", 3)
+
+        # WHEN
+        third.set_source_value(objects["p8b51"], "text", "w")
+        session.set_source_value(objects["p9b1"], "x", 3)
+
+        # THEN: every instance follows, and the modes stay
+        assert [objects[name]["text"] for name in ("p9b21", "p9b31", "p8b51")] == ["w", "w", "w"]
+        assert objects["p9b1"]["x"] == 3
+        assert (first.instance, third.instance) == (session.part_instances(tile)[0], session.part_instances(tile)[2])
+
+        # WHEN
+        first.close()
+
+        # THEN
+        assert first.instance is None and third.read_only_reason(objects["p8b51"]) is None
 
     def test_an_edit_of_a_part_object_changes_every_instance_and_saves_only_the_part(self, session, tile):
         # GIVEN
-        _edit_the_part(session)
+        focus = _edit_the_part(session)
         objects = _objects(session)
 
         # WHEN
-        session.set_source_value(objects["p9b20"], "x", "{{ id * 3 }}")
-        session.set_source_value(objects["p9b21"], "text", "w")
+        focus.set_source_value(objects["p9b20"], "x", "{{ id * 3 }}")
+        focus.set_source_value(objects["p9b21"], "text", "w")
 
         # THEN: each instance with its own variables, the objects stay
         after = _objects(session)
@@ -118,12 +150,12 @@ class TestPartMode:
 
     def test_a_move_changes_the_position_of_every_instance(self, session):
         # GIVEN
-        _edit_the_part(session)
+        focus = _edit_the_part(session)
 
         # WHEN: like a drag
         with session.edit("Move p9b21"):
-            session.set_source_value(_objects(session)["p9b21"], "x", 7)
-            session.set_source_value(_objects(session)["p9b21"], "y", 8)
+            focus.set_source_value(_objects(session)["p9b21"], "x", 7)
+            focus.set_source_value(_objects(session)["p9b21"], "y", 8)
 
         # THEN
         objects = _objects(session)
@@ -134,22 +166,22 @@ class TestPartMode:
 
     def test_adding_and_removing_objects_of_a_part(self, session, tile):
         # GIVEN
-        _edit_the_part(session)
+        focus = _edit_the_part(session)
         changes = []
         session.add_listener(changes.append)
 
         # WHEN
-        added = session.add_object(str(tile), {"page": 9, "id": 99, "obj": "btn", "x": 1})
+        added = focus.add_object(str(tile), {"page": 9, "id": 99, "obj": "btn", "x": 1})
 
         # THEN: in every instance, with templates for the page and id
         assert object_name(added) == "p9b22"
         assert session.source_of(added) == {"page": "{{ page }}", "id": "{{ id + 2 }}", "obj": "btn", "x": 1}
         assert {"p9b22", "p9b32", "p8b52"} <= set(_objects(session))
         assert changes[-1].selected == [added]
-        assert session.is_selectable(added)
+        assert focus.is_selectable(added)
 
         # WHEN
-        session.remove_object(_objects(session)["p9b21"])
+        focus.remove_object(_objects(session)["p9b21"])
 
         # THEN
         assert not {"p9b21", "p9b31", "p8b51"} & set(_objects(session))
@@ -175,10 +207,10 @@ class TestPartMode:
 
     def test_duplicating_a_part_object(self, session):
         # GIVEN
-        _edit_the_part(session)
+        focus = _edit_the_part(session)
 
         # WHEN
-        duplicate = session.duplicate_object(_objects(session)["p9b21"])
+        duplicate = focus.duplicate_object(_objects(session)["p9b21"])
 
         # THEN
         assert session.source_of(duplicate)["id"] == "{{ id + 2 }}"
@@ -186,14 +218,14 @@ class TestPartMode:
 
     def test_pasting_into_a_part_gives_the_objects_templates_and_every_instance_follows(self, session, tile):
         # GIVEN: a button with a label inside of it
-        _edit_the_part(session)
+        focus = _edit_the_part(session)
         clipboard = [
             {"page": 3, "id": 7, "obj": "btn", "x": 100, "y": 100, "w": 50, "h": 20},
             {"page": 3, "id": 8, "obj": "label", "parentid": 7, "text": "{{ id }}"},
         ]
 
         # WHEN: where the mouse is
-        button, label = session.paste_objects(str(tile), clipboard, page=9, screen=(480, 480), position=(60, 70))
+        button, label = focus.paste_objects(str(tile), clipboard, page=9, screen=(480, 480), position=(60, 70))
 
         # THEN: with the page and the next ids of the part, the label still in the button
         assert session.source_of(button) == {
@@ -239,30 +271,31 @@ class TestPartMode:
 
     def test_leaving_part_mode_keeps_the_changes_and_switching_the_instance_too(self, session, tile):
         # GIVEN
-        _edit_the_part(session)
-        session.set_source_value(_objects(session)["p9b21"], "text", "w")
+        focus = _edit_the_part(session)
+        focus.set_source_value(_objects(session)["p9b21"], "text", "w")
 
         # WHEN
-        session.enter_part_mode(session.part_instances(tile)[2])
+        focus.close()
+        focus = PartFocus(session, session.part_instances(tile)[2])
 
         # THEN
         objects = _objects(session)
         assert objects["p8b51"]["text"] == "w"
-        assert session.read_only_reason(objects["p8b51"]) is None and session.read_only_reason(objects["p9b21"]) is not None
+        assert focus.read_only_reason(objects["p8b51"]) is None and focus.read_only_reason(objects["p9b21"]) is not None
 
         # WHEN
-        session.leave_part_mode()
+        focus.close()
 
         # THEN
-        assert session.part_mode is None
+        assert focus.instance is None
         assert session.is_dirty is True and objects["p9b21"]["text"] == "w"
         assert session.read_only_reason(objects["p9b21"]).startswith("It is included from")
 
     def test_a_reload_that_can_not_be_rendered_keeps_part_mode_and_the_changes_of_the_part(self, session, tile, monkeypatch):
         # GIVEN: a change of the part in part mode
-        _edit_the_part(session)
-        mode = session.part_mode
-        session.set_source_value(_objects(session)["p9b21"], "text", "w")
+        focus = _edit_the_part(session)
+        mode = focus.instance
+        focus.set_source_value(_objects(session)["p9b21"], "text", "w")
         objects = _objects(session)
 
         def fail(path):
@@ -275,16 +308,16 @@ class TestPartMode:
             session.reset_to_disk()
 
         # THEN: nothing changed, and the renderer has the parts of the draft again
-        assert session.part_mode == mode
+        assert focus.instance == mode
         assert _objects(session) == objects and all(_objects(session)[name] is obj for name, obj in objects.items())
         assert [change.component.path for change in session.changes()] == [tile]
-        session.set_source_value(objects["p9b20"], "y", 11)
+        focus.set_source_value(objects["p9b20"], "y", 11)
         assert (objects["p9b31"]["text"], objects["p8b50"]["y"]) == ("w", 11)
 
     def test_a_part_that_changed_on_disk_is_not_overwritten(self, session, tile):
         # GIVEN
-        _edit_the_part(session)
-        session.set_source_value(_objects(session)["p9b21"], "text", "w")
+        focus = _edit_the_part(session)
+        focus.set_source_value(_objects(session)["p9b21"], "text", "w")
         tile.write_text(TILE_JSONL + "\n")
 
         # THEN
@@ -293,8 +326,8 @@ class TestPartMode:
 
     def test_after_a_save_the_part_goes_on_from_its_new_content(self, session, tile):
         # GIVEN: an object of the part is removed and saved
-        _edit_the_part(session)
-        session.remove_object(_objects(session)["p9b20"])
+        focus = _edit_the_part(session)
+        focus.remove_object(_objects(session)["p9b20"])
         [change] = plan_save(session)
         change.path.write_text(change.content)
         session.mark_saved({change.path: change.content})
@@ -304,7 +337,7 @@ class TestPartMode:
         assert session.origin_of(_objects(session)["p9b31"]).line == 2
 
         # WHEN: another change is saved, then both are undone
-        session.set_source_value(_objects(session)["p9b21"], "text", "w")
+        focus.set_source_value(_objects(session)["p9b21"], "text", "w")
         [change] = plan_save(session)
         assert change.content.endswith('"text": "w"}\n')
         session.undo()
@@ -317,8 +350,8 @@ class TestPartMode:
 
     def test_undoing_past_a_save_shows_the_saved_lines_of_the_part(self, session, tile):
         # GIVEN: the first object of the part is removed and saved, which moves the second one to line 2
-        _edit_the_part(session)
-        session.remove_object(_objects(session)["p9b20"])
+        focus = _edit_the_part(session)
+        focus.remove_object(_objects(session)["p9b20"])
         [change] = plan_save(session)
         change.path.write_text(change.content)
         session.mark_saved({change.path: change.content})
@@ -335,7 +368,7 @@ class TestPartMode:
         # GIVEN: the object before the directives is removed, then part mode is entered and the file saved
         instance = session.instance_of(_objects(session)["p9b30"])
         session.remove_object(_objects(session)["p9b1"])
-        session.enter_part_mode(instance)
+        focus = PartFocus(session, instance)
         [change] = plan_save(session)
         change.path.write_text(change.content)
 
@@ -343,9 +376,9 @@ class TestPartMode:
         session.mark_saved({change.path: change.content})
 
         # THEN: the directive is the first object of the file now
-        assert session.part_mode in session.part_instances(instance.part)
-        assert session.describe_instance(session.part_mode) == f"{DEVICE}/page.jsonl:1 (id=30)"
-        assert session.read_only_reason(_objects(session)["p9b30"]) is None
+        assert focus.instance in session.part_instances(instance.part)
+        assert session.describe_instance(focus.instance) == f"{DEVICE}/page.jsonl:1 (id=30)"
+        assert focus.read_only_reason(_objects(session)["p9b30"]) is None
 
     def test_a_page_file_cant_be_edited_as_a_part(self, cfg_root):
         # GIVEN: a page file that is also included
@@ -357,7 +390,7 @@ class TestPartMode:
 
         # THEN
         with pytest.raises(ValueError, match="is also a page file of the device"):
-            session.enter_part_mode(session.instance_of(included))
+            PartFocus(session, session.instance_of(included))
 
 
 class TestNestedParts:
@@ -369,25 +402,25 @@ class TestNestedParts:
 
     def test_the_objects_of_an_inner_part_are_selectable_but_not_editable(self, session, cfg_root):
         # GIVEN
-        _edit_the_part(session)
+        focus = _edit_the_part(session)
         dot = _objects(session)["p9b26"]
 
         # THEN
-        assert session.is_selectable(dot)
-        assert session.read_only_reason(dot) == (
+        assert focus.is_selectable(dot)
+        assert focus.read_only_reason(dot) == (
             "It is included from common/parts/dot.jsonl:1, by an !include inside of the part common/parts/tile.jsonl: "
             "edit that part."
         )
         inner = session.instance_of(dot)
         assert inner.part == cfg_root / "common/parts/dot.jsonl"
-        assert session.instance_of(dot, cfg_root / "common/parts/tile.jsonl") == session.part_mode
+        assert session.instance_of(dot, cfg_root / "common/parts/tile.jsonl") == focus.instance
 
     def test_an_edit_of_the_inner_part_changes_its_instances_in_every_outer_instance(self, session):
         # GIVEN
-        session.enter_part_mode(session.instance_of(_objects(session)["p9b26"]))
+        focus = PartFocus(session, session.instance_of(_objects(session)["p9b26"]))
 
         # WHEN
-        session.set_source_value(_objects(session)["p9b26"], "x", 9)
+        focus.set_source_value(_objects(session)["p9b26"], "x", 9)
 
         # THEN
         objects = _objects(session)
@@ -396,8 +429,8 @@ class TestNestedParts:
 
     def test_undoing_past_a_save_shows_the_saved_line_of_an_inner_directive(self, session):
         # GIVEN: an object before the inner directive is removed and saved, which moves the directive to line 3
-        _edit_the_part(session)
-        session.remove_object(_objects(session)["p9b20"])
+        focus = _edit_the_part(session)
+        focus.remove_object(_objects(session)["p9b20"])
         [change] = plan_save(session)
         change.path.write_text(change.content)
         session.mark_saved({change.path: change.content})
@@ -477,7 +510,7 @@ class TestPartAlone:
         # GIVEN
         session = self._session(cfg_root, card)
         [instance] = session.part_instances(card)
-        session.enter_part_mode(instance)
+        focus = PartFocus(session, instance)
         label = _objects(session)["p1b2"]
 
         # WHEN: the vars are no change of a file
@@ -487,10 +520,10 @@ class TestPartAlone:
         assert set(_objects(session)) == {"p2b10", "p2b11"}
         assert label["text"] == "Lights"
         assert session.is_dirty is False
-        assert session.part_mode == instance
+        assert focus.instance == instance
 
         # WHEN
-        session.set_source_value(label, "text", "{{ title }}!")
+        focus.set_source_value(label, "text", "{{ title }}!")
 
         # THEN
         [change] = plan_save(session)
