@@ -7,6 +7,7 @@ from PyQt6.QtCore import Qt, QSettings
 from PyQt6.QtGui import QAction, QBrush, QColor, QFont, QPalette
 from PyQt6.QtWidgets import QApplication, QHeaderView, QLabel, QMenu, QTreeWidget, QTreeWidgetItem, QWidget, QWidgetAction
 
+from openhasp_config_manager.gui.domain.file_operations import ConfigFiles
 from openhasp_config_manager.gui.domain.file_tree import FileKind, FileNode, format_pages
 from openhasp_config_manager.gui.qt.components import ThemedIcons, UiComponents
 from openhasp_config_manager.gui.qt.theme import current_colors
@@ -17,6 +18,14 @@ _KEY_ROLE = Qt.ItemDataRole.UserRole + 1
 _RELEVANT_ROLE = Qt.ItemDataRole.UserRole + 2
 
 _SHOW_ALL_SETTINGS_KEY = "files/show_all"
+
+# the file operations of the context menu (see `fileActionRequested`)
+NEW_FILE = "new_file"
+NEW_FOLDER = "new_folder"
+RENAME = "rename"
+MOVE = "move"
+DELETE = "delete"
+REVEAL = "reveal"
 
 _ICONS = {
     FileKind.FOLDER: "folder-outline",
@@ -82,6 +91,8 @@ class FileTreeWidget(QWidget):
     - Double-clicking a file opens it in the text editor (`openRequested`). "Add new objects here" in the context menu of a
       .jsonl file of the draft makes it the target (`targetRequested`).
     - Files the plate never uses (see `used_files` and `used_variable_files`) are hidden, unless "Show all files" is on.
+    - The context menu has the file operations (`fileActionRequested`): new files and folders, rename, move and delete. The
+      ones that are not possible for a file (e.g. renaming `boot.cmd`) are disabled, and say why.
     """
 
     # the key of the component whose objects to highlight, or None
@@ -89,6 +100,8 @@ class FileTreeWidget(QWidget):
     targetRequested = QtCore.pyqtSignal(str)
     # the path of a file to edit as text
     openRequested = QtCore.pyqtSignal(object)
+    # (NEW_FILE, ..., the path of the file or folder)
+    fileActionRequested = QtCore.pyqtSignal(str, object)
 
     def __init__(self):
         super().__init__()
@@ -472,6 +485,35 @@ class FileTreeWidget(QWidget):
             target.setChecked(key == self._target)
             target.triggered.connect(lambda: self.targetRequested.emit(key))
             menu.addSeparator()
+        self._add_file_actions(menu, path)
+        menu.addSeparator()
         copy_path = menu.addAction(ThemedIcons.icon("content-copy"), "Copy path")
         copy_path.triggered.connect(lambda: QApplication.clipboard().setText(item.data(0, _PATH_ROLE)))
+        reveal = menu.addAction(ThemedIcons.icon("folder-open-outline"), "Show in the file manager")
+        reveal.triggered.connect(lambda: self.fileActionRequested.emit(REVEAL, path))
         menu.exec(self._tree.viewport().mapToGlobal(position))
+
+    def file_actions(self, path: Path) -> List[Tuple[str, str, str, Optional[str]]]:
+        """:return: the file operations of the context menu of a file or folder: (action, title, icon, why it is not possible)"""
+        files = ConfigFiles(self._common_path.parent)
+        path = path.resolve()
+        result = []
+        if path.is_dir():
+            result.append((NEW_FILE, "New file…", "file-plus-outline", None))
+            at_root = "The root of the config directory only holds variable files." if path == files.root else None
+            result.append((NEW_FOLDER, "New folder…", "folder-plus-outline", at_root))
+        protected = "It is the root of the config directory." if path == files.root else files.is_protected(path)
+        result.append((RENAME, "Rename…", "rename-outline", protected))
+        result.append((MOVE, "Move to…", "folder-move-outline", protected))
+        deletion = protected if path == files.root else files.deletion_blocked(path)
+        result.append((DELETE, "Delete…", "delete-outline", deletion))
+        return result
+
+    def _add_file_actions(self, menu: QMenu, path: Path):
+        menu.setToolTipsVisible(True)
+        for action, title, icon, reason in self.file_actions(path):
+            entry = menu.addAction(ThemedIcons.icon(icon), title)
+            entry.setEnabled(reason is None)
+            if reason is not None:
+                entry.setToolTip(reason)
+            entry.triggered.connect(lambda _checked=False, action=action: self.fileActionRequested.emit(action, path))
