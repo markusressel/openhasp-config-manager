@@ -315,6 +315,22 @@ class TestPartMode:
         [change] = plan_save(session)
         assert change.content.endswith('"x": "{{ id * 2 }}", "y": 10, "text": "{{ id }}"}\n')
 
+    def test_undoing_past_a_save_shows_the_saved_lines_of_the_part(self, session, tile):
+        # GIVEN: the first object of the part is removed and saved, which moves the second one to line 2
+        _edit_the_part(session)
+        session.remove_object(_objects(session)["p9b20"])
+        [change] = plan_save(session)
+        change.path.write_text(change.content)
+        session.mark_saved({change.path: change.content})
+
+        # WHEN
+        session.undo()
+
+        # THEN: the removed object is new in the draft, the other one stays where the file has it now
+        objects = _objects(session)
+        assert session.origin_of(objects["p9b21"]).line == 2
+        assert session.origin_of(objects["p9b20"]).line is None
+
     def test_a_directive_after_a_saved_removal_keeps_its_part_mode(self, session, cfg_root):
         # GIVEN: the object before the directives is removed, then part mode is entered and the file saved
         instance = session.instance_of(_objects(session)["p9b30"])
@@ -377,6 +393,20 @@ class TestNestedParts:
         objects = _objects(session)
         assert [objects[name]["x"] for name in ("p9b26", "p9b36", "p8b56")] == [9, 9, 9]
         assert [change.component.path.name for change in session.changes()] == ["dot.jsonl"]
+
+    def test_undoing_past_a_save_shows_the_saved_line_of_an_inner_directive(self, session):
+        # GIVEN: an object before the inner directive is removed and saved, which moves the directive to line 3
+        _edit_the_part(session)
+        session.remove_object(_objects(session)["p9b20"])
+        [change] = plan_save(session)
+        change.path.write_text(change.content)
+        session.mark_saved({change.path: change.content})
+
+        # WHEN
+        session.undo()
+
+        # THEN
+        assert session.origin_of(_objects(session)["p9b26"]).includes[1].line == 3
 
 
 class TestNewPartObjectIds:
