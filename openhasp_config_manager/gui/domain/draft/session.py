@@ -893,6 +893,8 @@ class PlateSession:
 
         # part key -> uid of a part object -> its new index
         part_indices: Dict[str, Dict[int, int]] = {}
+        # part key -> uid of a part object -> its new line
+        part_lines: Dict[str, Dict[int, int]] = {}
         for key, part in self._parts.items():
             if part.component.path not in written:
                 continue
@@ -910,20 +912,22 @@ class PlateSession:
                 content=written[part.component.path],
                 sources=[copy.deepcopy(obj.source) for obj in sources],
             )
+            editor = _source_editor(written[part.component.path])
+            part_lines[key] = {obj.uid: editor.line_of(obj.index) for obj in part.objects}
 
         def translate(state: DraftState) -> DraftState:
             def item(key: str, values: DraftItem) -> DraftItem:
-                if key not in rewritten:
-                    return values
                 if values.origin is None:
-                    return values._replace(index=new_indices.get(values.uid))
-                # included: of a directive, which stays in the file
-                new = moved[key][values.index]
-                return values._replace(
-                    index=new,
-                    origin=_moved_origin(values.origin, new, lines[key].line_of(new)),
-                    instance=_moved_instance(values.instance, new),
-                )
+                    return values._replace(index=new_indices.get(values.uid)) if key in rewritten else values
+                if key in rewritten:
+                    # included: of a directive, which stays in the file
+                    new = moved[key][values.index]
+                    values = values._replace(
+                        index=new,
+                        origin=_moved_origin(values.origin, new, lines[key].line_of(new)),
+                        instance=_moved_instance(values.instance, new),
+                    )
+                return values._replace(origin=_relined_origin(values.origin, values.instance, part_lines))
 
             return DraftState(
                 objects={key: tuple(item(key, values) for values in objects) for key, objects in state.objects.items()},
@@ -1463,3 +1467,22 @@ def _moved_origin(origin: ObjectOrigin, index: int, line: int) -> ObjectOrigin:
     """:return: the origin of an included object whose outermost directive is at another index and line of its file"""
     step: IncludeStep = replace(origin.includes[0], index=index, line=line)
     return replace(origin, includes=(step,) + origin.includes[1:])
+
+
+def _relined_origin(
+    origin: ObjectOrigin, instance: Tuple[Tuple[StepKey, ...], int], part_lines: Dict[str, Dict[int, int]]
+) -> ObjectOrigin:
+    """
+    :param part_lines: part key -> uid of a part object -> its line, for the parts that were saved
+    :return: the origin of an included object with the lines its part objects and inner directives have in the saved parts
+    (None for those that are not in their file anymore)
+    """
+    steps, uid = instance
+    includes = tuple(
+        replace(step, line=part_lines[str(step.file)].get(steps[position][1]))
+        if position > 0 and str(step.file) in part_lines
+        else step
+        for position, step in enumerate(origin.includes)
+    )
+    line = part_lines[str(origin.file)].get(uid) if str(origin.file) in part_lines else origin.line
+    return replace(origin, line=line, includes=includes)
