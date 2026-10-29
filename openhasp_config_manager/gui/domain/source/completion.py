@@ -1,6 +1,7 @@
 """
-What can be completed at the cursor in a file: property names of an object, the variables inside of a template, the placeholders
-of openHASP in a `text` (`%ip%`, see `placeholders.py`), and the path of an `!include`. Qt-free.
+What can be completed at the cursor in a file: property names of an object, the values of a property that takes one of a few
+(`"mode": "dots"`, see `value_choices`), the variables inside of a template, the placeholders of openHASP in a `text` (`%ip%`, see
+`placeholders.py`), and the path of an `!include`. Qt-free.
 """
 
 import re
@@ -22,6 +23,7 @@ from openhasp_config_manager.gui.domain.source.placeholders import (
 )
 from openhasp_config_manager.gui.domain.source.syntax import Language, TokenKind, tokenize_line
 from openhasp_config_manager.gui.domain.style_parts import OBJECT_PARTS, Part, State, style_key
+from openhasp_config_manager.validation.property_values import ValueChoice, value_choices
 
 # the properties of openHASP objects (https://www.openhasp.com/0.7.0/design/objects/), for the keys of an object, and every
 # property that has an explanation
@@ -64,13 +66,15 @@ DIRECTIVE_KEYS = ["for", "vars"]
 @dataclass(frozen=True)
 class CompletionContext:
     # what is being typed
-    kind: str  # "property", "variable", "placeholder" or "include" (the path of an `!include`)
+    kind: str  # "property", "value", "variable", "placeholder" or "include" (the path of an `!include`)
     # the part of the word before the cursor
     prefix: str
     # where the word starts in the line
     start: int
-    # whether the key has its opening quote already (a property is also completed before it is typed)
+    # whether the key has its opening quote already (a property is also completed before it is typed), or the value
     quoted: bool = True
+    # the property of which the value is typed (kind "value")
+    key: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -105,6 +109,9 @@ def completion_context(
     if language == Language.JSONL:
         if (start := _placeholder_start(line)) is not None:
             return CompletionContext("placeholder", line[start:], start)
+        if (match := _VALUE.search(line)) is not None and _has_values(match["key"]) and not _in_comment(line, match.start()):
+            quoted = match["quote"] == '"'
+            return CompletionContext("value", match["prefix"], match.start("prefix") - quoted, quoted, match["key"])
         quote = _open_key_quote(line)
         if quote is not None:
             return CompletionContext("property", line[quote + 1 :], quote + 1)
@@ -148,6 +155,52 @@ def _placeholder_start(line: str) -> Optional[int]:
         return None
     key = tokens[-2]
     return quote + 1 if key.kind == TokenKind.KEY and key.text(line) == f'"{PLACEHOLDER_PROPERTY}"' else None
+
+
+# the start of the value of a property: `"mode": "do` or `"bg_grad_dir": 1`
+_VALUE = re.compile(r'"(?P<key>[A-Za-z_][A-Za-z0-9_]*)"\s*:\s*(?P<quote>"?)(?P<prefix>[A-Za-z0-9_-]*)$')
+
+
+def _in_comment(line: str, column: int) -> bool:
+    return any(token.kind == TokenKind.COMMENT and token.start <= column for token in tokenize_line(line, Language.JSONL))
+
+
+def _has_values(key: str) -> bool:
+    """:return: whether a property takes one of a few values, for any object type"""
+    return any(value_words(object_type, key) for object_type in (None, *TYPE_DOCS))
+
+
+def value_words(object_type: Optional[str], key: str) -> List[str]:
+    """:return: the values to offer for a property, as they are typed (`dots`, `0`, `true`), empty if it takes more than a few"""
+    if key == "obj":
+        return sorted(TYPE_DOCS)
+    return [_word(choice) for choice in value_choices(object_type, key)]
+
+
+def value_choice(object_type: Optional[str], key: str, word: str) -> Optional[ValueChoice]:
+    """:return: the value of a property a word of `value_words` stands for"""
+    if key == "obj" and word in TYPE_DOCS:
+        return ValueChoice(word, f"a `{word}` object")
+    return next((choice for choice in value_choices(object_type, key) if _word(choice) == word), None)
+
+
+def _word(choice: ValueChoice) -> str:
+    return str(choice.value).lower() if isinstance(choice.value, bool) else str(choice.value)
+
+
+def value_insertion(line: str, column: int, context: CompletionContext, word: str, choice: ValueChoice) -> Insertion:
+    """
+    What to write when a value is chosen from the list: it replaces what is typed of it, also after the cursor, with the quotes a
+    text needs (`"dots"`) and without them for a number or true/false, unless the value was started with a quote.
+    """
+    end = column + len(re.match(r"[A-Za-z0-9_-]*", line[column:])[0])
+    if context.quoted or isinstance(choice.value, str):
+        if line[end : end + 1] == '"':
+            end += 1
+        text = f'"{word}"'
+    else:
+        text = word
+    return Insertion(context.start, end, text, context.start + len(text))
 
 
 def placeholder_insertion(line: str, column: int, context: CompletionContext, word: str) -> Insertion:
@@ -234,12 +287,18 @@ def complete(
     properties: Iterable[str] = OBJECT_PROPERTIES,
     variables: Iterable[str] = (),
     paths: Iterable[str] = (),
+    values: Iterable[str] = (),
 ) -> List[str]:
     """
     :param paths: the files an `!include` can name (see `include_targets`)
-    :return: the words that start with the typed prefix, without the word that is already typed completely
+    :param values: the values of the property of which the value is typed (see `value_words`)
+    :return: the words that start with the typed prefix, without the word that is already typed completely (a value stays: the
+        list shows what it means)
     """
     if context.kind == "placeholder":
         return placeholder_candidates(context.prefix)
+    if context.kind == "value":
+        # in the order of their meaning (0, 1, 2 or left, center, right), the ones that start with what is typed
+        return [word for word in values if word.lower().startswith(context.prefix.lower())]
     words = {"property": properties, "variable": variables, "include": paths}[context.kind]
     return sorted({word for word in words if word.startswith(context.prefix) and word != context.prefix})

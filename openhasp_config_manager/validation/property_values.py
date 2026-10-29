@@ -9,7 +9,8 @@ The values openHASP accepts for its properties, from the source of openHASP 0.7.
 
 import difflib
 import re
-from typing import Dict, FrozenSet, List, Optional, Tuple
+from dataclasses import dataclass
+from typing import Dict, FrozenSet, List, Optional, Tuple, Union
 
 # hasp_process_label_long_mode: the mode of a label, and of the label of a button
 LABEL_MODES = ("expand", "break", "dots", "scroll", "loop", "crop")
@@ -274,3 +275,104 @@ def _not_one_of(value, allowed: Tuple) -> str:
     names = [name for name in allowed if isinstance(name, str)]
     close = difflib.get_close_matches(str(value).lower(), names, n=1) if isinstance(value, str) else []
     return f"{text} (did you mean {close[0]!r}?)" if close else text
+
+
+@dataclass(frozen=True)
+class ValueChoice:
+    """A value a property takes, and what it means."""
+
+    value: Union[str, int, bool]
+    meaning: str
+
+
+def _numbered(*meanings: str) -> Tuple[ValueChoice, ...]:
+    return tuple(ValueChoice(number, meaning) for number, meaning in enumerate(meanings))
+
+
+_LABEL_MODE_CHOICES = (
+    ValueChoice("expand", "the object grows to fit the text"),
+    ValueChoice("break", "keep the width, wrap the lines and grow in height"),
+    ValueChoice("dots", "keep the size, wrap the lines and end with ... if the text is too long"),
+    ValueChoice("scroll", "keep the size, scroll the text back and forth (one line)"),
+    ValueChoice("loop", "keep the size, scroll the text around in a circle (one line)"),
+    ValueChoice("crop", "keep the size, cut the text off"),
+)
+_BOOL_CHOICES = (ValueChoice(True, "on"), ValueChoice(False, "off"))
+
+# the values to offer per property: for every object type (None), or for one
+_CHOICES: Dict[Optional[str], Dict[str, Tuple[ValueChoice, ...]]] = {
+    None: {
+        "align": (
+            ValueChoice("left", "align the text to the left"),
+            ValueChoice("center", "center the text"),
+            ValueChoice("right", "align the text to the right"),
+            ValueChoice("auto", "left, or right for right-to-left text"),
+        ),
+        "bg_grad_dir": _numbered("no gradient", "vertical gradient", "horizontal gradient"),
+        "bg_blend_mode": _numbered("normal", "additive", "subtractive"),
+        "text_decor": _numbered("none", "underline", "strikethrough", "underline and strikethrough"),
+        "border_side": (
+            ValueChoice(0, "none"),
+            ValueChoice(1, "bottom"),
+            ValueChoice(2, "top"),
+            ValueChoice(4, "left"),
+            ValueChoice(8, "right"),
+            ValueChoice(3, "top and bottom"),
+            ValueChoice(12, "left and right"),
+            ValueChoice(15, "all sides"),
+        ),
+        # read as a number: true would be 0
+        "clip_corner": _numbered("don't clip the content at the rounded corners", "clip the content at the rounded corners"),
+        **dict.fromkeys(_STYLE_BOOLS, _BOOL_CHOICES),
+    },
+    "label": {"mode": _LABEL_MODE_CHOICES},
+    "btn": {"mode": _LABEL_MODE_CHOICES},
+    "cpicker": {
+        "mode": (
+            ValueChoice("hue", "pick the hue"),
+            ValueChoice("saturation", "pick the saturation"),
+            ValueChoice("value", "pick the brightness"),
+        )
+    },
+    "arc": {"type": _numbered("normal: from the start", "symmetrical: from the middle", "reverse: from the end")},
+    "slider": {"type": _numbered("normal: from the start", "symmetrical: from the middle", "range: two knobs")},
+    "spinner": {
+        "type": _numbered("spinning arc", "fill spin arc", "constant arc"),
+        "direction": _numbered("clockwise", "counterclockwise"),
+    },
+    "dropdown": {"direction": _numbered("open down", "open up", "open to the left", "open to the right")},
+}
+
+
+def value_choices(obj_type: Optional[str], key: str) -> Tuple[ValueChoice, ...]:
+    """
+    :param obj_type: the `obj` of the object, None if it isn't known
+    :param key: a property, also with the digits of its part and state (`bg_grad_dir10`)
+    :return: the values the property takes, empty if it takes more than a few (numbers, colors, texts)
+    """
+    if key in _CHOICES.get(obj_type, {}):
+        return _CHOICES[obj_type][key]
+    match = _SUFFIX.match(key)
+    name = match["name"] if match and match["name"] in _CHOICES[None] else key
+    return _CHOICES[None].get(name, ())
+
+
+def matching_choice(choices: Tuple[ValueChoice, ...], value) -> Optional[ValueChoice]:
+    """
+    :return: the choice a value is, the way the plate reads it: a name ignoring case (`"Dots"`), a number also as text (`"1"`),
+        true/false also as on/off, yes/no or 1/0. None if it is none of them.
+    """
+    for choice in choices:
+        if isinstance(choice.value, bool):
+            if _bool_problems(value) == [] and _is_true(value) == choice.value:
+                return choice
+        elif isinstance(choice.value, int):
+            if not isinstance(value, bool) and str(value).strip().lstrip("-").isdigit() and int(value) == choice.value:
+                return choice
+        elif isinstance(value, str) and value.lower() == choice.value:
+            return choice
+    return None
+
+
+def _is_true(value) -> bool:
+    return str(value).lower() in _TRUE_NAMES

@@ -184,6 +184,26 @@ class TestCompletion(TestBase):
         _type(editor, "left")
         assert editor.toPlainText() == '{"align": "left"}'
 
+    def test_the_values_of_a_property(self, editor):
+        editor.set_text('{"obj": "label", "mode": "')
+        editor.go_to(1, 27)
+        _type(editor, "d")
+        popup = editor.completion.completer.popup()
+        assert popup.isVisible()
+        assert editor.completion.completer.currentCompletion() == "dots"
+        QTest.keyClick(popup, Qt.Key.Key_Return)
+        assert editor.toPlainText() == '{"obj": "label", "mode": "dots"'
+
+    def test_the_values_show_after_a_property_is_chosen(self, editor):
+        editor.set_text('{"obj": "label", ')
+        editor.go_to(1, 18)
+        _type(editor, '"mod')
+        QTest.keyClick(editor.completion.completer.popup(), Qt.Key.Key_Return)
+        assert editor.toPlainText() == '{"obj": "label", "mode": ""'
+        QTest.qWait(50)
+        assert editor.completion.completer.popup().isVisible()
+        assert editor.completion.completer.model().stringList()[:3] == ["expand", "break", "dots"]
+
     def test_nothing_before_the_quote_outside_of_objects(self, editor):
         editor.set_text("")
         _type(editor, "alig")
