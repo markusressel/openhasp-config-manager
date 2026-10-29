@@ -3,6 +3,7 @@ from PyQt6 import QtCore, QtGui
 from typing import Optional
 
 from openhasp_config_manager.gui.domain.button_matrix import matrix_rows
+from openhasp_config_manager.gui.domain.source.placeholders import shown_text
 from openhasp_config_manager.gui.domain.style_parts import Part, State
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.box import box_style, draw_box
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.button import COMPACT_BUTTON_DEFAULTS
@@ -42,7 +43,7 @@ class HaspMessageBoxItem(EditableWidget):
 
     def text_lines(self):
         """:return: the lines of the text, wrapped at the width of the box"""
-        return wrap_lines(self.font, str(self.obj_data.get("text", "")), self.obj_w - 2 * _PADDING)
+        return wrap_lines(self.font, str(shown_text(self.obj_data.get("text", ""))), self.obj_w - 2 * _PADDING)
 
     @property
     def font(self) -> QtGui.QFont:

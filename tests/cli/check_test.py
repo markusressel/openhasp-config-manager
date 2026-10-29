@@ -62,6 +62,23 @@ class TestCheck:
         assert issue.message == "p9b1: text: Unknown variable: 'no_such_variable' is undefined"
         assert issue.line == 1
 
+    def test_texts_that_look_like_placeholders_but_are_not_replaced_are_warnings(self, cfg_root):
+        # GIVEN
+        write_page(
+            cfg_root,
+            '{"page": 9, "id": 1, "obj": "label", "text": "%ip%"}\n'
+            '{"page": 9, "id": 2, "obj": "label", "text": "IP: %ip%"}\n',
+        )
+
+        # WHEN
+        _, issues = _check(cfg_root)
+
+        # THEN
+        [issue] = issues
+        assert issue.severity == Severity.WARNING
+        assert issue.message.startswith("p9b2: text: openHASP replaces %ip% only when it is the whole text")
+        assert issue.line == 2
+
     def test_nested_templates_are_not_unknown_variables(self, cfg_root):
         # GIVEN
         write_page(

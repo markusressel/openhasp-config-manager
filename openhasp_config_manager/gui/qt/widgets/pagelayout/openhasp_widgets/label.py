@@ -1,5 +1,6 @@
 from PyQt6 import QtCore, QtGui, QtWidgets
 
+from openhasp_config_manager.gui.domain.source.placeholders import shown_text
 from openhasp_config_manager.gui.domain.problems import geometry_value
 from openhasp_config_manager.gui.domain.style_parts import Part
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.box import box_style, draw_box, padding, text_color
@@ -17,7 +18,8 @@ from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable
 class HaspLabelItem(EditableWidget):
     @property
     def text(self) -> str:
-        return self.obj_data.get("text", "")
+        # a placeholder like `%ip%` with an example value, like the plate shows it
+        return shown_text(self.obj_data.get("text", ""))
 
     @property
     def text_font(self):

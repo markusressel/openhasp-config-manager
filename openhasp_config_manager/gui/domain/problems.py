@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Dict, List, Tuple
 
+from openhasp_config_manager.gui.domain.source.placeholders import placeholder_problems
 from openhasp_config_manager.validation.property_values import value_problems
 
 
@@ -81,6 +82,9 @@ def find_problems(objects: List[Dict], screen_width: int, screen_height: int) ->
             # the plate takes a value it doesn't know without an error, and does something else with it
             for reason in value_problems(obj, key):
                 result.append(Problem(Severity.WARNING, obj, f"{object_name(obj)}: {key}: {reason}"))
+        # a text that looks like a placeholder of openHASP (`%ip%`), but isn't replaced
+        for reason in placeholder_problems(obj):
+            result.append(Problem(Severity.WARNING, obj, f"{object_name(obj)}: text: {reason}"))
 
         sides = _sides_outside(object_rect(obj), screen_width, screen_height)
         if sides:

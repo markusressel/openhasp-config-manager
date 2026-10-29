@@ -3,6 +3,7 @@ from typing import Dict
 from PyQt6 import QtCore, QtGui, QtWidgets
 
 from openhasp_config_manager.gui.domain.interaction import is_true
+from openhasp_config_manager.gui.domain.source.placeholders import shown_text
 from openhasp_config_manager.gui.domain.style_parts import Part
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.box import box_style, draw_box, text_color
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.default_theme import DEFAULT_RADIUS
@@ -51,7 +52,8 @@ COMPACT_BUTTON_DEFAULTS = {**BUTTON_DEFAULTS, "radius": DEFAULT_RADIUS}
 class HaspButtonItem(EditableWidget):
     @property
     def text(self) -> str:
-        return self.obj_data.get("text", "")
+        # a placeholder like `%ip%` with an example value, like the plate shows it
+        return shown_text(self.obj_data.get("text", ""))
 
     @property
     def toggles(self) -> bool:
