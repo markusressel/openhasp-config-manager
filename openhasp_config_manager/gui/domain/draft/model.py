@@ -226,6 +226,8 @@ class ComponentChanges:
     component: ComponentSource
     # index in the source file -> properties to set
     changes: Dict[int, Dict[str, Any]] = field(default_factory=dict)
+    # index in the source file -> properties to remove (only directives lose keys: a `vars` or `for` without names)
+    removals: Dict[int, Set[str]] = field(default_factory=dict)
     deletions: Set[int] = field(default_factory=set)
     additions: List[Dict[str, Any]] = field(default_factory=list)
     # the source objects the file must have after the changes

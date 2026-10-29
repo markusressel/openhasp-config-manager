@@ -96,7 +96,11 @@ class TestIncludedObjects(TestBase):
         # only the vars and for of the !include can be changed
         assert {field.objectName(): field.text() for field in editor.property_editor.findChildren(QLineEdit)} == {
             "vars.prefix": "",
+            "vars new name": "",
+            "vars new value": "",
             "for.id": "[20, 21]",
+            "for new name": "",
+            "for new value": "",
         }
         texts = [label.text() for label in editor.property_editor.findChildren(QLabel)]
         assert {"p9b21", "label", "common/parts/dot.jsonl:1", "included", "This instance: 21"} <= set(texts)
@@ -185,6 +189,122 @@ class TestIncludedObjects(TestBase):
         assert {21, 22, 23} <= {obj.get("id") for obj in editor.page_objects}
         assert editor.session.source_of(_object(editor, 21))["text"] == "{{ prefix }}{{ id }}"
 
+    def _add_name(self, editor, key: str, name: str, value: str):
+        from PyQt6.QtWidgets import QToolButton
+
+        self._field(editor, f"{key} new name").setText(name)
+        self._field(editor, f"{key} new value").setText(value)
+        editor.property_editor.findChild(QToolButton, f"add {key}").click()
+
+    def _section_error(self, editor, key: str) -> str:
+        from PyQt6.QtWidgets import QLabel
+
+        label = editor.property_editor.findChild(QLabel, f"{key}-error")
+        return label.text() if label.isVisibleTo(editor.property_editor) else ""
+
+    def test_a_name_is_added_to_the_vars_and_undo_removes_it(self, editor):
+        # GIVEN
+        self._select(editor, 21)
+
+        # WHEN: with Enter
+        self._field(editor, "vars new name").setText("unit")
+        self._field(editor, "vars new value").setText("°C")
+        self._field(editor, "vars new value").returnPressed.emit()
+
+        # THEN: a text, and a field for it
+        assert editor.session.directive_of(_object(editor, 21))["vars"] == {"prefix": "", "unit": "°C"}
+        assert self._field(editor, "vars.unit").text() == "°C"
+        assert self._field(editor, "vars new name").text() == ""
+        assert editor.action_undo.text() == "Undo Add vars.unit to the !include"
+
+        # WHEN: JSON is a value
+        self._add_name(editor, "vars", "size", "12")
+
+        # THEN
+        assert editor.session.directive_of(_object(editor, 21))["vars"]["size"] == 12
+
+        # WHEN
+        editor.undo()
+        editor.undo()
+
+        # THEN
+        assert editor.session.directive_of(_object(editor, 21))["vars"] == {"prefix": ""}
+        assert self._field(editor, "vars.unit") is None
+        assert editor.session.is_dirty is False
+
+    @pytest.mark.parametrize(
+        "key, name, value, error",
+        [
+            ("vars", "", "1", "Enter a name."),
+            ("vars", "2nd", "1", "2nd is not a name that templates can use"),
+            ("vars", "a.b", "1", "a.b is not a name that templates can use"),
+            ("vars", "for", "1", "for is not a name that templates can use"),
+            ("vars", "b4", "1", "b4 is the name of an object in the templates."),
+            ("vars", "prefix", "1", "prefix is already in vars."),
+            ("for", "id", "[1]", "id is already in for."),
+            ("for", "prefix", "[1]", "prefix is already in vars."),
+            ("for", "row", "3", "Write a JSON list of values"),
+            ("for", "row", "", "Write a JSON list of values"),
+        ],
+    )
+    def test_an_invalid_name_is_shown_and_not_added(self, editor, key, name, value, error):
+        # GIVEN
+        self._select(editor, 21)
+
+        # WHEN
+        self._add_name(editor, key, name, value)
+
+        # THEN
+        assert self._section_error(editor, key).startswith(error)
+        assert editor.session.is_dirty is False
+
+    def test_a_loop_variable_is_added_and_the_object_stays_selected(self, editor):
+        # GIVEN
+        self._select(editor, 21)
+
+        # WHEN
+        self._add_name(editor, "for", "row", "[0]")
+
+        # THEN: the instances are new, the one of the same id is selected
+        obj = _object(editor, 21)
+        assert editor.session.origin_of(obj).includes[0].loop == {"id": 21, "row": 0}
+        assert [item.obj_data for item in editor.page_preview_widget.selected_items()] == [obj]
+        assert self._field(editor, "for.row").text() == "[0]"
+
+    def test_removing_the_last_var_removes_the_vars_from_the_directive(self, editor):
+        from PyQt6.QtWidgets import QPushButton
+
+        # GIVEN
+        self._select(editor, 21)
+
+        # WHEN
+        editor.property_editor.findChild(QPushButton, "remove vars.prefix").click()
+
+        # THEN: the part has no prefix anymore, it stays as written
+        obj = _object(editor, 21)
+        assert "vars" not in editor.session.directive_of(obj)
+        assert self._field(editor, "vars.prefix") is None
+        assert editor.action_undo.text() == "Undo Remove vars.prefix from the !include"
+
+        # WHEN
+        editor.undo()
+
+        # THEN
+        assert editor.session.directive_of(_object(editor, 21))["vars"] == {"prefix": ""}
+
+    def test_removing_a_name_that_the_part_needs_is_shown_and_not_applied(self, editor):
+        from PyQt6.QtWidgets import QPushButton
+
+        # GIVEN
+        self._select(editor, 21)
+
+        # WHEN: the ids come from the loop
+        editor.property_editor.findChild(QPushButton, "remove for.id").click()
+
+        # THEN
+        assert self._section_error(editor, "for") != ""
+        assert editor.session.is_dirty is False
+
     def test_the_live_preview_deletes_the_removed_instances(self, editor, plate):
         # GIVEN
         editor.plate.action_live_preview.setChecked(True)
@@ -217,6 +337,7 @@ class TestNestedVars(TestBase):
         obj = _object(editor, 30)
         editor.page_preview_widget.select_object(obj)
         fields = {field.objectName(): field for field in editor.property_editor.findChildren(QLineEdit)}
+        fields = {name: field for name, field in fields.items() if "new" not in name}
         assert {name: field.text() for name, field in fields.items()} == {"vars.bar.id": "30", "vars.bar.text": "2:35"}
 
         # WHEN: the text stays a text, also when it looks like a number
@@ -231,6 +352,19 @@ class TestNestedVars(TestBase):
 
         # THEN
         assert editor.session.directive_of(_object(editor, 31))["vars"] == {"bar": {"id": 31, "text": "12"}}
+
+    def test_a_value_inside_of_a_mapping_is_removed(self, editor):
+        from PyQt6.QtWidgets import QPushButton
+
+        # GIVEN
+        editor.set_edit_mode(True)
+        editor.page_preview_widget.select_object(_object(editor, 30))
+
+        # WHEN
+        editor.property_editor.findChild(QPushButton, "remove vars.bar.text").click()
+
+        # THEN
+        assert editor.session.directive_of(_object(editor, 30))["vars"] == {"bar": {"id": 30}}
 
 
 class TestSharedInclude(TestBase):

@@ -228,6 +228,7 @@ def plan_save(session: PlateSession) -> List[FileChange]:
             changes=component_changes.changes,
             deletions=component_changes.deletions,
             additions=component_changes.additions,
+            removals=component_changes.removals,
         )
         verify_jsonl_source(new_content, component_changes.expected_sources)
         result.append(FileChange(path=component.path, content=new_content, is_common=component.is_common))
