@@ -131,7 +131,7 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
   (`external_changes`: clean tabs reload, tabs with changes show a banner). Saving a tab goes through `_on_source_saved`, which treats
   it like an external change for the draft (reload, or the *Reload from disk* banner if the draft has changes). `SourceEditorSync`
   (`gui/qt/window/source_sync.py`) connects the editor with the draft: selecting an object shows its line, the cursor selects its object,
-  the problems of the page are marked in their files, open tabs are remembered in `UiSession.open_files`. Tests of the editor go into `tests/gui/code_editor_test.py` or `source_editor_test.py`.
+  the problems of the page are marked in their files, open tabs are remembered in `UiSession.open_files`. Tests of the editor go into `tests/gui/code_editor/` or `tests/gui/source_editor_test.py`.
 - **State file**: the GUI writes `<config dir>/.openhasp-config-manager/gui-state.json` for tools that edit the config files next to it
   (what is open, the text editor tabs, selection, draft, problems, load errors, connection). The format is documented in `README` in `gui/domain/gui_state.py`
   (written into that folder). `MainWindow._collect_gui_state` builds it, `GuiStatePublisher` writes it debounced. When you add state
