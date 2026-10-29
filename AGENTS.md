@@ -80,6 +80,12 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
   finished edit, undo and redo to its listeners (`DraftChange`); `PageLayoutEditorWidget._on_draft_changed` updates the preview,
   the JSONL, the properties, the dirty state, the undo actions and Live preview from it. An edit operation only changes the
   session, it doesn't refresh anything itself.
+- **Tabs** (design in `docs/tabs-and-shared-drafts.md`): one tab per open device above the preview (`DeviceTabs`,
+  `gui/qt/window/device_tabs.py`), each with its own `PageLayoutEditorWidget` and what was loaded of the device (`DeviceTab`), so
+  switching tabs loads nothing. `MainWindow.page_layout_editor_widget` is the editor of the active tab; the window reacts to the
+  signals of an editor only while its tab is active, and points the panels, menus, toolbar, connection and log at the active tab
+  (`_on_tab_activated`). Closing a tab keeps its drafts (`MainWindow.sessions`). Files that change while a tab is in the
+  background are applied when it is shown again (`changed_files`).
 - **Undo/redo**: every change through the session is a step of its undo history (`gui/domain/draft/edit_history.py`, whole states of
   the sources, so undo doesn't depend on how an edit was made). Group the changes of one user action with
   `with session.edit("Move 3 objects"):`, and pass a `merge_key` for actions repeated in a row (typing into a property, nudging). An

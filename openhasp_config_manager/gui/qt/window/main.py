@@ -26,16 +26,18 @@ from openhasp_config_manager.gui.domain.gui_state import (
     GuiStateFile,
     now,
 )
+from openhasp_config_manager.gui.domain.draft.page_objects import get_navigable_page_indices
 from openhasp_config_manager.gui.domain.draft.session import PlateSession
 from openhasp_config_manager.gui.qt.components import ThemedIcons
 from openhasp_config_manager.gui.qt.config_watcher import ConfigWatcher
 from openhasp_config_manager.gui.qt.preview_image import png_bytes, render_plate
 from openhasp_config_manager.gui.qt.window.gui_state_publisher import GuiStatePublisher
+from openhasp_config_manager.gui.qt.window.device_tabs import DeviceTab, DeviceTabs
 from openhasp_config_manager.gui.qt.window.draft_actions import DraftActions
 from openhasp_config_manager.gui.qt.window.file_actions import FileActions
 from openhasp_config_manager.gui.qt.window.gui_state_collector import collect_gui_state
 from openhasp_config_manager.gui.qt.window.log_colors import LogColors
-from openhasp_config_manager.gui.qt.window.menus import create_menus
+from openhasp_config_manager.gui.qt.window.menus import create_menus, show_editor_actions
 from openhasp_config_manager.gui.qt.window.source_sync import SourceEditorSync
 from openhasp_config_manager.gui.qt.window.status_bar import StatusBarController
 from openhasp_config_manager.gui.qt.connection import ConnectionController
@@ -69,20 +71,10 @@ class MainWindow(QMainWindow):
         self.cfg_root = Path(config_manager.cfg_root).resolve()
         self.devices: List[Device] = []
         # one draft per (device name, cmd component): the Device objects are created anew on every reload
+        # they stay when the tab of the device is closed
         self.sessions: Dict[Tuple[str, str], PlateSession] = {}
-        self.device: Optional[Device] = None
-        self._selected_name: Optional[str] = None
-        # the (device name, cmd component) of the draft in the editor
-        self.session_key: Optional[Tuple[str, str]] = None
         # the page to show after a draft was reloaded (saved or reverted), per session key
         self._page_after_reload: Dict[Tuple[str, str], int] = {}
-        # the draft of a part that no page of the device includes, shown on its own instead of the pages (see
-        # `edit_part_alone`), and the page of the device to go back to
-        self.part_alone: Optional[PlateSession] = None
-        self._part_alone_path: Optional[Path] = None
-        self._page_before_part_alone: Optional[int] = None
-        # what the editor shows of the device (see `select_device`)
-        self._pages_data: Optional[OpenHaspDevicePagesData] = None
         self._discard_drafts_on_close = False
         # what the app wrote itself (Save), to tell its own file changes from those of others
         self.own_writes = OwnWrites()
@@ -125,7 +117,6 @@ class MainWindow(QMainWindow):
         self._restore_window_state()
         # the editor starts in interact mode, which has nothing to show in the properties
         self.properties_dock.hide()
-        self.page_layout_editor_widget.action_edit_mode.toggled.connect(self._on_edit_mode_toggled)
         self.load_plates()
         self._start_watching_config_dir()
         self.source_sync.restore_open_files()
@@ -134,25 +125,25 @@ class MainWindow(QMainWindow):
     # --- layout ---
 
     def create_basic_layout(self):
-        self.page_layout_editor_widget = PageLayoutEditorWidget(status=self.status, ui_session=self.ui_session)
-        self.page_layout_editor_widget.pageChanged.connect(lambda index, count: self.status_bar.set_page(index, count))
-        self.page_layout_editor_widget.dirtyChanged.connect(lambda dirty: self.status_bar.set_dirty(dirty))
-        self.page_layout_editor_widget.dirtyChanged.connect(lambda _: self._update_draft_actions())
-        self.page_layout_editor_widget.stateChanged.connect(self._state_publisher.request)
-        self.page_layout_editor_widget.dirtyChanged.connect(lambda _: self._state_publisher.request())
-        self.page_layout_editor_widget.pageChanged.connect(lambda *_: self._state_publisher.request())
-        self.addToolBar(self.page_layout_editor_widget.toolbar)
+        # the editors of the tabs show their properties and JSONL in these docks, each the one of the active tab
+        self.properties_stack = QStackedWidget()
+        self.page_jsonl_stack = QStackedWidget()
+        # a placeholder (no device, loading, errors) or the editor of the active tab
+        self.message_panel = MessagePanel()
+        self.center_stack = QStackedWidget()
+        self.center_stack.addWidget(self.message_panel)
+        # one tab per open device, each with its own editor
+        self.device_tabs = DeviceTabs(self._create_editor, parent=self)
+        self.device_tabs.activated.connect(self._on_tab_activated)
+        self.device_tabs.closeRequested.connect(self.close_tab)
+        self._toolbar = self.page_layout_editor_widget.toolbar
+        self.addToolBar(self._toolbar)
 
         # all panels are docks, so each can be moved: the central widget is only there for Qt
         central = QWidget()
         central.hide()
         self.setCentralWidget(central)
 
-        # a placeholder (no device, loading, errors) or the editor with the render preview
-        self.message_panel = MessagePanel()
-        self.center_stack = QStackedWidget()
-        self.center_stack.addWidget(self.message_panel)
-        self.center_stack.addWidget(self.page_layout_editor_widget)
         # files changed on disk while the draft has changes of its own
         self.disk_changes_banner = DiskConflictBanner(
             reload_tooltip="Discard the changes of the draft and load the files as they are on disk now",
@@ -165,6 +156,7 @@ class MainWindow(QMainWindow):
         center_layout = QVBoxLayout(center)
         center_layout.setContentsMargins(0, 0, 0, 0)
         center_layout.setSpacing(0)
+        center_layout.addWidget(self.device_tabs.bar)
         center_layout.addWidget(self.disk_changes_banner)
         center_layout.addWidget(self.center_stack, 1)
 
@@ -173,13 +165,10 @@ class MainWindow(QMainWindow):
         self.device_list_widget.deviceSelected.connect(self.on_device_selected)
         self.device_list_widget.reloadClicked.connect(self.load_plates)
 
-        # the files of the selected device, and which of them new objects go into
-        editor = self.page_layout_editor_widget
+        # the files of the device of the active tab, and which of them new objects go into
         self.file_tree_widget = FileTreeWidget()
-        self.file_tree_widget.highlightRequested.connect(editor.highlight_component)
-        self.file_tree_widget.targetRequested.connect(editor.set_target_component)
-        editor.selectedObjectComponentChanged.connect(self.file_tree_widget.reveal)
-        editor.fileStateChanged.connect(self._update_file_tree_state)
+        self.file_tree_widget.highlightRequested.connect(lambda key: self.page_layout_editor_widget.highlight_component(key))
+        self.file_tree_widget.targetRequested.connect(lambda key: self.page_layout_editor_widget.set_target_component(key))
 
         self.sidebar = QSplitter(Qt.Orientation.Vertical)
         self.sidebar.addWidget(self.device_list_widget)
@@ -196,7 +185,7 @@ class MainWindow(QMainWindow):
         self.splitDockWidget(self.devices_dock, self.preview_dock, Qt.Orientation.Horizontal)
 
         # right: the properties of the selected object
-        self.properties_dock = self._add_dock("Properties", "properties_dock", self.page_layout_editor_widget.property_editor)
+        self.properties_dock = self._add_dock("Properties", "properties_dock", self.properties_stack)
         self.splitDockWidget(self.preview_dock, self.properties_dock, Qt.Orientation.Horizontal)
 
         # below the preview: the files as text (source), and the JSONL of the page (rendered)
@@ -219,16 +208,14 @@ class MainWindow(QMainWindow):
             parent=self,
         )
         self.file_tree_widget.openRequested.connect(self.source_sync.open_file)
-        self.file_tree_widget.editPartRequested.connect(self.page_layout_editor_widget.edit_part)
+        self.file_tree_widget.editPartRequested.connect(lambda part: self.page_layout_editor_widget.edit_part(part))
         self.source_editor.set_part_check(self.file_tree_widget.is_part_file)
-        self.source_editor.editPartRequested.connect(self.page_layout_editor_widget.edit_part)
-        self.page_layout_editor_widget.editPartAloneRequested.connect(self.edit_part_alone)
-        self.page_layout_editor_widget.partAloneDone.connect(self.close_part_alone)
+        self.source_editor.editPartRequested.connect(lambda part: self.page_layout_editor_widget.edit_part(part))
         self.jsonl_dock = self._add_dock("Code", "jsonl_dock", self.code_view)
         self.splitDockWidget(self.preview_dock, self.jsonl_dock, Qt.Orientation.Vertical)
 
         # the JSONL of the page in the preview: the objects of all files that contribute to it, the way the plate gets them
-        self.page_jsonl_dock = self._add_dock("Page JSONL", "page_jsonl_dock", self.page_layout_editor_widget.jsonl_preview)
+        self.page_jsonl_dock = self._add_dock("Page JSONL", "page_jsonl_dock", self.page_jsonl_stack)
         self.tabifyDockWidget(self.jsonl_dock, self.page_jsonl_dock)
 
         # the log of the plate, next to the code. Hidden at first: it holds the only telnet connection the plate allows while shown.
@@ -247,9 +234,11 @@ class MainWindow(QMainWindow):
         self.logs_dock.visibilityChanged.connect(self.log_stream.set_active)
         self._size_docks()
 
-        self.status_bar = StatusBarController(self, self.status, on_resync=self.page_layout_editor_widget.resync_page)
+        self.status_bar = StatusBarController(
+            self, self.status, on_resync=lambda index: self.page_layout_editor_widget.resync_page(index)
+        )
 
-        # the connection to the selected plate
+        # the connection to the plate of the active tab
         self.connection = ConnectionController(self)
         self.connection.changed.connect(self.status_bar.set_connection)
         self.connection.changed.connect(lambda _: self._state_publisher.request())
@@ -260,12 +249,66 @@ class MainWindow(QMainWindow):
             )
         )
         self.status_bar.set_connection(self.connection.status)
-        self.page_layout_editor_widget.plate.pageOutOfSync.connect(self.connection.page_out_of_sync)
-        self.page_layout_editor_widget.plate.pageDeployed.connect(self.connection.page_deployed)
-        self.page_layout_editor_widget.plate.plateRestored.connect(self.connection.plate_restored)
-        for busy in [self.page_layout_editor_widget.busy, self.page_layout_editor_widget.device_controls.busy]:
-            busy.changed.connect(lambda _: self._update_sending())
-            busy.changed.connect(lambda _: self._update_draft_actions())
+
+    @property
+    def page_layout_editor_widget(self) -> PageLayoutEditorWidget:
+        """The editor of the active tab (one without a draft if there is no tab)."""
+        return self.device_tabs.editor
+
+    def _create_editor(self) -> PageLayoutEditorWidget:
+        """An editor for a tab. What it reports reaches the window only while its tab is the active one."""
+        editor = PageLayoutEditorWidget(status=self.status, ui_session=self.ui_session)
+
+        def active(slot):
+            return lambda *args: slot(*args) if editor is self.page_layout_editor_widget else None
+
+        editor.pageChanged.connect(active(lambda index, count: self.status_bar.set_page(index, count)))
+        editor.dirtyChanged.connect(active(lambda dirty: self.status_bar.set_dirty(dirty)))
+        editor.dirtyChanged.connect(active(lambda _: self._update_draft_actions()))
+        editor.dirtyChanged.connect(lambda _: self._update_tab_title(self.device_tabs.tab_of(editor)))
+        editor.stateChanged.connect(active(self._state_publisher.request))
+        editor.dirtyChanged.connect(active(lambda _: self._state_publisher.request()))
+        editor.pageChanged.connect(active(lambda *_: self._state_publisher.request()))
+        editor.selectedObjectComponentChanged.connect(active(lambda key: self.file_tree_widget.reveal(key)))
+        editor.fileStateChanged.connect(active(self._update_file_tree_state))
+        editor.editPartAloneRequested.connect(active(self.edit_part_alone))
+        editor.partAloneDone.connect(active(self.close_part_alone))
+        editor.action_edit_mode.toggled.connect(active(self._on_edit_mode_toggled))
+        editor.plate.pageOutOfSync.connect(active(lambda *args: self.connection.page_out_of_sync(*args)))
+        editor.plate.pageDeployed.connect(active(lambda *args: self.connection.page_deployed(*args)))
+        editor.plate.plateRestored.connect(active(lambda *args: self.connection.plate_restored(*args)))
+        for busy in [editor.busy, editor.device_controls.busy]:
+            busy.changed.connect(active(lambda _: self._update_sending()))
+            busy.changed.connect(active(lambda _: self._update_draft_actions()))
+        self.center_stack.addWidget(editor)
+        self.properties_stack.addWidget(editor.property_editor)
+        self.page_jsonl_stack.addWidget(editor.jsonl_preview)
+        return editor
+
+    def _delete_editor(self, editor: PageLayoutEditorWidget):
+        """The editor of a closed tab."""
+        for stack, widget in [
+            (self.center_stack, editor),
+            (self.properties_stack, editor.property_editor),
+            (self.page_jsonl_stack, editor.jsonl_preview),
+        ]:
+            stack.removeWidget(widget)
+            widget.deleteLater()
+        editor.toolbar.deleteLater()
+
+    def _show_editor(self, editor: PageLayoutEditorWidget):
+        """The toolbar, the menus and the docks show those of the editor of the active tab."""
+        if self._toolbar is not editor.toolbar:
+            self.removeToolBar(self._toolbar)
+            self._toolbar = editor.toolbar
+            self.addToolBar(self._toolbar)
+            self._toolbar.show()
+        show_editor_actions(self, editor)
+        self.properties_stack.setCurrentWidget(editor.property_editor)
+        self.page_jsonl_stack.setCurrentWidget(editor.jsonl_preview)
+        self.properties_dock.setVisible(editor.edit_mode)
+        self.source_sync.set_page_editor(editor)
+        self._update_sending()
 
     def _on_edit_mode_toggled(self, enabled: bool):
         # the properties can only be changed in edit mode
@@ -301,12 +344,13 @@ class MainWindow(QMainWindow):
         ThemedIcons.refresh()
         self.status_bar.refresh_theme()
         self.file_tree_widget.refresh_theme()
-        self.page_layout_editor_widget.jsonl_preview.refresh_theme()
         self.file_rendered.view.refresh_theme()
         self.source_editor.refresh_theme()
         self.log_view.refresh_theme()
-        self.page_layout_editor_widget.problems_panel.refresh_theme()
-        self.page_layout_editor_widget.page_preview_widget.viewport().update()
+        for editor in self.device_tabs.editors:
+            editor.jsonl_preview.refresh_theme()
+            editor.problems_panel.refresh_theme()
+            editor.page_preview_widget.viewport().update()
 
     # --- window state ---
 
@@ -354,8 +398,9 @@ class MainWindow(QMainWindow):
 
     def _dirty_draft_names(self) -> List[str]:
         names = [f"{device} ({cmd})" for (device, cmd), session in self.sessions.items() if session.is_dirty]
-        if self.part_alone is not None and self.part_alone.is_dirty:
-            names.append(f"{self._part_alone_path.name} (part)")
+        for tab in self.device_tabs.tabs:
+            if tab.part_alone is not None and tab.part_alone.is_dirty:
+                names.append(f"{tab.part_alone_path.name} (part)")
         return names
 
     def closeEvent(self, event):
@@ -411,7 +456,10 @@ class MainWindow(QMainWindow):
             self.center_stack.setCurrentWidget(self.message_panel)
             return
         restore, self._restore_selection = self._restore_selection, False
-        if self.device is not None:
+        if self.device_tabs.active is not None:
+            if self.device is None:
+                # loading or failed: what the tab showed before the devices were loaded
+                self._show_tab(self.device_tabs.active)
             return
         name = self.ui_session.session.selected_device if restore else None
         if name is not None and any(device.name == name for device in devices):
@@ -434,6 +482,18 @@ class MainWindow(QMainWindow):
         self._state_publisher.request()
         self.device_list_widget.set_devices(self.devices, selected=self._selected_name)
 
+    @property
+    def device(self) -> Optional[Device]:
+        """The device of the active tab, None while it loads or if it couldn't be loaded."""
+        tab = self.device_tabs.active
+        return None if tab is None else tab.device
+
+    @property
+    def _selected_name(self) -> Optional[str]:
+        """The name of the device of the active tab."""
+        tab = self.device_tabs.active
+        return None if tab is None else tab.name
+
     def _show_no_device_selected(self):
         self.message_panel.show_message(
             icon="gesture-tap",
@@ -443,57 +503,150 @@ class MainWindow(QMainWindow):
         self.center_stack.setCurrentWidget(self.message_panel)
 
     def on_device_selected(self, name: str):
-        """Reload the devices (to reflect any changes on disk) and load the pages of the selected one in the background."""
-        if self.part_alone is not None and self.device is not None and self.device.name != name:
-            # a part on its own belongs to the device it is rendered for
-            if not self.close_part_alone():
-                self.device_list_widget.set_devices(self.devices, selected=self.device.name)
-                return
-        self._selected_name = name
-        self.ui_session.session.selected_device = name
-        self.ui_session.save()
-        if self.device is None or self.device.name != name:
-            # another device: start without a connection and in interaction mode, not editing its objects by accident
-            self.connection.set_device(None)
-            self.log_stream.set_device(None)
-            self.page_layout_editor_widget.set_edit_mode(False)
-            self.page_layout_editor_widget.plate.stop_live_preview()
-        self.device = None
-        self.page_layout_editor_widget.device_controls.set_device(None)
-        self.page_layout_editor_widget.clear()
-        self.file_tree_widget.clear()
-        self._update_draft_actions()
-        self.status_bar.set_device(name)
-        self.status_bar.set_page(None)
-        self.status_bar.set_dirty(False)
-        self._state_publisher.request()
-        self.message_panel.show_loading(f"Loading {name}…", "Rendering the templates of the device's pages")
-        self.center_stack.setCurrentWidget(self.message_panel)
+        """
+        Focus the tab of the device, or open one and load the pages of the device in the background. The device of the active
+        tab is loaded again (to reflect any changes on disk).
+        """
+        tab = self.device_tabs.find(name)
+        if tab is not None and tab is not self.device_tabs.active:
+            self.device_tabs.activate(tab)
+            return
+        if tab is None:
+            tab = self.device_tabs.open(name)
+            # a new tab starts in interaction mode, not editing its objects by accident
+            tab.editor.set_edit_mode(False)
+        self._load_device(tab)
+
+    def _load_device(self, tab: DeviceTab):
+        """Load the pages of the device of a tab in the background, showing that it loads."""
+        name = tab.name
+        tab.device = None
+        tab.loaded = None
+        tab.load_generation += 1
+        generation = tab.load_generation
+        tab.editor.device_controls.set_device(None)
+        tab.editor.clear()
+        tab.message = lambda panel: panel.show_loading(f"Loading {name}…", "Rendering the templates of the device's pages")
+        if tab is self.device_tabs.active:
+            self._show_tab(tab, keep_connection=True)
+
+        def __current() -> bool:
+            # not if the tab was closed or loads again in the meantime
+            return tab in self.device_tabs.tabs and generation == tab.load_generation
 
         async def __load():
             return await asyncio.to_thread(load_device, self.config_manager, name)
 
         def __on_success(loaded: LoadedDevice):
-            if name != self._selected_name:
-                return  # another device was selected in the meantime
+            if not __current():
+                return
             self._set_devices(loaded.devices)
             try:
-                self.select_device(loaded)
+                self.select_device(loaded, tab=tab)
             except Exception as ex:
                 LOGGER.exception(f"Could not load {name}")
                 __on_error(ex)
 
         def __on_error(ex: Exception):
-            if name != self._selected_name:
+            if not __current():
                 return
             self._set_load_error(name, ex)
-            self.message_panel.show_error(
+            tab.message = lambda panel: panel.show_error(
                 title=f"Could not load {name}",
                 error=error_text(ex),
-                retry=lambda: self.on_device_selected(name),
+                retry=lambda: self._load_device(tab),
             )
+            if tab is self.device_tabs.active:
+                self._show_tab(tab, keep_connection=True)
 
         run_async(__load(), on_success=__on_success, on_error=__on_error)
+
+    # --- tabs ---
+
+    def _on_tab_activated(self, tab: Optional[DeviceTab], previous: Optional[DeviceTab]):
+        """Another tab is the active one: the panels, the connection and the log follow it, nothing is loaded again."""
+        if previous is not None:
+            # like selecting another device: Live preview and the connection stay with the active tab (for now)
+            previous.editor.plate.stop_live_preview()
+            previous.editor.device_controls.set_device(None)
+            if not self.disk_changes_banner.isHidden():
+                # offered again when the tab is shown again
+                previous.changed_files |= {self.cfg_root / path for path in self.disk_changes}
+        self.disk_changes_banner.hide()
+        self._show_editor(self.page_layout_editor_widget)
+        self._show_tab(tab)
+        if tab is not None and tab.device is not None and tab.changed_files:
+            changed, tab.changed_files = tab.changed_files, set()
+            self._apply_changes_to_draft(changed)
+
+    def _show_tab(self, tab: Optional[DeviceTab], keep_connection: bool = False):
+        """
+        Point the panels at the device of a tab: the Files tree, the status bar, the connection, the log.
+        :param keep_connection: the device of the tab loads again: the connection and the log stay while it loads
+        """
+        editor = self.page_layout_editor_widget
+        device = None if tab is None else tab.device
+        if device is not None or not keep_connection:
+            self.connection.set_device(device)
+            self.log_stream.set_device(device)
+        editor.device_controls.set_device(device)
+        self.status_bar.set_device(None if tab is None else tab.name)
+        if device is None:
+            self.file_tree_widget.clear()
+            self.status_bar.set_page(None)
+            self.status_bar.set_dirty(False)
+            if tab is None:
+                self._show_no_device_selected()
+            else:
+                if tab.message is not None:
+                    tab.message(self.message_panel)
+                self.center_stack.setCurrentWidget(self.message_panel)
+        else:
+            loaded = tab.loaded
+            self.file_tree_widget.set_files(
+                loaded.files,
+                components={component.path: component.key for component in loaded.components},
+                used=loaded.used_files,
+                used_variables=loaded.used_variable_files,
+                includers=loaded.includers,
+                common_path=Path(self.config_manager.cfg_root, COMMON_FOLDER_NAME),
+            )
+            self._update_file_tree_state()
+            self.source_editor.set_hints(loaded.unused_variables)
+            self.source_sync.set_variable_usages(loaded.variable_usages)
+            self.status_bar.set_page(editor.current_index, len(get_navigable_page_indices(editor.working_objects)))
+            self.status_bar.set_dirty(self.session.is_dirty)
+            self.center_stack.setCurrentWidget(editor)
+        self.ui_session.session.selected_device = None if tab is None else tab.name
+        self.ui_session.save()
+        self.device_list_widget.set_devices(self.devices, selected=self._selected_name)
+        self._update_draft_actions()
+        self._state_publisher.request()
+
+    def close_tab(self, tab: DeviceTab) -> bool:
+        """
+        Close the tab of a device. Its drafts stay (`sessions`), except a part on its own, which asks to be saved first.
+        :return: whether it was closed
+        """
+        if tab.part_alone is not None:
+            self.device_tabs.activate(tab)
+            if not self.close_part_alone():
+                return False
+        tab.editor.plate.stop_live_preview()
+        tab.editor.device_controls.set_device(None)
+        tab.editor.clear()
+        editor = self.device_tabs.close(tab)
+        if editor is not None:
+            self._delete_editor(editor)
+        return True
+
+    def _update_tab_title(self, tab: Optional[DeviceTab]):
+        """The title of a tab marks unsaved changes of its drafts."""
+        if tab is None:
+            return
+        session = self.sessions.get(tab.session_key)
+        dirty = (session is not None and session.is_dirty) or (tab.part_alone is not None and tab.part_alone.is_dirty)
+        self.device_tabs.set_dirty(tab, dirty)
 
     # --- changes on disk ---
 
@@ -514,11 +667,24 @@ class MainWindow(QMainWindow):
             return
         LOGGER.info(f"Changed on disk: {', '.join(sorted(str(path) for path in paths))}")
         self.source_editor.external_changes(paths)
+        self.mark_changed_in_background_tabs(paths)
         self._apply_changes_to_draft(paths)
 
     def reload_files(self, paths: Set[Path]):
         """Files changed by the app itself (e.g. a file operation of the Files tree): the pages and the files follow them."""
-        self._apply_changes_to_draft({path.resolve() for path in paths})
+        paths = {path.resolve() for path in paths}
+        self.mark_changed_in_background_tabs(paths)
+        self._apply_changes_to_draft(paths)
+
+    def mark_changed_in_background_tabs(self, paths: Set[Path]):
+        """Files changed that the devices of tabs in the background may show: they follow them when they are shown again."""
+        for tab in self.device_tabs.tabs:
+            if tab is not self.device_tabs.active and tab.device is not None:
+                tab.changed_files |= {path for path in paths if self._affects(tab.device, path)}
+
+    def _affects(self, device: Device, path: Path) -> bool:
+        """:return: whether a changed file can change the pages of a device: a file of it, or one outside of the devices"""
+        return path.is_relative_to(device.path.resolve()) or not path.is_relative_to(self.cfg_root / DEVICES_FOLDER_NAME)
 
     def _apply_changes_to_draft(self, paths: Set[Path]):
         """Files changed that the pages are made of: reload them, or offer to if the draft has changes of its own."""
@@ -542,15 +708,13 @@ class MainWindow(QMainWindow):
         """A file was saved in the text editor: the pages follow it, like after a change on disk by someone else."""
         self.own_writes.written(path.resolve(), text)
         self.status.succeeded.emit(f"Saved {path.name}")
+        self.mark_changed_in_background_tabs({path.resolve()})
         if self.device is not None:
             self._apply_changes_to_draft({path.resolve()})
 
     def _show_disk_changes(self, paths: Set[Path]):
         """Offer to reload, if the changes can affect the device of the draft."""
-        devices_dir = self.cfg_root / DEVICES_FOLDER_NAME
-        affecting = sorted(
-            path for path in paths if path.is_relative_to(self.device.path.resolve()) or not path.is_relative_to(devices_dir)
-        )
+        affecting = sorted(path for path in paths if self._affects(self.device, path))
         if affecting:
             self.disk_changes = [str(path.relative_to(self.cfg_root)) for path in affecting]
             self.disk_changes_banner.show_message(
@@ -559,11 +723,13 @@ class MainWindow(QMainWindow):
 
     def _reload_changed_files(self, paths: Set[Path]):
         """Load the device again, in the background and without leaving the editor: the page and zoom stay."""
-        name = self._selected_name
+        tab = self.device_tabs.active
+        name = tab.name
         self._reloading_changes = paths
         self._changes_during_reload = set()
         self._page_after_reload[self.session_key] = self.page_layout_editor_widget.current_index
         key = self.session_key
+        generation = tab.load_generation
 
         def __finish():
             more, self._reloading_changes, self._changes_during_reload = self._changes_during_reload, None, set()
@@ -576,9 +742,14 @@ class MainWindow(QMainWindow):
         def __on_success(loaded: LoadedDevice):
             changes = self._reloading_changes
             __finish()
-            if name != self._selected_name or self.device is None:
+            if tab not in self.device_tabs.tabs or generation != tab.load_generation or tab.device is None:
                 self._page_after_reload.pop(key, None)
-                return  # another device was selected in the meantime
+                return  # closed or loaded again in the meantime
+            if tab is not self.device_tabs.active:
+                # another tab was chosen in the meantime: this one follows the files when it is shown again
+                self._page_after_reload.pop(key, None)
+                tab.changed_files |= changes
+                return
             if self.session.is_dirty:
                 # edited while loading: keep the draft
                 self._page_after_reload.pop(key, None)
@@ -586,7 +757,7 @@ class MainWindow(QMainWindow):
                 return
             self._set_devices(loaded.devices)
             try:
-                self.select_device(loaded, keep_view=True)
+                self.select_device(loaded, keep_view=True, tab=tab)
             except Exception as ex:
                 LOGGER.exception(f"Could not reload {name}")
                 __show_error(ex)
@@ -620,10 +791,23 @@ class MainWindow(QMainWindow):
 
     @property
     def session(self) -> Optional[PlateSession]:
-        """The draft in the editor: of the pages of the device, or of a part on its own (see `edit_part_alone`)."""
-        if self.device is None:
+        """The draft in the active tab: of the pages of the device, or of a part on its own (see `edit_part_alone`)."""
+        tab = self.device_tabs.active
+        if tab is None or tab.device is None:
             return None
-        return self.part_alone or self.sessions.get(self.session_key)
+        return tab.part_alone or self.sessions.get(tab.session_key)
+
+    @property
+    def session_key(self) -> Optional[Tuple[str, str]]:
+        """The (device name, cmd component) of the draft of the pages in the active tab."""
+        tab = self.device_tabs.active
+        return None if tab is None else tab.session_key
+
+    @property
+    def part_alone(self) -> Optional[PlateSession]:
+        """The draft of a part on its own in the active tab, if it shows one (see `edit_part_alone`)."""
+        tab = self.device_tabs.active
+        return None if tab is None else tab.part_alone
 
     def _update_draft_actions(self):
         dirty = self.session is not None and self.session.is_dirty
@@ -632,23 +816,26 @@ class MainWindow(QMainWindow):
         self.action_deploy.setEnabled(self.device is not None and not self.page_layout_editor_widget.busy.busy)
 
     def reload_draft(self):
-        """Drop the draft of the current device (or of the part on its own) and load it from disk, on the same page."""
+        """Drop the draft of the active tab (or of the part on its own) and load it from disk, on the same page."""
+        tab = self.device_tabs.active
         self.disk_changes_banner.hide()
-        if self.part_alone is not None:
-            alone = self._load_part_alone(self._part_alone_path)
+        if tab.part_alone is not None:
+            alone = self._load_part_alone(tab, tab.part_alone_path)
             if alone is not None:
-                self._show_part_alone(alone)
+                self._show_part_alone(tab, alone)
             return
-        self.sessions.pop(self.session_key)
-        self._page_after_reload[self.session_key] = self.page_layout_editor_widget.current_index
-        self.on_device_selected(self.device.name)
+        self.sessions.pop(tab.session_key)
+        self._page_after_reload[tab.session_key] = tab.editor.current_index
+        self._load_device(tab)
 
-    def select_device(self, loaded: LoadedDevice, keep_view: bool = False):
+    def select_device(self, loaded: LoadedDevice, keep_view: bool = False, tab: Optional[DeviceTab] = None):
         """
-        Raises if the pages can't be rendered, before anything changed.
+        Show a loaded device in its tab. Raises if the pages can't be rendered, before anything changed.
 
         :param keep_view: the same device is loaded again: don't change the zoom
+        :param tab: the tab of the device, the active one by default
         """
+        tab = tab or self.device_tabs.active
         pages_data = OpenHaspDevicePagesData(
             device=loaded.device,
             name=loaded.cmd_component.name,
@@ -662,76 +849,66 @@ class MainWindow(QMainWindow):
             session.load(loaded.components, loaded.renderer)
         session.device = loaded.device
         self.sessions[key] = session
-        self.device = loaded.device
+        tab.device = loaded.device
+        tab.loaded = loaded
+        tab.message = None
         self.load_error = None
-        self.session_key = key
-        self.file_tree_widget.set_files(
-            loaded.files,
-            components={component.path: component.key for component in loaded.components},
-            used=loaded.used_files,
-            used_variables=loaded.used_variable_files,
-            includers=loaded.includers,
-            common_path=Path(self.config_manager.cfg_root, COMMON_FOLDER_NAME),
-        )
-        self.source_editor.set_hints(loaded.unused_variables)
-        self.source_sync.set_variable_usages(loaded.variable_usages)
-        self.page_layout_editor_widget.device_controls.set_device(self.device)
-        self.connection.set_device(self.device)
-        self.log_stream.set_device(self.device)
-        self._pages_data = pages_data
-        if self.part_alone is not None:
+        tab.session_key = key
+        tab.pages_data = pages_data
+        if tab.part_alone is not None:
             # a part on its own without changes follows the files on disk too, if it is still a file of the device
-            alone = self.part_alone
+            alone = tab.part_alone
             if not alone.is_dirty:
-                alone = self._load_part_alone(self._part_alone_path)
+                alone = self._load_part_alone(tab, tab.part_alone_path)
             if alone is not None:
                 alone.device = loaded.device
-            self.part_alone = alone
-        if self.part_alone is not None:
+            tab.part_alone = alone
+        editor = tab.editor
+        if tab.part_alone is not None:
             self._page_after_reload.pop(key, None)
-            self._show_part_alone(self.part_alone)
+            self._show_part_alone(tab, tab.part_alone)
         else:
-            self.page_layout_editor_widget.set_data(
-                session=session, device_pages_data=pages_data, page=self._page_after_reload.pop(key, None)
-            )
-        self._update_draft_actions()
-        self.center_stack.setCurrentWidget(self.page_layout_editor_widget)
+            editor.set_data(session=session, device_pages_data=pages_data, page=self._page_after_reload.pop(key, None))
+        if tab is self.device_tabs.active:
+            self._show_tab(tab)
+        self._update_tab_title(tab)
         if not keep_view:
-            self.page_layout_editor_widget.page_preview_widget.fit_to_view()
+            editor.page_preview_widget.fit_to_view()
 
     # --- a part on its own ---
 
     def edit_part_alone(self, part: Path):
         """
-        Part mode for a part that no page of the device includes: the editor shows the part on its own instead of the pages
-        (see `load_part_alone`), until "Done".
+        Part mode for a part that no page of the device includes: the editor of the active tab shows the part on its own
+        instead of the pages (see `load_part_alone`), until "Done".
         """
-        if self.device is None:
+        tab = self.device_tabs.active
+        if tab is None or tab.device is None:
             return
-        if part.resolve() in {component.path.resolve() for component in self.sessions[self.session_key].components}:
+        if part.resolve() in {component.path.resolve() for component in self.sessions[tab.session_key].components}:
             self.status.failed.emit(
                 f"Editing the part {part.name}", "it is a page file of the device: edit its objects on the page"
             )
             return
-        if self.sessions[self.session_key].part_instances(part):
+        if self.sessions[tab.session_key].part_instances(part):
             # asked for while another part is shown on its own: this one is edited on the pages
             if self.close_part_alone():
-                self.page_layout_editor_widget.edit_part(part)
+                tab.editor.edit_part(part)
             return
-        if self.part_alone is not None and not self.close_part_alone():
+        if tab.part_alone is not None and not self.close_part_alone():
             return
-        alone = self._load_part_alone(part)
+        alone = self._load_part_alone(tab, part)
         if alone is None:
             return
-        self._page_before_part_alone = self.page_layout_editor_widget.current_index
-        self._part_alone_path = part
-        self._show_part_alone(alone)
+        tab.page_before_part_alone = tab.editor.current_index
+        tab.part_alone_path = part
+        self._show_part_alone(tab, alone)
 
-    def _load_part_alone(self, part: Path) -> Optional[PlateSession]:
+    def _load_part_alone(self, tab: DeviceTab, part: Path) -> Optional[PlateSession]:
         """:return: a draft of the part on its own, in part mode; None if it can't be loaded (which is reported)"""
         try:
-            component, renderer = load_part_alone(self.config_manager, self.device, part)
-            session = PlateSession(device=self.device)
+            component, renderer = load_part_alone(self.config_manager, tab.device, part)
+            session = PlateSession(device=tab.device)
             session.load([component], renderer)
             instances = session.part_instances(part)
             if not instances:
@@ -743,28 +920,30 @@ class MainWindow(QMainWindow):
             return None
         return session
 
-    def _show_part_alone(self, alone: PlateSession):
-        self.part_alone = alone
-        editor = self.page_layout_editor_widget
-        editor.set_data(session=alone, device_pages_data=self._pages_data, page=alone.page_of_instance(alone.part_mode))
+    def _show_part_alone(self, tab: DeviceTab, alone: PlateSession):
+        tab.part_alone = alone
+        editor = tab.editor
+        editor.set_data(session=alone, device_pages_data=tab.pages_data, page=alone.page_of_instance(alone.part_mode))
         if not editor.edit_mode:
             editor.set_edit_mode(True)
         self._update_draft_actions()
+        self._update_tab_title(tab)
         self._state_publisher.request()
 
     def close_part_alone(self) -> bool:
         """
-        Back from a part on its own to the pages of the device. Asks to save the part first if it has changes.
+        Back from a part on its own to the pages of the device in the active tab. Asks to save the part first if it has changes.
         :return: whether it was closed (not if the user cancelled, or the save failed)
         """
-        alone = self.part_alone
+        tab = self.device_tabs.active
+        alone = None if tab is None else tab.part_alone
         if alone is None:
             return True
         if alone.is_dirty:
             answer = QMessageBox.question(
                 self,
                 "Unsaved part",
-                f"Save the changes of {self._part_alone_path.name}? Its draft goes away with the part.",
+                f"Save the changes of {tab.part_alone_path.name}? Its draft goes away with the part.",
                 QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel,
                 QMessageBox.StandardButton.Save,
             )
@@ -772,14 +951,13 @@ class MainWindow(QMainWindow):
                 return False
             if answer == QMessageBox.StandardButton.Save and not self.draft_actions.save():
                 return False
-        self.part_alone = None
-        self._part_alone_path = None
-        session = self.sessions.get(self.session_key)
-        if session is not None and self._pages_data is not None:
-            self.page_layout_editor_widget.set_data(
-                session=session, device_pages_data=self._pages_data, page=self._page_before_part_alone
-            )
+        tab.part_alone = None
+        tab.part_alone_path = None
+        session = self.sessions.get(tab.session_key)
+        if session is not None and tab.pages_data is not None:
+            tab.editor.set_data(session=session, device_pages_data=tab.pages_data, page=tab.page_before_part_alone)
         self._update_draft_actions()
+        self._update_tab_title(tab)
         self._state_publisher.request()
         return True
 

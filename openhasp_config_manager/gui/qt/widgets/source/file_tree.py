@@ -107,6 +107,8 @@ class FileTreeWidget(QWidget):
 
     def __init__(self):
         super().__init__()
+        # the folders the user collapsed, of every device shown so far (the others are expanded)
+        self._collapsed: Set[str] = set()
         layout = UiComponents.create_column(parent=self)
 
         header = UiComponents.create_row(alignment=QtCore.Qt.AlignmentFlag.AlignVCenter)
@@ -204,6 +206,7 @@ class FileTreeWidget(QWidget):
         self._apply_filter()
 
     def clear(self):
+        self._remember_collapsed()
         self._tree.clear()
         self._keys = {}
         self._items_by_key = {}
@@ -238,7 +241,7 @@ class FileTreeWidget(QWidget):
         :param common_path: the common folder: its files are shared by all devices
         """
         self._files = (roots, components, used, used_variables, includers, common_path)
-        expanded = self._expanded_paths()
+        self._remember_collapsed()
         self._tree.blockSignals(True)
         self._tree.clear()
         self._keys = {path.resolve(): key for path, key in components.items()}
@@ -250,7 +253,7 @@ class FileTreeWidget(QWidget):
         for root in roots:
             item = self._create_item(root, top_level=True)
             self._tree.addTopLevelItem(item)
-        self._restore_expanded(expanded)
+        self._restore_expanded()
         self._apply_filter()
         self._tree.blockSignals(False)
         self._hint.hide()
@@ -438,26 +441,28 @@ class FileTreeWidget(QWidget):
     def _is_shared(self, item: QTreeWidgetItem) -> bool:
         return self._common_path is not None and Path(item.data(0, _PATH_ROLE)).resolve().is_relative_to(self._common_path)
 
-    def _expanded_paths(self) -> Optional[Set[str]]:
-        """:return: the paths of the expanded folders, None if the tree is empty (everything is expanded then)"""
-        if self._tree.topLevelItemCount() == 0:
-            return None
-        result = set()
-        stack = [self._tree.topLevelItem(i) for i in range(self._tree.topLevelItemCount())]
-        while stack:
-            item = stack.pop()
-            if item.isExpanded():
-                result.add(item.data(0, _PATH_ROLE))
-            stack.extend(item.child(i) for i in range(item.childCount()))
-        return result
-
-    def _restore_expanded(self, expanded: Optional[Set[str]]):
+    def _folders(self) -> List[QTreeWidgetItem]:
+        result = []
         stack = [self._tree.topLevelItem(i) for i in range(self._tree.topLevelItemCount())]
         while stack:
             item = stack.pop()
             if item.childCount() > 0:
-                item.setExpanded(expanded is None or item.data(0, _PATH_ROLE) in expanded)
+                result.append(item)
             stack.extend(item.child(i) for i in range(item.childCount()))
+        return result
+
+    def _remember_collapsed(self):
+        """Remember which of the folders shown are collapsed, for when they are shown again (e.g. of another device)."""
+        for item in self._folders():
+            path = item.data(0, _PATH_ROLE)
+            if item.isExpanded():
+                self._collapsed.discard(path)
+            else:
+                self._collapsed.add(path)
+
+    def _restore_expanded(self):
+        for item in self._folders():
+            item.setExpanded(item.data(0, _PATH_ROLE) not in self._collapsed)
 
     # --- interaction ---
 

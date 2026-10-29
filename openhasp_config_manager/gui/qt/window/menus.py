@@ -6,7 +6,6 @@ from openhasp_config_manager.gui.qt.theme import ThemeMode, current_mode
 
 def create_menus(window):
     """Creates the actions and the menu bar of a `MainWindow`: the actions are attributes of it (`action_save`, ...)."""
-    editor = window.page_layout_editor_widget
     create = UiComponents.create_action
 
     window.action_save = create(
@@ -45,47 +44,16 @@ def create_menus(window):
     file_menu.addSeparator()
     file_menu.addAction(create(window, "Quit", "exit-to-app", window.close, shortcut=QKeySequence.StandardKey.Quit))
 
-    edit_menu = window.menuBar().addMenu("&Edit")
-    for action in [
-        editor.action_undo,
-        editor.action_redo,
-        None,
-        editor.action_edit_mode,
-        editor.action_snap,
-        None,
-        editor.action_copy,
-        editor.action_paste,
-        editor.action_duplicate,
-        editor.action_delete,
-    ]:
-        if action is None:
-            edit_menu.addSeparator()
-        else:
-            edit_menu.addAction(action)
-
-    page_menu = window.menuBar().addMenu("&Page")
-    for action in [
-        editor.action_previous_page,
-        editor.action_next_page,
-        None,
-        editor.plate.action_clear,
-    ]:
-        if action is None:
-            page_menu.addSeparator()
-        else:
-            page_menu.addAction(action)
-
-    plate_menu = window.menuBar().addMenu("P&late")
-    for action in [editor.plate.action_live_preview, editor.plate.action_restore_plate, None, window.action_deploy]:
-        if action is None:
-            plate_menu.addSeparator()
-        else:
-            plate_menu.addAction(action)
+    # the actions of the editor of the active tab (see `show_editor_actions`)
+    window.edit_menu = window.menuBar().addMenu("&Edit")
+    window.page_menu = window.menuBar().addMenu("&Page")
+    window.plate_menu = window.menuBar().addMenu("P&late")
 
     view_menu = window.menuBar().addMenu("&View")
-    for action in [editor.action_zoom_in, editor.action_zoom_out, editor.action_zoom_fit]:
-        view_menu.addAction(action)
-    view_menu.addSeparator()
+    # the zoom actions of the editor go before it
+    window.view_menu = view_menu
+    window.zoom_actions_end = view_menu.addSeparator()
+    window.zoom_actions = []
     for dock in [window.devices_dock, window.properties_dock, window.jsonl_dock, window.page_jsonl_dock, window.logs_dock]:
         view_menu.addAction(dock.toggleViewAction())
     view_menu.addSeparator()
@@ -107,3 +75,40 @@ def create_menus(window):
         action.setChecked(current_mode() == mode)
         theme_group.addAction(action)
         theme_menu.addAction(action)
+    show_editor_actions(window, window.page_layout_editor_widget)
+
+
+def show_editor_actions(window, editor):
+    """Fill the menus of the editor actions with those of an editor: each tab has its own."""
+    for menu, actions in [
+        (
+            window.edit_menu,
+            [
+                editor.action_undo,
+                editor.action_redo,
+                None,
+                editor.action_edit_mode,
+                editor.action_snap,
+                None,
+                editor.action_copy,
+                editor.action_paste,
+                editor.action_duplicate,
+                editor.action_delete,
+            ],
+        ),
+        (window.page_menu, [editor.action_previous_page, editor.action_next_page, None, editor.plate.action_clear]),
+        (
+            window.plate_menu,
+            [editor.plate.action_live_preview, editor.plate.action_restore_plate, None, window.action_deploy],
+        ),
+    ]:
+        menu.clear()
+        for action in actions:
+            if action is None:
+                menu.addSeparator()
+            else:
+                menu.addAction(action)
+    for action in window.zoom_actions:
+        window.view_menu.removeAction(action)
+    window.zoom_actions = [editor.action_zoom_in, editor.action_zoom_out, editor.action_zoom_fit]
+    window.view_menu.insertActions(window.zoom_actions_end, window.zoom_actions)
