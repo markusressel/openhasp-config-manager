@@ -1,4 +1,7 @@
-"""What can be completed at the cursor in a file: property names of an object, and the variables inside of a template. Qt-free."""
+"""
+What can be completed at the cursor in a file: property names of an object, the variables inside of a template, and the placeholders
+of openHASP in a `text` (`%ip%`, see `placeholders.py`). Qt-free.
+"""
 
 import re
 from dataclasses import dataclass
@@ -11,6 +14,12 @@ from openhasp_config_manager.gui.domain.object_type_docs import (
     is_text_property,
 )
 from openhasp_config_manager.gui.domain.source.docs import PROPERTY_DOCS
+from openhasp_config_manager.gui.domain.source.placeholders import (
+    PLACEHOLDER_PROPERTY,
+    is_typed_placeholder,
+    placeholder_candidates,
+    typed_placeholder_end,
+)
 from openhasp_config_manager.gui.domain.source.syntax import Language, TokenKind, tokenize_line
 from openhasp_config_manager.gui.domain.style_parts import OBJECT_PARTS, Part, State, style_key
 
@@ -49,7 +58,7 @@ OBJECT_PROPERTIES = sorted(name for name in _ALL_PROPERTIES if not _is_style_var
 @dataclass(frozen=True)
 class CompletionContext:
     # what is being typed
-    kind: str  # "property" or "variable"
+    kind: str  # "property", "variable" or "placeholder"
     # the part of the word before the cursor
     prefix: str
     # where the word starts in the line
@@ -86,6 +95,8 @@ def completion_context(
             word_start -= 1
         return CompletionContext("variable", line[word_start:], word_start)
     if language == Language.JSONL:
+        if (start := _placeholder_start(line)) is not None:
+            return CompletionContext("placeholder", line[start:], start)
         quote = _open_key_quote(line)
         if quote is not None:
             return CompletionContext("property", line[quote + 1 :], quote + 1)
@@ -114,6 +125,26 @@ def _open_key_quote(line: str) -> Optional[int]:
         return None
     before = line[:last_quote].rstrip()
     return last_quote if before == "" or before.endswith(("{", ",")) else None
+
+
+def _placeholder_start(line: str) -> Optional[int]:
+    """
+    :return: where a placeholder starts that is being typed: a `%` and letters at the start of the value of a `text` (openHASP only
+        replaces a text that is the placeholder and nothing else), None if there is none
+    """
+    quote = line.rfind('"')
+    if quote < 0 or not is_typed_placeholder(line[quote + 1 :]):
+        return None
+    tokens = [token for token in tokenize_line(line + '"', Language.JSONL) if token.start < quote]
+    if len(tokens) < 2 or tokens[-1].text(line) != ":":
+        return None
+    key = tokens[-2]
+    return quote + 1 if key.kind == TokenKind.KEY and key.text(line) == f'"{PLACEHOLDER_PROPERTY}"' else None
+
+
+def placeholder_insertion(line: str, column: int, context: CompletionContext, word: str) -> Insertion:
+    """What to write when a placeholder is chosen from the list: it replaces what is typed of it, also after the cursor."""
+    return Insertion(context.start, typed_placeholder_end(line, column), word, context.start + len(word))
 
 
 _BARE_WORD = re.compile(r"[A-Za-z_][A-Za-z0-9_]*$")
@@ -183,5 +214,7 @@ def complete(
     context: CompletionContext, properties: Iterable[str] = OBJECT_PROPERTIES, variables: Iterable[str] = ()
 ) -> List[str]:
     """:return: the words that start with the typed prefix, without the word that is already typed completely"""
+    if context.kind == "placeholder":
+        return placeholder_candidates(context.prefix)
     words = properties if context.kind == "property" else variables
     return sorted({word for word in words if word.startswith(context.prefix) and word != context.prefix})

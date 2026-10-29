@@ -8,10 +8,11 @@ from openhasp_config_manager.gui.domain.source.completion import (
     CompletionContext,
     complete,
     completion_context,
+    placeholder_insertion,
     properties_for,
     property_insertion,
 )
-from openhasp_config_manager.gui.domain.source.docs import object_type_at_line, property_help
+from openhasp_config_manager.gui.domain.source.docs import object_type_at_line, placeholder_help, property_help
 from openhasp_config_manager.gui.domain.source.objects import object_at_line
 from openhasp_config_manager.gui.qt.widgets.hover_card import CardContent, HoverCard
 
@@ -31,7 +32,10 @@ class _HideWith(QObject):
 
 
 class EditorCompletion(QObject):
-    """The completion of properties and template variables in a text editor, with the explanation of the highlighted entry."""
+    """
+    The completion of properties, template variables and placeholders in a text editor, with the explanation of the highlighted
+    entry.
+    """
 
     def __init__(self, editor: QPlainTextEdit):
         super().__init__(editor)
@@ -42,7 +46,8 @@ class EditorCompletion(QObject):
         self.completer.setCompletionMode(QCompleter.CompletionMode.PopupCompletion)
         self.completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
         self.completer.activated.connect(self._insert)
-        # what is completed, for the explanation of the highlighted entry: "property" or "variable", and the `obj` of the object
+        # what is completed, for the explanation of the highlighted entry (the `kind` of `CompletionContext`), and the `obj` of the
+        # object
         self._kind = "property"
         self._context: Optional[CompletionContext] = None
         self._object_type: Optional[str] = None
@@ -88,7 +93,12 @@ class EditorCompletion(QObject):
     def _show_docs(self, word: str):
         """Shows what the highlighted entry of the completion list is, next to the list."""
         popup = self.popup
-        found = property_help(word, self._object_type) if self._kind == "property" else None
+        if self._kind == "property":
+            found = property_help(word, self._object_type)
+        elif self._kind == "placeholder":
+            found = placeholder_help(word, self._object_type)
+        else:
+            found = None
         if found is None or not popup.isVisible():
             self.card.hide()
             return
@@ -106,6 +116,9 @@ class EditorCompletion(QObject):
         if self._kind == "property":
             line, column = block.text(), cursor.positionInBlock()
             insertion = property_insertion(line, column, context, word, self._object_type)
+            start, end, text, after = insertion.start, insertion.end, insertion.text, insertion.cursor
+        elif self._kind == "placeholder":
+            insertion = placeholder_insertion(block.text(), cursor.positionInBlock(), context, word)
             start, end, text, after = insertion.start, insertion.end, insertion.text, insertion.cursor
         else:
             start, end, text = context.start, cursor.positionInBlock(), word

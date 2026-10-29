@@ -1,4 +1,4 @@
-"""Short explanations of the properties of openHASP objects, for the hover text of the text editor. Qt-free."""
+"""Short explanations of the properties of openHASP objects and of its placeholders, for the hover text of the text editor. Qt-free."""
 
 import re
 from dataclasses import dataclass, field, replace
@@ -6,6 +6,8 @@ from typing import Dict, List, Optional, Tuple
 
 from openhasp_config_manager.gui.domain.object_type_docs import COMMON_PROPERTIES, STYLE_PROPERTIES, TYPE_DOCS
 from openhasp_config_manager.gui.domain.source.objects import SourceObject, object_at_line
+from openhasp_config_manager.gui.domain.source.placeholders import DOCS_URL as PLACEHOLDER_DOCS_URL
+from openhasp_config_manager.gui.domain.source.placeholders import REPLACED_IN_TYPES, placeholder_of
 from openhasp_config_manager.gui.domain.source.syntax import Language, TokenKind, tokenize_line
 from openhasp_config_manager.gui.domain.variables.definitions import key_at
 from openhasp_config_manager.gui.domain.style_parts import OBJECT_PARTS, PART_DESCRIPTIONS, STATE_DESCRIPTIONS, Part, State
@@ -189,6 +191,22 @@ def property_help(name: str, object_type: Optional[str] = None) -> Optional[Prop
     return PropertyHelp(name, base_text, kind, details, url)
 
 
+def placeholder_help(text: str, object_type: Optional[str] = None) -> Optional[PropertyHelp]:
+    """
+    :param text: a string without its quotes, e.g. `%ip%`
+    :param object_type: the `obj` of the object the text is in: openHASP doesn't replace it in every type
+    :return: what openHASP shows instead of a placeholder, None if the text is none
+    """
+    found = placeholder_of(text)
+    if found is None:
+        return None
+    details = [("Where", "Only a `text` that is the placeholder and nothing else.")]
+    if object_type is not None and object_type not in REPLACED_IN_TYPES:
+        types = ", ".join(f"`{name}`" for name in REPLACED_IN_TYPES)
+        details.append(("Note", f"A `{object_type}` shows it as written: only the text of {types} is replaced."))
+    return PropertyHelp(found.name, found.description, "Placeholder, replaced by the plate", details, PLACEHOLDER_DOCS_URL)
+
+
 def object_type_at_line(objects: List[SourceObject], line_number: int) -> Optional[str]:
     """:return: the `obj` of the object the line (starting at 1) is in, None if there is no object or it has no (single line) type"""
     found = object_at_line(objects, line_number)
@@ -201,11 +219,14 @@ def help_at(objects: List[SourceObject], line: str, line_number: int, column: in
     """
     :param objects: the objects of the .jsonl text (see `scan_objects`), for the type of the object the line is in
     :param line: the text of the line, `line_number` its number (starting at 1)
-    :return: the help for the property whose key is at a column, None if there is none or it is not known
+    :return: the help for the property whose key is at a column or for the placeholder there (`"text": "%ip%"`), None if there is
+        none or it is not known
     """
     for token in tokenize_line(line, Language.JSONL):
         if token.kind == TokenKind.KEY and token.start <= column <= token.end:
             return property_help(token.text(line).strip('"'), object_type_at_line(objects, line_number))
+        if token.kind == TokenKind.PLACEHOLDER and token.start <= column <= token.end:
+            return placeholder_help(token.text(line), object_type_at_line(objects, line_number))
     return None
 
 

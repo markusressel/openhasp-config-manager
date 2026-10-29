@@ -1,7 +1,7 @@
 """
 The syntax of the files of a config directory, for the text editor: which part of a line is a key, a string, a template,
 a comment, ... It knows the dialect of the .jsonl files (one object after the other, `//` comments, trailing commas, Jinja2
-templates in the strings) that no JSON highlighter does. Qt-free, so it is tested without a display.
+templates in the strings, the placeholders of openHASP like `"text": "%ip%"`) that no JSON highlighter does. Qt-free, so it is tested without a display.
 """
 
 import re
@@ -10,6 +10,7 @@ from enum import Enum, StrEnum
 from pathlib import Path
 from typing import List, Optional
 
+from openhasp_config_manager.gui.domain.source.placeholders import PLACEHOLDER_PROPERTY, placeholder_of
 from openhasp_config_manager.processing.template_rendering import template_spans
 
 
@@ -33,6 +34,8 @@ class TokenKind(StrEnum):
     TEMPLATE = "template"
     # a string that is a color, like "#ff8800" (with its quotes)
     COLOR = "color"
+    # a placeholder openHASP replaces at runtime, like `%ip%` (without the quotes of its string, see `placeholders.py`)
+    PLACEHOLDER = "placeholder"
     COMMAND = "command"
     ARGUMENT = "argument"
 
@@ -69,7 +72,8 @@ def language_of(path: Path) -> Language:
 def tokenize_line(line: str, language: Language) -> List[Token]:
     """:return: the highlighted parts of a line, in order. Text between them has no kind."""
     if language in (Language.JSONL, Language.JSON):
-        return _tokenize_jsonl(line)
+        # a placeholder is only replaced in the objects of a page, not in a JSON file like `config.json`
+        return _tokenize_jsonl(line, placeholders=language == Language.JSONL)
     if language == Language.CMD:
         return _tokenize_cmd(line)
     if language == Language.YAML:
@@ -82,7 +86,7 @@ def find_templates(text: str, offset: int = 0) -> List[Token]:
     return [Token(offset + start, offset + end, TokenKind.TEMPLATE) for start, end in template_spans(text)]
 
 
-def _tokenize_jsonl(line: str) -> List[Token]:
+def _tokenize_jsonl(line: str, placeholders: bool) -> List[Token]:
     tokens: List[Token] = []
     i = 0
     while i < len(line):
@@ -94,7 +98,11 @@ def _tokenize_jsonl(line: str) -> List[Token]:
             break
         elif char == '"':
             end = _end_of_string(line, i)
-            tokens += _string_tokens(line, i, end)
+            if placeholders and _is_placeholder(line, i, end, tokens):
+                tokens += [Token(i, i + 1, TokenKind.STRING), Token(i + 1, end - 1, TokenKind.PLACEHOLDER)]
+                tokens.append(Token(end - 1, end, TokenKind.STRING))
+            else:
+                tokens += _string_tokens(line, i, end)
             i = end
         elif char in _SYMBOLS:
             tokens.append(Token(i, i + 1, TokenKind.SYMBOL))
@@ -119,6 +127,20 @@ def _end_of_string(line: str, start: int) -> int:
         else:
             i += 1
     return len(line)
+
+
+def _is_placeholder(line: str, start: int, end: int, tokens: List[Token]) -> bool:
+    """
+    :param tokens: the tokens of the line before the string
+    :return: whether the string from `start` to `end` is the value of a `text` and a placeholder, which openHASP replaces only when
+        it is the whole text (see `placeholders.py`)
+    """
+    if end - start < 2 or line[end - 1] != '"' or len(tokens) < 2:
+        return False
+    key, colon = tokens[-2:]
+    if key.kind != TokenKind.KEY or key.text(line) != f'"{PLACEHOLDER_PROPERTY}"' or colon.text(line) != ":":
+        return False
+    return line[end:].lstrip()[:1] != ":" and placeholder_of(line[start + 1 : end - 1]) is not None
 
 
 def _string_tokens(line: str, start: int, end: int) -> List[Token]:

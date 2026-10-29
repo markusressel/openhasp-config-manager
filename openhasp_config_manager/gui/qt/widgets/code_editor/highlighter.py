@@ -15,6 +15,7 @@ _SYNTAX_COLORS = {
     TokenKind.CONSTANT: ("#569CD6", "#0000FF"),
     TokenKind.COMMENT: ("#6A9955", "#008000"),
     TokenKind.TEMPLATE: ("#C586C0", "#AF00DB"),
+    TokenKind.PLACEHOLDER: ("#4EC9B0", "#267F99"),
     TokenKind.COMMAND: ("#569CD6", "#0000FF"),
     TokenKind.ARGUMENT: ("#CE9178", "#A31515"),
 }

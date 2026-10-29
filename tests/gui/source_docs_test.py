@@ -1,4 +1,10 @@
-from openhasp_config_manager.gui.domain.source.docs import help_at, object_type_at_line, property_help, theme_help_at
+from openhasp_config_manager.gui.domain.source.docs import (
+    help_at,
+    object_type_at_line,
+    placeholder_help,
+    property_help,
+    theme_help_at,
+)
 from openhasp_config_manager.gui.domain.source.objects import scan_objects
 from tests import TestBase
 
@@ -110,3 +116,38 @@ class TestThemeHelpAt(TestBase):
 
     def test_a_text_that_is_no_yaml_has_no_help(self):
         assert theme_help_at("theme: [", 1, 2) is None
+
+
+class TestPlaceholderHelp(TestBase):
+    def test_what_it_is_replaced_with_and_the_link(self):
+        found = placeholder_help("%ip%")
+        assert found.name == "%ip%"
+        assert "IP address" in found.summary
+        assert found.url == "https://www.openhasp.com/0.7.0/design/data-types/#variables"
+
+    def test_case_does_not_matter(self):
+        assert placeholder_help("%HOSTNAME%").name == "%hostname%"
+
+    def test_unknown_or_part_of_a_text(self):
+        assert placeholder_help("%foo%") is None
+        assert placeholder_help("IP: %ip%") is None
+        assert placeholder_help("100%") is None
+
+    def test_types_that_do_not_replace_it_are_noted(self):
+        assert [label for label, _ in placeholder_help("%ip%", "label").details] == ["Where"]
+        assert [label for label, _ in placeholder_help("%ip%").details] == ["Where"]
+        note = dict(placeholder_help("%ip%", "checkbox").details)["Note"]
+        assert note.startswith("A `checkbox` shows it as written")
+
+    def test_help_at_a_placeholder(self):
+        line = '{"obj": "label", "text": "%version%"}'
+        objects = scan_objects(line)
+        column = line.index("%version%") + 3
+        assert help_at(objects, line, 1, column).name == "%version%"
+        # the quote of the string is no placeholder, the key is the property
+        assert help_at(objects, line, 1, line.index("%version%") - 1) is None
+        assert help_at(objects, line, 1, line.index('"text"') + 2).name == "text"
+
+    def test_no_help_at_a_text_that_is_no_placeholder(self):
+        for line in ('{"text": "100%"}', '{"text": "%foo%"}', '{"text": "{{ \'%ip%\' }}"}'):
+            assert help_at(scan_objects(line), line, 1, line.index("%") + 1) is None
