@@ -1,7 +1,7 @@
 import json
 import re
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Set, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 import orjson
 
@@ -69,6 +69,8 @@ class DeviceProcessor:
         # path -> the file as a part, see `part`
         self._parts: Dict[str, PartFile] = {}
         self._part_paths: Optional[Set[Path]] = None
+        # the jsonl files the plate runs (resolved), see `set_run_paths`; None: all of them
+        self._run_paths: Optional[Set[Path]] = None
 
     def add_component(self, component: Component):
         if isinstance(component, JsonlComponent):
@@ -82,6 +84,14 @@ class DeviceProcessor:
     def _add_jsonl(self, component: JsonlComponent):
         self._jsonl_components.append(component)
         self._part_paths = None
+
+    def set_run_paths(self, paths: Iterable[Path]):
+        """
+        The jsonl files the plate runs (from a .cmd file, or `hasp.pages`). Only their objects (and those of the parts they
+        include) are in the object references (`p1b2`) of the others: the plate has no other objects, and the variables of a
+        file the device doesn't run (e.g. of a page another device shows) must not break it. Without it, all files count.
+        """
+        self._run_paths = {Path(path).resolve() for path in paths}
 
     def normalize(self, device: Device, component: Component) -> str | bytes:
         if isinstance(component, JsonlComponent):
@@ -309,6 +319,8 @@ class DeviceProcessor:
         for c in sorted_components:
             # the objects of a part are in the variables through the files that include it (and its own when it is rendered)
             if c != component and Path(c.path).resolve() in part_paths:
+                continue
+            if c != component and self._run_paths is not None and Path(c.path).resolve() not in self._run_paths:
                 continue
             component_template_vars = self.path_variables(c.path)
 

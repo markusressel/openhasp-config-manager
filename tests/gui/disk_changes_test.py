@@ -2,6 +2,8 @@ from pathlib import Path
 
 import pytest
 
+from openhasp_config_manager.gui.domain.draft.session import PlateSession
+from openhasp_config_manager.processing.template_rendering import TemplateRenderError
 from tests import TestBase
 from tests.gui.helpers import EDITOR_JSONL, create_editor_cfg_root, gui_state, qwait, wait_until, x_of_label
 
@@ -147,6 +149,48 @@ class TestChangesOnDisk(TestBase):
 
         # THEN
         wait_until(lambda: x_of_label(window) == 5)
+
+    def test_pages_that_can_not_be_rendered_keep_what_is_shown(self, window, cfg_root, monkeypatch):
+        # GIVEN
+        failures = []
+        window.status.failed.connect(lambda description, error: failures.append(error))
+        monkeypatch.setattr(PlateSession, "_render_from_disk", _fail_rendering)
+
+        # WHEN
+        (cfg_root / "devices" / "test_device" / "editor.jsonl").write_text(EDITOR_JSONL.replace('"x": 10', '"x": 77'))
+
+        # THEN
+        wait_until(lambda: failures)
+        assert "Unknown variable 'nope'" in failures[0]
+        assert x_of_label(window) == 10
+        assert "Unknown variable 'nope'" in window.load_error["message"]
+        assert window.session.changes() == []
+
+    def test_a_device_whose_pages_can_not_be_rendered_shows_why(self, window, monkeypatch):
+        # GIVEN
+        monkeypatch.setattr(PlateSession, "_render_from_disk", _fail_rendering)
+        window.sessions.clear()
+
+        # WHEN
+        window.on_device_selected("test_device")
+
+        # THEN
+        wait_until(lambda: window.load_error is not None)
+        assert window.device is None
+        assert window.center_stack.currentWidget() is window.message_panel
+        assert "Unknown variable 'nope'" in window.load_error["message"]
+
+        # WHEN: it can be rendered again
+        monkeypatch.undo()
+        window.on_device_selected("test_device")
+
+        # THEN
+        wait_until(lambda: window.session is not None and window.session.is_loaded)
+        assert x_of_label(window) == 10
+
+
+def _fail_rendering(*args):
+    raise TemplateRenderError("Unknown variable 'nope' in the variable 'index': {{ nope.index }}")
 
 
 class TestGuiStateFile(TestBase):

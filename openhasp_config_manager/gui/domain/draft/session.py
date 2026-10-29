@@ -40,6 +40,8 @@ from openhasp_config_manager.processing.jsonl.source_editor import JsonlSourceEd
 ANY_OBJECT = "*"
 # the object itself in its templates
 _THIS = re.compile(rf"\b{THIS}\b")
+# the rendered objects per component, their entries (by id of the object) and the errors of their directives
+type _Rendered = Tuple[OrderedDict[str, List[Dict]], Dict[int, DraftEntry], Dict[str, List[IncludeError]]]
 
 
 class ReadOnlyObjectError(ValueError):
@@ -85,23 +87,39 @@ class PlateSession:
         self._dirty = False
 
     def load(self, components: List[ComponentSource], renderer: DraftRenderer):
-        """Initializes the draft from the components as they are on disk."""
-        self._components = OrderedDict((component.key, component) for component in components)
+        """
+        Initializes the draft from the components as they are on disk. If they can't be rendered, this raises and the
+        draft stays as it was.
+        """
+        components = OrderedDict((component.key, component) for component in components)
+        rendered = self._render_from_disk(components, renderer)
+        self._components = components
         self._renderer = renderer
-        self.reset_to_disk()
+        self._replace_with(rendered)
         self._loaded = True
 
     def reset_to_disk(self):
-        """Discards all changes of the draft and its undo history. The rendered objects are new objects afterwards."""
-        self._working_objects = OrderedDict()
-        self._entries = {}
-        self._history.clear()
-        self._frozen_sources = {}
-        self._renderer.set_draft_sources({component.key: component.sources for component in self._components.values()})
-        self._include_errors = {}
-        for component in self._components.values():
-            expansion = self._renderer.expand_objects(component.key, component.sources)
-            self._include_errors[component.key] = expansion.errors
+        """
+        Discards all changes of the draft and its undo history. The rendered objects are new objects afterwards. If the
+        files can't be rendered, this raises and the draft stays as it was.
+        """
+        try:
+            rendered = self._render_from_disk(self._components, self._renderer)
+        except Exception:
+            # the renderer sees the objects of the draft again
+            self._set_draft_sources()
+            raise
+        self._replace_with(rendered)
+
+    def _render_from_disk(self, components: OrderedDict[str, ComponentSource], renderer: DraftRenderer) -> _Rendered:
+        """:return: the rendered objects per component, their entries and the errors of their directives"""
+        working_objects: OrderedDict[str, List[Dict]] = OrderedDict()
+        entries: Dict[int, DraftEntry] = {}
+        include_errors: Dict[str, List[IncludeError]] = {}
+        renderer.set_draft_sources({component.key: component.sources for component in components.values()})
+        for component in components.values():
+            expansion = renderer.expand_objects(component.key, component.sources)
+            include_errors[component.key] = expansion.errors
             objects = []
             for expanded in expansion.objects:
                 origin = expanded.origin
@@ -110,10 +128,19 @@ class PlateSession:
                     entry = DraftEntry(
                         component.key, origin.includes[0].index, expanded.source, 0, origin=origin, scope=expanded.scope
                     )
-                    objects.append(self._create_entry(entry))
                 else:
-                    objects.append(self._create(component.key, origin.index, copy.deepcopy(expanded.source)))
-            self._working_objects[component.key] = objects
+                    entry = DraftEntry(component.key, origin.index, copy.deepcopy(expanded.source), 0)
+                entry.uid = next(self._uids)
+                obj = renderer.render_object(entry.component, entry.source, entry.scope)
+                entries[id(obj)] = entry
+                objects.append(obj)
+            working_objects[component.key] = objects
+        return working_objects, entries, include_errors
+
+    def _replace_with(self, rendered: _Rendered):
+        self._working_objects, self._entries, self._include_errors = rendered
+        self._history.clear()
+        self._frozen_sources = {}
         self._dirty = False
 
     @property
