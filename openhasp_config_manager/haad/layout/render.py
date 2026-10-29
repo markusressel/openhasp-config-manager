@@ -42,7 +42,7 @@ def render_page(page, theme: Theme, config: Config, screen_width: int, screen_he
         )
 
     theme_vars = {"theme": {"obj": {k: dict(v) for k, v in theme.obj.items()}}}
-    result = [] if page.index == 0 else [{"page": page.index, "id": 0, "bg_color": theme.background_color}]
+    result = [] if page.index == 0 else [{"page": page.index, "id": 0, "bg_color": theme.background_color, "bg_grad_dir": 0}]
     for obj in owned:
         if obj.parent is not None:
             width, height = obj.parent.jsonl["w"], obj.parent.jsonl["h"]

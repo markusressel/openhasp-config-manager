@@ -66,7 +66,7 @@ def _jsonl(*objects) -> Mqtt:
 
 
 PAGE_1 = [
-    {"page": 1, "id": 0, "bg_color": "#101010"},
+    {"page": 1, "id": 0, "bg_color": "#101010", "bg_grad_dir": 0},
     {
         "page": 1,
         "id": 1,
@@ -83,7 +83,7 @@ PAGE_1 = [
     {"page": 1, "id": 3, "obj": "switch", "x": 165, "y": 60, "w": 145, "h": 170},
 ]
 PAGE_2 = [
-    {"page": 2, "id": 0, "bg_color": "#101010"},
+    {"page": 2, "id": 0, "bg_color": "#101010", "bg_grad_dir": 0},
     {"page": 2, "id": 1, "obj": "btn", "x": 0, "y": 0, "w": 160, "h": 120, "text": "Reboot"},
 ]
 

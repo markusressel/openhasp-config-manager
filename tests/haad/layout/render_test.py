@@ -38,7 +38,7 @@ async def test_render_owned_objects(owned_page: PageController):
     rendered = render_page(owned_page, THEME, _config(owned_page), 480, 320)
 
     assert rendered == [
-        {"page": 1, "id": 0, "bg_color": "#111111"},
+        {"page": 1, "id": 0, "bg_color": "#111111", "bg_grad_dir": 0},
         {"page": 1, "id": 1, "obj": "obj", "x": 0, "y": 0, "w": 480, "h": 32, "bg_color": "#558B2F"},
         # theme < typed args (text) < props; text_font normalized to int like in JSONL files
         {
