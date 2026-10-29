@@ -98,3 +98,68 @@ def test_a_val_outside_of_min_and_max_is_shown_at_the_limit():
     assert _problems("val", 50, obj="arc") == []
     # a label has no min and max
     assert _problems("val", 150, obj="label") == []
+
+
+@pytest.mark.parametrize(
+    "action",
+    [
+        # the old way: a page the button leads to when it is released
+        "prev",
+        "Next",
+        "back",
+        "p1",
+        "p12",
+        # the commands per event, as an object or its text
+        {"up": "page 2"},
+        {"down": "p1b2.val=1", "long": ["page 1", "backlight off"], "hold": None},
+        {"release": {"page": 1, "id": 3, "text": "Hi"}},
+        '{"up": "page 2"}',
+        # ArduinoJson also reads single quotes
+        "{'up': 'page 2'}",
+        # removes the action
+        "",
+        None,
+        # a template that can't be rendered is a problem of its own
+        "{{ missing }}",
+        {"{{ event }}": "page 2"},
+    ],
+)
+def test_actions_the_plate_runs(action):
+    assert _problems("action", action, obj="btn") == []
+
+
+@pytest.mark.parametrize(
+    "action, expected",
+    [
+        ("page 2", "'page 2' is not prev, next, back, p<page> or a JSON object of events, the plate ignores it"),
+        ("P2", "'P2' is not prev, next, back, p<page> or a JSON object of events, the plate ignores it"),
+        (["page 2"], "['page 2'] is not prev, next, back, p<page> or a JSON object of events, the plate ignores it"),
+        ('["page 2"]', "'[\"page 2\"]' is not prev, next, back, p<page> or a JSON object of events, the plate ignores it"),
+        (2, "2 is not prev, next, back, p<page> or a JSON object of events, the plate ignores it"),
+        ("p0", "'p0' is no page (pages 1 to 12), the plate ignores the action"),
+        ("p", "'p' is no page (pages 1 to 12), the plate ignores the action"),
+        ("p20", "'p20' is no page (pages 1 to 12), the plate doesn't change the page"),
+        # HASP_NUM_PAGES + 1 to 3
+        ("p13", "'p13' is page prev on the plate, there is no page 13 (pages 1 to 12)"),
+        ("p15", "'p15' is page next on the plate, there is no page 15 (pages 1 to 12)"),
+        # the page is an uint8_t: 256 is 0
+        ("p256", "'p256' is no page (pages 1 to 12), the plate ignores the action"),
+    ],
+)
+def test_actions_the_plate_ignores(action, expected):
+    assert _problems("action", action, obj="btn") == [expected]
+
+
+def test_the_plate_runs_actions_only_on_its_events():
+    assert _problems("action", {"Up": "page 2", "click": "page 3", "lost": "page 4"}, obj="btn") == [
+        "'Up' is not one of: down, up, long, hold, release (did you mean 'up'?), the plate never runs it",
+        "'click' is not one of: down, up, long, hold, release, the plate never runs it",
+        "'lost' is not one of: down, up, long, hold, release, the plate never runs it",
+    ]
+
+
+def test_the_plate_runs_only_commands_lists_and_objects():
+    assert _problems("action", '{"up": 2, "down": ["page 1", true]}', obj="btn") == [
+        "up: 2 is not a command, a list of commands or an object, the plate ignores it",
+        "down: ['page 1', True] is not a command, a list of commands or an object, the plate ignores it",
+    ]

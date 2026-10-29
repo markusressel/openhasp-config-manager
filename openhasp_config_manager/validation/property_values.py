@@ -8,6 +8,7 @@ The values openHASP accepts for its properties, from the source of openHASP 0.7.
 """
 
 import difflib
+import json
 import re
 from dataclasses import dataclass
 from typing import Dict, FrozenSet, List, Optional, Tuple, Union
@@ -191,6 +192,8 @@ def value_problems(obj: Dict, key: str) -> List[str]:
 
     if key == "align":
         return _align_problems(value)
+    if key == "action":
+        return action_problems(value)
     if key == "page":
         return _number_problems(value, PAGES)
     if key == "val" and obj_type in _RANGE_OBJECTS:
@@ -267,6 +270,74 @@ def _val_problems(obj: Dict) -> List[str]:
     if low <= val <= high:
         return []
     return [f"{val} is not from min {low} to max {high}, the plate shows {min(max(val, low), high)}"]
+
+
+# generic_event_handler: the events it runs the action of an object for (Parser::get_event_name). It runs none on a lost press.
+ACTION_EVENTS = ("down", "up", "long", "hold", "release")
+# Parser::get_action_id: the old way of an action, a page the object leads to when it is released
+_ACTION_PAGES = ("prev", "next", "back")
+# hasp_event.h: page numbers of `p<page>` that mean prev, back and next (HASP_NUM_PAGES + 1, + 2, + 3)
+_ACTION_PAGE_NUMBERS = {PAGES[1] + 1: "prev", PAGES[1] + 2: "back", PAGES[1] + 3: "next"}
+
+
+def action_problems(action) -> List[str]:
+    """
+    How 0.7.0-rc13 takes an `action` (my_obj_set_action in `hasp_attribute_helper.h`): `prev`, `next`, `back` (ignoring case) or
+    `p<page>` become `{"up": "page ..."}`, everything else is read as JSON, and the plate drops the action if that fails. On an
+    event, script_event_handler runs the value of the event's key (case sensitive) with dispatch_json_variant: a command, a list
+    of them or an object (like a line of a jsonl file). Anything else does nothing.
+    :param action: the rendered `action` of an object (a JSON object in the file, or its text)
+    :return: why the action does nothing (or something else than it says), empty if it works or that isn't certain
+    """
+    if isinstance(action, str):
+        text = action
+        if text == "" or text.lower() in _ACTION_PAGES:
+            return []
+        if re.fullmatch(r"p[0-9]*", text):
+            return _action_page_problems(text)
+        if not text.lstrip(" \t\r\n").startswith("{"):
+            # not JSON, or JSON that isn't an object: no event has a value in it
+            return [f"{action!r} is not prev, next, back, p<page> or a JSON object of events, the plate ignores it"]
+        try:
+            action = json.loads(text)
+        except ValueError:
+            # ArduinoJson reads more than Python does (single quotes, keys without quotes)
+            return []
+    if action is None:
+        # removes the action
+        return []
+    if not isinstance(action, dict):
+        return [f"{action!r} is not prev, next, back, p<page> or a JSON object of events, the plate ignores it"]
+
+    problems = []
+    for event, commands in action.items():
+        if "{{" in event:
+            continue
+        if event not in ACTION_EVENTS:
+            problems.append(f"{_not_one_of(event, ACTION_EVENTS)}, the plate never runs it")
+        elif _command_types_ignored(commands):
+            problems.append(f"{event}: {commands!r} is not a command, a list of commands or an object, the plate ignores it")
+    return problems
+
+
+def _action_page_problems(text: str) -> List[str]:
+    # atoi of the digits (none is 0), as an uint8_t
+    page = int(text[1:] or 0) % 256
+    pages = f"pages {PAGES[0] + 1} to {PAGES[1]}"
+    if page in _ACTION_PAGE_NUMBERS:
+        return [f"{text!r} is page {_ACTION_PAGE_NUMBERS[page]} on the plate, there is no page {page} ({pages})"]
+    if page == 0:
+        return [f"{text!r} is no page ({pages}), the plate ignores the action"]
+    if page > PAGES[1]:
+        return [f"{text!r} is no page ({pages}), the plate doesn't change the page"]
+    return []
+
+
+def _command_types_ignored(commands) -> bool:
+    """:return: whether the value of an event (or an item of its list) is a number or true/false, which dispatch_json_variant ignores"""
+    if isinstance(commands, list):
+        return any(_command_types_ignored(command) for command in commands)
+    return not (commands is None or isinstance(commands, (str, dict)))
 
 
 def _not_one_of(value, allowed: Tuple) -> str:
