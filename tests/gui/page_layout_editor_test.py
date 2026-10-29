@@ -199,23 +199,24 @@ class TestLivePreview(TestBase):
         # THEN
         assert plate.calls == [("delete_object_id", 1, 50), ("set_page", 1)]
 
-    def test_a_page_the_editor_left_before_it_was_sent_is_not_sent(self, editor, plate, monkeypatch):
-        # GIVEN: sending the first page takes a while
-        from openhasp_config_manager.gui.qt.widgets.pagelayout import plate_link
+    def test_a_page_the_editor_left_before_it_was_sent_is_not_sent(self, editor, plate, async_loop):
+        # GIVEN: the plate is busy with something else, so the sends wait (in order) until the editor is back on page 9
+        import asyncio
 
-        monkeypatch.setattr(plate_link, "SEND_DELAY_SECONDS", 0.05)
+        lock = editor.plate._send_lock
+        asyncio.run_coroutine_threadsafe(lock.acquire(), async_loop).result(timeout=5)
         editor.plate.action_live_preview.setChecked(True)
 
         # WHEN
         editor._go_to_page(1)
         editor._go_to_page(9)
+        async_loop.call_soon_threadsafe(lock.release)
 
-        # THEN: page 9 was sent once, and is shown. The first send of it may have been skipped too, if it only started while
-        # the editor was on page 1
+        # THEN: page 9 was sent once and shown twice, page 1 not at all
         wait_until(lambda: not editor.busy.busy)
         assert ("clear_page", 1) not in plate.calls
         assert plate.calls.count(("clear_page", 9)) == 1
-        assert plate.calls[-1] == ("set_page", 9)
+        assert plate.calls.count(("set_page", 9)) == 2
 
     def test_forgotten_pages_are_sent_in_full_again(self, editor, plate):
         # GIVEN
