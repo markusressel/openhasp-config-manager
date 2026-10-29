@@ -72,7 +72,7 @@ class PartModeBar(QFrame):
         row.addWidget(self.title)
         self.instances = QComboBox()
         self.instances.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
-        self.instances.setMinimumContentsLength(10)
+        self.instances.setMinimumContentsLength(4)
         self.instances.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.instances.setMaximumWidth(UiDimensions.one * 40)
         self.instances.currentIndexChanged.connect(self._on_instance_chosen)

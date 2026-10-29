@@ -87,6 +87,19 @@ def plates(monkeypatch) -> _Plates:
 
 
 @pytest.fixture
+def font_scale(qapp, request):
+    """The font of the application, `request.param` times as large, while the test runs (before the window is created)."""
+    from PyQt6.QtWidgets import QApplication
+
+    default = QApplication.font()
+    font = QApplication.font()
+    font.setPointSizeF(default.pointSizeF() * request.param)
+    QApplication.setFont(font)
+    yield request.param
+    QApplication.setFont(default)
+
+
+@pytest.fixture
 def tile(cfg_root) -> Path:
     return (cfg_root / "common" / "parts" / "tile.jsonl").resolve()
 
@@ -259,7 +272,9 @@ class TestPartTabs(TestBase):
         assert pages.editor.plate.live
         wait_until(lambda: plates.calls(TEST_DEVICE)[-1:] == [("set_page", 2)])
 
-    def test_the_bar_of_a_part_tab_stays_one_line_in_a_small_window(self, window, tile):
+    # also with a larger font than the default one of the machine (users with bigger fonts)
+    @pytest.mark.parametrize("font_scale", [1, 1.5], indirect=True)
+    def test_the_bar_of_a_part_tab_stays_one_line_in_a_small_window(self, font_scale, window, tile):
         # GIVEN
         window.show()
         window.resize(900, 600)
@@ -274,3 +289,94 @@ class TestPartTabs(TestBase):
         assert bar.height() < 2 * bar.done.sizeHint().height()
         assert bar.done.geometry().right() <= bar.width()
         assert editor.widget_picker.is_compact
+
+
+class _Questions:
+    """The questions of the window (`QMessageBox.question`), answered with `answer`."""
+
+    def __init__(self, monkeypatch):
+        from PyQt6.QtWidgets import QMessageBox
+
+        self.texts: List[str] = []
+        self.answer = QMessageBox.StandardButton.Save
+
+        def question(_parent, _title, text, *args):
+            self.texts.append(text)
+            return self.answer
+
+        monkeypatch.setattr(QMessageBox, "question", question)
+
+
+class TestSaveAll(TestBase):
+    def test_save_writes_the_changes_of_every_tab_after_listing_the_files_the_tab_doesnt_show(
+        self, window, cfg_root, monkeypatch
+    ):
+        from PyQt6.QtWidgets import QMessageBox
+
+        # GIVEN: a change in the tab of the test device, then the tab of another device is active
+        questions = _Questions(monkeypatch)
+        pages = window.device_tabs.active
+        window.session.set_source_value(_object(window.session, 5), "x", 11)
+        _open(window, OTHER_DEVICE)
+        other_file = cfg_root / DEVICE_DIR / "other.jsonl"
+        assert not window.session.is_dirty and window.action_save.isEnabled()
+
+        # WHEN: the user cancels
+        questions.answer = QMessageBox.StandardButton.Cancel
+        assert not window.draft_actions.save()
+
+        # THEN
+        assert questions.texts == [
+            "These files have changes too, which this tab doesn't show:\n\n"
+            f"{DEVICE_DIR}/other.jsonl\n\nSave them anyway?"
+        ]
+        assert other_file.read_text() == OTHER_JSONL and pages.dirty
+
+        # WHEN
+        questions.answer = QMessageBox.StandardButton.Save
+        assert window.draft_actions.save()
+
+        # THEN: saved, and the tab of the test device has no changes anymore
+        assert '"x": 11' in other_file.read_text()
+        assert not pages.dirty and window.device_tabs.title(pages) == "test_device"
+        assert not window.action_save.isEnabled()
+
+    def test_save_in_a_part_tab_writes_the_other_files_of_the_device_too(self, window, tile, cfg_root, monkeypatch):
+        # GIVEN: a change of the part in its tab, and one of another file of the device
+        questions = _Questions(monkeypatch)
+        session = window.session
+        session.set_source_value(_object(session, 5), "x", 11)
+        window.edit_part(tile)
+        window.page_layout_editor_widget.editing.set_source_value(_object(session, 20), "y", 130)
+
+        # WHEN
+        assert window.draft_actions.save()
+
+        # THEN: one question about both: the file the part tab doesn't show, and the shared part
+        [text] = questions.texts
+        assert text.startswith(f"These files have changes too, which this tab doesn't show:\n\n{DEVICE_DIR}/other.jsonl\n\n")
+        assert "shared with other devices:\n\ncommon/parts/tile.jsonl\n\nThe change also affects: other_device." in text
+        assert '"x": 11' in (cfg_root / DEVICE_DIR / "other.jsonl").read_text()
+        assert '"y": 130' in tile.read_text()
+        assert not session.is_dirty and window.config_draft.dirty_paths == []
+
+    def test_a_part_on_its_own_is_saved_by_its_tab_alone_also_when_it_is_closed_in_the_background(
+        self, window, cfg_root, monkeypatch
+    ):
+        # GIVEN: a change of a part on its own, and one of the pages of the device, whose tab is active
+        questions = _Questions(monkeypatch)
+        pages = window.device_tabs.active
+        card = (cfg_root / DEVICE_DIR / "card.jsonl").resolve()
+        window.file_tree_widget.editPartRequested.emit(card)
+        tab = window.device_tabs.active
+        tab.editor.editing.set_source_value(_object(tab.focus.session, 7), "x", 15)
+        window.device_tabs.activate(pages)
+        window.session.set_source_value(_object(window.session, 5), "x", 11)
+
+        # WHEN: its tab is closed, and the user saves the part
+        assert window.close_tab(tab)
+
+        # THEN: only the part is written, the pages keep their changes in their draft
+        assert len(questions.texts) == 1 and "card.jsonl" in questions.texts[0]
+        assert '"x": 15' in card.read_text()
+        assert (cfg_root / DEVICE_DIR / "other.jsonl").read_text() == OTHER_JSONL and pages.dirty

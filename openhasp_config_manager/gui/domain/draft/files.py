@@ -9,6 +9,7 @@ from openhasp_config_manager.const import DEVICES_FOLDER_NAME, COMMON_FOLDER_NAM
 from openhasp_config_manager.gui.domain.file_tree import FileNode, including_files, scan_file_tree, used_files
 from openhasp_config_manager.gui.domain.variables.unused import UnusedVariables, find_unused_variables
 from openhasp_config_manager.gui.domain.variables.usages import DeviceFiles, VariableUsages
+from openhasp_config_manager.gui.domain.draft.config_draft import ConfigDraft
 from openhasp_config_manager.gui.domain.draft.model import ComponentSource
 from openhasp_config_manager.gui.domain.draft.part_alone import placeholder_vars
 from openhasp_config_manager.gui.domain.draft.session import ANY_OBJECT, PlateSession
@@ -209,15 +210,18 @@ class FileChange:
     path: Path
     content: str
     is_common: bool
+    # the key of the file or part in the draft (see `PlateSession.file_keys`, `part_keys`)
+    key: str
 
 
-def plan_save(session: PlateSession) -> List[FileChange]:
+def plan_save(draft: PlateSession | ConfigDraft) -> List[FileChange]:
     """
     Compute the new content of every source file the draft changed. Nothing is written.
+    :param draft: the draft of a device (the files it shows), or all files of the config directory
     :raises SaveConflictError: if a file changed on disk since the draft was loaded
     """
     result = []
-    for component_changes in session.changes():
+    for component_changes in draft.changes():
         component = component_changes.component
         content = component.path.read_text()
         if content != component.content:
@@ -231,7 +235,9 @@ def plan_save(session: PlateSession) -> List[FileChange]:
             removals=component_changes.removals,
         )
         verify_jsonl_source(new_content, component_changes.expected_sources)
-        result.append(FileChange(path=component.path, content=new_content, is_common=component.is_common))
+        result.append(
+            FileChange(path=component.path, content=new_content, is_common=component.is_common, key=component.key)
+        )
     return result
 
 

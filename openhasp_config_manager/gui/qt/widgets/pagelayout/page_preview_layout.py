@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import List, Optional, Dict, Callable, Tuple
 
 from PyQt6 import QtCore
-from PyQt6.QtCore import Qt, QRectF
+from PyQt6.QtCore import QEvent, Qt, QRectF
 from PyQt6.QtGui import QBrush, QCursor, QPainter, QPainterPath, QColor, QPen, QFont
 from PyQt6.QtWidgets import QApplication, QGraphicsView, QWidget
 
@@ -466,8 +466,15 @@ class PagePreviewWidget(QGraphicsView):
         widget.setParent(self.viewport())
         widget.show()
         self._overlays.append((widget, anchor))
+        # a bar gets wider (e.g. the text of a button changes): the view must not get narrower than it
+        widget.installEventFilter(self)
         self._update_minimum_width()
         self._position_overlays()
+
+    def eventFilter(self, watched, event) -> bool:
+        if event.type() == QEvent.Type.LayoutRequest and any(watched is overlay for overlay, _anchor in self._overlays):
+            self._update_minimum_width()
+        return super().eventFilter(watched, event)
 
     def set_overlay_visible(self, widget: QWidget, visible: bool):
         """Show or hide a floating bar (see `add_overlay`)."""

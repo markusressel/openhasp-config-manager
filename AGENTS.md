@@ -97,8 +97,9 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
   files of other devices. A step of several files is undone as a whole, only if it is the newest in each of them, otherwise
   it is refused (`UndoRefusedError`); redo likewise (Part 2 of `docs/tabs-and-shared-drafts.md`). Group the changes of one user action with
   `with session.edit("Move 3 objects"):`, and pass a `merge_key` for actions repeated in a row (typing into a property, nudging). An
-  edit operation of the editor needs no undo code of its own, only the grouping. Save doesn't load the draft again: the
-  draft takes what it wrote as its files (`mark_saved`), so the history continues. The steps of a file are forgotten when it is loaded
+  edit operation of the editor needs no undo code of its own, only the grouping. Save writes every changed file of the
+  `ConfigDraft` (`DraftActions.save`, listing first the files the active tab doesn't show; a part on its own only by its tab)
+  and doesn't load the draft again: the draft takes what it wrote as its files (`mark_saved`), so the history continues. The steps of a file are forgotten when it is loaded
   again from disk (it changed there) or reverted.
 - **Interact mode** (*Edit* off): touches go through `Indev` (`gui/domain/interaction.py`, a port of the LVGL input device: press lost,
   long press, release) to the items, which are its targets. What a touch changes is `RuntimeState` of the preview, next to the draft and

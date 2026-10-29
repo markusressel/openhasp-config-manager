@@ -719,7 +719,7 @@ class MainWindow(QMainWindow):
         )
         if answer == QMessageBox.StandardButton.Cancel:
             return False
-        return answer != QMessageBox.StandardButton.Save or self.draft_actions.save()
+        return answer != QMessageBox.StandardButton.Save or self.draft_actions.save(tab.focus.session)
 
     # --- plates ---
 
@@ -930,9 +930,23 @@ class MainWindow(QMainWindow):
         return None if tab is None else tab.session_key
 
     def _update_draft_actions(self):
-        dirty = self.session is not None and self.session.is_dirty
-        self.action_save.setEnabled(dirty)
+        session = self.session
+        dirty = session is not None and session.is_dirty
+        # Save writes every changed file (see `DraftActions.save`), also those of other tabs
+        self.action_save.setEnabled(
+            dirty or (session is not None and not session.is_part_alone and bool(self.config_draft.dirty_paths))
+        )
         self.action_revert.setEnabled(dirty)
+
+    def shown_keys(self, session: PlateSession) -> Set[str]:
+        """
+        :return: the keys of the files and parts that the tab of a draft shows: those of its device, or for the active part
+            tab, its part and the files that include its instance (see `PartFocus.undo_scope`)
+        """
+        tab = self.device_tabs.active
+        if isinstance(tab, PartTab) and not tab.alone and tab.focus.session is session:
+            return set(tab.focus.undo_scope)
+        return set(session.file_keys) | set(session.part_keys)
         self.action_deploy.setEnabled(self.device is not None and not self.page_layout_editor_widget.busy.busy)
 
     def reload_draft(self):

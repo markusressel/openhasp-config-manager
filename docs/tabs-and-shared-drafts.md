@@ -218,7 +218,12 @@ Each phase is one PR with tests. Phases on different files run in parallel.
   draft; the device tab no longer has a state of its own for it.
 - **The undo scope of a part tab** is the part and the files of the `!include` chain of its instance
   (`PartFocus.undo_scope`): undo there doesn't step through edits of other files of the device, which the device tab undoes.
-  The scope follows the instance when another one is chosen. Save still writes the whole draft (Part 4).
+  The scope follows the instance when another one is chosen.
+- **Save writes every changed file of the `ConfigDraft`** (Part 4), from any tab: one question lists the files the active
+  tab doesn't show (for a part tab: other than its undo scope) and the shared files, then all are written and every draft
+  that shows them is marked saved. A part on its own is the exception: its draft is its own (placeholder vars, maybe a copy
+  of a part that the shared draft has too, which would be written twice), so only its tab saves it, also when the tab is
+  closed in the background. Revert still drops the draft of the active tab.
 - **One `PlateLink` per device, not per editor** (supersedes "`PlateLink` stays in the editor of the device tab" of phase 5).
   `PlateConnections` keeps it with the connection, and every tab of the device shows its actions (Live preview, Clear page,
   Restore plate). Live preview sends the page of the tab of the device that was active last (`PlateLink.set_view`); closing
@@ -232,4 +237,7 @@ Each phase is one PR with tests. Phases on different files run in parallel.
   scrollbars. "Show the page" goes back to the dimmed page and the zoom of the page.
 - **A small window stays usable**: a part tab hides the device controls over the preview (they belong to the device tab), the
   widget picker shrinks to its icons when the editor is narrow (in device tabs too), and the buttons of the part bar lose their
-  titles before the bar would wrap. The window's minimum size is 960x600.
+  titles before the bar would wrap. The instance list is at least 4 characters wide. The window's minimum size is 960x600.
+  The preview is never narrower than its widest floating bar, also after a bar got wider (an event filter follows their
+  layouts): before, a stale minimum and a wider font (a fallback font on CI) pushed the editor under the Properties dock.
+  The test of the small window runs with the default font and one 1.5 times as large.
