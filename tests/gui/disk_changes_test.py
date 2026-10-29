@@ -208,3 +208,22 @@ class TestGuiStateFile(TestBase):
         assert state["running"] is False
         qwait(500)
         assert gui_state(cfg_root)["running"] is False
+
+
+class TestEditMode(TestBase):
+    def test_the_properties_are_shown_only_in_edit_mode(self, window):
+        # GIVEN
+        editor = window.page_layout_editor_widget
+        assert window.properties_dock.isHidden()
+
+        # WHEN
+        editor.set_edit_mode(True)
+
+        # THEN
+        assert not window.properties_dock.isHidden()
+
+        # WHEN
+        editor.set_edit_mode(False)
+
+        # THEN
+        assert window.properties_dock.isHidden()
