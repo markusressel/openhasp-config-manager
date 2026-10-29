@@ -39,9 +39,9 @@ The preview and the text editor follow each other, and both follow changes to th
 with another editor or an LLM at the same time. Hints, shortcuts and explanations are in the GUI itself (hover over things,
 use the context menus, and the legend of the file tree).
 
-With *Edit mode* off, the preview is an *Interact mode*: touching the objects looks and behaves like on a plate with openHASP
+With *Edit* off, the preview is an *Interact mode*: touching the objects looks and behaves like on a plate with openHASP
 0.7 (pressed looks, toggles, dragged sliders and arcs, dropdown lists, rollers that are dragged and thrown, tabs that are swiped, message boxes, `action` with page
-navigation, groups and commands like `p1b2.val 1`). What you touch is only shown and never changes the files; *Reset* (or Edit mode) puts the objects
+navigation, groups and commands like `p1b2.val 1`). What you touch is only shown and never changes the files; *Reset* (or turning on *Edit*) puts the objects
 back as the files say.
 
 The GUI has additional dependencies (PyQt6) and is optional:

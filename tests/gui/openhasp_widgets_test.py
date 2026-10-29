@@ -166,7 +166,7 @@ class TestPagePreviewWidget(TestBase):
 
         preview = PagePreviewWidget()
         preview.set_screen_size(480, 320)
-        bars = [QPushButton("Edit mode  Snap  Duplicate"), QPushButton("‹ Page 1 ›"), QPushButton("− fit +")]
+        bars = [QPushButton("Edit  Snap  Duplicate"), QPushButton("‹ Page 1 ›"), QPushButton("− fit +")]
         for bar, anchor in zip(bars, [OverlayAnchor.TOP_RIGHT, OverlayAnchor.BOTTOM_CENTER, OverlayAnchor.BOTTOM_RIGHT]):
             preview.add_overlay(bar, anchor)
         preview.resize(*size)
