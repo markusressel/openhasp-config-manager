@@ -371,11 +371,18 @@ def state(config_dir: Path, device: str, object: str, state: str):
     help=get_option_help(PARAM_CFG_DIR),
 )
 @click.option(*get_option_names(PARAM_PATH), required=False, default="", help=get_option_help(PARAM_PATH))
-def vars(config_dir: Path, path: str):
+@click.option(
+    *get_option_names(PARAM_DEVICE),
+    required=False,
+    default=None,
+    help="The device to compute the variables of a path outside of the device folders for (e.g. in common/). Without it, "
+    "the variables that use `device` are printed as they are written.",
+)
+def vars(config_dir: Path, path: str, device: Optional[str]):
     """
     Prints the variables accessible in a given path.
     """
-    asyncio.run(c_vars(config_dir, path))
+    asyncio.run(c_vars(config_dir, path, device))
 
 
 @cli.command(name="screenshot")

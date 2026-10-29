@@ -41,7 +41,8 @@ Templates in the values of `*.vars.yaml` files are rendered.
 - Templates that should stay text (rare) can be escaped with `{% raw %}...{% endraw %}`.
 
 Everything renders through `processing/template_rendering.py` (`render_variables`, `evaluate_template`). The `vars` command
-prints the computed values (with the device of the path, if the path is in a device folder), and so do the variable values of
+prints the computed values (with the device of the path, if the path is in a device folder, or of `--device`; without a
+device, the values that use `device` are printed as they are written), and so do the variable values of
 the GUI (hover, values next to the text, completion), which read the variables of the draft.
 
 ### Numbers in object references

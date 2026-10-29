@@ -813,6 +813,24 @@ class TestEvaluateTemplate(TestBase):
 
 
 class TestRenderVariables(TestBase):
+    def test_values_that_use_a_missing_name_stay_as_they_are(self):
+        # GIVEN: `device` is not known, `card.h` uses it through `card.w`
+        variables = {
+            "margin": 4,
+            "card": {"w": "{{ device.screen.width - margin * 2 }}", "h": "{{ card.w // 2 }}"},
+            "x": "{{ margin }}",
+        }
+
+        # WHEN
+        result = render_variables(variables, missing=frozenset({"device"}))
+
+        # THEN
+        assert result == {"margin": 4, "card": variables["card"], "x": 4}
+
+    def test_an_unknown_name_that_is_not_missing_still_raises(self):
+        with pytest.raises(TemplateRenderError, match="Unknown variable 'nope'"):
+            render_variables({"a": "{{ device.x + nope }}"}, missing=frozenset({"device"}))
+
     def test_values_are_computed_from_other_values(self):
         # GIVEN: in an order that is not the order they depend on each other
         variables = {

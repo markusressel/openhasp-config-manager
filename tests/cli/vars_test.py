@@ -30,5 +30,25 @@ class TestVars:
         # WHEN
         result = CliRunner().invoke(cli, ["vars", "-c", str(cfg_root), "-p", "common"])
 
+        # THEN: the variables that need it are printed as they are written
+        assert result.exit_code == 0, result.output
+        assert "card.w: {{ device.screen.width - margin * 2 }}\n" in result.output
+        assert "margin: 4\n" in result.output
+
+    def test_a_path_outside_of_the_devices_with_a_device(self, cfg_root):
+        # GIVEN: a variable of the device folder replaces the global one, like it does for the files of the common folder
+        (cfg_root / "devices/test_device/margin.vars.yaml").write_text("margin: 10\n")
+
+        # WHEN
+        result = CliRunner().invoke(cli, ["vars", "-c", str(cfg_root), "-p", "common", "-d", "test_device"])
+
         # THEN
-        assert "Unknown variable 'device' in the variable 'card.w'" in result.output
+        assert result.exit_code == 0, result.output
+        assert "card.w: 460\n" in result.output
+
+    def test_an_unknown_device(self, cfg_root):
+        # WHEN
+        result = CliRunner().invoke(cli, ["vars", "-c", str(cfg_root), "-p", "common", "-d", "nope"])
+
+        # THEN
+        assert "Unknown device: nope" in result.output
