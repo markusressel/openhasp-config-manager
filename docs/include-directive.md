@@ -58,6 +58,10 @@ only suffixes those properties have).
 The conversion is done while the object references are resolved (`render_dict_recursive(convert=...)`), with the same
 function the `ObjectDimensionsProcessor` uses for the output.
 
+While the references are resolved, a template that is not resolved yet counts as an unknown variable, so a reference waits for
+it. Before, `"{{ p1b2.x }}"` to an object later in the file whose `x` was a template got the text of that template (it only
+worked when the reference calculated with it, which failed and was tried again).
+
 ### `this` and `bY`
 
 - `this` is the object itself: `"w": "{{ this.h }}"` (square), `"text": "Page {{ this.page }}"`.
@@ -205,6 +209,10 @@ These were not settled beforehand. Each names the alternative that was not taken
 - **`page` and `id` of included objects are rendered at expansion**, with the instance scope, without objects, `this` or `bY`.
 - **Objects of a part only count through their instances** in `pXbY` of other files; a part that is also run by a `.cmd` is
   rendered on its own when it is deployed (with its defaults).
+- **Boolean properties stay text.** `hidden`, `enabled`, ... were numbers by accident (`hidden` matched `h`), so a templated
+  `"hidden": "{{ 1 if ... else 0 }}"` was sent as `0` and is now sent as `"0"`. The plate converts every value to text when it
+  reads JSONL, so this changes nothing there (a deploy uploads such files once). Alternative: a list of boolean properties that
+  are converted too.
 - **Problems of included objects point at the part** (file and line of the object in the part, the chain in the message and in
   the `include` field), because the text that has to change is usually there. Errors of a directive point at the directive.
 

@@ -1,6 +1,5 @@
 import copy
 import itertools
-import re
 from collections import OrderedDict
 from contextlib import contextmanager
 from dataclasses import replace
@@ -24,11 +23,8 @@ from openhasp_config_manager.gui.domain.draft.page_objects import next_free_id
 from openhasp_config_manager.gui.domain.problems import object_name
 from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.processing.template_rendering import has_nested_templates, referenced_objects
-from openhasp_config_manager.processing.jsonl.jsonl import ObjectDimensionsProcessor, NUMERIC_PROPERTY_NAMES
+from openhasp_config_manager.processing.jsonl.jsonl import ObjectDimensionsProcessor, is_numeric_property
 from openhasp_config_manager.processing.jsonl.source_editor import JsonlSourceEditor
-
-_NUMERIC_PROPERTY = re.compile(NUMERIC_PROPERTY_NAMES)
-
 
 # stands for every object: the objects a template refers to can't be told
 ANY_OBJECT = "*"
@@ -201,7 +197,7 @@ class PlateSession:
         except TemplateError as ex:
             return f"Invalid template: {ex.message}"
         result = rendered.get(key)
-        if _NUMERIC_PROPERTY.fullmatch(key) and not isinstance(result, (int, float)):
+        if is_numeric_property(key) and not isinstance(result, (int, float)):
             return f"Must be a number, renders to {result!r}."
         return None
 

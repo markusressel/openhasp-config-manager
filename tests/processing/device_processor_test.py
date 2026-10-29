@@ -259,3 +259,39 @@ class TestComputedVariables(TestBase):
         assert result == '{"page": 1, "id": 1, "x": 10, "w": 300}'
         assert processor.path_variables(component.path)["card"] == {"x": 10, "w": 300}
         assert processor.path_variables(tmp_path)["card"] == {"x": 4, "w": 312}
+
+
+class TestObjectReferences(TestBase):
+    def _render(self, content: str) -> str:
+        device = Device(
+            name="test_device",
+            path=Path(self.cfg_root, "devices", "test_device"),
+            config=self.default_config,
+            cmd=[],
+            jsonl=[],
+            images=[],
+            fonts=[],
+            output_dir=None,
+        )
+        processor = DeviceProcessor(device, [ObjectDimensionsProcessor()], VariableManager(self.cfg_root))
+        component = JsonlComponent(
+            name="page.jsonl", type="jsonl", path=Path(self.cfg_root, "devices", "test_device", "page.jsonl"), content=content
+        )
+        processor.add_component(component)
+        return processor.normalize(device, component)
+
+    def test_numeric_properties_of_other_objects_are_numbers(self):
+        # GIVEN: the screen of the default config is 320 wide
+        content = textwrap.dedent("""
+            {"page": 1, "id": 1, "x": "{{ 2 * 5 }}", "w": "50%", "h": "8", "text": "12"}
+            {"page": 1, "id": 2, "x": "{{ p1b1.x + p1b1.w }}", "w": "{{ p1b1.w - 12 }}", "h": "{{ (p1b1.h | int) * 2 }}"}
+            {"page": 1, "id": 3, "text": "{{ p1b1.text ~ '!' }}", "y": "{{ p1b2.x + p1b4.y }}"}
+            {"page": 1, "id": 4, "y": "{{ p1b1.h }}"}
+            """)
+
+        # WHEN
+        result = self._render(content).splitlines()
+
+        # THEN
+        assert result[1] == '{"page": 1, "id": 2, "x": 170, "w": 148, "h": 16}'
+        assert result[2] == '{"page": 1, "id": 3, "text": "12!", "y": 178}'

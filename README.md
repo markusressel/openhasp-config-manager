@@ -328,6 +328,10 @@ You can use the full functionality of Jinja2 like f.ex. math operations, functio
   }
 ```
 
+The numeric properties of other objects (`page`, `id`, `x`, `y`, `w`, `h`, `min`, `max`, `radius`, `border_width`,
+`pad_*`, `margin_*`, ...) are numbers, with percentages already turned into pixels, so you can calculate with them directly:
+`"{{ p1b1.x + p1b1.w + 4 }}"`. Other properties are text, as they are written.
+
 #### 📦 Variables & Scoping
 
 Besides accessing other objects, you can also define custom variables yourself, which can then

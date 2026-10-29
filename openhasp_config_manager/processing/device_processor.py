@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
@@ -14,6 +15,7 @@ from openhasp_config_manager.openhasp_client.model.component import (
 from openhasp_config_manager.openhasp_client.model.configuration.config import Config
 from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.processing.jsonl import JsonlObjectProcessor
+from openhasp_config_manager.processing.jsonl.jsonl import ObjectDimensionsProcessor
 from openhasp_config_manager.processing.preprocessor.jsonl_preprocessor import JsonlPreProcessor
 from openhasp_config_manager.processing.template_rendering import (
     render_dict_recursive,
@@ -23,6 +25,9 @@ from openhasp_config_manager.processing.template_rendering import (
 )
 from openhasp_config_manager.processing.variables import VariableManager
 from openhasp_config_manager.util import add_missing_keys, merge_dict_into, merge_dict_recursive, merge_dict_shared
+
+# the name of an object in the variables, `p1b2`
+_OBJECT_NAME = re.compile(r"p\d+b\d+")
 
 
 class DeviceProcessor:
@@ -47,6 +52,7 @@ class DeviceProcessor:
         self._variable_manager = variable_manager
         # path -> its computed variables, see `path_variables`
         self._path_variables: Dict[str, Dict[str, Any]] = {}
+        self._dimensions = ObjectDimensionsProcessor()
 
     def add_component(self, component: Component):
         if isinstance(component, JsonlComponent):
@@ -160,13 +166,21 @@ class DeviceProcessor:
                 c_result = self._object_map(self.parse_jsonl_objects(c))
             # `result` becomes what the variables of this component start with: everything before it, and its own variables
             merge_dict_into(result, component_template_vars)
-            rendered_template_vars = render_dict_recursive(input=c_result, template_vars=merge_dict_shared(result, c_result))
+            rendered_template_vars = render_dict_recursive(
+                input=c_result, template_vars=merge_dict_shared(result, c_result), convert=self._object_value
+            )
             # what the objects add, without overriding anything
             add_missing_keys(result, rendered_template_vars)
 
         if result is None:
             raise AssertionError("Unexpected None value")
         return result
+
+    def _object_value(self, keys: List[str], value: Any) -> Any:
+        """The properties of the objects in the variables (`p1b2.w`) are numbers and pixels, as they are sent to the plate."""
+        if len(keys) == 2 and _OBJECT_NAME.fullmatch(keys[0]):
+            return self._dimensions.normalize_value(keys[1], value, self._device.config)
+        return value
 
     def path_variables(self, path: Path) -> Dict[str, Any]:
         """

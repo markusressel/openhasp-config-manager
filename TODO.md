@@ -4,9 +4,7 @@ Open work and known issues. Done items are removed; the git history has them.
 
 ## 1. Bugs
 
-- [ ] **`NUMERIC_PROPERTY_NAMES` matches by prefix** (`processing/jsonl/jsonl.py`): `^(...|h|...).*$` also matches `hidden`, so a
-  templated `"hidden": "{{ ... | lower }}"` (`true`/`false`) logs "is not a number" and stays a string. Anchor the names
-  (`^(...)$`, keeping patterns like `pad_.+`), and add a test.
+None known.
 
 ## 2. Editor
 

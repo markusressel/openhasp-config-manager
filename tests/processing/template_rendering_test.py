@@ -591,6 +591,71 @@ class TestRenderDictRecursive(TestBase):
         assert result["p1b3"]["y"] == "30"
 
 
+class TestObjectsThatReferToEachOther(TestBase):
+    """The objects are in the variables themselves (like a deployment does it), and refer to each other."""
+
+    def test_references_to_templates_later_in_the_dict_wait_for_them(self):
+        # GIVEN: a chain of references to objects later in the dict, without calculations
+        objects = {
+            "p1b1": {"x": "{{ p1b2.x }}"},
+            "p1b2": {"x": "{{ p1b3.x }}"},
+            "p1b3": {"x": "{{ base }}"},
+        }
+
+        # WHEN
+        result = render_dict_recursive(objects, {"base": 7, **objects})
+
+        # THEN: nothing uses the text of a template that is not resolved yet
+        assert result == {"p1b1": {"x": "7"}, "p1b2": {"x": "7"}, "p1b3": {"x": "7"}}
+
+    def test_a_property_that_uses_a_later_property_of_the_same_object(self):
+        # GIVEN
+        objects = {"p1b1": {"w": "{{ p1b1.h }}", "h": "{{ size }}", "list": ["{{ p1b1.h }}"]}}
+
+        # WHEN
+        result = render_dict_recursive(objects, {"size": 5, **objects})
+
+        # THEN
+        assert result == {"p1b1": {"w": "5", "h": "5", "list": ["5"]}}
+
+    def test_references_in_a_cycle_are_left_out_and_reported(self, capsys):
+        # GIVEN
+        objects = {"p1b1": {"x": "{{ p1b2.x }}", "y": 1}, "p1b2": {"x": "{{ p1b1.x }}"}}
+
+        # WHEN
+        result = render_dict_recursive(objects, objects)
+
+        # THEN
+        assert result == {"p1b1": {"y": 1}, "p1b2": {}}
+        assert "p1b1.x (uses unknown p1b2.x)" in capsys.readouterr().out
+
+    def test_templates_that_are_not_in_the_variables(self):
+        # GIVEN: the variables have only a part of the objects
+        objects = {"p1b1": {"x": "{{ a }}"}, "p1b2": {"x": "{{ a }}"}, "p1b3": {"x": {"y": "{{ a }}"}}}
+
+        # WHEN
+        result = render_dict_recursive(objects, {"a": 1, "p1b1": {}})
+
+        # THEN
+        assert result == {"p1b1": {"x": "1"}, "p1b2": {"x": "1"}, "p1b3": {"x": {"y": "1"}}}
+
+    def test_resolved_values_are_converted_before_others_use_them(self):
+        # GIVEN
+        objects = {"p1b1": {"w": "{{ 10 * 2 }}", "nested": {"a": "1"}}, "p1b2": {"w": "{{ p1b1.w - 5 }}"}}
+        calls = []
+
+        def convert(keys, value):
+            calls.append(keys)
+            return int(value) if keys[-1] == "w" else value
+
+        # WHEN
+        result = render_dict_recursive(objects, objects, convert=convert)
+
+        # THEN
+        assert result == {"p1b1": {"w": 20, "nested": {"a": "1"}}, "p1b2": {"w": 15}}
+        assert ["p1b1", "nested", "a"] in calls and ["p1b1", "nested"] not in calls
+
+
 class TestRenderTemplateOrKeep(TestBase):
     def test_renders_like_render_template(self):
         assert render_template_or_keep("{{ a + 1 }}", {"a": 1}) == "2"

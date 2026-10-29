@@ -266,30 +266,51 @@ def referenced_objects(content: str, template_vars: Dict[str, Any]) -> Optional[
 
 # what could not be rendered: where it is, and why
 Unresolved = Tuple[str, str]
+# changes a value that was rendered, by its keys in the dict (e.g. ["p1b2", "x"]): see `render_dict_recursive`
+Converter = Callable[[List[str], Any], Any]
 
 
 def render_dict_recursive(
     input: Dict,
     template_vars: Dict,
     result_key_path: List[str] = None,
+    convert: Optional[Converter] = None,
 ) -> Dict[str, Any]:
     """
     Resolve the templates in the keys and values of a dict (and of the dicts and lists in it), which may refer to each
     other and to the `template_vars`. Entries that refer to something that is not defined yet are tried again after the
     others. Entries that never resolve are left out of the result, and reported.
     :param input: the dict which (possibly) contains templates
-    :param template_vars: the variables the templates can use. Not changed.
+    :param template_vars: the variables the templates can use. Not changed. Where they contain the entries of `input` (e.g. the
+        objects that refer to each other), a template counts as not defined until it is resolved, so nothing uses its text.
     :param result_key_path: the keys of the dict within the variables, for the dicts inside of `input`
+    :param convert: changes every value that is not a dict when it is resolved, before other templates use it (called with its
+        keys and the value, returns the value to use), e.g. to turn the numbers of object properties into numbers
     :return: the dict with its templates rendered
     :raises TemplateRenderError: if a template is not valid
     """
-    result, unresolved = _render_dict(input, copy.deepcopy(template_vars), result_key_path or [])
+    variables = copy.deepcopy(template_vars)
+    path = result_key_path or []
+    _mark_pending(variables, input, path)
+    result, unresolved = _render_dict(input, variables, path, convert)
     if unresolved:
         warn("Can't render these templates: " + "; ".join(f"{name} ({reason})" for name, reason in unresolved))
     return result
 
 
-def _render_dict(input: Dict, template_vars: Dict, path: List[str]) -> Tuple[Dict[str, Any], List[Unresolved]]:
+def _mark_pending(variables: Dict, input: Dict, path: List[str]):
+    """Replace the templates of `input` that are in the variables with unknown variables, until they are resolved."""
+    for leaf_path, _text in _template_leaves(input, tuple(path)):
+        target: Any = variables
+        for key in leaf_path[:-1]:
+            target = target.get(key) if isinstance(target, dict) else None
+        if isinstance(target, dict) and leaf_path[-1] in target:
+            target[leaf_path[-1]] = _Undefined(name=".".join(map(str, leaf_path)))
+
+
+def _render_dict(
+    input: Dict, template_vars: Dict, path: List[str], convert: Optional[Converter]
+) -> Tuple[Dict[str, Any], List[Unresolved]]:
     # `template_vars` is changed: every resolved entry is added to it at its place, for the templates that follow
     result = {}
 
@@ -307,12 +328,14 @@ def _render_dict(input: Dict, template_vars: Dict, path: List[str]) -> Tuple[Dic
                     unresolved.append((name, f"the key {key_unresolved}"))
                     continue
 
-            rendered_value, value_unresolved = _render_value(value, template_vars, path + [rendered_key], name)
+            rendered_value, value_unresolved = _render_value(value, template_vars, path + [rendered_key], name, convert)
             if value_unresolved:
                 unresolved += value_unresolved
                 if isinstance(value, dict):
                     partial[rendered_key] = rendered_value
                 continue
+            if convert is not None and not isinstance(rendered_value, dict):
+                rendered_value = convert(path + [rendered_key], rendered_value)
 
             # later templates can use it
             target = template_vars
@@ -330,9 +353,11 @@ def _render_dict(input: Dict, template_vars: Dict, path: List[str]) -> Tuple[Dic
         last_unresolved_names = unresolved_names
 
 
-def _render_value(value: Any, template_vars: Dict, path: List[str], name: str) -> Tuple[Any, List[Unresolved]]:
+def _render_value(
+    value: Any, template_vars: Dict, path: List[str], name: str, convert: Optional[Converter]
+) -> Tuple[Any, List[Unresolved]]:
     if isinstance(value, dict):
-        return _render_dict(value, template_vars, path)
+        return _render_dict(value, template_vars, path, convert)
     if isinstance(value, str):
         rendered, reason = _render_text(value, template_vars, name)
         return rendered, [(name, reason)] if reason else []
