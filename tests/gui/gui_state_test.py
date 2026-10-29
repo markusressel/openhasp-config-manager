@@ -20,6 +20,7 @@ from openhasp_config_manager.gui.domain.gui_state import (
     describe_part_mode,
     describe_problems,
 )
+from openhasp_config_manager.gui.domain.draft.part_focus import PartFocus
 from openhasp_config_manager.gui.domain.draft.session import PlateSession
 from openhasp_config_manager.gui.domain.problems import Problem, Severity
 from tests import TestBase
@@ -108,14 +109,14 @@ class TestDescribe(TestBase):
         loaded = load_device(create_config_manager(cfg_root), "test_device")
         session = PlateSession(device=loaded.device)
         session.load(loaded.components, loaded.renderer)
-        assert describe_part_mode(session, cfg_root) is None
+        assert describe_part_mode(None, cfg_root) is None
 
         # WHEN
         instance = session.part_instances(cfg_root / "common" / "dot.jsonl")[1]
-        session.enter_part_mode(instance)
+        focus = PartFocus(session, instance)
 
         # THEN
-        assert describe_part_mode(session, cfg_root) == {
+        assert describe_part_mode(focus, cfg_root) == {
             "part": "common/dot.jsonl",
             "instance": session.describe_instance(instance),
             "shared": True,
@@ -124,11 +125,11 @@ class TestDescribe(TestBase):
         assert "id=5" in session.describe_instance(instance)
 
         # WHEN: its objects are all removed
-        [dot] = session.objects_of_instance(instance)
-        session.remove_object(dot)
+        [dot] = focus.objects()
+        focus.remove_object(dot)
 
         # THEN
-        assert describe_part_mode(session, cfg_root)["instance"] is None
+        assert describe_part_mode(focus, cfg_root)["instance"] is None
 
     def test_object_has_rendered_and_written_geometry(self, session, cfg_root):
         # GIVEN
@@ -267,7 +268,7 @@ class TestDescribe(TestBase):
         write_page(cfg_root, '{"!include": "common/dot.jsonl", "for": {"id": [4]}}\n')
         session = load_session(cfg_root)
         [instance] = session.part_instances(part)
-        session.enter_part_mode(instance)
+        focus = PartFocus(session, instance)
 
         # WHEN
         result = describe_device(
@@ -280,11 +281,12 @@ class TestDescribe(TestBase):
             selection=[],
             target_component=str(part),
             config_dir=cfg_root,
+            part_focus=focus,
         )
 
         # THEN
         assert result["new_objects_file"] == "common/dot.jsonl"
-        assert result["part_mode"] == describe_part_mode(session, cfg_root)
+        assert result["part_mode"] == describe_part_mode(focus, cfg_root)
 
     def test_files_have_their_pages(self, session, cfg_root):
         # THEN

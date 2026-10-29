@@ -387,7 +387,7 @@ class TestPartMode(TestBase):
         window.file_tree_widget.editPartRequested.emit(part_file)
         [first, _second] = window.session.part_instances(part_file)
         [dot] = window.session.objects_of_instance(first)
-        window.session.set_source_value(dot, "text", "#{{ id }}")
+        editor.editing.set_source_value(dot, "text", "#{{ id }}")
 
         # THEN
         wait_until(lambda: (gui_state(window.cfg_root).get("device") or {}).get("part_mode"))
@@ -405,7 +405,7 @@ class TestPartMode(TestBase):
         assert part_file.read_text() == '{"page": 9, "id": "{{ id }}", "obj": "label", "text": "#{{ id }}"}\n'
         assert editor_file.read_text() == before
         wait_until(lambda: window.session.is_loaded and not window.session.is_dirty)
-        assert window.session.part_mode == first
+        assert editor.part_mode == first
         assert not editor.part_bar.isHidden()
 
 
@@ -448,7 +448,7 @@ class TestPartAlone(TestBase):
         # WHEN: vars of its own, and a change of the part
         [label] = editor.page_objects
         alone.set_directive_value(label, "vars", {"card": {"page": 9, "id": 7}, "title": "Hello"})
-        alone.set_source_value(label, "x", 6)
+        window.page_layout_editor_widget.editing.set_source_value(label, "x", 6)
 
         # THEN
         assert (label["page"], label["id"], label["text"]) == (9, 7, "Hello")
@@ -458,7 +458,7 @@ class TestPartAlone(TestBase):
         assert not window.session.is_dirty and window.part_alone is alone
 
         # WHEN: another change, then Done: discarded
-        alone.set_source_value(label, "x", 7)
+        window.page_layout_editor_widget.editing.set_source_value(label, "x", 7)
         monkeypatch.setattr(QMessageBox, "question", lambda *args: QMessageBox.StandardButton.Discard)
         editor.part_bar.done.click()
 
@@ -475,7 +475,7 @@ class TestPartAlone(TestBase):
         window.file_tree_widget.editPartRequested.emit(card_file)
         alone = window.part_alone
         [label] = window.page_layout_editor_widget.page_objects
-        alone.set_source_value(label, "x", 7)
+        window.page_layout_editor_widget.editing.set_source_value(label, "x", 7)
         monkeypatch.setattr(QMessageBox, "question", lambda *args: QMessageBox.StandardButton.Cancel)
 
         # WHEN
@@ -495,7 +495,7 @@ class TestPartAlone(TestBase):
         # THEN: still on its own
         wait_until(lambda: window.part_alone is not None and window.page_layout_editor_widget.page_objects[0]["x"] == 50)
         assert window.page_layout_editor_widget.session is window.part_alone
-        assert window.part_alone.part_mode is not None
+        assert window.page_layout_editor_widget.part_mode is not None
 
     def test_a_part_the_pages_include_is_edited_on_the_pages(self, card_file, window, cfg_root):
         # GIVEN: a part on its own
@@ -512,7 +512,18 @@ class TestPartAlone(TestBase):
 
         # THEN
         assert window.part_alone is None
-        assert window.session.part_mode.part == dot.resolve()
+        assert window.page_layout_editor_widget.part_mode.part == dot.resolve()
+
+        # WHEN: a part on its own again, then Done
+        mode = window.page_layout_editor_widget.part_mode
+        window.file_tree_widget.editPartRequested.emit(card_file)
+        assert window.page_layout_editor_widget.part_mode.part == card_file
+        window.page_layout_editor_widget.part_bar.done.click()
+
+        # THEN: the part mode of the pages goes on
+        assert window.part_alone is None
+        assert window.page_layout_editor_widget.part_mode == mode
+        assert not window.page_layout_editor_widget.part_bar.isHidden()
 
     def test_a_page_file_is_not_shown_as_a_part(self, window, editor_file):
         # GIVEN

@@ -35,8 +35,7 @@ class ObjectActions(QObject):
         Objects whose position is a template or a percentage can't be dragged: it would replace them with pixels. Included
         objects can't be changed at all, except for those of the part in part mode.
         """
-        session = self._editor.session
-        return session.read_only_reason(obj) is None and not session.has_computed_position(obj)
+        return self._editor.editing.read_only_reason(obj) is None and not self._editor.session.has_computed_position(obj)
 
     def report_locked(self, items: List[EditableWidget]):
         """Explain why objects can't be moved: in the status bar, and next to the first of them."""
@@ -52,7 +51,7 @@ class ObjectActions(QObject):
 
     def _changeable(self, items: List[EditableWidget], action: str) -> List[EditableWidget]:
         """:return: the objects that can be changed; why the others can't is shown (see `report_included`)"""
-        included = [item for item in items if self._editor.session.read_only_reason(item.obj_data) is not None]
+        included = [item for item in items if self._editor.editing.read_only_reason(item.obj_data) is not None]
         if included:
             self.report_included(included, action)
         return [item for item in items if not any(item is other for other in included)]
@@ -60,10 +59,10 @@ class ObjectActions(QObject):
     def report_included(self, items: List[EditableWidget], action: str):
         """Explain why included objects can't be changed: in the status bar, and next to the first of them."""
         names = ", ".join(object_name(item.obj_data) for item in items)
-        hint = INCLUDED_HINT if self._editor.session.part_mode is None else PART_MODE_HINT
+        hint = INCLUDED_HINT if self._editor.part_mode is None else PART_MODE_HINT
         self._editor.status.failed.emit(f"{action} {names}", hint)
         first = items[0]
-        reason = self._editor.session.read_only_reason(first.obj_data)
+        reason = self._editor.editing.read_only_reason(first.obj_data)
         self._editor.page_preview_widget.show_message(
             f"{object_name(first.obj_data)} can't be changed here:\n{reason}", near=first
         )
@@ -76,7 +75,7 @@ class ObjectActions(QObject):
         items = self._changeable(items, "Using pixels for")
         if not items:
             return
-        if self._editor.session.part_mode is not None:
+        if self._editor.part_mode is not None:
             answer = QMessageBox.question(
                 self._editor,
                 "Use pixels in the part",
@@ -88,7 +87,7 @@ class ObjectActions(QObject):
                 return
         with self._editor.session.edit(self._describe("Use pixels for x/y of", items)):
             for item in items:
-                self._editor.session.use_pixel_position(item.obj_data)
+                self._editor.editing.use_pixel_position(item.obj_data)
 
     def on_items_moved(self, items: List[EditableWidget]):
         with self._editor.session.edit(self._describe("Move", items)):
@@ -110,8 +109,8 @@ class ObjectActions(QObject):
                 self._move(item, item.obj_x + dx, item.obj_y + dy)
 
     def _move(self, item: EditableWidget, x: int, y: int):
-        self._editor.session.set_source_value(item.obj_data, "x", x)
-        self._editor.session.set_source_value(item.obj_data, "y", y)
+        self._editor.editing.set_source_value(item.obj_data, "x", x)
+        self._editor.editing.set_source_value(item.obj_data, "y", y)
 
     @staticmethod
     def _describe(action: str, items: List[EditableWidget]) -> str:
@@ -145,7 +144,7 @@ class ObjectActions(QObject):
             screen_height=screen.height,
             parent_id=parent_id,
         )
-        self._editor.session.add_object(component, obj)
+        self._editor.editing.add_object(component, obj)
 
     def _parent_for(self, widget_type: OpenHASPWidgetType) -> Optional[int]:
         """The object a new object belongs to: a tab goes into the last tabview of the page."""
@@ -165,7 +164,7 @@ class ObjectActions(QObject):
         with self._editor.session.edit(self._describe("Duplicate", items)):
             for item in items:
                 try:
-                    self._editor.session.duplicate_object(item.obj_data)
+                    self._editor.editing.duplicate_object(item.obj_data)
                 except ValueError as ex:
                     self._editor.status.failed.emit(f"Duplicating p{item.obj_data.get('page')}b{item.obj_id}", error_text(ex))
                     break
@@ -178,7 +177,7 @@ class ObjectActions(QObject):
         items = self._editor.page_preview_widget.selected_items()
         if not self._editor.edit_mode or not items:
             return
-        if self._editor.session.part_mode is not None:
+        if self._editor.part_mode is not None:
             names = ", ".join(object_name(item.obj_data) for item in items)
             self._editor.status.failed.emit(
                 f"Copying {names}", "the objects of a part need the variables of their instance: duplicate them instead"
@@ -211,7 +210,7 @@ class ObjectActions(QObject):
         screen = self._editor.device_pages_data.device.config.openhasp_config_manager.device.screen
         position = self._editor.page_preview_widget.cursor_plate_position()
         try:
-            self._editor.session.paste_objects(
+            self._editor.editing.paste_objects(
                 component,
                 sources,
                 page=self._editor.current_index,
@@ -242,4 +241,4 @@ class ObjectActions(QObject):
 
         with self._editor.session.edit(self._describe("Remove", items)):
             for item in items:
-                self._editor.session.remove_object(item.obj_data)
+                self._editor.editing.remove_object(item.obj_data)

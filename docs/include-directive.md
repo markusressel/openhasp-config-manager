@@ -194,7 +194,7 @@ of the directive in the open file):
   and instances can be added or removed. The `!include`s inside of parts are listed read-only, with a button to go to them.
   A directive in the common folder is marked "shared".
 - **Part mode** (editing a part itself): "Edit the part" in the Properties panel of an included object, or in the context
-  menu of a part in the Files tree or in the text editor, shows one instance of the part (`PlateSession.enter_part_mode`): its objects can be
+  menu of a part in the Files tree or in the text editor, shows one instance of the part (`PartFocus`): its objects can be
   changed like plain objects (moved, nudged, edited, added, duplicated, removed), the objects around it are dimmed and
   can't be selected. A change is written into the part in the draft, and every instance follows (also those on other
   pages). A bar above the preview names the part and the instance, chooses another instance, and ends part mode ("Done");

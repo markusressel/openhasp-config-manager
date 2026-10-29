@@ -89,9 +89,12 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
   signals of an editor only while its tab is active (except what it sends to its plate), and points the panels, menus, toolbar,
   status bar and log at the active tab (`_on_tab_activated`). Closing a tab keeps its drafts (`MainWindow.sessions`). Files that change while a tab is in the
   background are applied when it is shown again (`changed_files`).
-- **Undo/redo**: every change through the session is a step of the undo history of its `ConfigDraft` (one for all devices;
-  `gui/domain/draft/edit_history.py`, whole states of the sources, each file on its own (`DraftState`), so undo doesn't depend
-  on how an edit was made, and restores only the files of its step). Group the changes of one user action with
+- **Undo/redo**: every change through the session is a step of the undo history of its `ConfigDraft`
+  (`gui/domain/draft/edit_history.py`, whole states of the sources, each file on its own (`DraftState`), so undo doesn't depend
+  on how an edit was made, and restores only the files of its step). Like IntelliJ, the history belongs to the files: a session
+  undoes the newest step that changed a file it shows (also one made through another device), never steps of only the own
+  files of other devices. A step of several files is undone as a whole, only if it is the newest in each of them, otherwise
+  it is refused (`UndoRefusedError`); redo likewise (Part 2 of `docs/tabs-and-shared-drafts.md`). Group the changes of one user action with
   `with session.edit("Move 3 objects"):`, and pass a `merge_key` for actions repeated in a row (typing into a property, nudging). An
   edit operation of the editor needs no undo code of its own, only the grouping. Save doesn't load the draft again: the
   draft takes what it wrote as its files (`mark_saved`), so the history continues. The steps of a file are forgotten when it is loaded
@@ -113,9 +116,12 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
   plain objects around them. Edit operations check `session.read_only_reason(obj)` (or `_check_editable`, which raises
   `ReadOnlyObjectError`); `origin_of` says where an included object is written. New edit operations must respect this. Only
   the `vars` and `for` of the outermost `!include` change, through `set_directive_value`, which includes the directive again
-  (objects of instances that stay keep their rendered dict). In part mode (`enter_part_mode`) the objects of one instance of
-  a part can be changed: edits go into the draft copy of the part (`PartDraft`), every instance follows (`_reinclude`), and
-  everything else is read-only. `read_only_reason` and `is_selectable` depend on the mode: use them, not `is_included`.
+  (objects of instances that stay keep their rendered dict). In part mode the objects of one instance of a part can be
+  changed: edits go into the draft copy of the part (`PartDraft`), every instance follows (`_reinclude`), and everything
+  else is read-only. Part mode belongs to a view, not to the draft: a `PartFocus` (`gui/domain/draft/part_focus.py`,
+  `PageLayoutEditorWidget.part_focus`) has the methods that depend on it, which are those of the session with the instance
+  (`part_instance`), so two views of a draft can be in different modes. Edit through `editor.editing` (the focus in part
+  mode, else the session). `read_only_reason` and `is_selectable` depend on the mode: use them, not `is_included`.
   A part that no page includes is shown on its own (`load_part_alone`, `MainWindow.part_alone`): a draft of one `!include`
   that is in no file (`ComponentSource.is_scratch`, never saved), so `window.session` is then not the draft of the pages.
 - **Templates are never replaced implicitly.** Objects whose `x`/`y` is a template or a percentage can't be dragged or nudged; the

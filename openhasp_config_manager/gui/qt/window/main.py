@@ -612,6 +612,8 @@ class MainWindow(QMainWindow):
                 previous.changed_files |= {self.cfg_root / path for path in self.disk_changes}
         self.disk_changes_banner.hide()
         self._show_editor(self.page_layout_editor_widget)
+        # edits through other tabs can change what Undo and Redo do here
+        self.page_layout_editor_widget.update_undo_actions()
         self._show_tab(tab)
         if tab is not None and tab.device is not None and tab.changed_files:
             changed, tab.changed_files = tab.changed_files, set()
@@ -993,7 +995,7 @@ class MainWindow(QMainWindow):
         self._show_part_alone(tab, alone)
 
     def _load_part_alone(self, tab: DeviceTab, part: Path) -> Optional[PlateSession]:
-        """:return: a draft of the part on its own, in part mode; None if it can't be loaded (which is reported)"""
+        """:return: a draft of the part on its own (shown in part mode); None if it can't be loaded (which is reported)"""
         try:
             component, renderer = load_part_alone(self.config_manager, tab.device, part)
             session = PlateSession(device=tab.device)
@@ -1001,7 +1003,6 @@ class MainWindow(QMainWindow):
             instances = session.part_instances(part)
             if not instances:
                 raise ValueError("it has no objects to show")
-            session.enter_part_mode(instances[0])
         except Exception as ex:
             LOGGER.exception(f"Could not show {part} on its own")
             self.status.failed.emit(f"Editing the part {part.name}", error_text(ex))
@@ -1011,7 +1012,10 @@ class MainWindow(QMainWindow):
     def _show_part_alone(self, tab: DeviceTab, alone: PlateSession):
         tab.part_alone = alone
         editor = tab.editor
-        editor.set_data(session=alone, device_pages_data=tab.pages_data, page=alone.page_of_instance(alone.part_mode))
+        # in part mode of its first instance, unless the editor shows the part already (e.g. it was loaded again)
+        mode = editor.part_mode if editor.session is alone else None
+        instance = mode or alone.part_instances(tab.part_alone_path)[0]
+        editor.set_data(session=alone, device_pages_data=tab.pages_data, page=alone.page_of_instance(instance), part=instance)
         if not editor.edit_mode:
             editor.set_edit_mode(True)
         self._update_draft_actions()
