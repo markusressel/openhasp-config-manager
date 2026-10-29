@@ -30,11 +30,12 @@ Open work and known issues. Done items are removed; the git history has them.
 
 ## 3. Parts (`!include`) in the editor
 
-Included objects are shown and read-only, except in part mode (see `docs/include-directive.md`). Next:
+Included objects are shown and read-only, except in a part tab (see `docs/include-directive.md` and
+`docs/tabs-and-shared-drafts.md`). Next:
 
-- [ ] A part on its own (no page includes it) that refers to objects of its page (`b4.w` of a card) shows those templates
-  unresolved: offer to show it on a page of the device, with the objects of that page in its references.
-- [ ] Change the `vars` and `for` of an `!include` inside of a part in part mode (the "Instance" group is hidden there; only the
+- [ ] The part tab of a part that no page includes (a part on its own) shows templates that refer to objects of its page (`b4.w` of
+  a card) unresolved: offer to show it on a page of the device, with the objects of that page in its references.
+- [ ] Change the `vars` and `for` of an `!include` inside of a part in a part tab (the "Instance" group is hidden there; only the
   outermost `!include` of a page file can be changed today).
 - [ ] Copy an included object as a plain object (its values rendered with the variables of its instance). Copying is refused today,
   since the templates of the part need those variables.
@@ -44,9 +45,24 @@ Included objects are shown and read-only, except in part mode (see `docs/include
 - [ ] The draft expands the directives of every file again after each edit (for the object references). Cache the instances of a
   directive while its text and its scope stay the same, if large configs make editing slow. Measured on the user's config
   (`touch_down_1`): about 0.45 s per edit of a property or of `vars`, most of it in `jsonl_template_variables` (expanding and
-  copying the variables of every file). An edit in part mode takes 0.4 to 0.8 s there.
+  copying the variables of every file). An edit in a part tab takes 0.4 to 0.8 s there. With several devices open this adds up: an
+  edit of a shared file renders every open device that shows it at once (`PlateSession._sync`); render the devices in the
+  background tabs debounced, or when their Live preview or tab needs them (`docs/tabs-and-shared-drafts.md`, Part 1).
 
-## 4. Composed pages (haad layouts) in the editor
+## 4. Tabs and the shared draft (`docs/tabs-and-shared-drafts.md`)
+
+Left over from the implementation:
+
+- [ ] A file that is a page file of one device and a part included by another one has two drafts in the
+  `ConfigDraft`: in `files` and in `parts`). Editing both and saving fails with `SaveConflictError`.
+- [ ] The tab of a part that no page includes has a draft of its own (placeholder vars), so Save in another tab doesn't write it,
+  and it may hold a second copy of a part the shared draft has too. Share the `ConfigDraft` with it.
+- [ ] Restoring the tabs on start doesn't restore their page and zoom, and part tabs come back after the other tabs of their device
+  instead of at their place.
+- [ ] The Plates panel shows the page of a plate only after it changed pages once (the plate sends `state/page` only on a change):
+  ask for it when the connection is made (probably `command/page` with an empty payload; check that the plate answers).
+
+## 5. Composed pages (haad layouts) in the editor
 
 The code-defined layouts (`haad/layout`, `haad/page`, `haad/plate`) already update plates incrementally: `Page.relayout()` sends only the
 changed `x`/`y`/`w`/`h`, `Repeat` adds and removes single objects, ids are stable (`pXbY`), and `dump.py`/`render.py` turn a layout
@@ -57,7 +73,7 @@ into JSONL objects.
 - [ ] Layout-aware editing of `Column`/`Row`/`Panel` trees: an edit of `gap`, `padding` or `size` runs `relayout()` and sends the diff,
   the same path haad uses at runtime.
 
-## 5. The real plate
+## 6. The real plate
 
 - [ ] **Keep the display awake while Live preview is on.** The plate dims and turns its display off after the idle timeout, so the
   live preview changes can't be seen. Wake it when Live preview starts and keep it awake as long as it is on. Check this regularly
@@ -69,14 +85,14 @@ into JSONL objects.
 - [ ] Verify what the runtime and Live preview rely on: `delete` cascading to children, a single JSONL add onto a shown page, and the
   `x`/`y`/`w`/`h` commands.
 
-## 6. Code structure
+## 7. Code structure
 
 - [ ] `check.py` (CLI, no Qt) imports the editor's domain from `gui/domain/` (`draft/session`, `draft/files`, `problems`,
   `gui_state.relative`). It works because `gui/domain` is Qt-free, but the layering is upside down: move the Qt-free model of the
   pages (draft, problems, page objects) out of `gui/`, into `openhasp_config_manager/model/` (the Qt-free model that
   code-defined pages use, `docs/config-model-api.md`).
 
-## 7. The config model (`docs/config-model-api.md`)
+## 8. The config model (`docs/config-model-api.md`)
 
 The first slice (`ConfigModel.load()`, `variables()`, `expand_part()`, `render_part()`, the `Part` leaf) is done. Next, as pages need it:
 

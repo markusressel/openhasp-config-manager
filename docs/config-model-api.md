@@ -77,7 +77,7 @@ class RenderedObject:
 - Errors are the ones of `check` and a deployment (`IncludeExpansionError`, `IncludedObjectError`, `TemplateRenderError`), raised: fail
   fast, the caller can't render half a part.
 - `load` reads the files once. After a change of the config, load it again (haad: restart, as for code changes).
-- The GUI and `check` move onto this module over time; this is the move of the Qt-free model out of `gui/` (TODO.md §6).
+- The GUI and `check` move onto this module over time; this is the move of the Qt-free model out of `gui/` (TODO.md §7).
 
 ## Part 2: parts in code-defined layouts (`openhasp_config_manager.haad.layout`)
 
