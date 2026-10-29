@@ -112,7 +112,7 @@ class TestJsonl(TestBase):
 
 
 class TestTemplates(TestBase):
-    # where templates are is tested in template_rendering_test (`template_spans`)
+    # where templates are is tested in template_rendering/checks_test (`template_spans`)
     def test_templates_are_tokens_at_their_offset(self):
         assert [(t.start, t.end, t.kind) for t in find_templates("{{ a }} {% b %}", offset=5)] == [
             (5, 12, TokenKind.TEMPLATE),
