@@ -4,11 +4,12 @@ a comment, ... It knows the dialect of the .jsonl files (one object after the ot
 templates in the strings, the placeholders of openHASP like `"text": "%ip%"`) that no JSON highlighter does. Qt-free, so it is tested without a display.
 """
 
+import itertools
 import re
 from dataclasses import dataclass
 from enum import Enum, StrEnum
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Callable, Iterable, List, Optional, Tuple
 
 from openhasp_config_manager.gui.domain.source.placeholders import PLACEHOLDER_PROPERTY, placeholder_of
 from openhasp_config_manager.processing.template_rendering import template_spans
@@ -100,18 +101,25 @@ def tokenize_line(line: str, language: Language) -> List[Token]:
     return []
 
 
-def tokenize_jsonl(line: str, state: JsonlState) -> Tuple[List[Token], JsonlState]:
+def tokenize_jsonl(
+    line: str, state: JsonlState, following: Callable[[], Iterable[str]] = lambda: ()
+) -> Tuple[List[Token], JsonlState]:
     """
     :param state: where the line starts, what `tokenize_jsonl` returned for the line before (`JsonlState()` for the first)
+    :param following: the lines after this one. They are read when an object starts on this line, up to its end, to know
+        whether it is a directive object (`"vars"` may come before `"!include"`).
     :return: the highlighted parts of a line of a .jsonl text, and where the next line starts. The key of a directive is a
-        `DIRECTIVE` (`"!include"`), and so are `"vars"` and `"for"` after it in a directive object.
+        `DIRECTIVE` (`"!include"`), and so are `"vars"` and `"for"` in a directive object, before or after it.
     """
     tokens = []
     depth, directive = state.depth, state.directive
-    for token in _tokenize_jsonl(line, placeholders=True):
+    line_tokens = _tokenize_jsonl(line, placeholders=True)
+    for i, token in enumerate(line_tokens):
         text = token.text(line)
         if token.kind == TokenKind.SYMBOL and text in "{[":
             depth += 1
+            if depth == 1 and text == "{":
+                directive = _has_directive(line, line_tokens[i + 1 :], following)
         elif token.kind == TokenKind.SYMBOL and text in "}]":
             depth = max(depth - 1, 0)
             directive = directive and depth > 0
@@ -122,6 +130,24 @@ def tokenize_jsonl(line: str, state: JsonlState) -> Tuple[List[Token], JsonlStat
             token = Token(token.start, token.end, TokenKind.DIRECTIVE)
         tokens.append(token)
     return tokens, JsonlState(depth, directive)
+
+
+def _has_directive(line: str, rest: List[Token], following: Callable[[], Iterable[str]]) -> bool:
+    """:return: whether the object that starts before the tokens `rest` of `line` has a directive key"""
+    depth = 1
+    lines = ((text, _tokenize_jsonl(text, placeholders=False)) for text in following())
+    for text_of_line, tokens in itertools.chain([(line, rest)], lines):
+        for token in tokens:
+            text = token.text(text_of_line)
+            if token.kind == TokenKind.SYMBOL and text in "{[":
+                depth += 1
+            elif token.kind == TokenKind.SYMBOL and text in "}]":
+                depth -= 1
+                if depth == 0:
+                    return False
+            elif token.kind == TokenKind.KEY and depth == 1 and text.startswith('"!'):
+                return True
+    return False
 
 
 def find_templates(text: str, offset: int = 0) -> List[Token]:
