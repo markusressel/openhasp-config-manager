@@ -1,3 +1,5 @@
+import pytest
+
 from openhasp_config_manager.gui.domain.source.completion import (
     CompletionContext,
     Insertion,
@@ -6,6 +8,9 @@ from openhasp_config_manager.gui.domain.source.completion import (
     placeholder_insertion,
     properties_for,
     property_insertion,
+    value_choice,
+    value_insertion,
+    value_words,
 )
 from openhasp_config_manager.gui.domain.object_type_docs import is_text_property
 from openhasp_config_manager.gui.domain.source.docs import property_help
@@ -196,3 +201,56 @@ class TestPlaceholders(TestBase):
         assert insert('{"text": "%ho"}', 13, "%hostname%") == ('{"text": "%hostname%"}', 20)
         assert insert('{"text": "%ho|stn%"}'.replace("|", ""), 13, "%hostname%") == ('{"text": "%hostname%"}', 20)
         assert insert('{"text": "%"}', 11, "%ip%") == ('{"text": "%ip%"}', 14)
+
+
+class TestValues(TestBase):
+    def test_the_start_of_a_value(self):
+        assert completion_context('{"obj": "label", "mode": "do', Language.JSONL) == CompletionContext(
+            "value", "do", 25, quoted=True, key="mode"
+        )
+        assert completion_context('  "bg_grad_dir": ', Language.JSONL) == CompletionContext(
+            "value", "", 17, quoted=False, key="bg_grad_dir"
+        )
+        assert completion_context('// "mode": "d', Language.JSONL) is None
+        assert completion_context('{"text": "%i', Language.JSONL).kind == "placeholder"
+
+    def test_the_values_of_a_property(self):
+        assert value_words("label", "mode") == ["expand", "break", "dots", "scroll", "loop", "crop"]
+        assert value_words("cpicker", "mode") == ["hue", "saturation", "value"]
+        # the part and state of a style property don't matter
+        assert value_words("obj", "bg_grad_dir10") == ["0", "1", "2"]
+        assert value_words("line", "line_rounded") == ["true", "false"]
+        assert "slider" in value_words(None, "obj")
+        # a property that takes more than a few values
+        assert value_words("label", "x") == []
+        assert value_words("obj", "mode") == []
+
+    def test_candidates_in_their_order_ignoring_case(self):
+        context = CompletionContext("value", "", 0, key="align")
+        assert complete(context, values=["left", "center", "right", "auto"]) == ["left", "center", "right", "auto"]
+        context = CompletionContext("value", "LE", 0, key="align")
+        assert complete(context, values=["left", "center", "right", "auto"]) == ["left"]
+
+    def test_the_meaning_of_a_value(self):
+        assert value_choice("label", "mode", "dots").meaning.startswith("keep the size, wrap the lines")
+        assert value_choice("obj", "bg_grad_dir", "1").value == 1
+        assert value_choice("obj", "bg_grad_dir", "7") is None
+
+    @pytest.mark.parametrize(
+        "line, column, word, expected",
+        [
+            # a text gets its quotes, also when it was started without them
+            ('{"mode": "do"}', 12, "dots", ('{"mode": "dots"}', 15)),
+            ('{"mode": "d|ts"}'.replace("|", ""), 11, "dots", ('{"mode": "dots"}', 15)),
+            ('{"mode": ', 9, "dots", ('{"mode": "dots"', 15)),
+            # a number or true/false without quotes, unless they were typed
+            ('{"bg_grad_dir": ', 16, "1", ('{"bg_grad_dir": 1', 17)),
+            ('{"bg_grad_dir": ""}', 17, "1", ('{"bg_grad_dir": "1"}', 19)),
+            ('{"line_rounded": t', 18, "true", ('{"line_rounded": true', 21)),
+        ],
+    )
+    def test_insertion(self, line, column, word, expected):
+        context = completion_context(line[:column], Language.JSONL)
+        choice = value_choice("label", context.key, word)
+        insertion = value_insertion(line, column, context, word, choice)
+        assert (line[: insertion.start] + insertion.text + line[insertion.end :], insertion.cursor) == expected

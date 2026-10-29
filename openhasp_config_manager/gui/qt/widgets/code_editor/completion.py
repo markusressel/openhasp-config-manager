@@ -1,6 +1,6 @@
 from typing import Callable, List, Optional
 
-from PyQt6.QtCore import QEvent, QObject, QStringListModel, Qt
+from PyQt6.QtCore import QEvent, QObject, QStringListModel, Qt, QTimer
 from PyQt6.QtGui import QTextCursor
 from PyQt6.QtWidgets import QCompleter, QPlainTextEdit, QWidget
 
@@ -11,8 +11,16 @@ from openhasp_config_manager.gui.domain.source.completion import (
     placeholder_insertion,
     properties_for,
     property_insertion,
+    value_choice,
+    value_insertion,
+    value_words,
 )
-from openhasp_config_manager.gui.domain.source.docs import object_type_at_line, placeholder_help, property_help
+from openhasp_config_manager.gui.domain.source.docs import (
+    PropertyHelp,
+    object_type_at_line,
+    placeholder_help,
+    property_help,
+)
 from openhasp_config_manager.gui.domain.source.objects import object_at_line
 from openhasp_config_manager.gui.qt.widgets.hover_card import CardContent, HoverCard
 
@@ -33,8 +41,8 @@ class _HideWith(QObject):
 
 class EditorCompletion(QObject):
     """
-    The completion of properties, template variables and placeholders in a text editor, with the explanation of the highlighted
-    entry.
+    The completion of properties, their values, template variables and placeholders in a text editor, with the explanation of the
+    highlighted entry.
     """
 
     def __init__(self, editor: QPlainTextEdit):
@@ -77,7 +85,8 @@ class EditorCompletion(QObject):
         self._object_type = object_type_at_line(editor.objects(), line_number)
         present = [prop.key for prop in found.properties] if found is not None else []
         properties = properties_for(self._object_type, context.prefix, present)
-        words = complete(context, properties, self._variables())
+        values = value_words(self._object_type, context.key) if context.kind == "value" else []
+        words = complete(context, properties, self._variables(), values)
         if not words or (not force and not context.prefix):
             self.popup.hide()
             return
@@ -97,6 +106,8 @@ class EditorCompletion(QObject):
             found = property_help(word, self._object_type)
         elif self._kind == "placeholder":
             found = placeholder_help(word, self._object_type)
+        elif self._kind == "value" and (choice := value_choice(self._object_type, self._context.key, word)) is not None:
+            found = PropertyHelp(word, choice.meaning, f"Value of `{self._context.key}`")
         else:
             found = None
         if found is None or not popup.isVisible():
@@ -120,6 +131,10 @@ class EditorCompletion(QObject):
         elif self._kind == "placeholder":
             insertion = placeholder_insertion(block.text(), cursor.positionInBlock(), context, word)
             start, end, text, after = insertion.start, insertion.end, insertion.text, insertion.cursor
+        elif self._kind == "value":
+            choice = value_choice(self._object_type, context.key, word)
+            insertion = value_insertion(block.text(), cursor.positionInBlock(), context, word, choice)
+            start, end, text, after = insertion.start, insertion.end, insertion.text, insertion.cursor
         else:
             start, end, text = context.start, cursor.positionInBlock(), word
             after = start + len(text)
@@ -130,3 +145,6 @@ class EditorCompletion(QObject):
         cursor.setPosition(block.position() + after)
         cursor.endEditBlock()
         editor.setTextCursor(cursor)
+        if self._kind == "property" and value_words(self._object_type, word):
+            # the values of the property right away; the completer hides its list after this, so show it once it did
+            QTimer.singleShot(0, lambda: self.show(force=True))
