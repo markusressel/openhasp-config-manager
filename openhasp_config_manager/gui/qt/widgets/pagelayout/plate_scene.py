@@ -36,10 +36,14 @@ class PlateScene(QGraphicsScene):
             self.clear_guides()
             return position
 
+        # in the coordinates of the plate: an object on a tab has its position on the page of the tab
+        parent = item.parentItem()
+        if parent is not None:
+            position = parent.mapToScene(position)
         others = [
-            Rect(other.x(), other.y(), other.obj_w, other.obj_h)
+            Rect(other.scenePos().x(), other.scenePos().y(), other.obj_w, other.obj_h)
             for other in self.items()
-            if isinstance(other, EditableWidget) and other is not item
+            if isinstance(other, EditableWidget) and other is not item and other.isVisible()
         ]
         bounds = self.sceneRect()
         result = snap_rect(
@@ -52,7 +56,8 @@ class PlateScene(QGraphicsScene):
         self.guides_x = result.guides_x
         self.guides_y = result.guides_y
         self.update()
-        return QPointF(result.x, result.y)
+        snapped = QPointF(result.x, result.y)
+        return snapped if parent is None else parent.mapFromScene(snapped)
 
     def clear_guides(self):
         if self.guides_x or self.guides_y:

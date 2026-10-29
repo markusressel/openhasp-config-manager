@@ -13,6 +13,7 @@ from openhasp_config_manager.gui.dimensions import UiDimensions
 from openhasp_config_manager.gui.domain.interaction import Indev, Point, RuntimeState, is_clickable, object_key
 from openhasp_config_manager.gui.domain.preview_images import find_image_file
 from openhasp_config_manager.gui.domain.ripple import Ripple, active_ripples
+from openhasp_config_manager.gui.domain.tabs import tab_of
 from openhasp_config_manager.gui.domain.touch_actions import object_command
 from openhasp_config_manager.gui.domain.touch_groups import group_values
 from openhasp_config_manager.gui.qt.components import UiComponents
@@ -22,6 +23,7 @@ from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.registry
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.button import HaspButtonItem
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import set_font_files
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.tabview import HaspTabviewItem
 from openhasp_config_manager.gui.qt.widgets.pagelayout.plate_scene import PlateScene
 from openhasp_config_manager.gui.qt.widgets.pagelayout.preview_overlays import OverlayAnchor, overlay_layout
 from openhasp_config_manager.openhasp_client.icons import IntegratedIcon
@@ -214,6 +216,8 @@ class PagePreviewWidget(QGraphicsView):
         """Redraw all objects, e.g. after the edit of an object changed those with templates that refer to it."""
         for item in self.editable_items():
             item.refresh()
+        # a `parentid` may have changed
+        self._nest_items()
         self.refresh_movable()
 
     def refresh_movable(self):
@@ -304,7 +308,11 @@ class PagePreviewWidget(QGraphicsView):
         scene_point = QtCore.QPointF(*point)
         for item in self.scene().items(Qt.SortOrder.DescendingOrder):
             if isinstance(item, EditableWidget) and item.isVisible() and is_clickable(item.data):
-                if item.hit(item.mapFromScene(scene_point)):
+                local = item.mapFromScene(scene_point)
+                # an object on a tab is only there where the tab is (`lv_indev_search_obj` only looks inside of the parent)
+                if item.isClipped() and not item.clipPath().contains(local):
+                    continue
+                if item.hit(local):
                     return item
         return None
 
@@ -333,6 +341,17 @@ class PagePreviewWidget(QGraphicsView):
                 item.editable = self.mode == PreviewMode.Edit and self._is_selectable(item.obj_data)
                 item.set_dimmed(self._is_dimmed(item.obj_data))
                 self.scene().addItem(item)
+        self._nest_items()
+
+    def _nest_items(self):
+        """Put the items of the objects on a tab on the page of the tab in its tabview: `x`/`y` are relative to it."""
+        items = {item.key: item for item in self.editable_items()}
+        for item in items.values():
+            tab = tab_of(self.objects, item.obj_data)
+            tabview = None if tab is None else items.get((tab.get("page"), tab.get("parentid")))
+            page = tabview.tab_page(tab) if isinstance(tabview, HaspTabviewItem) else None
+            if item.parentItem() is not page:
+                item.setParentItem(page)
 
     def editable_items(self) -> List[EditableWidget]:
         return [item for item in self.scene().items() if isinstance(item, EditableWidget)]

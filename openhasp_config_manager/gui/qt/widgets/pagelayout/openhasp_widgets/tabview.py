@@ -1,11 +1,11 @@
-from typing import Optional
+from typing import Dict, Optional
 
-from PyQt6 import QtCore, QtGui
+from PyQt6 import QtCore, QtGui, QtWidgets
 
 from openhasp_config_manager.gui.domain.drag_scroll import READ_PERIOD
 from openhasp_config_manager.gui.domain.style_parts import Part
 from openhasp_config_manager.gui.domain.tab_swipe import TabSwipe
-from openhasp_config_manager.gui.domain.tabs import tab_texts
+from openhasp_config_manager.gui.domain.tabs import tab_objects, tab_texts
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.box import box_style, draw_box
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.default_theme import INDICATOR_DEFAULTS, TRACK_DEFAULTS
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import (
@@ -37,11 +37,13 @@ DEFAULT_ANIM_TIME = 300
 class HaspTabviewItem(EditableWidget):
     """
     A container with a row (or column) of tab buttons at `btn_pos`: 0 none, 1 top, 2 bottom, 3 left, 4 right. The buttons are the
-    `tab` objects that have the tabview as their `parentid`; `val` is the active one. Objects on a tab are not drawn inside of it.
+    `tab` objects that have the tabview as their `parentid`; `val` is the active one. The objects on a tab (their `parentid` is the tab) are drawn on its page, the content area,
+    only those of the active tab, clipped to it, with `x`/`y` relative to it (a tab is an `lv_page`, `lv_tabview_add_tab`; its
+    scrollable has no offset on the left and top, so its padding doesn't move them).
     The height of the button row is `pad_top40` + `pad_bottom40` on top of the default.
     Touched, a tab button looks pressed (a gray overlay), and releasing it makes its tab the active one (`val`). Swiping the content
     sideways past the middle (or flicking it) makes the tab next to it the active one. The indicator moves to the active tab in
-    `anim_time` (300 ms by default, linear). The content itself is not drawn moving: the objects on a tab are not drawn inside of it.
+    `anim_time` (300 ms by default, linear). The content itself is not drawn moving: the page of the active tab is shown at once.
     See https://www.openhasp.com/0.7.0/design/objects/tabview/
     """
 
@@ -49,6 +51,8 @@ class HaspTabviewItem(EditableWidget):
         self._anim = None
         self._swipe: Optional[TabSwipe] = None
         self._finger = None
+        # the pages of the tabs that have objects on them, by the id of their tab
+        self._pages: Dict[int, QtWidgets.QGraphicsRectItem] = {}
         super().__init__(*args, **kwargs)
         # the plate reads the finger every `READ_PERIOD` while it swipes, mouse events only say where it is
         self._swipe_timer = QtCore.QTimer(self)
@@ -105,6 +109,37 @@ class HaspTabviewItem(EditableWidget):
         if position == _BUTTONS_LEFT:
             return rect.adjusted(buttons.width(), 0, 0, 0)
         return rect.adjusted(0, 0, -buttons.width(), 0)
+
+    def tab_page(self, tab: Dict) -> QtWidgets.QGraphicsRectItem:
+        """:return: the page of one of the tabs, the parent of the items of the objects on it (created when first asked for)"""
+        page = self._pages.get(tab.get("id"))
+        if page is None:
+            page = QtWidgets.QGraphicsRectItem(parent=self)
+            page.setPen(QtGui.QPen(QtCore.Qt.PenStyle.NoPen))
+            page.setFlag(QtWidgets.QGraphicsItem.GraphicsItemFlag.ItemClipsChildrenToShape, True)
+            # clicks beside the objects go to the tabview
+            page.setAcceptedMouseButtons(QtCore.Qt.MouseButton.NoButton)
+            self._pages[tab.get("id")] = page
+            self._update_pages()
+        return page
+
+    def _update_pages(self):
+        """Place the pages on the content area, and show only the one of the active tab."""
+        content = self.content_area()
+        ids = [tab.get("id") for tab in self.tab_objects()]
+        active = min(int(number(self.data.get("val"), 0)), len(ids) - 1)
+        for tab_id, page in self._pages.items():
+            page.setPos(content.topLeft())
+            page.setRect(0, 0, content.width(), content.height())
+            page.setVisible(tab_id in ids and ids.index(tab_id) == active)
+
+    def _on_data_changed(self):
+        super()._on_data_changed()
+        self._update_pages()
+
+    def runtime_changed(self):
+        super().runtime_changed()
+        self._update_pages()
 
     def read_swipe(self):
         """One read of the plate while the finger swipes."""
@@ -190,6 +225,9 @@ class HaspTabviewItem(EditableWidget):
 
     def tabs(self):
         return tab_texts(getattr(self.parent_widget, "objects", []), self.obj_data)
+
+    def tab_objects(self):
+        return tab_objects(getattr(self.parent_widget, "objects", []), self.obj_data)
 
     def button_area(self) -> QtCore.QRectF:
         """:return: where the tab buttons are, an empty rect without buttons"""

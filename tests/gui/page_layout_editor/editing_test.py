@@ -1,4 +1,4 @@
-
+import pytest
 
 from tests import TestBase
 from tests.gui.helpers import wait_until
@@ -177,6 +177,46 @@ class TestLockedPosition(TestBase):
         # THEN
         assert unlocked is False
         assert offered() is True
+
+
+class TestObjectOnTab(TestBase):
+    @pytest.fixture
+    def editor_files(self):
+        return {
+            "devices/test_device/editor.jsonl": (
+                '{"page": 9, "id": 1, "obj": "tabview", "x": 20, "y": 20, "w": 400, "h": 280}\n'
+                '{"page": 9, "id": 2, "obj": "tab", "parentid": 1, "text": "One"}\n'
+                '{"page": 9, "id": 3, "obj": "btn", "x": 40, "y": 40, "w": 100, "h": 50, "parentid": 2, "text": "On tab"}\n'
+            )
+        }
+
+    def test_dragging_an_object_on_a_tab_keeps_its_position_relative_to_the_tab(self, editor):
+        from PyQt6 import QtCore
+        from PyQt6.QtCore import QPointF, Qt
+        from PyQt6.QtTest import QTest
+
+        # GIVEN
+        editor.resize(900, 700)
+        editor.show()
+        editor.set_edit_mode(True)
+        editor.page_preview_widget.set_snap_enabled(False)
+        preview = editor.page_preview_widget
+        viewport = preview.viewport()
+        # the button is at the content of the tab, under the buttons of the tabview
+        start = preview.mapFromScene(QPointF(20 + 40 + 10, 20 + 62 + 40 + 10))
+
+        # WHEN
+        QTest.mousePress(viewport, Qt.MouseButton.LeftButton, pos=start)
+        end = start + QtCore.QPoint(40, 0)
+        QTest.mouseMove(viewport, start + QtCore.QPoint(20, 0))
+        QTest.mouseMove(viewport, end)
+        QTest.mouseRelease(viewport, Qt.MouseButton.LeftButton, pos=end)
+
+        # THEN: it was selected and moved, not the tabview
+        assert [item.obj_id for item in preview.selected_items()] == [3]
+        moved = preview.mapToScene(end).x() - preview.mapToScene(start).x()
+        assert abs(editor.session.source_of(_object(editor, 3))["x"] - (40 + moved)) < 1
+        assert editor.session.source_of(_object(editor, 1))["x"] == 20
 
 
 class TestPropertyDocs(TestBase):
