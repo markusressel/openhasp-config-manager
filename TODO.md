@@ -26,8 +26,9 @@ None known.
   `label` or `msgbox`), and the page preview could show an example value instead of `%ip%`. The editor only knows them in .jsonl
   files, not in commands of .cmd files (`p1b2.text=%ip%`).
 - [ ] Preview of the new object types: objects inside a `tab` (`parentid`) and the open list of a `dropdown` are not drawn.
-- [ ] Files tree: "New .jsonl file here" on a folder (adds the `run L:/<flattened name>` line to the right .cmd and checks the 30
-  character limit of file names on the plate), and "Move to file" for an object.
+- [ ] "Move to file" for an object.
+- [ ] Files tree: drag and drop to move files and folders (the context menu has "Move to…"), and moving fonts (`.ttf`): the pages
+  name fonts without `L:/`, so their references are not changed and moving a folder with a font is refused.
 - [ ] Changes on disk (LLM edits): merge them into a draft with changes (the draft keeps only its changed properties, so objects and
   properties that changed on only one side can combine), instead of the "Reload or Keep" banner. Show which objects changed after a reload.
 - [ ] **Ordering and ids.** Z-order follows creation order on the plate, so reordering objects needs a delete and re-add of the objects

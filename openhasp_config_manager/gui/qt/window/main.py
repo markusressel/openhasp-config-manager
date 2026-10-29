@@ -30,6 +30,7 @@ from openhasp_config_manager.gui.qt.components import ThemedIcons
 from openhasp_config_manager.gui.qt.config_watcher import ConfigWatcher
 from openhasp_config_manager.gui.qt.window.gui_state_publisher import GuiStatePublisher
 from openhasp_config_manager.gui.qt.window.draft_actions import DraftActions
+from openhasp_config_manager.gui.qt.window.file_actions import FileActions
 from openhasp_config_manager.gui.qt.window.gui_state_collector import collect_gui_state
 from openhasp_config_manager.gui.qt.window.log_colors import LogColors
 from openhasp_config_manager.gui.qt.window.menus import create_menus
@@ -102,6 +103,8 @@ class MainWindow(QMainWindow):
 
         self.create_basic_layout()
         self.draft_actions = DraftActions(self)
+        self.file_actions = FileActions(self)
+        self.file_tree_widget.fileActionRequested.connect(self.file_actions.request)
         create_menus(self)
         self._update_draft_actions()
         # the arrangement of the docks as built above, before the saved one is restored
@@ -482,6 +485,10 @@ class MainWindow(QMainWindow):
         LOGGER.info(f"Changed on disk: {', '.join(sorted(str(path) for path in paths))}")
         self.source_editor.external_changes(paths)
         self._apply_changes_to_draft(paths)
+
+    def reload_files(self, paths: Set[Path]):
+        """Files changed by the app itself (e.g. a file operation of the Files tree): the pages and the files follow them."""
+        self._apply_changes_to_draft({path.resolve() for path in paths})
 
     def _apply_changes_to_draft(self, paths: Set[Path]):
         """Files changed that the pages are made of: reload them, or offer to if the draft has changes of its own."""

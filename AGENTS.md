@@ -105,6 +105,12 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
 - **Files**: new objects go into the target file chosen in the Files tree (`gui/domain/file_tree.py` follows the folder structure of
   `README.md`), by default the device's own file, never a shared `common/` file unless the device has none: saving a shared file changes
   every device that loads it.
+- **File operations** of the Files tree (new file/folder, rename, move, delete to the trash): `gui/domain/file_operations.py` makes a
+  `FilePlan` (Qt-free), `gui/qt/window/file_actions.py` asks and carries it out. The plate knows a file by its flattened path
+  (`common/page/md/content.jsonl` is `L:/common_page_md_content.jsonl`), so a rename or move also changes the `L:/<name>` references of
+  the devices that see the file and the `!include` paths. Refused: what the config needs (`common`, `devices`, device folders, their
+  `config.json` and startup scripts; `boot.cmd` can't be deleted), anything that leaves a `.cmd` running a missing file (the device
+  couldn't be loaded), a name a device already has on the plate, a run file longer than 30 characters, and files with unsaved changes.
 - **Changes on disk** (an LLM or editor edits the config directory while the GUI runs): `ConfigWatcher` (`gui/qt/config_watcher.py`,
   watchdog, debounced) reports changed paths to `MainWindow._on_config_changed`. A draft without changes reloads quietly (same page and
   zoom; a failing reload keeps what is shown and reports it in the status bar). A draft with changes is never replaced: a banner offers
