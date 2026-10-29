@@ -477,6 +477,13 @@ class FileTreeWidget(QWidget):
             return
         self._context_menu(item).exec(self._tree.viewport().mapToGlobal(position))
 
+    def is_part_file(self, path: Path) -> bool:
+        """
+        :return: whether a file can be edited as a part: a .jsonl file that is not a page file of the device (the preview
+            shows it on its own if no page includes it)
+        """
+        return path.suffix == ".jsonl" and path.is_file() and path.resolve() not in self._keys
+
     def _context_menu(self, item: QTreeWidgetItem) -> QMenu:
         menu = QMenu(self)
         key = item.data(0, _KEY_ROLE)
@@ -484,7 +491,7 @@ class FileTreeWidget(QWidget):
         if path.is_file():
             edit = menu.addAction(ThemedIcons.icon("file-edit-outline"), "Edit as text")
             edit.triggered.connect(lambda: self.openRequested.emit(path))
-        if path.resolve() in self._includers and self._in_preview(path.resolve()):
+        if self.is_part_file(path):
             edit_part = menu.addAction(ThemedIcons.icon("puzzle-edit-outline"), "Edit the part")
             edit_part.triggered.connect(lambda: self.editPartRequested.emit(path))
         if key is not None:

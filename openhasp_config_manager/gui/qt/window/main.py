@@ -18,6 +18,7 @@ from openhasp_config_manager.const import DEVICES_FOLDER_NAME, COMMON_FOLDER_NAM
 from openhasp_config_manager.gui.domain.draft.files import (
     LoadedDevice,
     load_device,
+    load_part_alone,
 )
 from openhasp_config_manager.gui.domain.config_changes import OwnWrites
 from openhasp_config_manager.gui.domain.connection import LinkState
@@ -74,6 +75,13 @@ class MainWindow(QMainWindow):
         self.session_key: Optional[Tuple[str, str]] = None
         # the page to show after a draft was reloaded (saved or reverted), per session key
         self._page_after_reload: Dict[Tuple[str, str], int] = {}
+        # the draft of a part that no page of the device includes, shown on its own instead of the pages (see
+        # `edit_part_alone`), and the page of the device to go back to
+        self.part_alone: Optional[PlateSession] = None
+        self._part_alone_path: Optional[Path] = None
+        self._page_before_part_alone: Optional[int] = None
+        # what the editor shows of the device (see `select_device`)
+        self._pages_data: Optional[OpenHaspDevicePagesData] = None
         self._discard_drafts_on_close = False
         # what the app wrote itself (Save), to tell its own file changes from those of others
         self.own_writes = OwnWrites()
@@ -207,6 +215,10 @@ class MainWindow(QMainWindow):
         )
         self.file_tree_widget.openRequested.connect(self.source_sync.open_file)
         self.file_tree_widget.editPartRequested.connect(self.page_layout_editor_widget.edit_part)
+        self.source_editor.set_part_check(self.file_tree_widget.is_part_file)
+        self.source_editor.editPartRequested.connect(self.page_layout_editor_widget.edit_part)
+        self.page_layout_editor_widget.editPartAloneRequested.connect(self.edit_part_alone)
+        self.page_layout_editor_widget.partAloneDone.connect(self.close_part_alone)
         self.jsonl_dock = self._add_dock("Code", "jsonl_dock", self.code_view)
         self.splitDockWidget(self.preview_dock, self.jsonl_dock, Qt.Orientation.Vertical)
 
@@ -336,7 +348,10 @@ class MainWindow(QMainWindow):
         self.close()
 
     def _dirty_draft_names(self) -> List[str]:
-        return [f"{device} ({cmd})" for (device, cmd), session in self.sessions.items() if session.is_dirty]
+        names = [f"{device} ({cmd})" for (device, cmd), session in self.sessions.items() if session.is_dirty]
+        if self.part_alone is not None and self.part_alone.is_dirty:
+            names.append(f"{self._part_alone_path.name} (part)")
+        return names
 
     def closeEvent(self, event):
         dirty = self._dirty_draft_names() + [f"{path.name} (text editor)" for path in self.source_editor.dirty_files()]
@@ -424,6 +439,11 @@ class MainWindow(QMainWindow):
 
     def on_device_selected(self, name: str):
         """Reload the devices (to reflect any changes on disk) and load the pages of the selected one in the background."""
+        if self.part_alone is not None and self.device is not None and self.device.name != name:
+            # a part on its own belongs to the device it is rendered for
+            if not self.close_part_alone():
+                self.device_list_widget.set_devices(self.devices, selected=self.device.name)
+                return
         self._selected_name = name
         self.ui_session.session.selected_device = name
         self.ui_session.save()
@@ -595,7 +615,10 @@ class MainWindow(QMainWindow):
 
     @property
     def session(self) -> Optional[PlateSession]:
-        return None if self.device is None else self.sessions.get(self.session_key)
+        """The draft in the editor: of the pages of the device, or of a part on its own (see `edit_part_alone`)."""
+        if self.device is None:
+            return None
+        return self.part_alone or self.sessions.get(self.session_key)
 
     def _update_draft_actions(self):
         dirty = self.session is not None and self.session.is_dirty
@@ -604,8 +627,13 @@ class MainWindow(QMainWindow):
         self.action_deploy.setEnabled(self.device is not None and not self.page_layout_editor_widget.busy.busy)
 
     def reload_draft(self):
-        """Drop the draft of the current device and load it from disk, on the same page."""
+        """Drop the draft of the current device (or of the part on its own) and load it from disk, on the same page."""
         self.disk_changes_banner.hide()
+        if self.part_alone is not None:
+            alone = self._load_part_alone(self._part_alone_path)
+            if alone is not None:
+                self._show_part_alone(alone)
+            return
         self.sessions.pop(self.session_key)
         self._page_after_reload[self.session_key] = self.page_layout_editor_widget.current_index
         self.on_device_selected(self.device.name)
@@ -645,13 +673,110 @@ class MainWindow(QMainWindow):
         self.page_layout_editor_widget.device_controls.set_device(self.device)
         self.connection.set_device(self.device)
         self.log_stream.set_device(self.device)
-        self.page_layout_editor_widget.set_data(
-            session=session, device_pages_data=pages_data, page=self._page_after_reload.pop(key, None)
-        )
+        self._pages_data = pages_data
+        if self.part_alone is not None:
+            # a part on its own without changes follows the files on disk too, if it is still a file of the device
+            alone = self.part_alone
+            if not alone.is_dirty:
+                alone = self._load_part_alone(self._part_alone_path)
+            if alone is not None:
+                alone.device = loaded.device
+            self.part_alone = alone
+        if self.part_alone is not None:
+            self._page_after_reload.pop(key, None)
+            self._show_part_alone(self.part_alone)
+        else:
+            self.page_layout_editor_widget.set_data(
+                session=session, device_pages_data=pages_data, page=self._page_after_reload.pop(key, None)
+            )
         self._update_draft_actions()
         self.center_stack.setCurrentWidget(self.page_layout_editor_widget)
         if not keep_view:
             self.page_layout_editor_widget.page_preview_widget.fit_to_view()
+
+    # --- a part on its own ---
+
+    def edit_part_alone(self, part: Path):
+        """
+        Part mode for a part that no page of the device includes: the editor shows the part on its own instead of the pages
+        (see `load_part_alone`), until "Done".
+        """
+        if self.device is None:
+            return
+        if part.resolve() in {component.path.resolve() for component in self.sessions[self.session_key].components}:
+            self.status.failed.emit(
+                f"Editing the part {part.name}", "it is a page file of the device: edit its objects on the page"
+            )
+            return
+        if self.sessions[self.session_key].part_instances(part):
+            # asked for while another part is shown on its own: this one is edited on the pages
+            if self.close_part_alone():
+                self.page_layout_editor_widget.edit_part(part)
+            return
+        if self.part_alone is not None and not self.close_part_alone():
+            return
+        alone = self._load_part_alone(part)
+        if alone is None:
+            return
+        self._page_before_part_alone = self.page_layout_editor_widget.current_index
+        self._part_alone_path = part
+        self._show_part_alone(alone)
+
+    def _load_part_alone(self, part: Path) -> Optional[PlateSession]:
+        """:return: a draft of the part on its own, in part mode; None if it can't be loaded (which is reported)"""
+        try:
+            component, renderer = load_part_alone(self.config_manager, self.device, part)
+            session = PlateSession(device=self.device)
+            session.load([component], renderer)
+            instances = session.part_instances(part)
+            if not instances:
+                raise ValueError("it has no objects to show")
+            session.enter_part_mode(instances[0])
+        except Exception as ex:
+            LOGGER.exception(f"Could not show {part} on its own")
+            self.status.failed.emit(f"Editing the part {part.name}", error_text(ex))
+            return None
+        return session
+
+    def _show_part_alone(self, alone: PlateSession):
+        self.part_alone = alone
+        editor = self.page_layout_editor_widget
+        editor.set_data(session=alone, device_pages_data=self._pages_data, page=alone.page_of_instance(alone.part_mode))
+        if not editor.edit_mode:
+            editor.set_edit_mode(True)
+        self._update_draft_actions()
+        self._state_publisher.request()
+
+    def close_part_alone(self) -> bool:
+        """
+        Back from a part on its own to the pages of the device. Asks to save the part first if it has changes.
+        :return: whether it was closed (not if the user cancelled, or the save failed)
+        """
+        alone = self.part_alone
+        if alone is None:
+            return True
+        if alone.is_dirty:
+            answer = QMessageBox.question(
+                self,
+                "Unsaved part",
+                f"Save the changes of {self._part_alone_path.name}? Its draft goes away with the part.",
+                QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel,
+                QMessageBox.StandardButton.Save,
+            )
+            if answer == QMessageBox.StandardButton.Cancel:
+                return False
+            if answer == QMessageBox.StandardButton.Save and not self.draft_actions.save():
+                return False
+        self.part_alone = None
+        self._part_alone_path = None
+        session = self.sessions.get(self.session_key)
+        if session is not None and self._pages_data is not None:
+            self.page_layout_editor_widget.set_data(
+                session=session, device_pages_data=self._pages_data, page=self._page_before_part_alone
+            )
+        self._update_draft_actions()
+        self._state_publisher.request()
+        return True
 
 
 def create_application_settings():

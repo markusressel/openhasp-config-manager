@@ -231,6 +231,11 @@ class PlateSession:
         self._dirty = False
 
     @property
+    def is_part_alone(self) -> bool:
+        """Whether the draft shows a part on its own (see `load_part_alone`), not the pages of a device."""
+        return any(component.is_scratch for component in self._components.values())
+
+    @property
     def is_dirty(self) -> bool:
         """Whether the draft differs from the files it was loaded from."""
         return self._dirty
@@ -621,12 +626,14 @@ class PlateSession:
         They keep their layout: their top left corner goes to `position` (or stays where the originals were), moved by
         `offset` and kept on the screen. Objects inside of another (parentid) stay there if it is pasted too.
         Templates are kept, except for the moved positions. Nothing is added if one of them can't be rendered.
+        In part mode, objects pasted into the part get a page and an id template like new objects of the part (see
+        `add_object`), and are rendered with the variables of the instance that is shown.
         :param screen: the width and height of the screen
-        :return: the rendered objects
-        :raises ValueError: for a part: pasted objects have no templates for their page and id
+        :return: the rendered objects (in part mode those of the instance that is shown)
+        :raises ReadOnlyObjectError: for a part outside of part mode
         """
         if component in self._parts:
-            raise ValueError("Objects can't be pasted into a part: add them with the objects of the page, or duplicate one")
+            return self._paste_into_part(component, sources, screen, position, offset)
         taken = [obj for objects in self._working_objects.values() for obj in objects]
         new_ids: Dict[Any, int] = {}
         prepared = []
@@ -637,13 +644,54 @@ class PlateSession:
             source["id"] = new_ids[source.get("id")]
             taken.append(source)
             prepared.append(source)
-        for source in prepared:
-            if "parentid" in source and source["parentid"] in new_ids:
-                source["parentid"] = new_ids[source["parentid"]]
-            else:
-                source.pop("parentid", None)
-
+        _link_parents(prepared, new_ids)
         rendered = [self._renderer.render_object(component, source) for source in prepared]
+        self._place_pasted(prepared, rendered, screen, position, offset)
+        with self.edit(f"Paste {len(prepared)} object{'' if len(prepared) == 1 else 's'}"):
+            return [self.add_object(component, source) for source in prepared]
+
+    def _paste_into_part(
+        self,
+        key: str,
+        sources: List[Dict[str, Any]],
+        screen: Tuple[int, int],
+        position: Optional[Tuple[int, int]],
+        offset: int,
+    ) -> List[Dict]:
+        """Paste into a part in part mode: see `paste_objects`."""
+        mode = self._check_part_mode(key)
+        instance = self._objects_of_instance(mode)
+        if not instance:
+            raise ValueError("The instance that is shown has no objects anymore: add an object first, or undo")
+        # the pasted objects are rendered like the objects of the instance
+        sample = self._entry(instance[0])
+        part = self._parts[key]
+        part_sources = [obj.source for obj in part.objects if not is_directive(obj.source)]
+        new_ids: Dict[Any, Any] = {}
+        prepared = []
+        for source in sources:
+            source = copy.deepcopy(source)
+            page, object_id = new_part_object_ids(part_sources, {**source, "page": instance[0].get("page")})
+            new_ids[source.get("id")] = object_id
+            source["page"] = page
+            source["id"] = object_id
+            part_sources.append(source)
+            prepared.append(source)
+        _link_parents(prepared, new_ids)
+        rendered = [self._renderer.render_object(sample.component, source, sample.scope) for source in prepared]
+        self._place_pasted(prepared, rendered, screen, position, offset)
+        with self.edit(f"Paste {len(prepared)} object{'' if len(prepared) == 1 else 's'} into the part"):
+            return self._append_to_part(key, prepared)
+
+    @staticmethod
+    def _place_pasted(
+        prepared: List[Dict[str, Any]],
+        rendered: List[Dict[str, Any]],
+        screen: Tuple[int, int],
+        position: Optional[Tuple[int, int]],
+        offset: int,
+    ):
+        """Move the pasted objects (their top left corner) to the position, or by the offset, and keep them on the screen."""
         top_level = [(source, obj) for source, obj in zip(prepared, rendered) if "parentid" not in source]
         if top_level:
             left = min(obj.get("x", 0) for _, obj in top_level)
@@ -656,9 +704,6 @@ class PlateSession:
             for source, obj in top_level:
                 source["x"] = obj.get("x", 0) + x - left
                 source["y"] = obj.get("y", 0) + y - top
-
-        with self.edit(f"Paste {len(prepared)} object{'' if len(prepared) == 1 else 's'}"):
-            return [self.add_object(component, source) for source in prepared]
 
     def remove_object(self, obj: Dict):
         """:raises ReadOnlyObjectError: for an included object"""
@@ -756,6 +801,8 @@ class PlateSession:
                 ],
             )
             for component in self._components.values()
+            # what shows a part on its own is in no file
+            if not component.is_scratch
         ]
         result += [
             self._component_changes(part.component, {}, [(obj.index, obj.source) for obj in part.objects])
@@ -1007,21 +1054,32 @@ class PlateSession:
 
     def _add_part_object(self, key: str, source: Dict[str, Any]) -> Optional[Dict]:
         """Add an object to the end of a part, in part mode: see `add_object`."""
-        mode = self._part_mode
-        if mode is None or str(mode.part) != key:
-            raise ReadOnlyObjectError(f"Objects are added to {key} in part mode only")
+        self._check_part_mode(key)
         part = self._parts[key]
         page, object_id = new_part_object_ids([obj.source for obj in part.objects if not is_directive(obj.source)], source)
         source = {**copy.deepcopy(source), "page": page, "id": object_id}
-        uid = next(self._part_uids)
         with self.edit(f"Add {source.get('obj', 'object')} to the part"):
-            part.objects.append(PartObject(uid, None, source))
-            self._reinclude_and_render({key})
-            added = next(
-                (obj for obj in self._objects_of_instance(mode) if self._entry(obj).instance[1] == uid),
-                None,
-            )
-            self._selected_after_edit = [] if added is None else [added]
+            added = self._append_to_part(key, [source])
+        return added[0] if added else None
+
+    def _check_part_mode(self, key: str) -> PartInstance:
+        """:return: the instance of part mode :raises ReadOnlyObjectError: if the draft is not in part mode of this part"""
+        mode = self._part_mode
+        if mode is None or str(mode.part) != key:
+            raise ReadOnlyObjectError(f"Objects are added to {key} in part mode only")
+        return mode
+
+    def _append_to_part(self, key: str, sources: List[Dict[str, Any]]) -> List[Dict]:
+        """
+        Add objects to the end of a part (in a running edit), and select them in the instance that is shown.
+        :return: their objects in that instance (none if the instance doesn't include them, e.g. a template of the page)
+        """
+        uids = [next(self._part_uids) for _ in sources]
+        self._parts[key].objects.extend(PartObject(uid, None, source) for uid, source in zip(uids, sources))
+        self._reinclude_and_render({key})
+        by_uid = {self._entry(obj).instance[1]: obj for obj in self._objects_of_instance(self._part_mode)}
+        added = [by_uid[uid] for uid in uids if uid in by_uid]
+        self._selected_after_edit = added
         return added
 
     def _reinclude_and_render(self, changed_parts: Set[str]):
@@ -1215,6 +1273,9 @@ class PlateSession:
 
     def _differs_from_files(self) -> bool:
         for component in self._components.values():
+            if component.is_scratch:
+                # its vars are not saved
+                continue
             if any(directive != component.sources[index] for index, directive in self._directives[component.key].items()):
                 return True
             # the included objects follow their directives, which stay
@@ -1354,6 +1415,15 @@ def _compared_items(state: DraftState) -> Dict[int, Tuple[Optional[Dict[str, Any
 @lru_cache(maxsize=256)
 def _resolved(path: str) -> Path:
     return Path(path).resolve()
+
+
+def _link_parents(prepared: List[Dict[str, Any]], new_ids: Dict[Any, Any]):
+    """Pasted objects stay inside of a pasted object (`parentid`), the others are on the page."""
+    for source in prepared:
+        if "parentid" in source and source["parentid"] in new_ids:
+            source["parentid"] = new_ids[source["parentid"]]
+        else:
+            source.pop("parentid", None)
 
 
 def _part_object(parts: Dict[str, PartDraft], file: Path, uid: int) -> PartObject:

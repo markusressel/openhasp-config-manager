@@ -125,6 +125,7 @@ class TestDescribe(TestBase):
             "part": "common/dot.jsonl",
             "instance": session.describe_instance(instance),
             "shared": True,
+            "alone": False,
         }
         assert "id=5" in session.describe_instance(instance)
 

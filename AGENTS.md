@@ -104,6 +104,8 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
   (objects of instances that stay keep their rendered dict). In part mode (`enter_part_mode`) the objects of one instance of
   a part can be changed: edits go into the draft copy of the part (`PartDraft`), every instance follows (`_reinclude`), and
   everything else is read-only. `read_only_reason` and `is_selectable` depend on the mode: use them, not `is_included`.
+  A part that no page includes is shown on its own (`load_part_alone`, `MainWindow.part_alone`): a draft of one `!include`
+  that is in no file (`ComponentSource.is_scratch`, never saved), so `window.session` is then not the draft of the pages.
 - **Templates are never replaced implicitly.** Objects whose `x`/`y` is a template or a percentage can't be dragged or nudged; the
   editor explains why, and "Use pixels for x/y" replaces them only when the user asks. Keep this for new edit operations.
 - **Files**: new objects go into the target file chosen in the Files tree (`gui/domain/file_tree.py` follows the folder structure of

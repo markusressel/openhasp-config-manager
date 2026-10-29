@@ -40,9 +40,8 @@ Included objects are shown and read-only, except in part mode (see `docs/include
 
 - [ ] Add and remove names of `vars` and `for` in the "Instance" group of the Properties panel (only their values can be changed;
   `PlateSession.set_directive_value` takes any mapping already).
-- [ ] Part mode for a part that no file of the device includes (with the part's defaults), and from the text editor of a part.
-- [ ] Paste into a part in part mode: give the pasted objects `page` and `id` templates like those of the part's objects
-  (`gui/domain/draft/part_ids.py`), instead of refusing it.
+- [ ] A part on its own (no page includes it) that refers to objects of its page (`b4.w` of a card) shows those templates
+  unresolved: offer to show it on a page of the device, with the objects of that page in its references.
 - [ ] Change the `vars` and `for` of an `!include` inside of a part in part mode (the "Instance" group is hidden there; only the
   outermost `!include` of a page file can be changed today).
 - [ ] After a save that moves the objects of a part to other lines, the undo states keep the lines of the included objects from

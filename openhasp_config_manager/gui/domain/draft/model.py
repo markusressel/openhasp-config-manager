@@ -91,6 +91,8 @@ class ComponentSource:
     is_common: bool
     # the objects as written in the file (templates not rendered), in the order of the file
     sources: List[Dict[str, Any]]
+    # a component that is in no file: the `!include` that shows a part on its own (see `load_part_alone`), never saved
+    is_scratch: bool = False
 
 
 @dataclass

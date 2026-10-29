@@ -78,6 +78,10 @@ class PageLayoutEditorWidget(QWidget):
     stateChanged = QtCore.pyqtSignal()
     # (path, line): show a file in the text editor at a line (see `OpenHASPWidgetPropertyEditor.openSourceRequested`)
     openSourceRequested = QtCore.pyqtSignal(object, int)
+    # a part that no page of the device includes, to edit on its own (see `load_part_alone`): its path
+    editPartAloneRequested = QtCore.pyqtSignal(object)
+    # "Done" in part mode of a part on its own: back to the pages of the device
+    partAloneDone = QtCore.pyqtSignal()
 
     def __init__(self, status: OperationStatus, ui_session: Optional[UiSessionStore] = None):
         """:param ui_session: where the choices of the user are remembered for the next start (in memory if None)"""
@@ -407,6 +411,8 @@ class PageLayoutEditorWidget(QWidget):
         """
         if self.session is not None and self.session is not session:
             self.session.remove_listener(self._on_draft_changed)
+            # the objects of the preview are those of the other draft
+            self.page_preview_widget.set_objects([])
         self.session = session
         session.add_listener(self._on_draft_changed)
         self.device_pages_data = device_pages_data
@@ -673,7 +679,8 @@ class PageLayoutEditorWidget(QWidget):
             return
         instances = self.session.part_instances(part)
         if not instances:
-            self.status.failed.emit(f"Editing the part {part.name}", "the pages of this device don't include it")
+            # shown on its own instead of the pages
+            self.editPartAloneRequested.emit(part)
             return
         instance = instance or instances[0]
         try:
@@ -689,6 +696,9 @@ class PageLayoutEditorWidget(QWidget):
     def leave_part_mode(self):
         """Back to the objects of the files: the changes of the part stay in the draft."""
         if self.session is None or self.session.part_mode is None:
+            return
+        if self.session.is_part_alone:
+            self.partAloneDone.emit()
             return
         self.session.leave_part_mode()
         self._update_part_mode()
@@ -720,20 +730,29 @@ class PageLayoutEditorWidget(QWidget):
         mode = self.session.part_mode
         instances = self.session.part_instances(mode.part)
         part = self.session.part_source(mode.part)
-        hint = None
+        alone = self.session.is_part_alone
+        hints = []
+        if alone:
+            hints.append(
+                f"No page of {self.session.device.name} includes it: it is shown on its own, with the vars of the Instance "
+                "group in the Properties (they are not saved)."
+            )
         if part.is_common:
             includers = self.device_pages_data.part_includers.get(part.path.resolve(), [])
             devices = sorted({device for device, _path in includers})
-            hint = (
-                f"A shared part: saving it changes every device that includes it ({len(includers)} "
-                f"file{'' if len(includers) == 1 else 's'} of {len(devices)} device{'' if len(devices) == 1 else 's'}: "
-                f"{', '.join(devices)}). Only the instances of {self.session.device.name} are shown."
-            )
+            if includers:
+                shown = "" if alone else f" Only the instances of {self.session.device.name} are shown."
+                hints.append(
+                    f"A shared part: saving it changes every device that includes it ({len(includers)} "
+                    f"file{'' if len(includers) == 1 else 's'} of {len(devices)} device{'' if len(devices) == 1 else 's'}: "
+                    f"{', '.join(devices)}).{shown}"
+                )
         self.part_bar.show_part(
             relative_config_path(part.path, self.session.device.path),
             [self.session.describe_instance(instance) for instance in instances],
             instances.index(mode) if mode in instances else None,
-            hint,
+            " ".join(hints) or None,
+            alone=alone,
         )
 
     def _update_jsonl_dimming(self):

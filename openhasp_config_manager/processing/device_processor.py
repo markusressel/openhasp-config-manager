@@ -203,15 +203,21 @@ class DeviceProcessor:
         return self._part_paths
 
     def jsonl_template_variables(
-        self, component: JsonlComponent, draft_objects: Optional[Dict[Path, List[Dict[str, Any]]]] = None
+        self,
+        component: JsonlComponent,
+        draft_objects: Optional[Dict[Path, List[Dict[str, Any]]]] = None,
+        alone: bool = False,
     ) -> Dict[str, Any]:
         """
-        :param component: the component, which must have been added to this processor
+        :param component: the component, which must have been added to this processor, unless it is `alone`
         :param draft_objects: component path -> its source objects (see parse_jsonl_objects), to use instead of the
             objects in the files of those components
+        :param alone: only the objects of the component are in the object references (`pXbY`), not those of the files of
+            the device: for objects that are shown on their own (e.g. a part, see `load_part_alone`). Its objects must be in
+            `draft_objects`.
         :return: the variables the templates of the component's objects are rendered with
         """
-        return self._compute_jsonl_template_variables(self._device, component, draft_objects)
+        return self._compute_jsonl_template_variables(self._device, component, draft_objects, alone=alone)
 
     def render_jsonl_object(
         self,
@@ -319,6 +325,7 @@ class DeviceProcessor:
         component: Component,
         draft_objects: Optional[Dict[Path, List[Dict[str, Any]]]] = None,
         replaced_page: Optional[int] = None,
+        alone: bool = False,
     ) -> Dict[str, Any]:
         """
         Computes a map of "variable" -> "evaluated value in the given path context" for the given component.
@@ -326,12 +333,14 @@ class DeviceProcessor:
         :param component: the component to use as a context for evaluating template variables; one that was not added to
             this processor (see `render_sources`) needs its objects in `draft_objects`
         :param replaced_page: leaves the objects of the other components on this page out (see `render_sources`)
+        :param alone: leaves the objects of the other components out (see `jsonl_template_variables`)
         :return: map of "variable" -> "evaluated value in the given path context"
         """
         result = {}
 
         # object specific variables for all components that the processor currently knows about, the component itself last
-        sorted_components = [c for c in self._jsonl_components if c != component] + [component]
+        sorted_components = [] if alone else [c for c in self._jsonl_components if c != component]
+        sorted_components.append(component)
         part_paths = self.part_paths()
         if component not in self._jsonl_components:
             # the parts of objects that are in no file only count through them, like the parts of the files

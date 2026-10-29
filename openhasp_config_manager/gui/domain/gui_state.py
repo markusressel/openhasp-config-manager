@@ -57,7 +57,10 @@ Read the file before and after you edit, and trust it only while it is current:
   - `new_objects_file`: the file new objects of the user go into.
   - `part_mode`: `null`, or the part the user edits in part mode: `part` (the file), `instance` (the `!include` whose objects
     are shown and changed, `null` once they are all removed) and `shared` (in `common/`). A change to the objects of the
-    instance changes the part, so every instance (and every device that includes a shared part) follows.
+    instance changes the part, so every instance (and every device that includes a shared part) follows. `alone` is
+    `true` if no page of the device includes the part: the GUI then shows the part on its own (instead of the pages, with
+    `vars` the user enters, which are not saved), `files` is empty, and the `file` of an object is the
+    `!include` that shows the part (`<part> (alone).jsonl`, a file that doesn't exist).
   - `draft`: `modified` is `true` if the user has unsaved changes in the GUI. They are not in the files yet, and a file the user
     changed on disk meanwhile can't be saved over. `files` lists, per file, the `changed`, `added` and `deleted` objects.
 - `editor`: the text editor of the GUI, where files are edited as text. `mode` (`source`, `split`, `rendered`: which of the text editor and the
@@ -168,6 +171,7 @@ def describe_part_mode(session: PlateSession, config_dir: Path) -> Optional[Dict
         # an instance whose objects were all removed is not in the draft anymore
         "instance": session.describe_instance(mode) if session.objects_of_instance(mode) else None,
         "shared": session.part_source(mode.part).is_common,
+        "alone": session.is_part_alone,
     }
 
 
@@ -195,6 +199,8 @@ def describe_files(components: List[ComponentSource], working_objects: Dict[str,
             "pages": sorted({obj["page"] for obj in working_objects.get(component.key, []) if obj.get("page") is not None}),
         }
         for component in components
+        # what shows a part on its own is in no file
+        if not component.is_scratch
     ]
 
 

@@ -239,6 +239,9 @@ class OpenHASPWidgetPropertyEditor(QWidget):
             # in part mode the objects of the part can be changed like the others
             self._add_included_content(obj_data)
             return
+        if self._session.is_part_alone:
+            # the vars the part is shown with, which only the panel has
+            self._add_instance_group(obj_data)
         self._add_locked_position_hint()
 
         for title, keys in group_properties(obj_data):
@@ -318,9 +321,13 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         column.setContentsMargins(UiDimensions.one, UiDimensions.one, UiDimensions.one, UiDimensions.one)
         column.setSpacing(UiDimensions.one)
 
-        where = f"{relative_config_path(component.path, self._session.device.path)}:{self._session.line_of(obj_data)}"
+        if component.is_scratch:
+            title = "The part is shown on its own, with these vars. They are not saved: only the part is."
+        else:
+            where = f"{relative_config_path(component.path, self._session.device.path)}:{self._session.line_of(obj_data)}"
+            title = f"The {INCLUDE} at {where}"
         row = _plain_layout(QHBoxLayout())
-        row.addWidget(UiComponents.create_label(f"The {INCLUDE} at {where}", role="hint", word_wrap=True), 1)
+        row.addWidget(UiComponents.create_label(title, role="hint", word_wrap=True), 1)
         if component.is_common:
             row.addWidget(
                 _badge("shared", "A file of the common folder: changing the !include changes every device that loads it."),

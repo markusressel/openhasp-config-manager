@@ -194,13 +194,19 @@ of the directive in the open file):
   and instances can be added or removed. The `!include`s inside of parts are listed read-only, with a button to go to them.
   A directive in the common folder is marked "shared".
 - **Part mode** (editing a part itself): "Edit the part" in the Properties panel of an included object, or in the context
-  menu of a part in the Files tree, shows one instance of the part (`PlateSession.enter_part_mode`): its objects can be
+  menu of a part in the Files tree or in the text editor, shows one instance of the part (`PlateSession.enter_part_mode`): its objects can be
   changed like plain objects (moved, nudged, edited, added, duplicated, removed), the objects around it are dimmed and
   can't be selected. A change is written into the part in the draft, and every instance follows (also those on other
   pages). A bar above the preview names the part and the instance, chooses another instance, and ends part mode ("Done");
   the changes stay in the draft until it is saved, which writes the part file. For a part in the common folder, the bar
-  says how many files of which devices include it. New objects go into the part, with a `page` and an `id` template
-  like those of its other objects (`{{ base + n }}`).
+  says how many files of which devices include it. New and pasted objects go into the part, with a `page` and an `id`
+  template like those of its other objects (`{{ base + n }}`).
+- **A part on its own**: a part that no page of the device includes (e.g. a new one) is shown on its own instead of the
+  pages (`load_part_alone`): as the objects of one `!include` that is in no file, rendered for the device. Its `vars`
+  start with a placeholder (`1`) for each variable the part uses that its folders don't define (`placeholder_vars`), and
+  are changed in the "Instance" group of the Properties panel; they are not saved. Part mode works as above, Save writes
+  only the part, and "Done" goes back to the pages of the device (asking to save the part first if it has changes).
+  Every `.jsonl` file of the device that is not one of its page files can be edited as a part.
 - **Text editor**: directive keys (`"!include"`, and `"vars"`/`"for"` of a directive) have their own token kind
   (`TokenKind.DIRECTIVE`); Ctrl+click on the path opens the part; hover explains `!include`, `vars` and `for`; the path is
   completed after `"!include": "`; the errors of the file's directives are marked in it; a directive is one object for
@@ -305,8 +311,13 @@ These were not settled beforehand. Each names the alternative that was not taken
   change in one place change other parts unseen.
 - **"Use pixels for x/y" asks first** in part mode: the pixels of the instance that is shown are written into the part, so
   every instance gets the same x and y.
-- **Copying and pasting are refused** in part mode: the objects of a part need the variables of their instance, and pasted
-  objects have no templates for their `page` and `id`. Duplicating works (the copy gets the next id template).
+- **Copying is refused** in part mode: the objects of a part need the variables of their instance. Duplicating works (the
+  copy gets the next id template).
+- **Pasted objects become objects of the part**: each gets the `page` template of the part and the next `id` template,
+  their `parentid` follows the new id of their parent, and they are rendered with the variables of the instance that is
+  shown, to place them where the mouse is (that position is written in pixels, like a paste on a page). The paste is one
+  undo step. `parentid` is a number after rendering now, like `id`, so a template of it nests the objects in the preview.
+  Alternative: refuse it, which made a part the only place without paste.
 - **Part mode is not in the undo history**: undo changes the objects, not the mode. Undoing the addition of a part's only
   objects ends nothing; the bar then names no instance. Alternative: undo steps for entering and leaving part mode.
 - **Part mode survives a reload** (a save, a change on disk) if the instance is still included, found by its description
@@ -317,10 +328,31 @@ These were not settled beforehand. Each names the alternative that was not taken
   again after an edit took 0.45 s on the user's config, 0.36 s with the cache. An edit in part mode takes 0.4 to 0.8 s there
   (see TODO.md).
 
+### A part on its own
+
+- **A draft of its own**: the window keeps a second `PlateSession` for the part (`MainWindow.part_alone`), with one
+  component that is in no file (`ComponentSource.is_scratch`): an `!include` of the part next to it, so it has the
+  variables of the part's folders. The draft of the pages of the device is not touched, and comes back with "Done".
+  Alternative: the `!include` as a hidden component of the draft of the device, which would mix the part into the pages
+  (their object references, problems, Save and the Live preview).
+- **It is rendered alone**: its object references (`pXbY`, `bY`) see only its own objects, not those of the pages
+  (`ProcessorDraftRenderer(alone=True)`), and it has a `DeviceProcessor` of its own, so its draft parts don't change the
+  rendering of the device's draft. A part that refers to an object of the page it is on (e.g. `b4.w` of a card) shows that
+  template unresolved. Alternative: render it with the pages of the device, where an id of the part can be an object of
+  a page.
+- **Placeholders, not the vars of another device**: every variable the templates use that the folders don't have is `1`
+  (a page, an id and a number), and a value missing from a mapping of the defaults (`tile.id`) is added to it. Alternative:
+  the `vars` of an `!include` of another device, which may need variables of that device and that file.
+- **The vars are in the "Instance" group** of the Properties panel, like the vars of an `!include` of a page, and are never
+  saved: changing them makes no change of a file. Alternative: fields in the bar above the preview.
+- **"Done" asks to save** a part with changes (Save, Discard, Cancel), and so does selecting another device: the draft of
+  a part on its own goes away with it. It follows changes on disk like the draft of the pages, and is loaded again if the
+  device is.
+- **A page file of the device is refused**: its objects are edited on the page.
+
 ## Later
 
 - `!extends`: an object that takes the properties of a part object and overrides some of them.
-- Editing a part on its own, with its defaults instead of the variables of an instance (part mode shows an instance).
 - Templates in the `!include` path.
 - `vars` values that refer to objects (`"x": "{{ b4.x + 10 }}"`): they would have to be rendered per object, after the
   objects; today pass the id of the object and refer to it in the part, e.g. `{{ b{{ anchor }}.x }}`.

@@ -1054,18 +1054,38 @@ class TestPartMode(TestBase):
         assert (items[40].editable, items[41].editable) == (True, False)
         assert editor.part_bar.hint.isHidden() is False
 
-    def test_a_part_that_is_not_included_is_reported(self, editor, tmp_path):
+    def test_a_part_that_is_not_included_is_asked_for_on_its_own(self, editor, tmp_path):
         # GIVEN
-        failures = []
-        editor.status.failed.connect(lambda *args: failures.append(args))
+        requested = []
+        editor.editPartAloneRequested.connect(requested.append)
         (tmp_path / "cfg/common/parts/other.jsonl").write_text(PIN_JSONL)
 
         # WHEN
         editor.edit_part(tmp_path / "cfg/common/parts/other.jsonl")
 
-        # THEN
-        assert failures == [("Editing the part other.jsonl", "the pages of this device don't include it")]
+        # THEN: the window shows it on its own
+        assert requested == [tmp_path / "cfg/common/parts/other.jsonl"]
         assert editor.session.part_mode is None
+
+    def test_pasting_into_the_part(self, editor):
+        from PyQt6.QtWidgets import QApplication
+
+        # GIVEN: a plain object copied
+        editor.set_edit_mode(True)
+        editor.page_preview_widget.select_object(_object(editor, 1))
+        editor.object_actions.copy_selected()
+        self._edit_part_of(editor, 21)
+
+        # WHEN
+        editor.object_actions.paste()
+
+        # THEN: in every instance, selected in the one that is shown
+        assert "label" in QApplication.clipboard().text()
+        [pasted] = [item.obj_data for item in editor.page_preview_widget.selected_items()]
+        assert editor.session.source_of(pasted)["id"] == "{{ id + 1 }}"
+        assert editor.session.instance_of(pasted) == editor.session.part_mode
+        assert (pasted["id"], _object(editor, 21)["id"]) == (22, 21)
+        assert editor.action_undo.text() == "Undo Paste 1 object into the part"
 
     def test_a_shared_part_says_which_devices_saving_changes(self, editor):
         # WHEN

@@ -99,10 +99,14 @@ class CodeEditor(QPlainTextEdit):
     # the "back" and "forward" buttons of the mouse
     backRequested = QtCore.pyqtSignal()
     forwardRequested = QtCore.pyqtSignal()
+    # "Edit the part" of the context menu (see `is_part`)
+    editPartRequested = QtCore.pyqtSignal()
 
     def __init__(self, language: Language, parent=None):
         super().__init__(parent)
         self.language = language
+        # whether the text is a part, which the context menu offers to edit in part mode
+        self.is_part: Callable[[], bool] = lambda: False
         self._loading = False
         self._text_markers: List[SourceIssue] = []
         self._app_markers: List[SourceIssue] = []
@@ -606,9 +610,19 @@ class CodeEditor(QPlainTextEdit):
         super().keyReleaseEvent(event)
 
     def contextMenuEvent(self, event):
+        self.context_menu(event.pos()).exec(event.globalPos())
+
+    def context_menu(self, position: QPoint) -> QMenu:
+        """:param position: where the menu is asked for, in the editor"""
         menu: QMenu = self.createStandardContextMenu()
         menu.addSeparator()
-        color = self._colors.color_at(event.pos())
+        if self.is_part():
+            action = QAction("Edit the part", menu)
+            action.setToolTip("Edit the objects of the part in the preview: every instance follows")
+            action.triggered.connect(lambda _checked=False: self.editPartRequested.emit())
+            menu.addAction(action)
+            menu.addSeparator()
+        color = self._colors.color_at(position)
         if color is not None:
             action = QAction("Edit color…\tCtrl+click", menu)
             action.triggered.connect(lambda _checked=False, color=color: self.edit_color(*color))
@@ -626,7 +640,7 @@ class CodeEditor(QPlainTextEdit):
             action.triggered.connect(lambda _checked=False, handler=handler: handler())
             action.setEnabled(self.language != Language.TEXT)
             menu.addAction(action)
-        menu.exec(event.globalPos())
+        return menu
 
     # --- keys ---
 
