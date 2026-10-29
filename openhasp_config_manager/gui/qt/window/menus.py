@@ -54,7 +54,14 @@ def create_menus(window):
     window.view_menu = view_menu
     window.zoom_actions_end = view_menu.addSeparator()
     window.zoom_actions = []
-    for dock in [window.devices_dock, window.properties_dock, window.jsonl_dock, window.page_jsonl_dock, window.logs_dock]:
+    for dock in [
+        window.devices_dock,
+        window.properties_dock,
+        window.jsonl_dock,
+        window.page_jsonl_dock,
+        window.logs_dock,
+        window.plates_dock,
+    ]:
         view_menu.addAction(dock.toggleViewAction())
     view_menu.addSeparator()
     view_menu.addAction(

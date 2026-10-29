@@ -78,7 +78,7 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
   file, with its templates. Change objects through the session (`set_source_value`, `add_object`, `paste_objects`, ...), never by
   mutating the rendered dicts: Save patches only the changed source properties back into the files. The session reports every
   finished edit, undo and redo to its listeners (`DraftChange`); `PageLayoutEditorWidget._on_draft_changed` updates the preview,
-  the JSONL, the properties, the dirty state, the undo actions and Live preview from it. An edit operation only changes the
+  the JSONL, the properties, the dirty state and the undo actions from it; `PlateLink` listens to the session itself for Live preview. An edit operation only changes the
   session, it doesn't refresh anything itself. The sources belong to a `ConfigDraft` (`gui/domain/draft/config_draft.py`,
   `MainWindow.config_draft`), shared by the sessions of all devices: a file is loaded once, an edit of a shared file (common
   page, part) through one session is rendered again by every other session that shows it (they report it as a `DraftChange`
@@ -86,8 +86,8 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
 - **Tabs** (design in `docs/tabs-and-shared-drafts.md`): one tab per open device above the preview (`DeviceTabs`,
   `gui/qt/window/device_tabs.py`), each with its own `PageLayoutEditorWidget` and what was loaded of the device (`DeviceTab`), so
   switching tabs loads nothing. `MainWindow.page_layout_editor_widget` is the editor of the active tab; the window reacts to the
-  signals of an editor only while its tab is active, and points the panels, menus, toolbar, connection and log at the active tab
-  (`_on_tab_activated`). Closing a tab keeps its drafts (`MainWindow.sessions`). Files that change while a tab is in the
+  signals of an editor only while its tab is active (except what it sends to its plate), and points the panels, menus, toolbar,
+  status bar and log at the active tab (`_on_tab_activated`). Closing a tab keeps its drafts (`MainWindow.sessions`). Files that change while a tab is in the
   background are applied when it is shown again (`changed_files`).
 - **Undo/redo**: every change through the session is a step of the undo history of its `ConfigDraft`
   (`gui/domain/draft/edit_history.py`, whole states of the sources, each file on its own (`DraftState`), so undo doesn't depend
@@ -159,6 +159,11 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
 - **Plate actions** (`PlateLink` in `gui/qt/widgets/pagelayout/plate_link.py`, names and tooltips agreed with the user): *Live preview* sends the draft to the plate while editing (nothing is stored
   on it), *Restore plate* rebuilds the pages from the files on the plate like a restart, *Deploy* uploads the saved files. *Revert*
   discards the draft; *Undo*/*Redo* step through the edits of the draft.
+- **Connections**: one per open device (`PlateConnections` in `gui/qt/connection.py`), opened with its first tab and closed with
+  its last one; `MainWindow.connection` is the active tab's. Live preview keeps running in a background tab and sends what
+  changes for its device, also edits of a shared file in another tab; it runs on at most `MAX_LIVE_PREVIEWS` devices
+  (`gui/domain/live_preview.py`), more are refused, nothing is turned off by itself. The status shows in a dot in each tab's
+  title, in the Plates dock (`gui/qt/widgets/plates_panel.py`, a row per open device) and, for the active tab, the status bar.
 - **Remembered state**: what should survive a restart for a config directory or a device goes into `UiSession`/`DeviceSession`
   (`gui/domain/ui_session.py`) as a dataclass field with a default, then `ui_session.save()` (`gui/qt/ui_session_store.py`). App-wide
   preferences (window geometry, theme, view toggles) are plain `QSettings` keys.

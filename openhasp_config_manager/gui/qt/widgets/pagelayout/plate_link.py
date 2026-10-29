@@ -5,6 +5,8 @@ from typing import Callable, Dict, List, Optional
 from PyQt6 import QtCore
 from PyQt6.QtWidgets import QMessageBox, QWidget
 
+from openhasp_config_manager.gui.domain.draft.model import DraftChange
+from openhasp_config_manager.gui.domain.draft.session import PlateSession
 from openhasp_config_manager.gui.domain.live_preview import LivePlate, LiveUpdate
 from openhasp_config_manager.gui.qt.async_bridge import qBridge, run_async
 from openhasp_config_manager.gui.qt.components import UiComponents
@@ -26,6 +28,9 @@ class PlateLink(QtCore.QObject):
     """
     What the editor does on the plate of its device: *Live preview* (the draft on the plate while editing), *Clear page* and
     *Restore plate*, with their actions. Everything is sent in order: a page that is sent in full, then the changes after it.
+
+    Live preview keeps running while the tab of the editor is in the background: it follows the draft of the device
+    (`set_session`), which also reports the edits made through another device of a file both show (a shared part).
 
     Live preview remembers what it sent to each page (`LivePlate`): coming back to a page only sends what changed since,
     and then shows it. What to send is decided when it is its turn to be sent (in the asyncio thread, under `_send_lock`),
@@ -78,6 +83,10 @@ class PlateLink(QtCore.QObject):
             lambda _: self._send_live_changes(), interval_ms=LIVE_PREVIEW_INTERVAL_MS, parent=self
         )
         self._stopping_silently = False
+        # the draft whose changes Live preview sends
+        self._session: Optional[PlateSession] = None
+        # says why Live preview can't be turned on now, None if it can (see `set_live_guard`)
+        self._live_guard: Callable[[], Optional[str]] = lambda: None
         # keeps what is sent to the plate in order: a page that is sent in full, then the changes after it
         self._send_lock = asyncio.Lock()
 
@@ -120,6 +129,23 @@ class PlateLink(QtCore.QObject):
 
     # --- Live preview ---
 
+    def set_session(self, session: Optional[PlateSession]):
+        """Follow the changes of a draft (of the pages of the device, or of a part on its own), None for none."""
+        if self._session is session:
+            return
+        if self._session is not None:
+            self._session.remove_listener(self._on_draft_changed)
+        self._session = session
+        if session is not None:
+            session.add_listener(self._on_draft_changed)
+
+    def set_live_guard(self, guard: Callable[[], Optional[str]]):
+        """:param guard: says why Live preview can't be turned on now (e.g. too many devices have it on), None if it can"""
+        self._live_guard = guard
+
+    def _on_draft_changed(self, _change: DraftChange):
+        self.draft_changed()
+
     def stop_live_preview(self):
         """Turn Live preview off without offering to restore the plate, e.g. when another device is selected."""
         self._stopping_silently = True
@@ -148,6 +174,13 @@ class PlateLink(QtCore.QObject):
 
     @qBridge(bool)
     def _on_live_preview_toggled(self, enabled: bool):
+        refusal = self._live_guard() if enabled else None
+        if refusal is not None:
+            self.action_live_preview.blockSignals(True)
+            self.action_live_preview.setChecked(False)
+            self.action_live_preview.blockSignals(False)
+            QMessageBox.information(self._parent, "Live preview", refusal)
+            return
         self.liveChanged.emit(enabled)
         if self._device() is None:
             return

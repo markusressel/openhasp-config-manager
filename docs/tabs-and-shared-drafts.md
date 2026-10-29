@@ -200,3 +200,12 @@ Each phase is one PR with tests. Phases on different files run in parallel.
   closed: a save moves the instance with the lines of its `!include`, and a reload finds it again by its description (or
   ends it, `instance` is None then), as for the part mode of the draft before. Alternative: the view finds its instance again
   after every save and reload, which needs the description from before them.
+
+### Phase 5: connections per device
+
+- **Phase 5: `PlateLink` stays in the editor of the device tab.** `PlateConnections` keeps the connection of each open device,
+  while Live preview, Clear page and Restore plate stay in the `PageLayoutEditorWidget` that owns them (toolbar, busy state,
+  error banner). A device has only one tab until the part tabs (phase 6), which decide how a part tab and the device tab share
+  Live preview. `PlateLink` follows the draft of its device itself (`set_session`), so edits from other tabs reach it.
+- **Phase 5: the page the plate shows** is what the plate reports on its `state/page` topic. It sends that only when the page
+  changes, so the Plates panel shows "–" until the plate switched pages once after connecting.

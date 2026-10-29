@@ -416,6 +416,7 @@ class PageLayoutEditorWidget(QWidget):
         self._set_part_focus(None)
         self._close_parked_part_focus()
         self.session = None
+        self.plate.set_session(None)
         self.device_pages_data = None
         self.current_index = 1
         self.page_objects = []
@@ -449,6 +450,8 @@ class PageLayoutEditorWidget(QWidget):
             self._set_part_focus(PartFocus(session, part))
         self.session = session
         session.add_listener(self._on_draft_changed)
+        # Live preview follows the draft itself, also while the editor is in the background
+        self.plate.set_session(session)
         self.device_pages_data = device_pages_data
         self.error_banner.hide()
         self.highlight_component(None)
@@ -526,7 +529,6 @@ class PageLayoutEditorWidget(QWidget):
         self.dirtyChanged.emit(self.session.is_dirty)
         self.fileStateChanged.emit()
         self.update_undo_actions()
-        self.plate.draft_changed()
 
     def _reload_page(self, select: List[Dict] = ()):
         """Rebuilds the preview from the draft after objects were added or removed, and selects the given objects."""

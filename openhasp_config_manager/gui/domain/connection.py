@@ -1,7 +1,7 @@
 import dataclasses
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import FrozenSet, Optional, Tuple
+from typing import FrozenSet, List, Optional, Tuple
 
 
 class LinkState(StrEnum):
@@ -37,15 +37,17 @@ _SEVERITY_ORDER = [Severity.NEUTRAL, Severity.OK, Severity.WARNING, Severity.ERR
 @dataclass(frozen=True)
 class ConnectionStatus:
     """
-    The connection to the selected plate, as shown in the status bar: the link (MQTT broker and the plate's LWT),
-    whether something is being sent, and the pages that may show something else on the plate than in the editor
-    because sending them failed.
+    The connection to a plate, as shown in the status bar, the tabs and the Plates panel: the link (MQTT broker and the
+    plate's LWT), whether something is being sent, the page the plate reported to show, and the pages that may show
+    something else on the plate than in the editor because sending them failed.
     """
 
     link: LinkState = LinkState.NO_DEVICE
     error: Optional[str] = None
     sending: bool = False
     out_of_sync_pages: FrozenSet[int] = frozenset()
+    # the page the plate shows (`state/page`), None until it reports one: it does so only when the page changes
+    page: Optional[int] = None
 
     @classmethod
     def connecting(cls) -> "ConnectionStatus":
@@ -66,8 +68,13 @@ class ConnectionStatus:
         if payload == "online":
             return dataclasses.replace(self, link=LinkState.PLATE_ONLINE, error=None)
         if payload == "offline":
-            return dataclasses.replace(self, link=LinkState.PLATE_OFFLINE, error=None)
+            # it starts on its home page when it comes back
+            return dataclasses.replace(self, link=LinkState.PLATE_OFFLINE, error=None, page=None)
         return self
+
+    def with_page(self, payload: str) -> "ConnectionStatus":
+        """:param payload: the plate's `state/page` message: the number of the page it shows now"""
+        return dataclasses.replace(self, page=int(payload))
 
     def with_sending(self, sending: bool) -> "ConnectionStatus":
         return dataclasses.replace(self, sending=sending)
@@ -83,11 +90,26 @@ class ConnectionStatus:
         return dataclasses.replace(self, out_of_sync_pages=frozenset())
 
     @property
+    def link_summary(self) -> Tuple[str, Severity]:
+        """:return: the state of the link alone (broker and plate) and how bad it is"""
+        return _LINK_TEXT[self.link]
+
+    @property
+    def problems(self) -> List[str]:
+        """:return: what is wrong besides the state of the link, e.g. for the Plates panel"""
+        result = []
+        if self.link == LinkState.BROKER_UNREACHABLE and self.error:
+            result.append(self.error)
+        if self.out_of_sync_pages:
+            result.append(f"Out of sync: page {', '.join(str(page) for page in sorted(self.out_of_sync_pages))}")
+        return result
+
+    @property
     def summary(self) -> Tuple[str, Severity]:
         """
         :return: the text for the status bar and how bad it is
         """
-        text, severity = _LINK_TEXT[self.link]
+        text, severity = self.link_summary
         parts = [text]
         if self.sending:
             parts.append("Sending…")
@@ -103,7 +125,7 @@ class ConnectionStatus:
         :return: an explanation for the tooltip
         """
         lines = {
-            LinkState.NO_DEVICE: "No device is selected.",
+            LinkState.NO_DEVICE: "No device is loaded.",
             LinkState.CONNECTING: "Connecting to the MQTT broker of the plate…",
             LinkState.BROKER_UNREACHABLE: f"The MQTT broker can't be reached: {self.error}. Retrying every few seconds.",
             LinkState.PLATE_UNKNOWN: "Connected to the MQTT broker, but the plate has not reported its state (LWT) yet. "

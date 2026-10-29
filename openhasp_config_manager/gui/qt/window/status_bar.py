@@ -2,7 +2,7 @@ from typing import Callable, Optional
 
 import qtawesome as qta
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QColor, QPalette
+from PyQt6.QtGui import QColor, QIcon, QPalette
 from PyQt6.QtWidgets import QApplication, QLabel, QMainWindow, QProgressBar, QToolButton
 
 from openhasp_config_manager.gui.dimensions import UiDimensions
@@ -12,9 +12,24 @@ from openhasp_config_manager.gui.qt.operations import OperationStatus
 from openhasp_config_manager.gui.qt.theme import current_colors
 
 
+def severity_color(severity: Severity) -> QColor:
+    colors = current_colors()
+    return {
+        Severity.NEUTRAL: QApplication.palette().color(QPalette.ColorRole.PlaceholderText),
+        Severity.OK: QColor(colors.success),
+        Severity.WARNING: QColor(colors.warning),
+        Severity.ERROR: QColor(colors.error),
+    }[severity]
+
+
+def connection_icon(connection_status: ConnectionStatus, live: bool = False) -> QIcon:
+    """The dot of a connection (in the color of its state), or the Live preview icon in that color while it is on."""
+    return qta.icon("mdi6.broadcast" if live else "mdi6.circle", color=severity_color(connection_status.summary[1]))
+
+
 class StatusBarController:
     """
-    Shows the selected device, the connection to it, the page, the draft state and the last operation in the status bar.
+    Shows the device of the active tab, the connection to it, the page, the draft state and the last operation in the status bar.
     """
 
     def __init__(self, window: QMainWindow, status: OperationStatus, on_resync: Callable[[int], None]):
@@ -54,16 +69,9 @@ class StatusBarController:
     def set_connection(self, connection_status: ConnectionStatus):
         self._connection_status = connection_status
         text, severity = connection_status.summary
-        colors = current_colors()
-        color = {
-            Severity.NEUTRAL: QApplication.palette().color(QPalette.ColorRole.PlaceholderText),
-            Severity.OK: QColor(colors.success),
-            Severity.WARNING: QColor(colors.warning),
-            Severity.ERROR: QColor(colors.error),
-        }[severity]
         self._connection.setVisible(connection_status.link != LinkState.NO_DEVICE)
         self._connection.setText(text)
-        self._connection.setIcon(qta.icon("mdi6.circle", color=color))
+        self._connection.setIcon(connection_icon(connection_status))
         self._connection.setToolTip(connection_status.details)
         self._connection.setProperty("severity", severity.value)
         self._connection.style().unpolish(self._connection)
