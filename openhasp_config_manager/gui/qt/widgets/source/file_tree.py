@@ -60,6 +60,7 @@ _LEGEND = [
 _LEGEND_COLUMN = [
     "p1, p2–p4: the pages a .jsonl file has objects on",
     "boot.cmd, ...: the startup script that loads a file that is not in the draft",
+    "part: a .jsonl file that other files include (!include); the preview shows its objects with them",
     "title, theme: the variables of a variable file that are used",
     "global, shared, this device: what the top-level folders are for. The ones further down win: the variables of the device override the shared and the global ones",
 ]
@@ -145,6 +146,8 @@ class FileTreeWidget(QWidget):
         self._used: Dict[Path, str] = {}
         # resolved path -> the referenced variables, for the variable files the used files reference
         self._used_variables: Dict[Path, List[str]] = {}
+        # resolved path of a part -> the resolved paths of the files that include it
+        self._includers: Dict[Path, List[Path]] = {}
         self._items_by_key: Dict[str, QTreeWidgetItem] = {}
         self._common_path: Optional[Path] = None
         self._target: Optional[str] = None
@@ -207,6 +210,7 @@ class FileTreeWidget(QWidget):
         components: Dict[Path, str],
         used: Dict[Path, str],
         used_variables: Dict[Path, List[str]],
+        includers: Dict[Path, List[Path]],
         common_path: Path,
     ):
         """
@@ -215,15 +219,17 @@ class FileTreeWidget(QWidget):
         :param used: the .cmd and .jsonl files the plate runs -> the startup script that runs them (see `used_files`)
         :param used_variables: the variable files the used files reference -> the referenced variables
             (see `used_variable_files`)
+        :param includers: the parts -> the files that include them (see `including_files`)
         :param common_path: the common folder: its files are shared by all devices
         """
-        self._files = (roots, components, used, used_variables, common_path)
+        self._files = (roots, components, used, used_variables, includers, common_path)
         expanded = self._expanded_paths()
         self._tree.blockSignals(True)
         self._tree.clear()
         self._keys = {path.resolve(): key for path, key in components.items()}
         self._used = {path.resolve(): script for path, script in used.items()}
         self._used_variables = {path.resolve(): names for path, names in used_variables.items()}
+        self._includers = {part.resolve(): [path.resolve() for path in paths] for part, paths in includers.items()}
         self._items_by_key = {}
         self._common_path = common_path.resolve()
         for root in roots:
@@ -317,8 +323,11 @@ class FileTreeWidget(QWidget):
             self._items_by_key[key] = item
             return item
 
-        # not part of the draft: dimmed, unless it is a variable file the plate's files use
-        if not (node.kind == FileKind.VARIABLES and variables is not None):
+        includers = self._includers.get(path) if script is not None else None
+        # not part of the draft: dimmed, unless it is a variable file the plate's files use, or a part the preview shows
+        if not (node.kind == FileKind.VARIABLES and variables is not None) and not (
+            includers is not None and self._in_preview(path)
+        ):
             dimmed = QBrush(QApplication.palette().color(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text))
             item.setForeground(0, dimmed)
             item.setForeground(1, dimmed)
@@ -338,12 +347,37 @@ class FileTreeWidget(QWidget):
             font = QFont(item.font(0))
             font.setItalic(True)
             item.setFont(0, font)
+        elif includers is not None:
+            item.setText(1, "part")
+            names = ", ".join(self._display_path(including) for including in includers)
+            shown = (
+                "The preview shows its objects with the files that include them, read-only: change them in this file."
+                if self._in_preview(path)
+                else "The preview doesn't show its objects: no file of the draft includes it."
+            )
+            item.setToolTip(0, f"A part, included (!include) by {names} ({script}).\n{shown}")
         elif node.kind == FileKind.JSONL:
             item.setText(1, script)
             item.setToolTip(0, f"Loaded by {script} on the plate. The editor shows the pages that boot.cmd loads.")
         else:
             item.setToolTip(0, f"Run by the plate ({script}).")
         return item
+
+    def _in_preview(self, part: Path, seen: Optional[Set[Path]] = None) -> bool:
+        """:return: whether a file of the draft includes the part, directly or through other parts"""
+        seen = set() if seen is None else seen
+        seen.add(part)
+        return any(
+            including in self._keys or (including not in seen and self._in_preview(including, seen))
+            for including in self._includers.get(part, [])
+        )
+
+    def _display_path(self, path: Path) -> str:
+        """:return: the path of a file relative to the config directory"""
+        try:
+            return path.relative_to(self._common_path.parent).as_posix()
+        except ValueError:
+            return str(path)
 
     def legend_html(self) -> str:
         """:return: what the colors and the second column of the tree mean, as rich text (in the colors of the theme)"""

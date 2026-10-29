@@ -136,6 +136,23 @@ def used_files(
     return result
 
 
+def including_files(jsonl_components: List[JsonlComponent], config_dir: Path) -> Dict[Path, List[Path]]:
+    """
+    The parts: the .jsonl files that other .jsonl files include (`!include`).
+    :param config_dir: the config directory, which the paths of `!include`s are relative to
+    :return: the resolved path of each part -> the resolved paths of the files that include it directly, in their order
+    """
+    paths = {Path(component.path).resolve() for component in jsonl_components}
+    result: Dict[Path, List[Path]] = {}
+    for component in jsonl_components:
+        including = Path(component.path).resolve()
+        for path in included_paths(component.content):
+            part = Path(config_dir, path).resolve()
+            if part in paths and including not in result.setdefault(part, []):
+                result[part].append(including)
+    return result
+
+
 def format_pages(pages: Iterable[int]) -> str:
     """:return: the pages as ranges, e.g. "p0, p2–p4" for [0, 2, 3, 4]"""
     ranges = []

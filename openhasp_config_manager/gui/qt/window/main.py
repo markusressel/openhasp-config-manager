@@ -604,6 +604,7 @@ class MainWindow(QMainWindow):
             components={component.path: component.key for component in loaded.components},
             used=loaded.used_files,
             used_variables=loaded.used_variable_files,
+            includers=loaded.includers,
             common_path=Path(self.config_manager.cfg_root, COMMON_FOLDER_NAME),
         )
         self.source_editor.set_hints(loaded.unused_variables)
