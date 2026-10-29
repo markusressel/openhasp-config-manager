@@ -1,6 +1,6 @@
 import pytest
 
-from openhasp_config_manager.validation.property_values import value_problems
+from openhasp_config_manager.validation.property_values import action_page, value_problems
 
 
 def _problems(key, value, obj="label", **extra):
@@ -163,3 +163,23 @@ def test_the_plate_runs_only_commands_lists_and_objects():
         "up: 2 is not a command, a list of commands or an object, the plate ignores it",
         "down: ['page 1', True] is not a command, a list of commands or an object, the plate ignores it",
     ]
+
+
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        ("NEXT", "next"),
+        ("p3", 3),
+        ("p13", "prev"),
+        ("p14", "back"),
+        ("p15", "next"),
+        ("p20", 20),
+        ("p259", 3),
+        ("p", 0),
+        ("P3", None),
+        (" next", None),
+        ('{"up": "page 2"}', None),
+    ],
+)
+def test_where_the_old_actions_lead(text, expected):
+    assert action_page(text) == expected

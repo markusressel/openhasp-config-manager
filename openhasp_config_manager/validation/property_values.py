@@ -293,7 +293,7 @@ def action_problems(action) -> List[str]:
         text = action
         if text == "" or text.lower() in _ACTION_PAGES:
             return []
-        if re.fullmatch(r"p[0-9]*", text):
+        if _is_action_page_number(text):
             return _action_page_problems(text)
         if not text.lstrip(" \t\r\n").startswith("{"):
             # not JSON, or JSON that isn't an object: no event has a value in it
@@ -320,9 +320,32 @@ def action_problems(action) -> List[str]:
     return problems
 
 
-def _action_page_problems(text: str) -> List[str]:
+def action_page(text: str) -> Union[str, int, None]:
+    """
+    The old way of an action, as action_problems reads it: `prev`, `next`, `back` (ignoring case) or `p<page>`, whose page is an
+    uint8_t and means prev, back or next after the last page.
+    :param text: the `action` of an object
+    :return: `prev`, `next`, `back` or the page number (0 and pages after the last one lead nowhere), None if the text is no page
+    """
+    if text.lower() in _ACTION_PAGES:
+        return text.lower()
+    if not _is_action_page_number(text):
+        return None
+    page = _action_page_number(text)
+    return _ACTION_PAGE_NUMBERS.get(page, page)
+
+
+def _is_action_page_number(text: str) -> bool:
+    return re.fullmatch(r"p[0-9]*", text) is not None
+
+
+def _action_page_number(text: str) -> int:
     # atoi of the digits (none is 0), as an uint8_t
-    page = int(text[1:] or 0) % 256
+    return int(text[1:] or 0) % 256
+
+
+def _action_page_problems(text: str) -> List[str]:
+    page = _action_page_number(text)
     pages = f"pages {PAGES[0] + 1} to {PAGES[1]}"
     if page in _ACTION_PAGE_NUMBERS:
         return [f"{text!r} is page {_ACTION_PAGE_NUMBERS[page]} on the plate, there is no page {page} ({pages})"]

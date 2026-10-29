@@ -5,17 +5,20 @@ import re
 from dataclasses import dataclass
 from typing import List, Mapping, Optional, Union
 
-# the events of an object that an action can name
-EVENTS = ("down", "up", "long", "hold", "release", "lost")
+from openhasp_config_manager.validation.property_values import ACTION_EVENTS, action_page
+
 
 
 def action_commands(action, event: str) -> List[str]:
     """
+    Like the plate reads an action (`action_problems`): the plate runs no action on other events (e.g. `lost`).
     :param action: the `action` property of an object: a page (`prev`, `next`, `back`, `p3`, the old way) or the commands per event as
         a JSON object (`{"up": "page 2", "long": ["page 1", "page back"]}`)
-    :param event: `down`, `up`, `long`, `hold` or `release`
+    :param event: `down`, `up`, `long`, `hold`, `release` or another event of the object
     :return: the commands the action has for an event, in order
     """
+    if event not in ACTION_EVENTS:
+        return []
     commands = _events_of(action).get(event)
     if commands is None:
         return []
@@ -25,18 +28,18 @@ def action_commands(action, event: str) -> List[str]:
 def _events_of(action) -> Mapping:
     if isinstance(action, Mapping):
         return action
-    text = str(action or "").strip()
-    if text.startswith("{"):
+    if not isinstance(action, str):
+        return {}
+    # the old way: a page the button leads to when it is released
+    page = action_page(action)
+    if page is not None:
+        return {"up": f"page {page}"} if page != 0 else {}
+    if action.lstrip(" \t\r\n").startswith("{"):
         try:
-            events = json.loads(text)
+            events = json.loads(action)
         except ValueError:
             return {}  # the plate warns about the parameter and ignores it
         return events if isinstance(events, dict) else {}
-    # the old way: a page the button leads to when it is released
-    if text.lower() in ("prev", "next", "back"):
-        return {"up": f"page {text.lower()}"}
-    if len(text) > 1 and text[0] == "p" and text[1:].isdigit():
-        return {"up": f"page {int(text[1:])}"}
     return {}
 
 
