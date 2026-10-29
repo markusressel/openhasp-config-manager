@@ -72,6 +72,38 @@ class TestDescribe(TestBase):
         }
         assert describe_object(session, label, cfg_root)["line"] == 3
 
+    def test_an_included_object_says_where_it_is_written(self, cfg_root):
+        # GIVEN
+        (cfg_root / "common" / "dot.jsonl").write_text('{"page": 9, "id": "{{ id }}", "obj": "obj", "x": "{{ id }}"}\n')
+        (cfg_root / "devices" / "test_device" / "editor.jsonl").write_text(
+            '{"!include": "common/dot.jsonl", "vars": {"size": "{{ range(2) }}"}, "for": {"id": [4]}}\n'
+        )
+        loaded = load_device(_create_config_manager(cfg_root, cfg_root.parent / "output"), "test_device")
+        session = PlateSession(device=loaded.device)
+        session.load(loaded.components, loaded.renderer)
+        [component] = session.components
+        [dot] = session.working_objects[component.key]
+
+        # WHEN
+        location = describe_object(session, dot, cfg_root)
+        [problem] = describe_problems(session, [Problem(Severity.WARNING, dot, "a problem")], cfg_root)
+
+        # THEN: what JSON can't hold is text
+        assert (location["file"], location["line"], location["source"]) == (
+            "devices/test_device/editor.jsonl",
+            1,
+            {"x": "{{ id }}"},
+        )
+        assert location["include"] == {
+            "file": "common/dot.jsonl",
+            "line": 1,
+            "chain": [
+                {"file": "devices/test_device/editor.jsonl", "line": 1, "vars": {"size": "range(0, 2)"}, "loop": {"id": 4}}
+            ],
+        }
+        assert problem["include"] == location["include"]
+        json.dumps(location)
+
     def test_object_has_rendered_and_written_geometry(self, session, cfg_root):
         # GIVEN
         [component] = session.components

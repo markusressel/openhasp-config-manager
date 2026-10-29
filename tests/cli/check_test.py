@@ -202,6 +202,41 @@ class TestIncludes:
         assert issue.message == 'Can\'t process the file: can only concatenate str (not "int") to str'
         assert (issue.file, issue.line, issue.included_at) == ("common/dot.jsonl", 2, (f"{DEVICE}/editor.jsonl:1",))
 
+    def test_problems_of_included_objects_are_reported_in_the_part(self, cfg_root):
+        # GIVEN: the second dot is outside of the screen, and its text uses a variable that doesn't exist
+        (cfg_root / "common" / "dot.jsonl").write_text(
+            '{"page": 9, "id": "{{ id }}", "obj": "label", "x": "{{ id * 300 }}", "w": 10, "text": "{{ nope }}"}\n'
+        )
+        _write(cfg_root, '{"page": 9, "id": 9, "obj": "obj"}\n{"!include": "common/dot.jsonl", "for": {"id": [1, 2]}}\n')
+
+        # WHEN
+        _, issues = _check(cfg_root)
+
+        # THEN
+        assert [(issue.severity, issue.message, issue.file, issue.line, issue.included_at) for issue in issues] == [
+            (
+                Severity.WARNING,
+                "p9b2 is outside of the screen: right by 130 px",
+                "common/dot.jsonl",
+                1,
+                (f"{DEVICE}/editor.jsonl:2 (id=2)",),
+            ),
+            (
+                Severity.WARNING,
+                "p9b1: text: Unknown variable: 'nope' is undefined",
+                "common/dot.jsonl",
+                1,
+                (f"{DEVICE}/editor.jsonl:2 (id=1)",),
+            ),
+            (
+                Severity.WARNING,
+                "p9b2: text: Unknown variable: 'nope' is undefined",
+                "common/dot.jsonl",
+                1,
+                (f"{DEVICE}/editor.jsonl:2 (id=2)",),
+            ),
+        ]
+
     def test_a_part_alone_is_not_checked(self, cfg_root):
         # GIVEN: the part needs the variables of an instance
         (cfg_root / "common" / "dot.jsonl").write_text('{"page": 9, "id": "{{ id }}", "x": "{{ id * 2 }}"}\n')

@@ -78,7 +78,9 @@ def check_config(config_manager: ConfigManager, device_name: Optional[str] = Non
 def _check_unused_variables(config_dir: Path, devices: List[Device]) -> List[Issue]:
     """The variables of the YAML files that no file of any device uses (see `VariableUsages`)."""
     try:
-        usages = VariableUsages(config_dir, [DeviceFiles(d.path, list(used_files(d.cmd, d.jsonl))) for d in devices])
+        usages = VariableUsages(
+            config_dir, [DeviceFiles(d.path, list(used_files(d.cmd, d.jsonl, config_dir))) for d in devices]
+        )
         unused = find_unused_variables(usages)
     except Exception as ex:
         return [Issue(Severity.ERROR, f"Can't look for unused variables: {ex}")]
@@ -176,6 +178,19 @@ def _check_pages(config_manager: ConfigManager, config_dir: Path, devices: List[
 def _object_issue(
     session: PlateSession, obj: Dict, severity: Severity, message: str, device: Device, config_dir: Path
 ) -> Issue:
+    origin = session.origin_of(obj)
+    if origin is not None:
+        # the text to change is in the part
+        included_at = tuple(describe_step(step, config_dir) for step in origin.includes)
+        return Issue(
+            severity,
+            message,
+            device=device.name,
+            file=relative(origin.file, config_dir),
+            line=origin.line,
+            object=object_name(obj),
+            included_at=included_at,
+        )
     return Issue(
         severity,
         message,

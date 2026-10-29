@@ -5,6 +5,7 @@ from PyQt6 import QtCore
 
 from openhasp_config_manager.gui.domain.gui_state import relative
 from openhasp_config_manager.gui.domain.draft.session import PlateSession
+from openhasp_config_manager.gui.domain.problems import Severity
 from openhasp_config_manager.gui.domain.source.issues import SourceIssue
 from openhasp_config_manager.gui.domain.variables.definitions import Definition, VariableDefinitions
 from openhasp_config_manager.gui.domain.variables.usages import Usage, VariableUsages
@@ -52,6 +53,7 @@ class SourceEditorSync(QtCore.QObject):
         page_editor.page_preview_widget.selectionChanged.connect(self._select_in_file_view)
         page_editor.page_preview_widget.selectionChanged.connect(self._reveal_selection)
         source_editor.objectAtCursorChanged.connect(self._select_object_of_cursor)
+        page_editor.openSourceRequested.connect(self.open_source)
         source_editor.stateChanged.connect(self._remember_open_files)
         source_editor.stateChanged.connect(self.update_file_view)
         source_editor.set_variables(self.variables_of_file)
@@ -64,6 +66,11 @@ class SourceEditorSync(QtCore.QObject):
         """Show a file in the text editor, for editing (not as a preview)."""
         self._code_view.show_source()
         self._source_editor.open_file(path)
+
+    def open_source(self, path: Path, line: int):
+        """Show a file in the text editor at a line, e.g. the part of an included object."""
+        self._code_view.show_source()
+        self._source_editor.open_file(path, line)
 
     def variables_of_file(self, path: Path) -> List[str]:
         """:return: the template variables a file of the draft can use, for the completion"""
@@ -211,7 +218,10 @@ class SourceEditorSync(QtCore.QObject):
         self._file_view.view.set_selected_objects([widget.obj_data for widget in selected], scroll=scroll)
 
     def update_markers(self):
-        """The problems of the open page are shown in the editors of their files."""
+        """
+        The problems of the open page are shown in the editors of their files, and what is wrong with the directives of the files
+        of the draft (`!include`) where it is: at a directive, or in a part.
+        """
         session = self._shown_session()
         markers: Dict[Path, List[SourceIssue]] = {}
         for problem in [] if session is None else self._page_editor.problems:
@@ -219,4 +229,8 @@ class SourceEditorSync(QtCore.QObject):
             if line is not None:
                 path = session.component_of(problem.obj).path.resolve()
                 markers.setdefault(path, []).append(SourceIssue(line, 0, 1, problem.severity, problem.message))
+        for errors in [] if session is None else session.include_errors().values():
+            for error in errors:
+                issue = SourceIssue(error.line, 0, 1, Severity.ERROR, error.describe(self._config_dir))
+                markers.setdefault(error.file.resolve(), []).append(issue)
         self._source_editor.set_markers(markers)

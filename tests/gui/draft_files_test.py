@@ -200,7 +200,9 @@ class TestDraftFiles(TestBase):
         rendered = []
         original = session._renderer.render_object
         monkeypatch.setattr(
-            session._renderer, "render_object", lambda c, source: rendered.append(source) or original(c, source)
+            session._renderer,
+            "render_object",
+            lambda c, source, scope=None: rendered.append(source) or original(c, source, scope),
         )
 
         # WHEN: the label refers to the button, the button to nothing

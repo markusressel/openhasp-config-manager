@@ -25,7 +25,25 @@ None known.
 - [ ] **Ordering and ids.** Z-order follows creation order on the plate, so reordering objects needs a delete and re-add of the objects
   above them. Live preview has the same issue: an object whose id changed is deleted and added again, so it ends up on top.
 
-## 3. Composed pages (haad layouts) in the editor
+## 3. Parts (`!include`) in the editor
+
+Included objects are shown and read-only (see `docs/include-directive.md`). Next:
+
+- [ ] **Edit the `vars` of an instance in the properties panel.** An included object shows the `vars` and `for` values of its
+  `!include`; changing one writes the directive (in the including file), and all objects of the instance are rendered again.
+- [ ] **A mode to edit a part itself.** Open a part "as a definition": one instance is shown (chosen from the files that include it,
+  or with the part's defaults), edits are written into the part file, and every instance follows.
+- [ ] Copy an included object as a plain object (its values rendered with the variables of its instance). Copying is refused today,
+  since the templates of the part need those variables.
+- [ ] The values next to the templates in the text editor of a part are rendered with the variables of its folder only, not with
+  those of an instance (`vars`, `for`, `this`, `bY` are unknown there): show them for one instance.
+- [ ] A cursor in a directive could select the objects it includes in the preview (today nothing is selected).
+- [ ] `vars` and `for` written before the `"!include"` key of a directive are highlighted as plain keys (the highlighter reads the
+  lines from the top).
+- [ ] The draft expands the directives of every file again after each edit (for the object references). Cache the instances of a
+  directive while its text and its scope stay the same, if large configs make editing slow.
+
+## 4. Composed pages (haad layouts) in the editor
 
 The code-defined layouts (`haad/layout`, `haad/page`, `haad/plate`) already update plates incrementally: `Page.relayout()` sends only the
 changed `x`/`y`/`w`/`h`, `Repeat` adds and removes single objects, ids are stable (`pXbY`), and `dump.py`/`render.py` turn a layout
@@ -36,7 +54,7 @@ into JSONL objects.
 - [ ] Layout-aware editing of `Column`/`Row`/`Panel` trees: an edit of `gap`, `padding` or `size` runs `relayout()` and sends the diff,
   the same path haad uses at runtime.
 
-## 4. The real plate
+## 5. The real plate
 
 - [ ] **Keep the display awake while Live preview is on.** The plate dims and turns its display off after the idle timeout, so the
   live preview changes can't be seen. Wake it when Live preview starts and keep it awake as long as it is on. Check this regularly
@@ -54,7 +72,7 @@ into JSONL objects.
   `OpenHaspClient.get_object_property`). So only the objects the draft knows can be compared, one round trip per property; objects that
   exist only on the plate stay invisible. Probing every id and screenshots were rejected.
 
-## 5. Packaging and installation
+## 6. Packaging and installation
 
 The `gui` extra is done (`pip install 'openhasp-config-manager[gui]'`); AppDaemon and haad are installed by their own environments.
 
@@ -63,7 +81,7 @@ The `gui` extra is done (`pip install 'openhasp-config-manager[gui]'`); AppDaemo
   client into its own package.
 - [ ] A future TUI becomes a `tui` extra the same way.
 
-## 6. Code structure
+## 7. Code structure
 
 Found in a review of the text editor and preview work, not done yet:
 

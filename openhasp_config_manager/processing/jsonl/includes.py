@@ -16,7 +16,10 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Protocol, Set, Tuple
 
+import orjson
+
 from openhasp_config_manager.processing.jsonl.source_editor import JsonlSourceEditor
+from openhasp_config_manager.processing.preprocessor.jsonl_preprocessor import JsonlPreProcessor
 from openhasp_config_manager.processing.template_rendering import (
     THIS,
     TemplateRenderError,
@@ -467,3 +470,19 @@ def expand_includes(
 def directive_paths(sources: Iterable[Dict[str, Any]]) -> List[str]:
     """:return: the paths the `!include`s of the objects of a file name, as written"""
     return [path for source in sources if is_directive(source) and (path := include_path(source)) is not None]
+
+
+def included_paths(content: str) -> List[str]:
+    """
+    :return: the paths the `!include`s of a .jsonl text name, as written; none if the text is not valid JSONL (that is
+        reported when the file is processed)
+    """
+    preprocessor = JsonlPreProcessor()
+    try:
+        sources = [
+            orjson.loads(preprocessor.cleanup_object_for_json_parsing(text))
+            for text in preprocessor.split_jsonl_objects(content)
+        ]
+    except ValueError:
+        return []
+    return directive_paths(source for source in sources if isinstance(source, dict))

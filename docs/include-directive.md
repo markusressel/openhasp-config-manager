@@ -227,6 +227,24 @@ These were not settled beforehand. Each names the alternative that was not taken
 - **Problems of included objects point at the part** (file and line of the object in the part, the chain in the message and in
   the `include` field), because the text that has to change is usually there. Errors of a directive point at the directive.
 
+### The GUI
+
+- **An included object belongs to the directive's file** (`component_of`, `line_of` give the including file and the line of the
+  outermost `!include`), and `origin_of` says where it is written. That keeps the page, the problems and the file of the object
+  consistent with the files the plate runs. `check` and the state file name the part as the place to change.
+- **Copying an included object is refused** like cutting, duplicating and removing: its templates need the variables of its
+  instance, so a pasted copy would not render. Alternative: copy the rendered values (see TODO.md).
+- **The cursor in a directive selects nothing** in the preview (`object_of_source` skips included objects): a directive can
+  include many objects on several pages.
+- **The draft keeps the directives as they are.** Its objects are saved around them (the file keeps its directives and the
+  plain objects in their order, new ones at its end). A directive that includes nothing (e.g. a missing part) stays too.
+- **The included objects are in the undo states** like the others (they never change), so undo and redo keep them where they are.
+- **Highlighting `vars` and `for` needs the lines before**: the highlighter keeps the state of the lines (how deep in brackets,
+  and whether the object is a directive). `vars`/`for` before the `"!include"` key are not highlighted (rare, see TODO.md). Hover,
+  folding and the object at the cursor read the whole text and don't have this limit.
+- **Errors that need the config** (a missing part, a cycle, templates of `vars`) are marked from the draft (as loaded), errors of
+  the text alone (`directive_error`) while typing.
+
 ## Later
 
 - `!extends`: an object that takes the properties of a part object and overrides some of them.

@@ -15,6 +15,7 @@ from openhasp_config_manager.manager import ConfigManager
 from openhasp_config_manager.openhasp_client.model.component import CmdComponent, JsonlComponent
 from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.processing.device_processor import DeviceProcessor
+from openhasp_config_manager.processing.jsonl.includes import Expansion
 from openhasp_config_manager.processing.jsonl.source_editor import JsonlSourceEditor, verify_jsonl_source
 from openhasp_config_manager.processing.template_rendering import (
     check_template,
@@ -59,36 +60,53 @@ class ProcessorDraftRenderer:
             )
         return self._template_var_cache[key]
 
-    def render_object(self, component: str, source: Dict[str, Any]) -> Dict[str, Any]:
-        return self._processor.render_jsonl_object(source, self._vars_of(component), keep_unresolved=True)
+    def render_object(self, component: str, source: Dict[str, Any], scope: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        return self._processor.render_jsonl_object(source, self._vars_of(component), keep_unresolved=True, scope=scope)
 
-    def referenced_objects(self, component: str, source: Dict[str, Any], page: Any = None) -> Set[str]:
+    def expand_objects(self, component: str, sources: List[Dict[str, Any]]) -> Expansion:
+        return self._processor.expand_jsonl_objects(self._components[component], sources)
+
+    def referenced_objects(
+        self, component: str, source: Dict[str, Any], page: Any = None, scope: Optional[Dict[str, Any]] = None
+    ) -> Set[str]:
         """
         :param page: the page of the object, for the objects of its page it names without a page (`b2`)
+        :param scope: the variables of the instance of a part, for an included object
         :return: the objects (`p1b2`) the templates of a source object refer to, also when the name is built by a template inside
             of the template (`{{ p{{ page.index }}b2.x }}`), which is resolved with the variables of the component.
             `ANY_OBJECT` if that is not possible. Remembered for the whole session: the inner templates are the same for as long
-            as the source is (they are about the layout of the pages, not about the objects).
+            as the source is (they are about the layout of the pages, not about the objects). Not for included objects: their
+            inner templates depend on their instance.
         """
+        if scope:
+            return self._referenced_objects(source, {**self._vars_of(component), **scope}, page)
         key = (component, json.dumps(source, sort_keys=True, default=str), str(page))
         if key not in self._references:
-            names: Set[str] = set()
-            for value in source.values():
-                if isinstance(value, str):
-                    found = referenced_objects(value, self._vars_of(component), page)
-                    if found is None:
-                        names = {ANY_OBJECT}
-                        break
-                    names |= found
-            self._references[key] = names
+            self._references[key] = self._referenced_objects(source, self._vars_of(component), page)
         return self._references[key]
 
-    def check_template(self, component: str, template: str, name: Optional[str] = None) -> Optional[str]:
+    @staticmethod
+    def _referenced_objects(source: Dict[str, Any], variables: Dict[str, Any], page: Any) -> Set[str]:
+        names: Set[str] = set()
+        for value in source.values():
+            if isinstance(value, str):
+                found = referenced_objects(value, variables, page)
+                if found is None:
+                    return {ANY_OBJECT}
+                names |= found
+        return names
+
+    def check_template(
+        self, component: str, template: str, name: Optional[str] = None, scope: Optional[Dict[str, Any]] = None
+    ) -> Optional[str]:
         """
         :param name: the object the template is in (`p1b2`), for `this` and `bY` (see `object_variables`)
+        :param scope: the variables of the instance of a part, for an included object
         :return: why the template can't be rendered, or None if it can
         """
         variables = self._vars_of(component)
+        if scope:
+            variables = {**variables, **scope}
         if name is not None:
             variables = {**variables, **object_variables(name, variables)}
         return check_template(template, variables)
@@ -259,9 +277,10 @@ def load_analyzed_device(config_manager: ConfigManager, devices: List[Device], d
         )
 
     files = scan_file_tree(device.path)
-    used = used_files(device.cmd, device.jsonl)
+    used = used_files(device.cmd, device.jsonl, config_manager.cfg_root)
     variable_usages = VariableUsages(
-        config_manager.cfg_root, [DeviceFiles(d.path, list(used_files(d.cmd, d.jsonl))) for d in devices]
+        config_manager.cfg_root,
+        [DeviceFiles(d.path, list(used_files(d.cmd, d.jsonl, config_manager.cfg_root))) for d in devices],
     )
     return LoadedDevice(
         devices=devices,

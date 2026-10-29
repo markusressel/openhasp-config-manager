@@ -21,8 +21,17 @@ from openhasp_config_manager.gui.domain.draft.model import (
 )
 from openhasp_config_manager.gui.domain.draft.edit_history import EditHistory
 from openhasp_config_manager.gui.domain.draft.page_objects import next_free_id
+from openhasp_config_manager.gui.domain.file_tree import config_root_of
 from openhasp_config_manager.gui.domain.problems import object_name
 from openhasp_config_manager.openhasp_client.model.device import Device
+from openhasp_config_manager.processing.jsonl.includes import (
+    INCLUDE,
+    IncludeError,
+    ObjectOrigin,
+    describe_includes,
+    display_path,
+    is_directive,
+)
 from openhasp_config_manager.processing.template_rendering import THIS, has_nested_templates, referenced_objects
 from openhasp_config_manager.processing.jsonl.jsonl import ObjectDimensionsProcessor, is_numeric_property
 from openhasp_config_manager.processing.jsonl.source_editor import JsonlSourceEditor
@@ -31,6 +40,10 @@ from openhasp_config_manager.processing.jsonl.source_editor import JsonlSourceEd
 ANY_OBJECT = "*"
 # the object itself in its templates
 _THIS = re.compile(rf"\b{THIS}\b")
+
+
+class ReadOnlyObjectError(ValueError):
+    """An object of the draft can't be changed: it is included by an `!include` (the message says from where)."""
 
 
 @lru_cache(maxsize=64)
@@ -46,6 +59,9 @@ class PlateSession:
     The draft keeps every object twice: rendered (`working_objects`, shown in the preview) and as written in its source
     file, with templates. Edits change the source and render the object again, so the draft can be saved back into the
     source files without losing templates (see `changes()`).
+
+    The directives of a file (`!include`) are replaced by the objects they include. Those are shown like the others, but are
+    read-only: they are written in another file (the part), once for all of its instances. Saving keeps the directives.
     """
 
     def __init__(self, device: Device):
@@ -63,6 +79,8 @@ class PlateSession:
         # the edit that is running (see `edit`): its description, merge key and the state before it
         self._edit: Optional[Tuple[str, Optional[Hashable], DraftState]] = None
         self._listeners: List[Callable[[DraftChange], None]] = []
+        # component key -> the errors of its directives, when it was loaded
+        self._include_errors: Dict[str, List[IncludeError]] = {}
 
         self._dirty = False
 
@@ -80,10 +98,22 @@ class PlateSession:
         self._history.clear()
         self._frozen_sources = {}
         self._renderer.set_draft_sources({component.key: component.sources for component in self._components.values()})
+        self._include_errors = {}
         for component in self._components.values():
-            self._working_objects[component.key] = [
-                self._create(component.key, index, copy.deepcopy(source)) for index, source in enumerate(component.sources)
-            ]
+            expansion = self._renderer.expand_objects(component.key, component.sources)
+            self._include_errors[component.key] = expansion.errors
+            objects = []
+            for expanded in expansion.objects:
+                origin = expanded.origin
+                if origin.is_included:
+                    # the part's object is shared by its instances, and never changed
+                    entry = DraftEntry(
+                        component.key, origin.includes[0].index, expanded.source, 0, origin=origin, scope=expanded.scope
+                    )
+                    objects.append(self._create_entry(entry))
+                else:
+                    objects.append(self._create(component.key, origin.index, copy.deepcopy(expanded.source)))
+            self._working_objects[component.key] = objects
         self._dirty = False
 
     @property
@@ -119,9 +149,36 @@ class PlateSession:
         return self._entry(obj).index
 
     def line_of(self, obj: Dict) -> Optional[int]:
-        """:return: the line (starting at 1) on which the object starts in its source file, None for an object added in the draft"""
+        """
+        :return: the line (starting at 1) on which the object starts in its source file, None for an object added in the draft.
+            The line of the `!include` for an included object (see `origin_of` for where it is written).
+        """
         index = self.source_index(obj)
         return None if index is None else _source_editor(self.component_of(obj).content).line_of(index)
+
+    def is_included(self, obj: Dict) -> bool:
+        """:return: whether an `!include` includes the object: it is read-only (see `read_only_reason`)"""
+        return self._entry(obj).is_included
+
+    def origin_of(self, obj: Dict) -> Optional[ObjectOrigin]:
+        """:return: where an included object is written, and the `!include`s that lead to it; None for the other objects"""
+        return self._entry(obj).origin
+
+    def read_only_reason(self, obj: Dict) -> Optional[str]:
+        """:return: why the object can't be changed in the draft, None if it can"""
+        origin = self._entry(obj).origin
+        if origin is None:
+            return None
+        config_dir = config_root_of(self.device.path)
+        part = f"{display_path(origin.file, config_dir)}:{origin.line}"
+        return (
+            f"It is included from {part} ({describe_includes(origin.includes, config_dir)}). Change it in that file, or the "
+            f"vars of the {INCLUDE}."
+        )
+
+    def include_errors(self) -> Dict[str, List[IncludeError]]:
+        """:return: component key -> what is wrong with the directives of its file (as loaded from disk)"""
+        return self._include_errors
 
     def component_at(self, path: Path) -> Optional[ComponentSource]:
         """:return: the component of a file (the path in any spelling), None if the draft has no objects of that file"""
@@ -134,9 +191,16 @@ class PlateSession:
         return None if component is None else list(self._working_objects.get(component.key, []))
 
     def object_of_source(self, component: str, index: int) -> Optional[Dict]:
-        """:return: the rendered object that was written as the n-th object of a component's file, None if it was deleted"""
+        """
+        :return: the rendered object that was written as the n-th object of a component's file, None if it was deleted (or the
+            n-th object is a directive)
+        """
         return next(
-            (obj for obj in self._working_objects.get(component, []) if self._entry(obj).index == index),
+            (
+                obj
+                for obj in self._working_objects.get(component, [])
+                if self._entry(obj).index == index and not self._entry(obj).is_included
+            ),
             None,
         )
 
@@ -155,7 +219,8 @@ class PlateSession:
 
     def check_template(self, obj: Dict, template: str) -> Optional[str]:
         """:return: why a template can't be rendered in a property of the object (`this` is the object), None if it can"""
-        return self._renderer.check_template(self._entry(obj).component, template, object_name(obj))
+        entry = self._entry(obj)
+        return self._renderer.check_template(entry.component, template, object_name(obj), entry.scope)
 
     def template_suggestions(self, obj: Dict) -> List[Tuple[str, Any]]:
         return self._renderer.template_suggestions(self._entry(obj).component)
@@ -196,6 +261,9 @@ class PlateSession:
         Check a value for a property, as written in the source (a literal or a template), before setting it.
         :return: why it can't be set, or None if it can
         """
+        reason = self.read_only_reason(obj)
+        if reason is not None:
+            return reason
         try:
             rendered = self._render_with(obj, key, value)
         except TemplateError as ex:
@@ -209,7 +277,9 @@ class PlateSession:
         """
         Set a property as it is written in the source, a literal or a template, and render the object again.
         Nothing changes if the object can't be rendered with it (see check_value).
+        :raises ReadOnlyObjectError: for an included object
         """
+        self._check_editable(obj)
         before = object_name(obj)
         rendered = self._render_with(obj, key, value)
         with self.edit(f"Change {key} of {before}"):
@@ -232,6 +302,7 @@ class PlateSession:
 
     def use_pixel_position(self, obj: Dict):
         """Replace a template or a percentage in x and y with the pixels it renders to, so the object can be moved."""
+        self._check_editable(obj)
         with self.edit(f"Use pixels for x/y of {object_name(obj)}"):
             for key in ("x", "y"):
                 if self.is_template(obj, key) or self.is_percentage(obj, key):
@@ -242,6 +313,7 @@ class PlateSession:
         Remove a property the draft added to the source (e.g. resetting a theme default that was changed),
         and render the object again.
         """
+        self._check_editable(obj)
         before = object_name(obj)
         with self.edit(f"Reset {key} of {before}"):
             self._entry(obj).source.pop(key)
@@ -264,7 +336,9 @@ class PlateSession:
         Duplicate an object into the same component, with the next free id on its page, moved by `offset`.
         Templates of the original are kept, except for the moved position.
         :return: the rendered duplicate
+        :raises ReadOnlyObjectError: for an included object (its templates need the variables of its instance)
         """
+        self._check_editable(obj)
         entry = self._entry(obj)
         source = copy.deepcopy(entry.source)
         source["id"] = next_free_id(self._working_objects, obj.get("page", 0))
@@ -324,6 +398,8 @@ class PlateSession:
             return [self.add_object(component, source) for source in prepared]
 
     def remove_object(self, obj: Dict):
+        """:raises ReadOnlyObjectError: for an included object"""
+        self._check_editable(obj)
         entry = self._entry(obj)
         with self.edit(f"Remove {object_name(obj)}"):
             objects = self._working_objects[entry.component]
@@ -402,9 +478,14 @@ class PlateSession:
         result = []
         for component in self._components.values():
             component_changes = ComponentChanges(component=component)
-            kept: Dict[int, Dict[str, Any]] = {}
+            # the directives stay as they are
+            kept: Dict[int, Dict[str, Any]] = {
+                index: source for index, source in enumerate(component.sources) if is_directive(source)
+            }
             for obj in self._working_objects[component.key]:
                 entry = self._entry(obj)
+                if entry.is_included:
+                    continue
                 if entry.index is None:
                     component_changes.additions.append(copy.deepcopy(entry.source))
                     continue
@@ -440,11 +521,18 @@ class PlateSession:
                 continue
             rewritten.add(key)
             entries = [self._entry(obj) for obj in self._working_objects[key]]
-            for index, entry in enumerate(entries):
-                entry.index = index
-                new_indices[entry.uid] = index
+            # the file keeps its directives and the objects that were not removed in their order, the new ones are at its end
+            kept = {index: source for index, source in enumerate(component.sources) if is_directive(source)}
+            kept |= {entry.index: entry.source for entry in entries if entry.index is not None and not entry.is_included}
+            moved = {old: new for new, old in enumerate(sorted(kept))}
+            added = [entry for entry in entries if entry.index is None]
+            new_index = {entry.uid: len(kept) + position for position, entry in enumerate(added)}
+            for entry in entries:
+                entry.index = moved[entry.index] if entry.index is not None else new_index[entry.uid]
+                new_indices[entry.uid] = entry.index
+            sources = [kept[old] for old in sorted(kept)] + [entry.source for entry in added]
             self._components[key] = replace(
-                component, content=written[component.path], sources=[copy.deepcopy(entry.source) for entry in entries]
+                component, content=written[component.path], sources=[copy.deepcopy(source) for source in sources]
             )
         self._history = self._history.mapped(
             lambda state: {
@@ -460,15 +548,24 @@ class PlateSession:
     # --- internals ---
 
     def _create(self, component: str, index: Optional[int], source: Dict[str, Any], uid: Optional[int] = None) -> Dict:
-        obj = self._renderer.render_object(component, source)
-        self._entries[id(obj)] = DraftEntry(
-            component=component, index=index, source=source, uid=next(self._uids) if uid is None else uid
-        )
+        return self._create_entry(DraftEntry(component=component, index=index, source=source, uid=0), uid)
+
+    def _create_entry(self, entry: DraftEntry, uid: Optional[int] = None) -> Dict:
+        entry.uid = next(self._uids) if uid is None else uid
+        obj = self._rendered(entry)
+        self._entries[id(obj)] = entry
         return obj
 
+    def _rendered(self, entry: DraftEntry) -> Dict[str, Any]:
+        return self._renderer.render_object(entry.component, entry.source, entry.scope)
+
     def _render(self, obj: Dict):
-        entry = self._entry(obj)
-        self._apply(obj, self._renderer.render_object(entry.component, entry.source))
+        self._apply(obj, self._rendered(self._entry(obj)))
+
+    def _check_editable(self, obj: Dict):
+        reason = self.read_only_reason(obj)
+        if reason is not None:
+            raise ReadOnlyObjectError(f"{object_name(obj)} can't be changed here. {reason}")
 
     def _render_dependents(self, changed: Dict, name_before: Optional[str] = None):
         """
@@ -492,9 +589,21 @@ class PlateSession:
         )
 
     def _set_draft_sources(self):
-        self._renderer.set_draft_sources(
-            {key: [self._entry(obj).source for obj in objects] for key, objects in self._working_objects.items()}
-        )
+        self._renderer.set_draft_sources({key: self._file_sources(key) for key in self._working_objects})
+
+    def _file_sources(self, key: str) -> List[Dict[str, Any]]:
+        """:return: the objects of a component as the draft would write them: with its directives instead of what they include"""
+        component = self._components[key]
+        result = []
+        directives = {index for index, source in enumerate(component.sources) if is_directive(source)}
+        for entry in map(self._entry, self._working_objects[key]):
+            if not entry.is_included:
+                result.append(entry.source)
+            elif entry.index in directives:
+                directives.remove(entry.index)
+                result.append(component.sources[entry.index])
+        # directives that include nothing (e.g. because of an error): they add no objects anywhere
+        return result + [component.sources[index] for index in sorted(directives)]
 
     def _render_referring(self, names: Set[str], skip: List[Dict]):
         """Render the objects again whose templates refer to one of the named objects, except the ones to skip."""
@@ -503,7 +612,7 @@ class PlateSession:
             for obj in objects:
                 entry = self._entry(obj)
                 if not any(obj is other for other in skip) and self._references_of(entry, obj.get("page")) & names_or_any:
-                    rendered = self._renderer.render_object(entry.component, entry.source)
+                    rendered = self._rendered(entry)
                     if rendered != obj:
                         self._apply(obj, rendered)
 
@@ -515,13 +624,13 @@ class PlateSession:
         values = [value for value in entry.source.values() if isinstance(value, str)]
         if any(has_nested_templates(value) for value in values):
             # the names are built by templates, which need the variables of the component
-            return self._renderer.referenced_objects(entry.component, entry.source, page)
+            return self._renderer.referenced_objects(entry.component, entry.source, page, entry.scope)
         return set().union(*(referenced_objects(value, {}, page) for value in values))
 
     def _render_with(self, obj: Dict, key: str, value: Any) -> Dict:
         """:return: the object rendered with a different source value, without changing it"""
         entry = self._entry(obj)
-        return self._renderer.render_object(entry.component, {**entry.source, key: value})
+        return self._renderer.render_object(entry.component, {**entry.source, key: value}, entry.scope)
 
     def _apply(self, obj: Dict, rendered: Dict):
         # the preview holds the rendered dict: keep its identity
@@ -545,9 +654,11 @@ class PlateSession:
 
     def _differs_from_files(self) -> bool:
         for component in self._components.values():
-            entries = [self._entry(obj) for obj in self._working_objects[component.key]]
-            if len(entries) != len(component.sources) or any(
-                entry.index != index or entry.source != component.sources[index] for index, entry in enumerate(entries)
+            # the included objects never change, and the directives stay
+            entries = [entry for entry in map(self._entry, self._working_objects[component.key]) if not entry.is_included]
+            indices = [index for index, source in enumerate(component.sources) if not is_directive(source)]
+            if len(entries) != len(indices) or any(
+                entry.index != index or entry.source != component.sources[index] for index, entry in zip(indices, entries)
             ):
                 return True
         return False

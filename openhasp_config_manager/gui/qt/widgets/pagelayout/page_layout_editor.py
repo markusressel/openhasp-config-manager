@@ -74,6 +74,8 @@ class PageLayoutEditorWidget(QWidget):
     selectedObjectComponentChanged = QtCore.pyqtSignal(object)
     # something the GUI state file reports changed (selection, mode, problems, ...)
     stateChanged = QtCore.pyqtSignal()
+    # (path, line): show a file in the text editor at a line (see `OpenHASPWidgetPropertyEditor.openSourceRequested`)
+    openSourceRequested = QtCore.pyqtSignal(object, int)
 
     def __init__(self, status: OperationStatus, ui_session: Optional[UiSessionStore] = None):
         """:param ui_session: where the choices of the user are remembered for the next start (in memory if None)"""
@@ -106,6 +108,7 @@ class PageLayoutEditorWidget(QWidget):
         self.property_editor.removeObjectClicked.connect(self.object_actions.remove_selected)
         self.property_editor.duplicateObjectClicked.connect(self.object_actions.duplicate_selected)
         self.property_editor.usePixelPositionClicked.connect(self.object_actions.use_pixel_positions)
+        self.property_editor.openSourceRequested.connect(self.openSourceRequested)
         self.property_editor.set_validator(self._validate_property)
 
         self.jsonl_preview = PageJsonlPreviewWidget()

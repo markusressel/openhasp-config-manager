@@ -1,11 +1,12 @@
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import pytest
 from jinja2 import TemplateSyntaxError
 
 from openhasp_config_manager.gui.domain.draft.model import ChangeKind, ComponentSource
 from openhasp_config_manager.gui.domain.draft.session import PlateSession
+from openhasp_config_manager.processing.jsonl.includes import ExpandedObject, Expansion, ObjectOrigin
 from tests import TestBase
 
 
@@ -15,7 +16,7 @@ class FakeRenderer:
     def __init__(self, variables: Dict[str, Any]):
         self.variables = variables
 
-    def render_object(self, component: str, source: Dict[str, Any]) -> Dict[str, Any]:
+    def render_object(self, component: str, source: Dict[str, Any], scope: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         result = {}
         for key, value in source.items():
             if isinstance(value, str) and value.startswith("{{"):
@@ -27,10 +28,23 @@ class FakeRenderer:
         result.setdefault("bg_color", "#THEME")
         return result
 
+    def expand_objects(self, component: str, sources: List[Dict[str, Any]]) -> Expansion:
+        # no directives
+        return Expansion(
+            [ExpandedObject(source, ObjectOrigin(Path(component), i, None)) for i, source in enumerate(sources)], []
+        )
+
     def set_draft_sources(self, sources: Dict[str, List[Dict[str, Any]]]):
         pass
 
-    def check_template(self, component: str, template: str, name: Optional[str] = None) -> Optional[str]:
+    def referenced_objects(
+        self, component: str, source: Dict[str, Any], page: Any = None, scope: Optional[Dict[str, Any]] = None
+    ) -> Set[str]:
+        return set()
+
+    def check_template(
+        self, component: str, template: str, name: Optional[str] = None, scope: Optional[Dict[str, Any]] = None
+    ) -> Optional[str]:
         return None if template.strip("{} ") in self.variables else "Unknown variable"
 
     def template_suggestions(self, component: str) -> List[Tuple[str, Any]]:
