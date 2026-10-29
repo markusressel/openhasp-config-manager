@@ -920,6 +920,22 @@ class TestWidgetPicker(TestBase):
         assert editor.widget_picker.minimumSizeHint().height() < 300
         assert editor.minimumSizeHint().height() < 600
 
+    def test_the_buttons_fit_next_to_the_scrollbar(self, qapp):
+        from PyQt6.QtWidgets import QScrollArea
+
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.widget_picker import OpenHASPWidgetPicker
+
+        picker = OpenHASPWidgetPicker()
+        picker.resize(picker.width(), 300)
+        picker.show()
+        qapp.processEvents()
+
+        # THEN the list scrolls, and its buttons are not cut off by the scrollbar
+        scroll_area = picker.findChild(QScrollArea)
+        assert scroll_area.verticalScrollBar().isVisible()
+        assert scroll_area.viewport().width() >= scroll_area.widget().sizeHint().width()
+        picker.close()
+
 
 class TestNavigationButtons(TestBase):
     def test_a_click_on_prev_changes_the_page_after_the_click_is_handled(self, editor):
