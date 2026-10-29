@@ -168,6 +168,23 @@ class PlateSession:
         """:return: a text with templates (e.g. one template), rendered with the variables of a component of the draft"""
         return self._renderer.render_text(component, text)
 
+    def variable_value_at(self, path: Path, name: str) -> Any:
+        """
+        :return: the value of a template variable in a file: of its component if it has objects in the draft, else the variables
+            of the YAML files the device sees there (e.g. in a variable file) :raises KeyError: if it has none
+        """
+        component = self.component_at(path)
+        if component is not None:
+            return self.variable_value(component.key, name)
+        return self._renderer.path_variable_value(path, name)
+
+    def render_text_at(self, path: Path, text: str) -> str:
+        """:return: a text with templates, rendered like `variable_value_at` finds the variables of a file"""
+        component = self.component_at(path)
+        if component is not None:
+            return self.render_text(component.key, text)
+        return self._renderer.render_path_text(path, text)
+
     def variable_names(self, component: str) -> List[str]:
         """:return: the names of the template variables a file can use, e.g. "theme.navbar.height" """
         return [template[3:-3] for template, _value in self._renderer.template_suggestions(component)]

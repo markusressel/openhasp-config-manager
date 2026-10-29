@@ -111,6 +111,22 @@ class TestDraftFiles(TestBase):
             session.variable_value(component.key, "no.such.variable")
         assert session.render_text(component.key, "{{ p9b2.text }}!") == "B!"
 
+    def test_computed_variables_in_the_objects_and_in_the_variable_files(self, cfg_root):
+        # GIVEN: a variable computed from the screen and another variable
+        variable_file = cfg_root / "computed.vars.yaml"
+        variable_file.write_text('margin: 4\ncard:\n  w: "{{ device.screen.width - margin * 2 }}"\n')
+        session = _load(cfg_root)
+        [component] = session.components
+
+        # THEN: the objects, and a variable file open in the text editor, see the computed value
+        assert session.variable_value(component.key, "card.w") == 472
+        assert session.variable_value_at(component.path, "card.w") == 472
+        assert session.variable_value_at(variable_file, "card.w") == 472
+        assert session.render_text_at(variable_file, "{{ device.screen.width - margin * 2 }}") == "472"
+        assert session.render_text_at(component.path, "{{ p9b2.text }}") == "B"
+        with pytest.raises(KeyError):
+            session.variable_value_at(variable_file, "p9b2.text")
+
     def test_suggestions_contain_the_variables_of_a_deployment(self, cfg_root):
         # GIVEN
         session = _load(cfg_root)

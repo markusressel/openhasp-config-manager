@@ -19,6 +19,7 @@ from openhasp_config_manager.processing.template_rendering import (
     render_dict_recursive,
     render_template,
     render_template_or_keep,
+    render_variables,
 )
 from openhasp_config_manager.processing.variables import VariableManager
 from openhasp_config_manager.util import add_missing_keys, merge_dict_into, merge_dict_recursive, merge_dict_shared
@@ -44,6 +45,8 @@ class DeviceProcessor:
         self._jsonl_preprocessor = JsonlPreProcessor()
         self._jsonl_object_processors = jsonl_object_processors
         self._variable_manager = variable_manager
+        # path -> its computed variables, see `path_variables`
+        self._path_variables: Dict[str, Dict[str, Any]] = {}
 
     def add_component(self, component: Component):
         if isinstance(component, JsonlComponent):
@@ -149,12 +152,7 @@ class DeviceProcessor:
         sorted_components = list(sorted(self._jsonl_components, key=lambda x: x == component))
         assert sorted_components[-1] == component
         for c in sorted_components:
-            component_template_vars = self._variable_manager.get_vars(c.path)
-            component_template_vars["device"] = self._device.config.openhasp_config_manager.device
-            if "/common/" in str(c.path):
-                # for common components, also include device specific, top-level variables
-                device_vars = self._variable_manager.get_vars(device.path)
-                component_template_vars = merge_dict_recursive(component_template_vars, device_vars)
+            component_template_vars = self.path_variables(c.path)
 
             if draft_objects is not None and c.path in draft_objects:
                 c_result = self._object_map(draft_objects[c.path])
@@ -169,6 +167,23 @@ class DeviceProcessor:
         if result is None:
             raise AssertionError("Unexpected None value")
         return result
+
+    def path_variables(self, path: Path) -> Dict[str, Any]:
+        """
+        :param path: a file or folder of the config directory
+        :return: the variables of the YAML files for that path on this device, computed (see `render_variables`), and `device`.
+            A file of the common folder also gets the variables of the device folder. Shared: don't change it.
+        :raises TemplateRenderError: if a variable can't be computed
+        """
+        key = str(path)
+        if key not in self._path_variables:
+            variables = self._variable_manager.get_raw_vars(path)
+            if "/common/" in key:
+                # for common components, also include device specific, top-level variables
+                variables = merge_dict_recursive(variables, self._variable_manager.get_raw_vars(self._device.path))
+            device = self._device.config.openhasp_config_manager.device
+            self._path_variables[key] = {**render_variables(variables, {"device": device}), "device": device}
+        return self._path_variables[key]
 
     def _object_map(self, source_objects: List[Dict[str, Any]]) -> Dict[str, dict]:
         """

@@ -12,6 +12,9 @@ Templates in the config files are Jinja2 with some differences:
 - **Keys of dicts win over their methods.** `{{ cfg.values }}` is the variable `values` of `cfg`, not `dict.values`.
 - **Templates are sandboxed.** They can't change what they are given or reach into Python internals, because configs may
   come from places the user doesn't control.
+- **Values that are not sent as text have types.** The values of variables (`render_variables`) and of the `vars`/`for` of an
+  `!include` are evaluated with `evaluate_template`: a single template is the value of its expression, other text with
+  templates is text (a number if it is one). These are strict: an unknown name is an error.
 """
 
 import copy
@@ -19,13 +22,14 @@ import logging
 import re
 from contextvars import ContextVar
 from functools import lru_cache
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 import jinja2
-from jinja2 import BaseLoader, Template, TemplateError, TemplateSyntaxError, UndefinedError
+from jinja2 import BaseLoader, Template, TemplateError, TemplateSyntaxError, UndefinedError, meta, nodes
 from jinja2.sandbox import ImmutableSandboxedEnvironment
 
 from openhasp_config_manager.console import warn
+from openhasp_config_manager.util import merge_dict_shared
 
 LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(logging.DEBUG)
@@ -360,3 +364,223 @@ def _render_text(text: str, template_vars: Dict, name: str) -> Tuple[str, Option
         # e.g. `{{ {{ a }} }}` is only valid when `a` is defined
         return rendered if error is None else text, "uses unknown " + ", ".join(sorted(unknown))
     return rendered, None
+
+
+# --- values with types: the variables of the YAML files, the `vars` and `for` of an `!include` ---
+
+_INTEGER = re.compile(r"-?\d+")
+_FLOAT = re.compile(r"-?\d+\.\d+")
+# stands for a template inside of a template while the names a template uses are collected
+_NESTED = "__nested_template__"
+
+# where a variable is: its keys (and the indices of lists), `common.margin` is ("common", "margin")
+VariablePath = Tuple[Any, ...]
+
+
+@lru_cache(maxsize=_CACHE_SIZE)
+def _compile_expression(expression: str) -> Callable[..., Any]:
+    return _STRICT.compile_expression(expression, undefined_to_none=False)
+
+
+def is_single_template(text: str) -> bool:
+    """:return: whether a text is one `{{ ... }}` and nothing else (spaces around it are fine)"""
+    stripped = text.strip()
+    return stripped.startswith("{{") and stripped.endswith("}}") and template_spans(stripped) == [(0, len(stripped))]
+
+
+def evaluate_template(text: str, template_vars: Dict[str, Any]) -> Any:
+    """
+    The value of a text that is not sent to the plate as text, like a variable: a single template (`{{ common.margin * 2 }}`)
+    is the value of its expression (a number, a list, a mapping, ...). Any other text is rendered (see `render_template`) and
+    is a number if it is one (`"1{{ x }}"`). Unknown variables are errors.
+    :raises jinja2.TemplateSyntaxError: for an invalid template
+    :raises jinja2.UndefinedError: for an unknown variable
+    """
+    if not is_single_template(text):
+        return _number(render_template(text, template_vars, strict=True))
+    expression = render_nested_templates(text.strip(), template_vars, strict=True)[2:-2]
+    value = _compile_expression(expression)(template_vars)
+    if isinstance(value, jinja2.Undefined):
+        # e.g. a key the mapping doesn't have: raises the UndefinedError
+        str(value)
+    return value
+
+
+def _number(text: str) -> Any:
+    if _INTEGER.fullmatch(text):
+        return int(text)
+    if _FLOAT.fullmatch(text):
+        return float(text)
+    return text
+
+
+def render_variables(variables: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """
+    Compute the variables of the YAML files whose values are templates (see `evaluate_template`), from each other: in the order
+    they depend on each other, found from the names their templates use. Templates in keys are not rendered.
+    :param variables: the variables, e.g. the merged variables of a path (they are not changed)
+    :param context: more variables the templates can use, e.g. `device`. They win over `variables` (like a merge of both would)
+        and are not rendered; variables they replace are not computed and stay as they are.
+    :return: a copy of `variables` with the computed values
+    :raises TemplateRenderError: for an invalid template, an unknown name, a cycle, or a template that can't be computed
+    """
+    context = context or {}
+    result = copy.deepcopy(variables)
+    leaves = {path: text for path, text in _template_leaves(result, ()) if not _overridden(context, path)}
+    scope = merge_dict_shared(result, context)
+    for path in leaves:
+        # a template that uses a variable which is computed later fails (e.g. a name that a template inside of it builds)
+        _set_at(scope, path, jinja2.StrictUndefined(hint=f"'{_dotted(path)}' is not computed yet"))
+    for path in _dependency_order(leaves, scope):
+        try:
+            value = evaluate_template(leaves[path], scope)
+        except Exception as ex:
+            message = ex.message if isinstance(ex, TemplateError) else str(ex)
+            raise TemplateRenderError(f"Can't compute the variable '{_dotted(path)}': {message}: {leaves[path]}") from ex
+        _set_at(result, path, value)
+        _set_at(scope, path, value)
+    return result
+
+
+def _template_leaves(value: Any, path: VariablePath) -> List[Tuple[VariablePath, str]]:
+    if isinstance(value, dict):
+        return [leaf for key, child in value.items() for leaf in _template_leaves(child, path + (key,))]
+    if isinstance(value, list):
+        return [leaf for index, child in enumerate(value) for leaf in _template_leaves(child, path + (index,))]
+    if isinstance(value, str) and ("{{" in value or "{%" in value):
+        return [(path, value)]
+    return []
+
+
+def _overridden(context: Dict[str, Any], path: VariablePath) -> bool:
+    """:return: whether merging the context over the variables replaces the variable at the path"""
+    current: Any = context
+    for key in path:
+        if not isinstance(current, dict):
+            # a value of the context (e.g. a list) replaces everything below it
+            return True
+        if key not in current:
+            return False
+        current = current[key]
+    return True
+
+
+def _set_at(target: Any, path: VariablePath, value: Any):
+    for key in path[:-1]:
+        target = target[key]
+    target[path[-1]] = value
+
+
+def _dotted(path: VariablePath) -> str:
+    return ".".join(str(key) for key in path)
+
+
+def _dependency_order(leaves: Dict[VariablePath, str], scope: Dict[str, Any]) -> List[VariablePath]:
+    """
+    :return: the paths of the templates, each after the templates it uses
+    :raises TemplateRenderError: for an unknown name or a cycle
+    """
+    dependencies = {path: _dependencies(path, text, leaves, scope) for path, text in leaves.items()}
+    order: List[VariablePath] = []
+    done: Set[VariablePath] = set()
+    visiting: List[VariablePath] = []
+
+    def visit(path: VariablePath):
+        if path in done:
+            return
+        if path in visiting:
+            cycle = visiting[visiting.index(path) :] + [path]
+            raise TemplateRenderError("The variables depend on each other in a cycle: " + " -> ".join(map(_dotted, cycle)))
+        visiting.append(path)
+        for dependency in dependencies[path]:
+            visit(dependency)
+        visiting.pop()
+        done.add(path)
+        order.append(path)
+
+    for path in leaves:
+        visit(path)
+    return order
+
+
+def _dependencies(path: VariablePath, text: str, leaves: Dict[VariablePath, str], scope: Dict[str, Any]) -> List[VariablePath]:
+    """:return: the templates the template at `path` uses: those at a name it uses, below it, or around it"""
+    result = []
+    for used in referenced_variables(text):
+        unknown = _unknown_part(scope, used)
+        if unknown is not None:
+            raise TemplateRenderError(f"Unknown variable '{_dotted(unknown)}' in the variable '{_dotted(path)}': {text}")
+        result += [leaf for leaf in leaves if leaf[: len(used)] == used or used[: len(leaf)] == leaf]
+    return result
+
+
+def _unknown_part(scope: Dict[str, Any], used: VariablePath) -> Optional[VariablePath]:
+    """:return: the beginning of a name that is not a variable (`a.nope` of `a.nope.x`), None if the mappings have it"""
+    current: Any = scope
+    for index, key in enumerate(used):
+        if not isinstance(current, dict):
+            # e.g. `device`, a list or a value that is computed later: the rendering tells
+            return None
+        if key not in current:
+            return used[: index + 1]
+        current = current[key]
+    return None
+
+
+def referenced_variables(text: str) -> List[VariablePath]:
+    """
+    :return: the variables the templates of a text use, as far as they are written out: `{{ common.margin * 2 }}` uses
+        ("common", "margin"), `{{ a[i] }}` uses ("a",) and ("i",). Names that a template inside of a template builds are not known.
+        Names the templates define themselves (`{% for %}`, `{% set %}`) are left out.
+    :raises TemplateRenderError: for an invalid template
+    """
+    parts = []
+    outer = text
+    for _ in range(text.count("{{")):
+        nested = _find_nested_template(outer)
+        if nested is None:
+            break
+        start, end = nested
+        parts.append(outer[start:end])
+        outer = outer[:start] + _NESTED + outer[end:]
+    parts.append(outer)
+
+    result: List[VariablePath] = []
+    for part in parts:
+        try:
+            ast = _STRICT.parse(part)
+            # the functions of Jinja2 (`range`, ...) are not in it
+            free = meta.find_undeclared_variables(ast)
+        except TemplateSyntaxError as ex:
+            raise TemplateRenderError(f"Invalid template: {ex.message}: {text}") from ex
+        _collect_paths(ast, free, result)
+    return [path for path in result if _NESTED not in str(path[0])]
+
+
+def _collect_paths(node: nodes.Node, free: Set[str], result: List[VariablePath]):
+    if isinstance(node, nodes.Call) and isinstance(node.node, nodes.Getattr):
+        # a method (`a.keys()`) uses what it is called on
+        _collect_paths(node.node.node, free, result)
+        for child in node.iter_child_nodes():
+            if child is not node.node:
+                _collect_paths(child, free, result)
+        return
+    path = _reference_path(node)
+    if path is not None and path[0] in free:
+        result.append(path)
+        return
+    for child in node.iter_child_nodes():
+        _collect_paths(child, free, result)
+
+
+def _reference_path(node: nodes.Node) -> Optional[VariablePath]:
+    """:return: the path of a name with its attributes and constant keys (`a.b["c"]`), None for anything else"""
+    if isinstance(node, nodes.Name):
+        return (node.name,)
+    if isinstance(node, nodes.Getattr):
+        base = _reference_path(node.node)
+        return None if base is None else base + (node.attr,)
+    if isinstance(node, nodes.Getitem) and isinstance(node.arg, nodes.Const):
+        base = _reference_path(node.node)
+        return None if base is None else base + (node.arg.value,)
+    return None

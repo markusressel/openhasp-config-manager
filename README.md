@@ -404,11 +404,37 @@ page_title: "My Device"
 }
 ```
 
+##### Computed values
+
+The values of variables can be templates themselves, computed from other variables and from `device` (the
+`openhasp_config_manager.device` section of the device's `config.json`, e.g. `device.screen.width`):
+
+`openhasp-configs/global.vars.yaml`
+
+```yaml
+common:
+  margin: 4
+  card:
+    x: "{{ common.margin }}"
+    w: "{{ device.screen.width - common.margin * 2 }}"
+    padding: 6
+    inner_w: "{{ common.card.w - common.card.padding * 2 }}"
+```
+
+* A value is computed with the variables of the path it is used in, so a device that overrides `common.margin` gets its
+  own `common.card.w`. For files in `common`, that includes the variables of the device folder.
+* The order of the definitions doesn't matter. Variables that depend on each other in a cycle, or names that don't exist,
+  are errors (`check` and a deployment report them).
+* A value that is a single template (`"{{ ... }}"`) is the value of the expression: a number, a list, ... Other text with
+  templates stays text, unless it is a number.
+* Objects (`p1b2`) can't be used in variables: variables are computed before the objects. Use them in the objects instead.
+* If a value should keep its braces, write it as `"{% raw %}{{ text }}{% endraw %}"`.
+
 #### Printing variables
 
 If you are not sure what variables are accessible in a given path, you can use the `vars`
 command, which will give you a copy&paste ready output of all variables for a
-given directory:
+given directory (with computed values; for a path in a device folder with the `device` of that device):
 
 ```shell
 > openhasp-config-manager vars -c openhasp-configs -p devices/touch_down_1/home

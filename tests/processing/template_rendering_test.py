@@ -6,6 +6,10 @@ from openhasp_config_manager.processing import template_rendering
 from openhasp_config_manager.processing.template_rendering import (
     TemplateRenderError,
     check_template,
+    evaluate_template,
+    is_single_template,
+    referenced_variables,
+    render_variables,
     render_dict_recursive,
     render_template,
     render_template_collecting_unknown,
@@ -623,3 +627,206 @@ class TestReferencedObjects(TestBase):
 
     def test_none_if_a_nested_template_is_not_valid(self):
         assert referenced_objects("{{ p{{ 1 + }}b2.x }}", {}) is None
+
+
+class TestEvaluateTemplate(TestBase):
+    def test_a_single_template_is_the_value_of_its_expression(self):
+        # GIVEN
+        template_vars = {"a": 2, "cfg": {"x": [1, 2]}}
+
+        # THEN
+        assert evaluate_template("{{ a * 2 }}", template_vars) == 4
+        assert evaluate_template(" {{ a / 4 }} ", template_vars) == 0.5
+        assert evaluate_template("{{ cfg }}", template_vars) == {"x": [1, 2]}
+        assert evaluate_template("{{ cfg.x }}", template_vars) == [1, 2]
+        assert evaluate_template("{{ 'text' }}", template_vars) == "text"
+        assert evaluate_template("{{ a > 1 }}", template_vars) is True
+        assert list(evaluate_template("{{ range(1, 3) }}", template_vars)) == [1, 2]
+
+    def test_a_single_template_with_templates_inside(self):
+        # THEN
+        assert evaluate_template("{{ p{{ page }}b1 }}", {"page": 3, "p3b1": {"x": 4}}) == {"x": 4}
+
+    def test_other_text_is_text_or_a_number(self):
+        # GIVEN
+        template_vars = {"a": 2}
+
+        # THEN
+        assert evaluate_template("a{{ a }}", template_vars) == "a2"
+        assert evaluate_template("1{{ a }}", template_vars) == 12
+        assert evaluate_template("{{ a }}.5", template_vars) == 2.5
+        assert evaluate_template("-{{ a }}", template_vars) == -2
+        assert evaluate_template("{{ a }}{{ a }}", template_vars) == 22
+        assert evaluate_template("{% if a %}yes{% endif %}", template_vars) == "yes"
+        assert evaluate_template("plain", template_vars) == "plain"
+
+    def test_unknown_variables_are_errors(self):
+        # THEN
+        with pytest.raises(UndefinedError):
+            evaluate_template("{{ nope }}", {})
+        with pytest.raises(UndefinedError):
+            evaluate_template("{{ cfg.nope }}", {"cfg": {}})
+        with pytest.raises(UndefinedError):
+            evaluate_template("a {{ nope }}", {})
+
+    def test_invalid_templates(self):
+        # THEN
+        with pytest.raises(TemplateSyntaxError):
+            evaluate_template("{{ 1 + }}", {})
+        with pytest.raises(TemplateSyntaxError):
+            evaluate_template("{{ 1", {})
+
+    def test_single_templates(self):
+        # THEN
+        assert is_single_template("{{ a }}") and is_single_template("  {{ a }}\n") and is_single_template("{{ p{{ a }}b1 }}")
+        assert not is_single_template("{{ a }}{{ b }}")
+        assert not is_single_template("x {{ a }}")
+        assert not is_single_template("{{ a")
+        assert not is_single_template("{% if a %}{% endif %}")
+
+
+class TestRenderVariables(TestBase):
+    def test_values_are_computed_from_other_values(self):
+        # GIVEN: in an order that is not the order they depend on each other
+        variables = {
+            "card": {"x": "{{ common.margin }}", "w": "{{ device.screen.width - card.x * 2 }}"},
+            "common": {"margin": 4, "double": "{{ common.margin * 2 }}"},
+            "title": "Page {{ common.double }}",
+        }
+        device = {"screen": {"width": 320}}
+
+        # WHEN
+        result = render_variables(variables, {"device": device})
+
+        # THEN
+        assert result == {"card": {"x": 4, "w": 312}, "common": {"margin": 4, "double": 8}, "title": "Page 8"}
+        assert "device" not in result
+        assert variables["card"]["x"] == "{{ common.margin }}"
+
+    def test_a_value_uses_everything_below_a_name(self):
+        # GIVEN
+        variables = {"sizes": {"a": "{{ 1 + 1 }}", "b": 3}, "total": "{{ sizes.a + sizes['b'] }}", "all": "{{ sizes }}"}
+
+        # THEN
+        assert render_variables(variables) == {"sizes": {"a": 2, "b": 3}, "total": 5, "all": {"a": 2, "b": 3}}
+
+    def test_a_value_below_a_computed_value(self):
+        # GIVEN: `items` is computed, and `first` uses a part of it
+        variables = {"items": "{{ [10, 20] }}", "first": "{{ items[0] }}"}
+
+        # THEN
+        assert render_variables(variables) == {"items": [10, 20], "first": 10}
+
+    def test_templates_in_lists(self):
+        # THEN
+        assert render_variables({"a": 1, "list": ["x{{ a }}", 2, {"b": "{{ a + 1 }}"}]}) == {
+            "a": 1,
+            "list": ["x1", 2, {"b": 2}],
+        }
+
+    def test_variables_without_templates_stay(self):
+        # GIVEN
+        variables = {"a": 1, "b": {"c": "text", "d": [1, "x"]}, 5: "five"}
+
+        # THEN
+        assert render_variables(variables) == variables
+
+    def test_the_context_wins_and_replaced_values_are_not_computed(self):
+        # GIVEN: `card.x` is replaced by the context, its template would fail
+        variables = {"card": {"x": "{{ nope }}", "w": "{{ card.x * 2 }}"}, "list": ["{{ nope }}"]}
+
+        # WHEN
+        result = render_variables(variables, {"card": {"x": 5}, "list": [1]})
+
+        # THEN
+        assert result["card"]["w"] == 10
+        assert result["list"] == ["{{ nope }}"]
+
+    def test_jinja_functions_and_local_names(self):
+        # THEN
+        assert render_variables({"a": "{{ range(3) | list }}"}) == {"a": [0, 1, 2]}
+        assert render_variables({"a": [1, 2], "b": "{% for i in a %}{{ i.real }}{% endfor %}"})["b"] == 12
+        assert render_variables({"a": {"k": 1}, "b": "{{ a[a.keys() | first] }}"})["b"] == 1
+
+    def test_templates_inside_of_templates(self):
+        # GIVEN
+        variables = {"n": 1, "item1": "one", "chosen": "{{ item{{ n }} }}"}
+
+        # THEN
+        assert render_variables(variables)["chosen"] == "one"
+
+    def test_a_name_built_by_a_template_inside_must_be_computed_already(self):
+        # GIVEN: the dependency on `item1` can't be seen, and it is computed after `chosen`
+        variables = {"chosen": "{{ item{{ n }} }}", "n": 1, "item1": "{{ 'one' }}"}
+
+        # THEN
+        with pytest.raises(TemplateRenderError, match=r"Can't compute the variable 'chosen': 'item1' is not computed yet"):
+            render_variables(variables)
+
+    def test_cycles_are_errors(self):
+        # THEN
+        with pytest.raises(TemplateRenderError, match=r"cycle: a -> b -> a$"):
+            render_variables({"a": "{{ b }}", "b": "{{ a }}"})
+        with pytest.raises(TemplateRenderError, match=r"cycle: x.y -> x.y$"):
+            render_variables({"x": {"y": "{{ x.y + 1 }}"}})
+        with pytest.raises(TemplateRenderError, match=r"cycle: x.y -> x.y$"):
+            render_variables({"x": {"y": "{{ x }}"}})
+
+    def test_unknown_names_are_errors(self):
+        # THEN
+        with pytest.raises(TemplateRenderError, match=r"Unknown variable 'nope' in the variable 'a.b': \{\{ nope \+ 1 \}\}"):
+            render_variables({"a": {"b": "{{ nope + 1 }}"}})
+        with pytest.raises(TemplateRenderError, match=r"Unknown variable 'a.nope' in the variable 'b'"):
+            render_variables({"a": {"c": 1}, "b": "{{ a.nope.x }}"})
+        with pytest.raises(TemplateRenderError, match=r"Unknown variable 'p1b2' in the variable 'b'"):
+            render_variables({"b": "{{ p1b2.x }}"})
+
+    def test_a_name_below_something_that_is_not_a_mapping(self):
+        # THEN: the rendering tells
+        with pytest.raises(TemplateRenderError, match=r"Can't compute the variable 'b'"):
+            render_variables({"a": [1], "b": "{{ a.nope }}"})
+
+    def test_invalid_templates_and_other_errors(self):
+        # THEN
+        with pytest.raises(TemplateRenderError, match=r"Invalid template: .*: \{\{ 1 \+ \}\}"):
+            render_variables({"a": "{{ 1 + }}"})
+        with pytest.raises(TemplateRenderError, match=r"Can't compute the variable 'a': division by zero"):
+            render_variables({"a": "{{ 1 / 0 }}"})
+        with pytest.raises(TemplateRenderError, match=r"Invalid template: No filter named 'no_such_filter'"):
+            render_variables({"a": "{{ 1 | no_such_filter }}"})
+
+    def test_raw_text_is_not_rendered(self):
+        # THEN
+        assert render_variables({"a": "{% raw %}{{ x }}{% endraw %}"}) == {"a": "{{ x }}"}
+
+
+class TestReferencedVariables(TestBase):
+    def test_the_names_with_their_attributes_and_keys(self):
+        # THEN
+        assert referenced_variables("{{ common.margin * 2 + a['b'].c + l[0] }}") == [
+            ("common", "margin"),
+            ("a", "b", "c"),
+            ("l", 0),
+        ]
+
+    def test_names_with_keys_that_are_not_constant(self):
+        # THEN
+        assert referenced_variables("{{ a[i].x }}") == [("a",), ("i",)]
+        assert referenced_variables("{{ (a | first).x }}") == [("a",)]
+
+    def test_local_names_and_functions(self):
+        # THEN
+        assert referenced_variables("{% for i in items %}{{ i.x }}{% endfor %}{% set y = 1 %}{{ y }}") == [("items",)]
+        assert referenced_variables("{{ range(n) }}") == [("n",)]
+        assert referenced_variables("{{ a.keys() | list }} {{ b.c.get('x', d) }}") == [("a",), ("b", "c"), ("d",)]
+
+    def test_templates_inside_of_templates(self):
+        # THEN: the outer name is built, the inner ones are known
+        assert referenced_variables("{{ p{{ page }}b1.x + a }}") == [("page",), ("a",)]
+
+    def test_text_without_templates(self):
+        assert referenced_variables("plain") == []
+
+    def test_invalid_templates(self):
+        with pytest.raises(TemplateRenderError, match="Invalid template"):
+            referenced_variables("{{ 1 + }}")

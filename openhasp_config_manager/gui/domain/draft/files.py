@@ -82,24 +82,40 @@ class ProcessorDraftRenderer:
 
     def variable_value(self, component: str, name: str) -> Any:
         """:return: the value of a template variable (`common.header.bar.height`) in a component :raises KeyError: if it has none"""
-        value: Any = self._vars_of(component)
-        for part in name.split("."):
-            if dataclasses.is_dataclass(value) and not isinstance(value, type) and hasattr(value, part):
-                value = getattr(value, part)
-            elif isinstance(value, dict) and part in value:
-                value = value[part]
-            else:
-                raise KeyError(name)
-        return value
+        return _variable_value(self._vars_of(component), name)
 
     def render_text(self, component: str, text: str) -> str:
         """:return: a text with templates the way a deployment renders it (unknown variables stay as written) :raises TemplateError:"""
         return render_template_or_keep(text, self._vars_of(component))
 
+    def path_variable_value(self, path: Path, name: str) -> Any:
+        """
+        :return: the value of a variable of the YAML files for a file that has no objects in the draft (e.g. a variable file), as
+            the device sees it :raises KeyError: if it has none
+        """
+        return _variable_value(self._processor.path_variables(path), name)
+
+    def render_path_text(self, path: Path, text: str) -> str:
+        """:return: a text with templates, rendered with the variables of a file that has no objects in the draft"""
+        return render_template_or_keep(text, self._processor.path_variables(path))
+
     def template_suggestions(self, component: str) -> List[Tuple[str, Any]]:
         if component not in self._suggestions:
             self._suggestions[component] = sorted(flatten_template_variables(self._vars_of(component)))
         return self._suggestions[component]
+
+
+def _variable_value(variables: Dict[str, Any], name: str) -> Any:
+    """:raises KeyError: if the variables have no such name"""
+    value: Any = variables
+    for part in name.split("."):
+        if dataclasses.is_dataclass(value) and not isinstance(value, type) and hasattr(value, part):
+            value = getattr(value, part)
+        elif isinstance(value, dict) and part in value:
+            value = value[part]
+        else:
+            raise KeyError(name)
+    return value
 
 
 def flatten_template_variables(variables: Dict[str, Any]) -> List[Tuple[str, Any]]:

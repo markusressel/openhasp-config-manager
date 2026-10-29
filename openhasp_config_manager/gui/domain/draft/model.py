@@ -33,6 +33,14 @@ class DraftRenderer(Protocol):
         """:return: a text with templates, rendered like a deployment does :raises jinja2.TemplateError: if it can't be"""
         ...
 
+    def path_variable_value(self, path: Path, name: str) -> Any:
+        """:return: the value of a variable for a file that has no objects in the draft :raises KeyError: if it has none"""
+        ...
+
+    def render_path_text(self, path: Path, text: str) -> str:
+        """:return: a text with templates, rendered with the variables of a file that has no objects in the draft"""
+        ...
+
 
 @dataclass(frozen=True)
 class ComponentSource:

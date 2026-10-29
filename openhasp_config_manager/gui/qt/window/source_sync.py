@@ -72,18 +72,19 @@ class SourceEditorSync(QtCore.QObject):
         return [] if component is None else session.variable_names(component.key)
 
     def variable_value(self, path: Path, name: str) -> Any:
-        """:return: the value of the template variable `name` in a file of the draft :raises KeyError: if it has none"""
+        """
+        :return: the value of the template variable `name` in a file of the device (see `PlateSession.variable_value_at`)
+        :raises KeyError: if it has none
+        """
         session = self._loaded_session()
-        component = None if session is None else session.component_at(path)
-        if component is None:
+        if session is None:
             raise KeyError(name)
-        return session.variable_value(component.key, name)
+        return session.variable_value_at(path, name)
 
     def render_text(self, path: Path, text: str) -> Optional[str]:
-        """:return: what a text with templates renders to in a file of the draft, None if the draft has no such file"""
+        """:return: what a text with templates renders to in a file of the device, None if no device is loaded"""
         session = self._loaded_session()
-        component = None if session is None else session.component_at(path)
-        return None if component is None else session.render_text(component.key, text)
+        return None if session is None else session.render_text_at(path, text)
 
     def find_definition(self, path: Path, name: str) -> Optional[Definition]:
         """:return: where the variable `name`, used in a file, is defined"""

@@ -120,6 +120,17 @@ class TestCheck:
         # THEN
         assert any(issue.severity == Severity.ERROR and "not closed" in issue.message for issue in issues)
 
+    def test_variables_that_depend_on_each_other_in_a_cycle_are_an_error(self, cfg_root):
+        # GIVEN
+        (cfg_root / "computed.vars.yaml").write_text('a: "{{ b }}"\nb: "{{ a + 1 }}"\n')
+
+        # WHEN
+        _, issues = _check(cfg_root)
+
+        # THEN
+        assert issues and all(issue.severity == Severity.ERROR for issue in issues)
+        assert any("The variables depend on each other in a cycle: a -> b -> a" in issue.message for issue in issues)
+
     def test_an_unknown_device_is_an_error(self, cfg_root):
         # WHEN
         devices, issues = _check(cfg_root, "nope")
