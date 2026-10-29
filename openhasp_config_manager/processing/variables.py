@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, FrozenSet, Optional
 
 import yaml
 from yaml import Loader
@@ -59,7 +59,9 @@ class VariableManager:
         combined = merge_dict_recursive(combined, vars)
         self._path_vars[relative_path_str] = combined
 
-    def get_vars(self, path: Path, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def get_vars(
+        self, path: Path, context: Optional[Dict[str, Any]] = None, missing: FrozenSet[str] = frozenset()
+    ) -> Dict[str, Any]:
         """
         Returns the variable definitions and values for a given path.
 
@@ -70,10 +72,12 @@ class VariableManager:
 
         :param path: the path context to use for variable evaluation
         :param context: more variables the templates can use (e.g. `device`), which are not part of the result
+        :param missing: names the templates may use that are not known for the path: the variables that use them stay as they
+            are written (see `render_variables`)
         :return: a map of "variable name" -> "variable value given the path context"
         :raises TemplateRenderError: if a template can't be computed
         """
-        return render_variables(self.get_raw_vars(path), context)
+        return render_variables(self.get_raw_vars(path), context, missing)
 
     def get_raw_vars(self, path: Path) -> Dict[str, Any]:
         """

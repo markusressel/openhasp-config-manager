@@ -1,7 +1,8 @@
 """
 Where the variables of the YAML files are used, by the plates of all devices. A variable is used if a template of a file the plate
 runs names it (`{{ common.header.height }}`, or a part of it: `{{ common.header }}` uses everything below), if the value of a used
-variable names it, or if it is the theme of the type of an object (`theme.obj.btn`, applied without a template). Variables the
+variable names it, or if it is the theme of the type of an object (`theme.obj.btn`, applied without a template). A part
+(`!include`) sees the variables of the files that include it too, so its names are looked up from each of them as well. Variables the
 manager reads itself (`include_files`, `binary_images`) are used. What other code reads from the files (e.g. a controller that
 loads `theme.yaml`) is not known. Qt-free.
 """
@@ -14,6 +15,7 @@ from typing import Dict, FrozenSet, Iterable, List, Set, Tuple
 from openhasp_config_manager.gui.domain.variables.definitions import VariableDefinitions, VariableLeaf
 from openhasp_config_manager.gui.domain.variables.references import scan_text
 from openhasp_config_manager.manager import BINARY_IMAGES_VARIABLE, INCLUDE_FILES_VARIABLE
+from openhasp_config_manager.processing.jsonl.includes import included_paths
 
 # the variables the manager reads itself, by their top-level name
 MANAGER_VARIABLES = frozenset({INCLUDE_FILES_VARIABLE, BINARY_IMAGES_VARIABLE})
@@ -75,6 +77,7 @@ class VariableUsages:
     """Which variables the plates use, and where. Computed once for all devices; make a new one after the files changed."""
 
     def __init__(self, config_dir: Path, devices: Iterable[DeviceFiles]):
+        self._config_dir = config_dir
         self.definitions = VariableDefinitions(config_dir)
         # (variable file, leaf) -> where it is used, by any device
         self._usages: Dict[Tuple[Path, str], Set[Usage]] = defaultdict(set)
@@ -139,10 +142,12 @@ class VariableUsages:
     def _add_device(self, device: DeviceFiles):
         device_path = device.path.resolve()
         leaves_used = self._device_leaves.setdefault(device_path, {})
+        files = [file.resolve() for file in device.files if file.is_file()]
+        includers = self._includers(files)
         pending = [
-            (file.resolve(), [named for named_line in self._scan(file.resolve()).values() for named in named_line])
-            for file in device.files
-            if file.is_file()
+            (context, [named for named_line in self._scan(file).values() for named in named_line])
+            for file in files
+            for context in _contexts(file, includers)
         ]
         while pending:
             context, named = pending.pop()
@@ -165,3 +170,20 @@ class VariableUsages:
                         ]
                         if in_value:
                             pending.append((context, in_value))
+
+    def _includers(self, files: List[Path]) -> Dict[Path, Set[Path]]:
+        """:return: each part -> the files that include it (resolved paths)"""
+        result: Dict[Path, Set[Path]] = defaultdict(set)
+        for file in files:
+            if file.suffix == ".jsonl":
+                for path in included_paths(file.read_text(encoding="utf-8")):
+                    result[Path(self._config_dir, path).resolve()].add(file)
+        return result
+
+
+def _contexts(file: Path, includers: Dict[Path, Set[Path]]) -> List[Path]:
+    """:return: the file, and every file that includes it, also through other parts: the files whose variables it sees"""
+    result = [file]
+    for context in result:
+        result += [including for including in sorted(includers.get(context, ())) if including not in result]
+    return result

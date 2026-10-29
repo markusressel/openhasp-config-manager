@@ -157,3 +157,23 @@ class TestUnusedVariables(TestBase):
             },
         )
         assert _unused(tmp_path, [("devices/plate", ["devices/plate/page.jsonl"])]) == {}
+
+    def test_a_part_uses_the_variables_of_the_files_that_include_it(self, tmp_path):
+        # GIVEN: the part names variables of the page's folder, also through a part it includes, and through a computed value
+        _write(
+            tmp_path,
+            {
+                "common/common.vars.yaml": "pages:\n  media: 2\n  unused: 3\n",
+                "common/page/vars.yaml": 'title: Media\nindex: "{{ pages.media }}"\nunused: 1\n',
+                "common/page/page.jsonl": '{"!include": "common/parts/outer.jsonl"}',
+                "common/parts/outer.jsonl": '{"!include": "common/parts/inner.jsonl", "vars": {"text": "{{ title }}"}}',
+                "common/parts/inner.jsonl": '{"page": "{{ index }}", "id": 1, "text": "{{ text }}"}',
+            },
+        )
+        files = ["common/page/page.jsonl", "common/parts/outer.jsonl", "common/parts/inner.jsonl"]
+
+        # THEN
+        assert _unused(tmp_path, [("devices/plate", files)]) == {
+            "common/common.vars.yaml": ["pages.unused"],
+            "common/page/vars.yaml": ["unused"],
+        }

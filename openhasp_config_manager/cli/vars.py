@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from openhasp_config_manager.console import error, echo
 from openhasp_config_manager.manager import ConfigManager
@@ -25,13 +25,13 @@ async def _format_variables(variables: Dict) -> str:
     return "\n".join(get_dict_contents(variables))
 
 
-async def c_vars(config_dir: Path, path: str):
+async def c_vars(config_dir: Path, path: str, device: Optional[str] = None):
     try:
         variable_manager = VariableManager(cfg_root=config_dir)
         variable_manager.read()
         # nothing is written: the output directory is only needed by the manager
         config_manager = ConfigManager(config_dir, Path("./nonexistent"), variable_manager)
-        variables = config_manager.variables_of_path(Path(config_dir, path))
+        variables = config_manager.variables_of_path(Path(config_dir, path), device)
         formatted = await _format_variables(variables)
         echo(formatted)
     except Exception as ex:

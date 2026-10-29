@@ -23,7 +23,7 @@ import re
 from contextlib import contextmanager
 from contextvars import ContextVar
 from functools import lru_cache
-from typing import Any, Callable, Dict, Iterator, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, FrozenSet, Iterator, List, Optional, Set, Tuple
 
 import jinja2
 from jinja2 import BaseLoader, Template, TemplateError, TemplateSyntaxError, UndefinedError, meta, nodes
@@ -515,13 +515,17 @@ def _number(text: str) -> Any:
     return text
 
 
-def render_variables(variables: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def render_variables(
+    variables: Dict[str, Any], context: Optional[Dict[str, Any]] = None, missing: FrozenSet[str] = frozenset()
+) -> Dict[str, Any]:
     """
     Compute the variables of the YAML files whose values are templates (see `evaluate_template`), from each other: in the order
     they depend on each other, found from the names their templates use. Templates in keys are not rendered.
     :param variables: the variables, e.g. the merged variables of a path (they are not changed)
     :param context: more variables the templates can use, e.g. `device`. They win over `variables` (like a merge of both would)
         and are not rendered; variables they replace are not computed and stay as they are.
+    :param missing: top-level names that the templates may use but are not known here (e.g. `device` for a path outside of
+        the devices): the variables that use them, also through other variables, are not computed and stay as they are
     :return: a copy of `variables` with the computed values
     :raises TemplateRenderError: for an invalid template, an unknown name, a cycle, or a template that can't be computed
     """
@@ -532,7 +536,12 @@ def render_variables(variables: Dict[str, Any], context: Optional[Dict[str, Any]
     for path in leaves:
         # a template that uses a variable which is computed later fails (e.g. a name that a template inside of it builds)
         _set_at(scope, path, jinja2.StrictUndefined(hint=f"'{_dotted(path)}' is not computed yet"))
-    for path in _dependency_order(leaves, scope):
+    dependencies, uses_missing = _dependencies_of(leaves, scope, missing)
+    not_computed: Set[VariablePath] = set()
+    for path in _dependency_order(dependencies):
+        if path in uses_missing or any(dependency in not_computed for dependency in dependencies[path]):
+            not_computed.add(path)
+            continue
         try:
             value = evaluate_template(leaves[path], scope)
         except Exception as ex:
@@ -540,6 +549,9 @@ def render_variables(variables: Dict[str, Any], context: Optional[Dict[str, Any]
             raise TemplateRenderError(f"Can't compute the variable '{_dotted(path)}': {message}: {leaves[path]}") from ex
         _set_at(result, path, value)
         _set_at(scope, path, value)
+    for path in not_computed:
+        # the scope shares its mappings with the result: replace the placeholder by the template again
+        _set_at(result, path, leaves[path])
     return result
 
 
@@ -576,12 +588,28 @@ def _dotted(path: VariablePath) -> str:
     return ".".join(str(key) for key in path)
 
 
-def _dependency_order(leaves: Dict[VariablePath, str], scope: Dict[str, Any]) -> List[VariablePath]:
+def _dependencies_of(
+    leaves: Dict[VariablePath, str], scope: Dict[str, Any], missing: FrozenSet[str]
+) -> Tuple[Dict[VariablePath, List[VariablePath]], Set[VariablePath]]:
+    """
+    :return: the templates each template uses, and the templates that use one of the `missing` names
+    :raises TemplateRenderError: for an unknown name
+    """
+    dependencies = {}
+    uses_missing = set()
+    for path, text in leaves.items():
+        used = referenced_variables(text)
+        if any(name[0] in missing for name in used):
+            uses_missing.add(path)
+        dependencies[path] = _dependencies(path, text, [name for name in used if name[0] not in missing], leaves, scope)
+    return dependencies, uses_missing
+
+
+def _dependency_order(dependencies: Dict[VariablePath, List[VariablePath]]) -> List[VariablePath]:
     """
     :return: the paths of the templates, each after the templates it uses
-    :raises TemplateRenderError: for an unknown name or a cycle
+    :raises TemplateRenderError: for a cycle
     """
-    dependencies = {path: _dependencies(path, text, leaves, scope) for path, text in leaves.items()}
     order: List[VariablePath] = []
     done: Set[VariablePath] = set()
     visiting: List[VariablePath] = []
@@ -599,15 +627,17 @@ def _dependency_order(leaves: Dict[VariablePath, str], scope: Dict[str, Any]) ->
         done.add(path)
         order.append(path)
 
-    for path in leaves:
+    for path in dependencies:
         visit(path)
     return order
 
 
-def _dependencies(path: VariablePath, text: str, leaves: Dict[VariablePath, str], scope: Dict[str, Any]) -> List[VariablePath]:
-    """:return: the templates the template at `path` uses: those at a name it uses, below it, or around it"""
+def _dependencies(
+    path: VariablePath, text: str, names: List[VariablePath], leaves: Dict[VariablePath, str], scope: Dict[str, Any]
+) -> List[VariablePath]:
+    """:return: the templates the template at `path` uses (with the `names` it uses): those at a name, below it, or around it"""
     result = []
-    for used in referenced_variables(text):
+    for used in names:
         unknown = _unknown_part(scope, used)
         if unknown is not None:
             raise TemplateRenderError(f"Unknown variable '{_dotted(unknown)}' in the variable '{_dotted(path)}': {text}")

@@ -38,7 +38,9 @@ from openhasp_config_manager.processing.references import (
     matching_names,
     use_binary_images,
 )
+from openhasp_config_manager.processing.template_rendering import render_variables
 from openhasp_config_manager.processing.variables import VariableManager
+from openhasp_config_manager.util import merge_dict_recursive
 from openhasp_config_manager.validation.cmd import CmdFileValidator
 from openhasp_config_manager.validation.device_validator import DeviceValidator
 from openhasp_config_manager.validation.jsonl import JsonlObjectValidator
@@ -635,21 +637,36 @@ class ConfigManager:
             raise ValueError(f"'{variable}' must be a list of file name patterns, found: {patterns}")
         return patterns
 
-    def variables_of_path(self, path: Path) -> Dict[str, Any]:
+    def variables_of_path(self, path: Path, device_name: Optional[str] = None) -> Dict[str, Any]:
         """
         :param path: a file or folder of the config directory
+        :param device_name: the device to compute the variables of a path outside of the devices for: they get the variables of
+            the device folder and `device`, like the files of the common folder do on that device
         :return: the variables of the YAML files for the path, computed (see `VariableManager.get_vars`): with `device` if the path is
-            in the folder of a device
+            in the folder of a device or a device is given. Without a device, the variables that use `device` stay as they are
+            written.
         :raises TemplateRenderError: if a variable can't be computed
+        :raises ValueError: if the device is unknown, or the path is in the folder of another device
         """
         devices = Path(self.cfg_root, DEVICES_FOLDER_NAME).resolve()
         resolved = Path(path).resolve()
-        context = None
         if resolved.is_relative_to(devices) and resolved != devices:
-            config = self._read_config(Path(devices, resolved.relative_to(devices).parts[0]))
-            if config is not None:
-                context = {"device": config.openhasp_config_manager.device}
-        return self._variable_manager.get_vars(Path(path), context)
+            folder = resolved.relative_to(devices).parts[0]
+            if device_name is not None and device_name != folder:
+                raise ValueError(f"The path is in the folder of the device '{folder}', not of '{device_name}'")
+            config = self._read_config(Path(devices, folder))
+            context = None if config is None else {"device": config.openhasp_config_manager.device}
+            return self._variable_manager.get_vars(Path(path), context)
+        if device_name is None:
+            return self._variable_manager.get_vars(Path(path), missing=frozenset({"device"}))
+        device_path = Path(self.cfg_root, DEVICES_FOLDER_NAME, device_name)
+        config = self._read_config(device_path) if device_path.is_dir() else None
+        if config is None:
+            raise ValueError(f"Unknown device: {device_name}")
+        variables = merge_dict_recursive(
+            self._variable_manager.get_raw_vars(Path(path)), self._variable_manager.get_raw_vars(device_path)
+        )
+        return render_variables(variables, {"device": config.openhasp_config_manager.device})
 
     def _binary_image_names(self, device: Device, components: List[Component]) -> Set[str]:
         """
