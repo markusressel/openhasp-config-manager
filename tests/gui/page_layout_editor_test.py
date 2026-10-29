@@ -210,10 +210,12 @@ class TestLivePreview(TestBase):
         editor._go_to_page(1)
         editor._go_to_page(9)
 
-        # THEN: page 9 was sent once, and is shown again
-        wait_until(lambda: plate.calls.count(("set_page", 9)) == 2)
+        # THEN: page 9 was sent once, and is shown. The first send of it may have been skipped too, if it only started while
+        # the editor was on page 1
+        wait_until(lambda: not editor.busy.busy)
         assert ("clear_page", 1) not in plate.calls
         assert plate.calls.count(("clear_page", 9)) == 1
+        assert plate.calls[-1] == ("set_page", 9)
 
     def test_forgotten_pages_are_sent_in_full_again(self, editor, plate):
         # GIVEN
