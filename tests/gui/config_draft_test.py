@@ -3,7 +3,7 @@ from typing import Dict, List, Tuple
 
 import pytest
 
-from openhasp_config_manager.gui.domain.draft.config_draft import ConfigDraft
+from openhasp_config_manager.gui.domain.draft.config_draft import ConfigDraft, UndoRefusedError
 from openhasp_config_manager.gui.domain.draft.files import plan_save, write_save
 from openhasp_config_manager.gui.domain.draft.model import ChangeKind, DraftChange
 from openhasp_config_manager.gui.domain.draft.part_focus import PartFocus
@@ -249,8 +249,8 @@ class TestUndo:
         assert _objects(device)["p9b20"]["text"] == _objects(other)["p9b20"]["text"] == "tile"
         assert not device.is_dirty and not other.is_dirty
 
-    def test_undo_of_an_edit_of_files_the_device_does_not_show_changes_nothing_of_it(self, devices):
-        # GIVEN: one history for all devices
+    def test_undo_does_not_undo_the_own_files_of_another_device(self, devices):
+        # GIVEN
         device, other = devices
         changes = _listened(other)
         device.set_source_value(_objects(device)["p9b1"], "x", 50)
@@ -259,8 +259,134 @@ class TestUndo:
         undone = other.undo()
 
         # THEN
+        assert undone is None
+        assert _objects(device)["p9b1"]["x"] == 50
+        assert (other.undo_description, device.undo_description) == (None, "Change x of p9b1")
+        assert changes == []
+
+    def test_each_device_undoes_the_newest_edit_of_the_files_it_shows(self, devices):
+        # GIVEN: an edit of the shared file, of the own file of each device, and of the shared part
+        device, other = devices
+        device.set_source_value(_objects(device)["p2b2"], "text", "changed")
+        other.set_source_value(_objects(other)["p9b1"], "x", 3)
+        device.set_source_value(_objects(device)["p9b1"], "x", 4)
+        focus = PartFocus(other, other.instance_of(_objects(other)["p9b20"]))
+        focus.set_source_value(_objects(other)["p9b20"], "text", "part")
+        focus.close()
+
+        # WHEN: the device undoes twice
+        device.undo()
+        device.undo()
+
+        # THEN: the edit of the part (shown by both), then its own one; the own edit of the other device stays
+        assert _objects(device)["p9b20"]["text"] == _objects(other)["p9b20"]["text"] == "tile"
+        assert _objects(device)["p9b1"]["x"] == 1 and _objects(other)["p9b1"]["x"] == 3
+        assert (device.undo_description, other.undo_description) == ("Change text of p2b2", "Change x of p9b1")
+
+        # WHEN: the other device undoes twice
+        other.undo()
+        other.undo()
+
+        # THEN: its own edit, then the one of the device in the shared file
+        assert _objects(other)["p9b1"]["x"] == 1
+        assert _objects(device)["p2b2"]["text"] == _objects(other)["p2b2"]["text"] == "two"
+        assert device.undo() is None and other.undo() is None
+        assert not device.is_dirty and not other.is_dirty
+
+    def test_an_edit_of_several_files_is_undone_as_a_whole_and_only_if_it_is_the_newest_in_each(self, devices):
+        # GIVEN: one step in the shared file and in the own file of the device, then another edit of its own file
+        device, other = devices
+        with device.edit("Change both"):
+            device.set_source_value(_objects(device)["p2b2"], "text", "changed")
+            device.set_source_value(_objects(device)["p9b1"], "x", 5)
+        device.set_source_value(_objects(device)["p9b1"], "x", 6)
+
+        # THEN: the other device would undo it, but it is refused
+        step = other.next_undo
+        assert step.description == "Change both"
+        assert other.display_paths(step.files) == ["common/shared.jsonl", f"{DEVICE_DIR}/page.jsonl"]
+        assert other.display_paths(step.changed_since) == [f"{DEVICE_DIR}/page.jsonl"]
+
+        # WHEN
+        with pytest.raises(UndoRefusedError, match=f"{DEVICE_DIR}/page.jsonl changed since"):
+            other.undo()
+
+        # THEN: nothing changed
+        assert _objects(other)["p2b2"]["text"] == "changed"
+        assert _objects(device)["p9b1"]["x"] == 6
+
+        # WHEN: the newer edit is undone
+        device.undo()
+
+        # THEN: the other device undoes the step in both files
+        assert other.next_undo.changed_since == frozenset()
+        other.undo()
+        assert _objects(device)["p2b2"]["text"] == _objects(other)["p2b2"]["text"] == "two"
         assert _objects(device)["p9b1"]["x"] == 1
-        assert (undone.objects, undone.pages, changes) == ([], set(), [])
+        assert device.undo_description is None
+
+    def test_redo_of_an_edit_of_several_files_waits_for_the_steps_to_redo_before_it_in_its_files(self, devices):
+        # GIVEN: an edit of the own file of the device, then a step of both files; both undone
+        device, other = devices
+        device.set_source_value(_objects(device)["p9b1"], "x", 5)
+        with device.edit("Change both"):
+            device.set_source_value(_objects(device)["p2b2"], "text", "changed")
+            device.set_source_value(_objects(device)["p9b1"], "x", 6)
+        device.undo()
+        device.undo()
+
+        # WHEN: the other device redoes the step before the edit it followed
+        with pytest.raises(UndoRefusedError, match="Can't redo"):
+            other.redo()
+
+        # THEN
+        assert other.redo_description == "Change both"
+        assert other.display_paths(other.next_redo.changed_since) == [f"{DEVICE_DIR}/page.jsonl"]
+        assert _objects(device)["p9b1"]["x"] == 1
+
+        # WHEN: the device redoes its own edit first
+        device.redo()
+        other.redo()
+
+        # THEN
+        assert _objects(device)["p9b1"]["x"] == 6
+        assert _objects(device)["p2b2"]["text"] == _objects(other)["p2b2"]["text"] == "changed"
+        assert device.redo_description is None and other.undo_description == "Change both"
+
+    def test_an_edit_drops_only_what_could_be_redone_in_its_files(self, devices):
+        # GIVEN: an undone edit of the shared file, and an undone edit of the own file of the other device
+        device, other = devices
+        device.set_source_value(_objects(device)["p2b2"], "text", "changed")
+        other.set_source_value(_objects(other)["p9b1"], "x", 3)
+        other.undo()
+        other.undo()
+
+        # WHEN: an edit of the own file of the device
+        device.set_source_value(_objects(device)["p9b1"], "x", 4)
+
+        # THEN: both can still be redone
+        assert (device.redo_description, other.redo_description) == ("Change text of p2b2", "Change text of p2b2")
+
+        # WHEN: an edit of the shared file
+        device.set_source_value(_objects(device)["p2b1"], "x", 7)
+
+        # THEN
+        assert (device.redo_description, other.redo_description) == (None, "Change x of p9b1")
+
+    def test_typing_through_one_device_is_merged_into_one_step(self, devices):
+        # GIVEN
+        device, other = devices
+        label = _objects(device)["p2b2"]
+
+        # WHEN
+        for text in ["a", "ab", "abc"]:
+            with device.edit("Change text of p2b2", merge_key=("text", device.object_uid(label))):
+                device.set_source_value(label, "text", text)
+
+        # THEN
+        other.undo()
+        assert _objects(device)["p2b2"]["text"] == "two"
+        assert other.undo_description is None
 
 
 class TestLoading:

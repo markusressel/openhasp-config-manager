@@ -165,6 +165,33 @@ Each phase is one PR with tests. Phases on different files run in parallel.
 
 ## Decisions made during implementation
 
+### Phase 2: undo per file
+
+- **One list of steps, not one per file.** `EditHistory` keeps the steps in the order they were made, and each `Step` knows its
+  files (`files`, the keys of the files and parts it changed). The steps of one file are the steps of the list that changed it,
+  in that order. A device tab undoes the newest step that changed one of the files and parts its `PlateSession` shows
+  (`file_keys`, `part_keys`); the steps of files it doesn't show (the own files of other devices) are skipped, not undone.
+- **Refused steps.** A step is undone only if no newer step changed one of its files. If one did, the undo is refused with the
+  files that changed since (`BlockedStepError` in the history, `UndoRefusedError` with the paths relative to the config directory
+  in the session, `OperationStatus.failed` in the window). Such a file is always one the tab doesn't show: a newer step in a
+  file it shows would be the one to undo. Nothing is undone in part.
+- **Redo is symmetric.** The steps to redo are in the order they were undone; a tab redoes the step undone last in its files,
+  and only if no step undone after it changed one of its files (those are redone first). A redone step is the newest step of
+  its files again.
+- **A new edit drops the steps to redo of the files it changes**, not all of them: the own file of another device keeps what it
+  can redo, like a document in IntelliJ. The drop goes on through the files of a dropped step: a step to redo that would be
+  redone after a dropped one in one of its files is dropped too (its state before would never come back, and redoing it would
+  bring back the changes of the dropped step too). An edit without files (the generic use of `EditHistory`) drops
+  everything, as before.
+- **Merging stays with the newest step of all files** (`merge_key`, `seal`), as before: an edit in between, also through another
+  device, ends the merging. A merged step has the files of all its edits.
+- **The Undo and Redo actions** show the step the active tab would undo (`PlateSession.next_undo`, `next_redo`: description,
+  files, files changed since). The tooltip lists the files of a step of several files and why it would be refused; the action
+  stays enabled, so that the refusal is explained when it is triggered. The window refreshes them when a tab is activated, since
+  an edit in another tab can change them without a change of the files of this one.
+
+### Phase 3: part mode in the view
+
 - **Part 3: both ways.** The methods that depend on part mode are those of `PlateSession` with the instance as an argument
   (`part_instance`, None for the objects of the files), and a `PartFocus` (`gui/domain/draft/part_focus.py`) binds them to its
   instance. Until part tabs exist (phase 6) the editor owns the focus (`PageLayoutEditorWidget.part_focus`, edits go through

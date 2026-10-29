@@ -170,6 +170,42 @@ class TestDeviceTabs(TestBase):
         assert first.undo_description is not None
 
 
+class TestUndoPerFile(TestBase):
+    SHARED_JSONL = '{"page": 1, "id": 5, "obj": "label", "text": "shared"}\n'
+
+    @pytest.fixture
+    def cfg_root(self, cfg_root) -> Path:
+        """Both devices also show a file of the common folder."""
+        (cfg_root / "common" / "shared.jsonl").write_text(self.SHARED_JSONL)
+        for name in ["test_device", SECOND_DEVICE]:
+            (cfg_root / "devices" / name / "boot.cmd").write_text("run L:/common_shared.jsonl\nrun L:/editor.jsonl\n")
+        return cfg_root
+
+    def test_undo_of_an_edit_of_several_files_is_refused_in_a_tab_that_does_not_show_all_newer_changes(self, window):
+        # GIVEN: an edit of the shared file and of the own file of the first device, then another one of its own file
+        session = window.session
+        shared, own = session.components
+        with session.edit("Change both"):
+            session.set_source_value(session.working_objects[shared.key][0], "text", "changed")
+            session.set_source_value(session.working_objects[own.key][0], "x", 41)
+        session.set_source_value(session.working_objects[own.key][0], "x", 42)
+        _open(window, SECOND_DEVICE)
+        editor = window.page_layout_editor_widget
+        failed = []
+        window.status.failed.connect(lambda description, error: failed.append(error))
+
+        # THEN: the Undo of the second tab says what it would undo, and why it can't
+        assert editor.action_undo.text() == "Undo Change both"
+        assert "Refused: devices/test_device/editor.jsonl changed since" in editor.action_undo.toolTip()
+
+        # WHEN
+        editor.action_undo.trigger()
+
+        # THEN
+        assert len(failed) == 1 and "devices/test_device/editor.jsonl changed since" in failed[0]
+        assert session.working_objects[own.key][0]["x"] == 42
+
+
 class TestDeviceLogs(TestBase):
     LINE = "[   2.000][1/2  3][4/5  6] HASP: Hello"
 

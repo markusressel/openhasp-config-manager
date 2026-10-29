@@ -89,9 +89,12 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
   signals of an editor only while its tab is active, and points the panels, menus, toolbar, connection and log at the active tab
   (`_on_tab_activated`). Closing a tab keeps its drafts (`MainWindow.sessions`). Files that change while a tab is in the
   background are applied when it is shown again (`changed_files`).
-- **Undo/redo**: every change through the session is a step of the undo history of its `ConfigDraft` (one for all devices;
-  `gui/domain/draft/edit_history.py`, whole states of the sources, each file on its own (`DraftState`), so undo doesn't depend
-  on how an edit was made, and restores only the files of its step). Group the changes of one user action with
+- **Undo/redo**: every change through the session is a step of the undo history of its `ConfigDraft`
+  (`gui/domain/draft/edit_history.py`, whole states of the sources, each file on its own (`DraftState`), so undo doesn't depend
+  on how an edit was made, and restores only the files of its step). Like IntelliJ, the history belongs to the files: a session
+  undoes the newest step that changed a file it shows (also one made through another device), never steps of only the own
+  files of other devices. A step of several files is undone as a whole, only if it is the newest in each of them, otherwise
+  it is refused (`UndoRefusedError`); redo likewise (Part 2 of `docs/tabs-and-shared-drafts.md`). Group the changes of one user action with
   `with session.edit("Move 3 objects"):`, and pass a `merge_key` for actions repeated in a row (typing into a property, nudging). An
   edit operation of the editor needs no undo code of its own, only the grouping. Save doesn't load the draft again: the
   draft takes what it wrote as its files (`mark_saved`), so the history continues. The steps of a file are forgotten when it is loaded

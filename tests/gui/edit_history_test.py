@@ -1,4 +1,6 @@
-from openhasp_config_manager.gui.domain.draft.edit_history import EditHistory
+import pytest
+
+from openhasp_config_manager.gui.domain.draft.edit_history import BlockedStepError, EditHistory
 from tests import TestBase
 
 
@@ -142,3 +144,82 @@ class TestEditHistory(TestBase):
 
         # THEN
         assert (history.redo(), history.undo().description, history.undo()) == (None, "first", None)
+
+
+class TestEditHistoryPerFile(TestBase):
+    def test_undo_of_some_files_undoes_the_newest_step_in_them(self):
+        # GIVEN
+        history = EditHistory()
+        history.push("a", 0, 1, files={"a"})
+        history.push("b", 1, 2, files={"b"})
+
+        # WHEN
+        step = history.undo({"a", "c"})
+
+        # THEN
+        assert step.description == "a"
+        assert (history.next_undo({"a"}), history.next_undo().description) == (None, "b")
+        assert history.next_redo({"b"}) is None and history.next_redo({"a"}).description == "a"
+
+    def test_a_step_of_several_files_is_refused_while_a_newer_step_changed_one_of_them(self):
+        # GIVEN
+        history = EditHistory()
+        history.push("both", 0, 1, files={"a", "b"})
+        history.push("b", 1, 2, files={"b"})
+        both = history.next_undo({"a"})
+
+        # WHEN
+        with pytest.raises(BlockedStepError) as refused:
+            history.undo({"a"})
+
+        # THEN
+        assert (refused.value.step, refused.value.files) == (both, {"b"})
+        assert history.blocked_by(both) == {"b"}
+
+        # WHEN: the newer step is undone
+        history.undo({"b"})
+
+        # THEN
+        assert history.blocked_by(both) == frozenset()
+        assert history.undo({"a"}).description == "both"
+
+    def test_redo_of_a_step_waits_for_the_steps_to_redo_before_it_in_its_files(self):
+        # GIVEN
+        history = EditHistory()
+        history.push("b", 0, 1, files={"b"})
+        history.push("both", 1, 2, files={"a", "b"})
+        history.undo()
+        history.undo()
+
+        # WHEN
+        with pytest.raises(BlockedStepError):
+            history.redo({"a"})
+
+        # THEN
+        assert history.redo({"b"}).description == "b"
+        assert history.redo({"a"}).description == "both"
+
+    def test_an_edit_drops_what_could_be_redone_in_its_files_and_after_that_in_theirs(self):
+        # GIVEN: all undone, redone in the order they were made
+        history = EditHistory()
+        for description, files in [("d", {"d"}), ("ab", {"a", "b"}), ("b", {"b"}), ("c", {"c"})]:
+            history.push(description, 0, 1, files=files)
+        for _ in range(4):
+            history.undo()
+
+        # WHEN
+        history.push("a", 0, 2, files={"a"})
+
+        # THEN: b would be redone after ab, which can't be redone anymore
+        assert [history.redo().description, history.redo().description, history.redo()] == ["d", "c", None]
+
+    def test_merged_steps_have_the_files_of_all_of_them(self):
+        # GIVEN
+        history = EditHistory()
+        history.push("move", 0, 1, merge_key="m", files={"a"})
+
+        # WHEN
+        history.push("move", 1, 2, merge_key="m", files={"b"})
+
+        # THEN
+        assert history.undo({"b"}).files == {"a", "b"}
