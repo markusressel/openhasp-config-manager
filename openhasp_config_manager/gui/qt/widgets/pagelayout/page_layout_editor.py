@@ -26,6 +26,7 @@ from openhasp_config_manager.gui.domain.draft.page_objects import (
     step_page,
 )
 from openhasp_config_manager.gui.domain.file_tree import default_target_component, relative_config_path
+from openhasp_config_manager.gui.domain.draft.config_draft import UndoRefusedError
 from openhasp_config_manager.gui.domain.draft.model import ChangeKind, DraftChange, PartInstance
 from openhasp_config_manager.gui.domain.draft.session import PlateSession
 from openhasp_config_manager.gui.domain.touch_actions import page_command
@@ -371,20 +372,26 @@ class PageLayoutEditorWidget(QWidget):
         self.action_delete.setEnabled(self.edit_mode and has_selection)
         self.action_copy.setEnabled(self.edit_mode and has_selection)
         self.action_paste.setEnabled(has_data)
-        self._update_undo_actions()
+        self.update_undo_actions()
         self.plate.update_actions(has_data)
         self.widget_picker.setEnabled(has_data and len(self.working_objects) > 0)
 
-    def _update_undo_actions(self):
+    def update_undo_actions(self):
+        """Show what Undo and Redo would do in the files of the device (edits through other devices change them too)."""
         session = self.session
-        for action, title, description in [
-            (self.action_undo, "Undo", session and session.undo_description),
-            (self.action_redo, "Redo", session and session.redo_description),
+        for action, title, step in [
+            (self.action_undo, "Undo", session and session.next_undo),
+            (self.action_redo, "Redo", session and session.next_redo),
         ]:
-            text = title if description is None else f"{title} {description}"
-            action.setEnabled(description is not None)
+            text = title if step is None else f"{title} {step.description}"
+            action.setEnabled(step is not None)
             action.setText(text)
-            action.setToolTip(f"{text} ({action.shortcut().toString()})")
+            tooltip = f"{text} ({action.shortcut().toString()})"
+            if step is not None and len(step.files) > 1:
+                tooltip += f"\nChanges {', '.join(session.display_paths(step.files))}"
+            if step is not None and step.changed_since:
+                tooltip += f"\nRefused: {', '.join(session.display_paths(step.changed_since))} changed since"
+            action.setToolTip(tooltip)
 
     # --- data ---
 
@@ -491,7 +498,7 @@ class PageLayoutEditorWidget(QWidget):
             self._update_part_bar()
         self.dirtyChanged.emit(self.session.is_dirty)
         self.fileStateChanged.emit()
-        self._update_undo_actions()
+        self.update_undo_actions()
         self.plate.draft_changed()
 
     def _reload_page(self, select: List[Dict] = ()):
@@ -547,11 +554,17 @@ class PageLayoutEditorWidget(QWidget):
 
     def undo(self):
         if self.session is not None:
-            self.session.undo()
+            try:
+                self.session.undo()
+            except UndoRefusedError as ex:
+                self.status.failed.emit("Undo", str(ex))
 
     def redo(self):
         if self.session is not None:
-            self.session.redo()
+            try:
+                self.session.redo()
+            except UndoRefusedError as ex:
+                self.status.failed.emit("Redo", str(ex))
 
     def _show_undone(self, change: DraftChange):
         """Show what an undo or redo changed: on its page, with the changed objects selected."""

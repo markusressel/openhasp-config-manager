@@ -6,7 +6,7 @@ import weakref
 from collections import OrderedDict
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Set, Tuple, TypeVar
+from typing import TYPE_CHECKING, Any, Dict, FrozenSet, Iterable, List, NamedTuple, Optional, Set, Tuple, TypeVar
 
 from openhasp_config_manager.gui.domain.draft.edit_history import EditHistory, Step
 from openhasp_config_manager.gui.domain.draft.model import (
@@ -25,6 +25,20 @@ if TYPE_CHECKING:
     from openhasp_config_manager.gui.domain.draft.session import PlateSession
 
 T = TypeVar("T")
+
+
+class UndoRefusedError(ValueError):
+    """A step of several files can't be undone (redone) as a whole: some of its files changed since."""
+
+
+class HistoryStep(NamedTuple):
+    """What the undo (redo) of a device would undo (redo)."""
+
+    description: str
+    # the keys of the files and parts the step changed
+    files: FrozenSet[str]
+    # the keys of those that newer steps changed: the step can't be undone (redone) while there are any
+    changed_since: FrozenSet[str]
 
 
 @dataclass
@@ -72,8 +86,11 @@ class ConfigDraft:
     its listeners (`DraftChange`), as for its own edits. A file is loaded once: a device that is loaded later uses its draft,
     with its changes. The files of one device (`devices/<name>/...`) are shown by that device only.
 
-    The undo history is one for all files, but it keeps the state of every file on its own (`DraftState`): an undo restores
-    only the files its step changed.
+    The undo history keeps the state of every file on its own (`DraftState`), and every step knows the files it changed. Like
+    in IntelliJ, the history belongs to the files, not to the devices: the undo of a device undoes the newest step that
+    changed a file it shows (a shared file also when another device made the edit), and restores only the files of that
+    step. A step of several files is undone as a whole, and only if it is the newest step in each of them (otherwise it is
+    refused, see `UndoRefusedError`). Redo likewise.
     """
 
     def __init__(self):
@@ -278,8 +295,9 @@ class ConfigDraft:
 
     def edited(self, description: str, before: DraftState, after: DraftState, merge_key: Any):
         """An edit through the draft of a device changed the draft (its objects are in the files already): a step of the history."""
-        self.history.push(description, before, after, merge_key)
-        self._update_dirty(*before.changed(after))
+        files, parts = before.changed(after)
+        self.history.push(description, before, after, merge_key, files | parts)
+        self._update_dirty(files, parts)
 
     def sync_others(self, editor: "PlateSession", before: DraftState, after: DraftState, description: str):
         """The other devices that show a file the edit changed render it again (and tell their listeners)."""
@@ -287,14 +305,31 @@ class ConfigDraft:
             if session is not editor:
                 session._sync(before, after, ChangeKind.EDIT, description)
 
+    def next_undo(self, session: "PlateSession") -> Optional[HistoryStep]:
+        """:return: what `undo` would undo for the device, None if nothing (also if it would be refused)"""
+        return self._next(self.history.next_undo(_shown_by(session)))
+
+    def next_redo(self, session: "PlateSession") -> Optional[HistoryStep]:
+        """:return: what `redo` would redo for the device, None if nothing (also if it would be refused)"""
+        return self._next(self.history.next_redo(_shown_by(session)))
+
+    def _next(self, step: Optional[Step[DraftState]]) -> Optional[HistoryStep]:
+        if step is None:
+            return None
+        return HistoryStep(step.description, step.files, self.history.blocked_by(step))
+
     def undo(self, session: "PlateSession") -> Optional[DraftChange]:
-        """:return: what the undo changed for the device (empty if none of its files), None if there was nothing to undo"""
-        step = self.history.undo()
+        """
+        Undo the newest step that changed a file or part the device shows, in all of its files.
+        :return: what the undo changed for the device, None if there was nothing to undo
+        :raise BlockedStepError: if newer steps changed some of the files of the step (files the device doesn't show)
+        """
+        step = self.history.undo(_shown_by(session))
         return None if step is None else self._restore(session, step, step.before, ChangeKind.UNDO)
 
     def redo(self, session: "PlateSession") -> Optional[DraftChange]:
-        """:return: what the redo changed for the device (empty if none of its files), None if there was nothing to redo"""
-        step = self.history.redo()
+        """:return: what the redo changed for the device, None if there was nothing to redo (see `undo`)"""
+        step = self.history.redo(_shown_by(session))
         return None if step is None else self._restore(session, step, step.after, ChangeKind.REDO)
 
     def _restore(self, session: "PlateSession", step: Step[DraftState], state: DraftState, kind: ChangeKind) -> DraftChange:
@@ -411,6 +446,11 @@ class ConfigDraft:
                 self._dirty_parts.add(key)
             else:
                 self._dirty_parts.discard(key)
+
+
+def _shown_by(session: "PlateSession") -> FrozenSet[str]:
+    """:return: the keys of the files and parts a device shows: those its undo and redo look at"""
+    return frozenset(session.file_keys) | frozenset(session.part_keys)
 
 
 def _restored_objects(

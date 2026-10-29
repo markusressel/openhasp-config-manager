@@ -583,6 +583,8 @@ class MainWindow(QMainWindow):
                 previous.changed_files |= {self.cfg_root / path for path in self.disk_changes}
         self.disk_changes_banner.hide()
         self._show_editor(self.page_layout_editor_widget)
+        # edits through other tabs can change what Undo and Redo do here
+        self.page_layout_editor_widget.update_undo_actions()
         self._show_tab(tab)
         if tab is not None and tab.device is not None and tab.changed_files:
             changed, tab.changed_files = tab.changed_files, set()
