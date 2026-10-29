@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import List, Optional, Dict, Callable, Tuple
 
 from PyQt6 import QtCore
-from PyQt6.QtCore import Qt, QRectF
+from PyQt6.QtCore import QEvent, Qt, QRectF
 from PyQt6.QtGui import QBrush, QCursor, QPainter, QPainterPath, QColor, QPen, QFont
 from PyQt6.QtWidgets import QApplication, QGraphicsView, QWidget
 
@@ -37,6 +37,10 @@ DEFAULT_SCREEN_HEIGHT = 320
 ZOOM_STEP = 1.25
 MIN_ZOOM = 0.25
 MAX_ZOOM = 8.0
+# fitting the shown objects (see `set_focus`) zooms in at most this far: a small part stays recognizable as a part of the plate
+FOCUS_MAX_ZOOM = 4.0
+# the space around the shown objects when they are fitted, of their size
+FOCUS_MARGIN = 0.15
 
 # how long a message next to an object stays (see show_message)
 MESSAGE_DURATION_MS = 6000
@@ -93,6 +97,8 @@ class PagePreviewWidget(QGraphicsView):
         self._is_movable: Callable[[Dict], bool] = lambda _obj: True
         self._is_selectable: Callable[[Dict], bool] = lambda _obj: True
         self._is_dimmed: Callable[[Dict], bool] = lambda _obj: False
+        # the objects that are shown, the others are hidden; None: all of them (see `set_focus`)
+        self._is_shown: Optional[Callable[[Dict], bool]] = None
         # where the mouse pressed on an object that can't be moved, until it is released
         self._locked_press: Optional[Tuple[QtCore.QPoint, EditableWidget]] = None
 
@@ -251,6 +257,43 @@ class PagePreviewWidget(QGraphicsView):
         for item in self.editable_items():
             item.set_dimmed(is_dimmed(item.obj_data))
 
+    def set_focus(self, is_shown: Optional[Callable[[Dict], bool]]):
+        """
+        Show only some of the objects (e.g. those of an instance of a part), and fit those to the view instead of the plate
+        (see `fit_to_view`); None shows all of them again.
+        """
+        self._is_shown = is_shown
+        self._apply_focus()
+        self.viewport().update()
+
+    @property
+    def is_focused(self) -> bool:
+        """Whether only some of the objects are shown (see `set_focus`)."""
+        return self._is_shown is not None
+
+    def _apply_focus(self):
+        items = self.editable_items()
+        shown = {id(item) for item in items if self._is_shown is None or self._is_shown(item.obj_data)}
+        # the tabview of a shown object on one of its tabs stays, or the object would be hidden with it
+        for item in items:
+            if id(item) in shown:
+                parent = item.parentItem()
+                while parent is not None:
+                    shown.add(id(parent))
+                    parent = parent.parentItem()
+        for item in items:
+            item.set_shown(id(item) in shown)
+
+    def _focus_rect(self) -> Optional[QRectF]:
+        """:return: the area of the plate the shown objects cover (see `set_focus`), None if all objects are shown or none"""
+        if self._is_shown is None:
+            return None
+        rect = QRectF()
+        for item in self.editable_items():
+            if item.isVisible() and self._is_shown(item.obj_data):
+                rect = rect.united(item.mapRectToScene(item.obj_rect))
+        return None if rect.isEmpty() else rect
+
     def set_objects(self, loaded_objects: List[dict]):
         self.objects = loaded_objects
         self.load_objects()
@@ -342,6 +385,7 @@ class PagePreviewWidget(QGraphicsView):
                 item.set_dimmed(self._is_dimmed(item.obj_data))
                 self.scene().addItem(item)
         self._nest_items()
+        self._apply_focus()
 
     def _nest_items(self):
         """Put the items of the objects on a tab on the page of the tab in its tabview: `x`/`y` are relative to it."""
@@ -422,10 +466,26 @@ class PagePreviewWidget(QGraphicsView):
         widget.setParent(self.viewport())
         widget.show()
         self._overlays.append((widget, anchor))
-        # never narrower than a bar: it would be cut off
-        widest = max(overlay.sizeHint().width() for overlay, _anchor in self._overlays)
-        self.setMinimumWidth(widest + 2 * UiDimensions.one + 2 * self.frameWidth())
+        # a bar gets wider (e.g. the text of a button changes): the view must not get narrower than it
+        widget.installEventFilter(self)
+        self._update_minimum_width()
         self._position_overlays()
+
+    def eventFilter(self, watched, event) -> bool:
+        if event.type() == QEvent.Type.LayoutRequest and any(watched is overlay for overlay, _anchor in self._overlays):
+            self._update_minimum_width()
+        return super().eventFilter(watched, event)
+
+    def set_overlay_visible(self, widget: QWidget, visible: bool):
+        """Show or hide a floating bar (see `add_overlay`)."""
+        widget.setVisible(visible)
+        self._update_minimum_width()
+        self.update_overlays()
+
+    def _update_minimum_width(self):
+        # never narrower than a bar: it would be cut off
+        widest = max((overlay.sizeHint().width() for overlay, _anchor in self._overlays if not overlay.isHidden()), default=0)
+        self.setMinimumWidth(widest + 2 * UiDimensions.one + 2 * self.frameWidth())
 
     def update_overlays(self):
         """Place the floating bars again after one changed its size or visibility."""
@@ -434,18 +494,38 @@ class PagePreviewWidget(QGraphicsView):
         self._position_overlays()
 
     def fit_to_view(self):
-        """Scale the plate to fill the view, with the rows of the floating bars above and below it kept free."""
+        """
+        Scale the plate to fill the view, with the rows of the floating bars above and below it kept free. With a focus (see
+        `set_focus`) the shown objects fill it instead.
+        """
         self._set_fit(True)
         plate = self._padded_scene_rect()
         top, bottom = self._overlay_margins()
         viewport = self.viewport().rect()
         available_height = max(1, viewport.height() - top - bottom)
-        scale = min(viewport.width() / plate.width(), available_height / plate.height())
-        # the view shows the plate and the rows of the bars: fitting it centers the plate between them
-        self.setSceneRect(plate.adjusted(0, -top / scale, 0, bottom / scale))
-        self.fitInView(self.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
+        focus = self._focus_rect()
+        if focus is not None:
+            self._fit_rect(focus, top, bottom)
+        else:
+            scale = min(viewport.width() / plate.width(), available_height / plate.height())
+            # the view shows the plate and the rows of the bars: fitting it centers the plate between them
+            self.setSceneRect(plate.adjusted(0, -top / scale, 0, bottom / scale))
+            self.fitInView(self.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
         self._position_add_object_button()
         self.zoomChanged.emit(self.zoom())
+
+    def _fit_rect(self, rect: QRectF, top: int, bottom: int):
+        """Scale an area of the plate to fill the view between the rows of the floating bars, at most `FOCUS_MAX_ZOOM`."""
+        margin = max(rect.width(), rect.height()) * FOCUS_MARGIN + UiDimensions.one
+        rect = rect.adjusted(-margin, -margin, margin, margin)
+        viewport = self.viewport().rect()
+        available_height = max(1, viewport.height() - top - bottom)
+        scale = min(viewport.width() / rect.width(), available_height / rect.height(), FOCUS_MAX_ZOOM)
+        # what the view shows, in the plate: the area centered between the bars (like the plate, see `fit_to_view`)
+        visible = QRectF(0, 0, viewport.width() / scale, viewport.height() / scale)
+        visible.moveCenter(rect.center() + QtCore.QPointF(0, (bottom - top) / (2 * scale)))
+        self.setSceneRect(visible)
+        self.fitInView(visible, Qt.AspectRatioMode.KeepAspectRatio)
 
     def _overlay_margins(self) -> Tuple[int, int]:
         """:return: the height to keep free above and below the plate for the floating bars"""
@@ -639,7 +719,8 @@ class PagePreviewWidget(QGraphicsView):
         screen.addRect(plate)
         outside = QPainterPath()
         for item in self.editable_items():
-            outside.addRect(item.mapRectToScene(item.obj_rect))
+            if item.isVisible():
+                outside.addRect(item.mapRectToScene(item.obj_rect))
         outside = outside.subtracted(screen)
         if outside.isEmpty():
             return

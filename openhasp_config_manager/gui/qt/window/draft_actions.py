@@ -1,9 +1,11 @@
 import asyncio
+from typing import List, Optional
 
 from PyQt6.QtWidgets import QMessageBox
 
 from openhasp_config_manager.deployment import deploy_device
-from openhasp_config_manager.gui.domain.draft.files import SaveConflictError, plan_save, write_save
+from openhasp_config_manager.gui.domain.draft.files import FileChange, SaveConflictError, plan_save, write_save
+from openhasp_config_manager.gui.domain.draft.session import PlateSession
 from openhasp_config_manager.gui.qt.operations import error_text, run_busy
 from openhasp_config_manager.manager import ConfigManager
 from openhasp_config_manager.processing.variables import VariableManager
@@ -15,40 +17,25 @@ class DraftActions:
     def __init__(self, window):
         self._window = window
 
-    def save(self) -> bool:
+    def save(self, session: Optional[PlateSession] = None) -> bool:
         """
-        Write the changes of the draft into the source files.
+        Write the changes of the draft into the source files: every changed file of the `ConfigDraft`, also those the
+        active tab doesn't show (like IntelliJ's Save All, they are listed first). A part on its own has a draft of its own
+        (with placeholder vars, and maybe a copy of a part the shared draft has too): only its tab saves it, its part alone.
+        :param session: the draft whose files to save (by default the active tab's), e.g. a part on its own whose tab closes
         :return: whether the draft was saved
         """
-        session = self._window.session
-        if session is None or not session.is_dirty:
+        session = session or self._window.session
+        if session is None:
             return False
+        draft = session.config if session.is_part_alone else self._window.config_draft
         try:
-            changes = plan_save(session)
+            changes = plan_save(draft)
         except (SaveConflictError, ValueError) as ex:
             QMessageBox.critical(self._window, "Save failed", error_text(ex))
             return False
-
-        common = [change for change in changes if change.is_common]
-        if common:
-            paths = [change.path for change in common]
-            others = sorted(
-                device.name
-                for device in self._window.devices
-                if device.name != self._window.device.name and any(component.path in paths for component in device.jsonl)
-            )
-            answer = QMessageBox.question(
-                self._window,
-                "Save shared files",
-                "These files are in the common folder and shared with other devices:\n\n"
-                + "\n".join(str(path) for path in paths)
-                + (f"\n\nThe change also affects: {', '.join(others)}." if others else "")
-                + "\n\nSave them anyway?",
-                QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Cancel,
-                QMessageBox.StandardButton.Cancel,
-            )
-            if answer != QMessageBox.StandardButton.Save:
-                return False
+        if not changes or not self._confirm(session, changes):
+            return False
 
         try:
             write_save(changes)
@@ -65,6 +52,43 @@ class DraftActions:
         session.mark_saved({change.path: change.content for change in changes})
         self._window.status.succeeded.emit(f"Saved {len(changes)} file{'' if len(changes) == 1 else 's'}")
         return True
+
+    def _confirm(self, session: PlateSession, changes: List[FileChange]) -> bool:
+        """
+        Ask before writing files the user may not expect: files that the tab doesn't show, and shared files.
+        :return: whether to save
+        """
+        shown = self._window.shown_keys(session)
+        hidden = [change for change in changes if change.key not in shown]
+        common = [change for change in changes if change.is_common]
+        if not hidden and not common:
+            return True
+        text = ""
+        if hidden:
+            text += "These files have changes too, which this tab doesn't show:\n\n" + "\n".join(
+                session.display_paths(change.key for change in hidden)
+            )
+        if common:
+            paths = [change.path for change in common]
+            others = sorted(
+                device.name
+                for device in self._window.devices
+                if device.name != session.device.name and any(component.path in paths for component in device.jsonl)
+            )
+            text += (
+                ("\n\n" if text else "")
+                + "These files are in the common folder and shared with other devices:\n\n"
+                + "\n".join(session.display_paths(change.key for change in common))
+                + (f"\n\nThe change also affects: {', '.join(others)}." if others else "")
+            )
+        answer = QMessageBox.question(
+            self._window,
+            "Save shared files" if not hidden else "Save all changed files",
+            text + "\n\nSave them anyway?",
+            QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Cancel,
+        )
+        return answer == QMessageBox.StandardButton.Save
 
     def deploy(self):
         """Deploy the files of the current device as they are on disk, like the deploy command of the CLI."""

@@ -214,6 +214,28 @@ class TestPagePreviewWidget(TestBase):
             assert preview.viewport().rect().contains(bar.geometry())
             assert not bar.geometry().intersects(plate)
 
+    def test_the_preview_stays_as_wide_as_a_floating_bar_that_gets_wider(self, qapp):
+        # GIVEN
+        from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel
+
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.page_preview_layout import OverlayAnchor, PagePreviewWidget
+
+        preview = PagePreviewWidget()
+        bar = QFrame()
+        label = QLabel("Edit")
+        QHBoxLayout(bar).addWidget(label)
+        preview.add_overlay(bar, OverlayAnchor.TOP_RIGHT)
+        preview.show()
+        narrow = preview.minimumWidth()
+
+        # WHEN
+        label.setText("Edit  Snap  Duplicate  Delete  Undo  Redo")
+        qapp.processEvents()
+
+        # THEN
+        assert preview.minimumWidth() > narrow
+        assert preview.minimumWidth() >= bar.sizeHint().width()
+
     def test_cursor_plate_position_is_on_the_grid_and_only_over_the_plate(self):
         # GIVEN
         from PyQt6 import QtCore

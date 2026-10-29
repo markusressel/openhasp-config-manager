@@ -1,6 +1,7 @@
 
 import pytest
 
+from openhasp_config_manager.gui.domain.draft.part_focus import PartFocus
 from tests import TestBase
 from tests.gui.page_layout_editor.helpers import DOT_INCLUDE, DOT_JSONL, EDITOR_JSONL, _object
 
@@ -31,31 +32,68 @@ class TestPartMode(TestBase):
         return {item.obj_data.get("id"): item for item in editor.page_preview_widget.editable_items()}
 
     def _edit_part_of(self, editor, obj_id: int):
+        """Click "Edit the part" for an object, and show the part like the part tab the window opens for it."""
         from PyQt6.QtWidgets import QPushButton
 
         self._select(editor, obj_id)
         [button] = [button for button in editor.property_editor.findChildren(QPushButton) if button.text() == "Edit the part"]
+        requested = []
+        editor.editPartRequested.connect(lambda part, instance: requested.append((part, instance)))
         button.click()
+        [(_part, instance)] = requested
+        self._focus(editor, instance)
 
-    def test_the_panel_leads_into_part_mode_where_only_the_instance_can_be_changed(self, editor, tmp_path):
+    def _focus(self, editor, instance):
+        editor.set_data(editor.session, editor.device_pages_data, focus=PartFocus(editor.session, instance))
+        editor.set_edit_mode(True)
+
+    def test_the_panel_asks_for_part_mode_where_only_the_instance_can_be_changed(self, editor, tmp_path):
         # WHEN
         self._edit_part_of(editor, 21)
 
         # THEN
         assert editor.part_mode.part == (tmp_path / "cfg/common/parts/dot.jsonl").resolve()
         assert not editor.part_bar.isHidden()
-        assert "Editing part common/parts/dot.jsonl, instance at" in editor.part_bar.title.text().replace("\u200b", "")
+        assert editor.part_bar.title.full_text == "dot.jsonl"
+        assert editor.part_bar.title.toolTip().startswith("Editing the part common/parts/dot.jsonl, instance at")
         assert editor.part_bar.instances.currentIndex() == 1
+        assert editor.part_bar.instances.currentText() == "editor.jsonl:4 (id=21)"
         items = self._items(editor)
         assert (items[21].editable, items[20].editable, items[1].editable, items[40].editable) == (True, False, False, False)
-        # the objects around the instance are dimmed
-        dimmed = [obj.get("id") for obj in editor.page_objects if editor.page_preview_widget._is_dimmed(obj)]
-        assert dimmed == [1, 2, 20, 40, 41]
         assert editor.target_component == str(editor.part_mode.part)
 
-    def test_an_edit_in_the_instance_changes_every_instance_and_done_ends_part_mode(self, editor):
+    def test_only_the_objects_of_the_instance_are_shown_zoomed_to_fit_them_unless_the_page_is_shown(self, editor):
+        # GIVEN
+        preview = editor.page_preview_widget
+        preview.resize(800, 600)
+        preview.fit_to_view()
+        plate_zoom = preview.zoom()
+
+        # WHEN
+        self._edit_part_of(editor, 21)
+
+        # THEN: the page is rendered, but only the instance is shown, zoomed in
+        assert {obj.get("id") for obj in editor.page_objects} == {1, 2, 20, 21, 40, 41}
+        assert [item.obj_data.get("id") for item in preview.editable_items() if item.isVisible()] == [21]
+        focused_zoom = preview.zoom()
+        assert focused_zoom > plate_zoom
+        assert preview.fits_to_view
+
+        # WHEN
+        editor.part_bar.show_page.click()
+
+        # THEN: the page around it, dimmed, the whole plate in view
+        assert editor.shows_page
+        assert all(item.isVisible() for item in preview.editable_items())
+        dimmed = [obj.get("id") for obj in editor.page_objects if preview._is_dimmed(obj)]
+        assert dimmed == [1, 2, 20, 40, 41]
+        assert not preview.is_focused and preview.zoom() < focused_zoom
+
+    def test_an_edit_in_the_instance_changes_every_instance_and_done_asks_to_close_the_tab(self, editor):
         # GIVEN
         self._edit_part_of(editor, 21)
+        done = []
+        editor.partDone.connect(lambda: done.append(True))
 
         # WHEN
         editor.editing.set_source_value(_object(editor, 21), "text", "-{{ id }}")
@@ -67,23 +105,22 @@ class TestPartMode(TestBase):
         # WHEN
         editor.part_bar.done.click()
 
-        # THEN: the change stays in the draft
-        assert editor.part_mode is None
-        assert editor.part_bar.isHidden()
-        assert _object(editor, 20)["text"] == "-20"
-        # included objects can be selected (to see where they come from) but not changed
-        assert self._items(editor)[41].movable is False
+        # THEN
+        assert done == [True]
 
     def test_another_instance_can_be_chosen(self, editor):
         # GIVEN
         self._edit_part_of(editor, 21)
+        focus = editor.part_focus
 
         # WHEN
         editor.part_bar.instances.setCurrentIndex(0)
 
-        # THEN
+        # THEN: in the same part mode, which the tab owns
+        assert editor.part_focus is focus
         items = self._items(editor)
         assert (items[20].editable, items[21].editable) == (True, False)
+        assert [item.obj_data.get("id") for item in editor.page_preview_widget.editable_items() if item.isVisible()] == [20]
 
     def test_nudging_moves_the_objects_of_every_instance(self, editor):
         # GIVEN
@@ -156,32 +193,19 @@ class TestPartMode(TestBase):
         # THEN
         assert editor.page_preview_widget.selected_items() == []
 
-    def test_edit_part_from_elsewhere_shows_the_page_of_the_first_instance(self, editor, tmp_path):
+    def test_part_mode_shows_the_page_of_its_instance(self, editor, tmp_path):
         # GIVEN
         editor.set_page_index(1)
+        [first, _second] = editor.session.part_instances(tmp_path / "cfg/common/parts/pin.jsonl")
 
-        # WHEN: e.g. from the Files tree
-        editor.edit_part(tmp_path / "cfg/common/parts/pin.jsonl")
+        # WHEN
+        self._focus(editor, first)
 
         # THEN
         assert editor.current_index == 9
-        assert editor.edit_mode is True
         items = self._items(editor)
         assert (items[40].editable, items[41].editable) == (True, False)
-        assert editor.part_bar.hint.isHidden() is False
-
-    def test_a_part_that_is_not_included_is_asked_for_on_its_own(self, editor, tmp_path):
-        # GIVEN
-        requested = []
-        editor.editPartAloneRequested.connect(requested.append)
-        (tmp_path / "cfg/common/parts/other.jsonl").write_text(PIN_JSONL)
-
-        # WHEN
-        editor.edit_part(tmp_path / "cfg/common/parts/other.jsonl")
-
-        # THEN: the window shows it on its own
-        assert requested == [tmp_path / "cfg/common/parts/other.jsonl"]
-        assert editor.part_mode is None
+        assert editor.part_bar.info.isHidden() is False
 
     def test_pasting_into_the_part(self, editor):
         from PyQt6.QtWidgets import QApplication
@@ -208,7 +232,7 @@ class TestPartMode(TestBase):
         self._edit_part_of(editor, 21)
 
         # THEN
-        assert editor.part_bar.hint.text() == (
+        assert editor.part_bar.info.toolTip() == (
             "A shared part: saving it changes every device that includes it (1 file of 1 device: test_device). "
             "Only the instances of test_device are shown."
         )

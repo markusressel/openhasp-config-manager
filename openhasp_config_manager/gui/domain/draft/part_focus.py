@@ -1,15 +1,16 @@
 """Part mode of a view: the instance of a part whose objects a view of a draft edits (see `PartFocus`)."""
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, FrozenSet, List, Optional, Tuple
 
-from openhasp_config_manager.gui.domain.draft.model import PartInstance
+from openhasp_config_manager.gui.domain.draft.config_draft import HistoryStep
+from openhasp_config_manager.gui.domain.draft.model import DraftChange, PartInstance
 from openhasp_config_manager.gui.domain.draft.session import PlateSession
 
 
 class PartFocus:
     """
-    Part mode of one view of a draft (an editor, later a part tab): the objects of one instance of a part can be changed like
+    Part mode of one view of a draft (a part tab, see `MainWindow.edit_part`): the objects of one instance of a part can be changed like
     the objects of a file, every instance of the part follows, and the other objects are read-only. The draft has no part mode
     itself, so two views of it can be in different modes at once: one edits the part, the other one the pages.
 
@@ -31,6 +32,14 @@ class PartFocus:
         """Part mode ends: the draft doesn't keep the instance up to date anymore."""
         self.session.remove_part_focus(self)
         self.instance = None
+
+    def move_to(self, instance: PartInstance):
+        """
+        Edit the part in another of its instances.
+        :raises ValueError: if the instance is not in the draft
+        """
+        self.session.check_part_instance(instance)
+        self.instance = instance
 
     @property
     def is_active(self) -> bool:
@@ -54,6 +63,40 @@ class PartFocus:
     def describe(self) -> Optional[str]:
         """:return: where the instance is included (see `PlateSession.describe_instance`), None if it has no objects anymore"""
         return self.session.describe_instance(self.instance) if self.objects() else None
+
+    # --- undo, and what is not saved ---
+
+    @property
+    def undo_scope(self) -> FrozenSet[str]:
+        """
+        The keys of the files whose changes the view undoes and marks as unsaved: the part, and the files with the `!include`s
+        that lead to the instance (Part 2 of `docs/tabs-and-shared-drafts.md`). Empty after part mode ended.
+        """
+        if self.instance is None:
+            return frozenset()
+        return frozenset({str(self.instance.part)} | {str(step[0]) for step in self.instance.steps})
+
+    @property
+    def is_dirty(self) -> bool:
+        """Whether a file of the `undo_scope` has unsaved changes (also made through another view)."""
+        return any(self.session.config.is_dirty(key) for key in self.undo_scope)
+
+    @property
+    def next_undo(self) -> Optional[HistoryStep]:
+        """What `undo` undoes, None if nothing; also if it is refused."""
+        return self.session.step_to_undo(self.undo_scope)
+
+    @property
+    def next_redo(self) -> Optional[HistoryStep]:
+        """What `redo` redoes, None if nothing; also if it is refused."""
+        return self.session.step_to_redo(self.undo_scope)
+
+    def undo(self) -> Optional[DraftChange]:
+        """Undo the newest step that changed a file of the `undo_scope` (see `PlateSession.undo`)."""
+        return self.session.undo(self.undo_scope)
+
+    def redo(self) -> Optional[DraftChange]:
+        return self.session.redo(self.undo_scope)
 
     # --- what depends on the mode ---
 

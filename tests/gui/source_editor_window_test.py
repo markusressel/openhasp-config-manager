@@ -378,18 +378,20 @@ class TestPartMode(TestBase):
         editor.write_text(editor.read_text() + '{"!include": "devices/test_device/dot.jsonl", "for": {"id": [20, 21]}}\n')
         return part.resolve()
 
-    def test_the_files_tree_starts_it_and_saving_writes_the_part(self, part_file, window, editor_file):
+    def test_the_files_tree_opens_a_part_tab_and_saving_writes_the_part(self, part_file, window, editor_file):
         # GIVEN
-        editor = window.page_layout_editor_widget
+        pages = window.page_layout_editor_widget
         before = editor_file.read_text()
 
         # WHEN
         window.file_tree_widget.editPartRequested.emit(part_file)
+        editor = window.page_layout_editor_widget
         [first, _second] = window.session.part_instances(part_file)
         [dot] = window.session.objects_of_instance(first)
         editor.editing.set_source_value(dot, "text", "#{{ id }}")
 
-        # THEN
+        # THEN: in a tab of its own, in the draft of the pages
+        assert editor is not pages and editor.session is pages.session
         wait_until(lambda: (gui_state(window.cfg_root).get("device") or {}).get("part_mode"))
         state = gui_state(window.cfg_root)["device"]
         assert state["part_mode"]["part"] == "devices/test_device/dot.jsonl"
@@ -424,7 +426,7 @@ class TestPartAlone(TestBase):
         from PyQt6.QtWidgets import QMessageBox
 
         # GIVEN
-        editor = window.page_layout_editor_widget
+        pages = window.device_tabs.active
         device_session = window.session
         window.file_tree_widget.openRequested.emit(card_file)
         [edit_part] = [
@@ -436,36 +438,38 @@ class TestPartAlone(TestBase):
         # WHEN
         edit_part.trigger()
 
-        # THEN: instead of the pages, with a placeholder for each variable
-        alone = window.part_alone
-        assert window.session is alone and editor.session is alone
+        # THEN: in a part tab without a page of the device, with a placeholder for each variable
+        tab = window.device_tabs.active
+        editor = window.page_layout_editor_widget
+        alone = window.session
+        assert tab is not pages and tab.alone
+        assert alone is not device_session and editor.session is alone
         assert [obj.get("id") for obj in editor.page_objects] == [1]
-        assert "on its own" in editor.part_bar.title.text()
-        assert "No page of test_device includes it" in editor.part_bar.hint.text()
+        assert "on its own" in editor.part_bar.title.toolTip()
+        assert "No page of test_device includes it" in editor.part_bar.info.toolTip()
         wait_until(lambda: ((gui_state(window.cfg_root).get("device") or {}).get("part_mode") or {}).get("alone"))
         assert gui_state(window.cfg_root)["device"]["files"] == []
 
         # WHEN: vars of its own, and a change of the part
         [label] = editor.page_objects
         alone.set_directive_value(label, "vars", {"card": {"page": 9, "id": 7}, "title": "Hello"})
-        window.page_layout_editor_widget.editing.set_source_value(label, "x", 6)
+        editor.editing.set_source_value(label, "x", 6)
 
         # THEN
         assert (label["page"], label["id"], label["text"]) == (9, 7, "Hello")
         assert window.action_save.isEnabled()
         assert window.draft_actions.save()
         assert card_file.read_text() == CARD_JSONL.replace('"x": 5', '"x": 6')
-        assert not window.session.is_dirty and window.part_alone is alone
+        assert not window.session.is_dirty and window.session is alone
 
         # WHEN: another change, then Done: discarded
-        window.page_layout_editor_widget.editing.set_source_value(label, "x", 7)
+        editor.editing.set_source_value(label, "x", 7)
         monkeypatch.setattr(QMessageBox, "question", lambda *args: QMessageBox.StandardButton.Discard)
         editor.part_bar.done.click()
 
-        # THEN: back on the pages of the device, which don't have the part
-        assert window.part_alone is None
-        assert window.session is device_session and editor.session is device_session
-        assert editor.part_bar.isHidden()
+        # THEN: the tab is closed, back on the pages of the device
+        assert tab not in window.device_tabs.tabs
+        assert window.device_tabs.active is pages and window.session is device_session
         assert card_file.read_text() == CARD_JSONL.replace('"x": 5', '"x": 6')
 
     def test_done_with_changes_can_be_cancelled(self, card_file, window, monkeypatch):
@@ -473,7 +477,7 @@ class TestPartAlone(TestBase):
 
         # GIVEN
         window.file_tree_widget.editPartRequested.emit(card_file)
-        alone = window.part_alone
+        tab = window.device_tabs.active
         [label] = window.page_layout_editor_widget.page_objects
         window.page_layout_editor_widget.editing.set_source_value(label, "x", 7)
         monkeypatch.setattr(QMessageBox, "question", lambda *args: QMessageBox.StandardButton.Cancel)
@@ -482,7 +486,7 @@ class TestPartAlone(TestBase):
         window.page_layout_editor_widget.part_bar.done.click()
 
         # THEN
-        assert window.part_alone is alone
+        assert window.device_tabs.active is tab
         assert "card.jsonl (part)" in window._dirty_draft_names()
 
     def test_a_part_on_its_own_follows_a_change_on_disk(self, card_file, window):
@@ -493,37 +497,10 @@ class TestPartAlone(TestBase):
         card_file.write_text(CARD_JSONL.replace('"x": 5', '"x": 50'))
 
         # THEN: still on its own
-        wait_until(lambda: window.part_alone is not None and window.page_layout_editor_widget.page_objects[0]["x"] == 50)
-        assert window.page_layout_editor_widget.session is window.part_alone
+        wait_until(lambda: window.session is not None and window.page_layout_editor_widget.page_objects[0]["x"] == 50)
+        assert window.device_tabs.active.alone
+        assert window.page_layout_editor_widget.session is window.session
         assert window.page_layout_editor_widget.part_mode is not None
-
-    def test_a_part_the_pages_include_is_edited_on_the_pages(self, card_file, window, cfg_root):
-        # GIVEN: a part on its own
-        dot = cfg_root / "devices" / "test_device" / "dot.jsonl"
-        dot.write_text('{"page": 9, "id": "{{ id }}", "obj": "label"}\n')
-        editor_file = cfg_root / "devices" / "test_device" / "editor.jsonl"
-        editor_file.write_text(editor_file.read_text() + '{"!include": "devices/test_device/dot.jsonl", "vars": {"id": 30}}\n')
-        wait_until(lambda: window.session is not None and window.session.part_instances(dot))
-        window.file_tree_widget.editPartRequested.emit(card_file)
-        assert window.part_alone is not None
-
-        # WHEN
-        window.file_tree_widget.editPartRequested.emit(dot)
-
-        # THEN
-        assert window.part_alone is None
-        assert window.page_layout_editor_widget.part_mode.part == dot.resolve()
-
-        # WHEN: a part on its own again, then Done
-        mode = window.page_layout_editor_widget.part_mode
-        window.file_tree_widget.editPartRequested.emit(card_file)
-        assert window.page_layout_editor_widget.part_mode.part == card_file
-        window.page_layout_editor_widget.part_bar.done.click()
-
-        # THEN: the part mode of the pages goes on
-        assert window.part_alone is None
-        assert window.page_layout_editor_widget.part_mode == mode
-        assert not window.page_layout_editor_widget.part_bar.isHidden()
 
     def test_a_page_file_is_not_shown_as_a_part(self, window, editor_file):
         # GIVEN
@@ -531,10 +508,10 @@ class TestPartAlone(TestBase):
         window.status.failed.connect(lambda *args: failures.append(args))
 
         # WHEN
-        window.page_layout_editor_widget.edit_part(editor_file)
+        window.edit_part(editor_file)
 
         # THEN
-        assert window.part_alone is None
+        assert len(window.device_tabs.tabs) == 1
         assert failures == [("Editing the part editor.jsonl", "it is a page file of the device: edit its objects on the page")]
 
 

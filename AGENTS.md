@@ -85,7 +85,8 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
   too), and the files of a device (`devices/<name>/`) are only its own.
 - **Tabs** (design in `docs/tabs-and-shared-drafts.md`): one tab per open device above the preview (`DeviceTabs`,
   `gui/qt/window/device_tabs.py`), each with its own `PageLayoutEditorWidget` and what was loaded of the device (`DeviceTab`), so
-  switching tabs loads nothing. `MainWindow.page_layout_editor_widget` is the editor of the active tab; the window reacts to the
+  switching tabs loads nothing. "Edit the part" opens a part tab (`PartTab`, one per part and device) with its own editor and
+  `PartFocus`; its undo scope is the part and the files that include the instance (`PartFocus.undo_scope`). `MainWindow.page_layout_editor_widget` is the editor of the active tab; the window reacts to the
   signals of an editor only while its tab is active (except what it sends to its plate), and points the panels, menus, toolbar,
   status bar and log at the active tab (`_on_tab_activated`). Closing a tab keeps its drafts (`MainWindow.sessions`). Files that change while a tab is in the
   background are applied when it is shown again (`changed_files`).
@@ -96,8 +97,9 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
   files of other devices. A step of several files is undone as a whole, only if it is the newest in each of them, otherwise
   it is refused (`UndoRefusedError`); redo likewise (Part 2 of `docs/tabs-and-shared-drafts.md`). Group the changes of one user action with
   `with session.edit("Move 3 objects"):`, and pass a `merge_key` for actions repeated in a row (typing into a property, nudging). An
-  edit operation of the editor needs no undo code of its own, only the grouping. Save doesn't load the draft again: the
-  draft takes what it wrote as its files (`mark_saved`), so the history continues. The steps of a file are forgotten when it is loaded
+  edit operation of the editor needs no undo code of its own, only the grouping. Save writes every changed file of the
+  `ConfigDraft` (`DraftActions.save`, listing first the files the active tab doesn't show; a part on its own only by its tab)
+  and doesn't load the draft again: the draft takes what it wrote as its files (`mark_saved`), so the history continues. The steps of a file are forgotten when it is loaded
   again from disk (it changed there) or reverted.
 - **Interact mode** (*Edit* off): touches go through `Indev` (`gui/domain/interaction.py`, a port of the LVGL input device: press lost,
   long press, release) to the items, which are its targets. What a touch changes is `RuntimeState` of the preview, next to the draft and
@@ -119,11 +121,12 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
   (objects of instances that stay keep their rendered dict). In part mode the objects of one instance of a part can be
   changed: edits go into the draft copy of the part (`PartDraft`), every instance follows (`_reinclude`), and everything
   else is read-only. Part mode belongs to a view, not to the draft: a `PartFocus` (`gui/domain/draft/part_focus.py`,
-  `PageLayoutEditorWidget.part_focus`) has the methods that depend on it, which are those of the session with the instance
+  `PartTab.focus`, `PageLayoutEditorWidget.part_focus`) has the methods that depend on it, which are those of the session with the instance
   (`part_instance`), so two views of a draft can be in different modes. Edit through `editor.editing` (the focus in part
   mode, else the session). `read_only_reason` and `is_selectable` depend on the mode: use them, not `is_included`.
-  A part that no page includes is shown on its own (`load_part_alone`, `MainWindow.part_alone`): a draft of one `!include`
-  that is in no file (`ComponentSource.is_scratch`, never saved), so `window.session` is then not the draft of the pages.
+  A part tab shows only the objects of the instance (the page dimmed with "Show the page"). A part that no page includes is
+  shown on its own in a part tab (`load_part_alone`, `PartTab.alone`): a draft of one `!include` that is in no file
+  (`ComponentSource.is_scratch`, never saved), so `window.session` is then not the draft of the pages.
 - **Templates are never replaced implicitly.** Objects whose `x`/`y` is a template or a percentage can't be dragged or nudged; the
   editor explains why, and "Use pixels for x/y" replaces them only when the user asks. Keep this for new edit operations.
 - **Files**: new objects go into the target file chosen in the Files tree (`gui/domain/file_tree.py` follows the folder structure of
@@ -156,11 +159,12 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
   worth knowing for such tools, add it there, bump `SCHEMA_VERSION` only for breaking changes, and keep that README current. Never put
   credentials or plate configuration in it. Next to it, `GuiStatePublisher` writes `preview.png`, the plate as the preview shows it
   (`render_plate` in `gui/qt/preview_image.py`, which the `preview` command uses too, for pages of the files on disk).
-- **Plate actions** (`PlateLink` in `gui/qt/widgets/pagelayout/plate_link.py`, names and tooltips agreed with the user): *Live preview* sends the draft to the plate while editing (nothing is stored
+- **Plate actions** (`PlateLink` in `gui/qt/widgets/pagelayout/plate_link.py`, one per device, shared by its tabs; it sends the
+  page of the tab of the device that was active last, `set_view`; names and tooltips agreed with the user): *Live preview* sends the draft to the plate while editing (nothing is stored
   on it), *Restore plate* rebuilds the pages from the files on the plate like a restart, *Deploy* uploads the saved files. *Revert*
   discards the draft; *Undo*/*Redo* step through the edits of the draft.
 - **Connections**: one per open device (`PlateConnections` in `gui/qt/connection.py`), opened with its first tab and closed with
-  its last one; `MainWindow.connection` is the active tab's. Live preview keeps running in a background tab and sends what
+  its last one, with the device's `PlateLink` (`PlateConnections.link`); `MainWindow.connection` is the active tab's. Live preview keeps running in a background tab and sends what
   changes for its device, also edits of a shared file in another tab; it runs on at most `MAX_LIVE_PREVIEWS` devices
   (`gui/domain/live_preview.py`), more are refused, nothing is turned off by itself. The status shows in a dot in each tab's
   title, in the Plates dock (`gui/qt/widgets/plates_panel.py`, a row per open device) and, for the active tab, the status bar.

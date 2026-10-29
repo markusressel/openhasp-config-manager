@@ -305,31 +305,33 @@ class ConfigDraft:
             if session is not editor:
                 session._sync(before, after, ChangeKind.EDIT, description)
 
-    def next_undo(self, session: "PlateSession") -> Optional[HistoryStep]:
+    def next_undo(self, session: "PlateSession", scope: Optional[FrozenSet[str]] = None) -> Optional[HistoryStep]:
         """:return: what `undo` would undo for the device, None if nothing (also if it would be refused)"""
-        return self._next(self.history.next_undo(_shown_by(session)))
+        return self._next(self.history.next_undo(_scope(session, scope)))
 
-    def next_redo(self, session: "PlateSession") -> Optional[HistoryStep]:
+    def next_redo(self, session: "PlateSession", scope: Optional[FrozenSet[str]] = None) -> Optional[HistoryStep]:
         """:return: what `redo` would redo for the device, None if nothing (also if it would be refused)"""
-        return self._next(self.history.next_redo(_shown_by(session)))
+        return self._next(self.history.next_redo(_scope(session, scope)))
 
     def _next(self, step: Optional[Step[DraftState]]) -> Optional[HistoryStep]:
         if step is None:
             return None
         return HistoryStep(step.description, step.files, self.history.blocked_by(step))
 
-    def undo(self, session: "PlateSession") -> Optional[DraftChange]:
+    def undo(self, session: "PlateSession", scope: Optional[FrozenSet[str]] = None) -> Optional[DraftChange]:
         """
         Undo the newest step that changed a file or part the device shows, in all of its files.
+        :param scope: the keys of the files and parts to look at, some of those the device shows (e.g. those of a part tab);
+            all of them by default
         :return: what the undo changed for the device, None if there was nothing to undo
-        :raise BlockedStepError: if newer steps changed some of the files of the step (files the device doesn't show)
+        :raise BlockedStepError: if newer steps changed some of the files of the step (files outside of the scope)
         """
-        step = self.history.undo(_shown_by(session))
+        step = self.history.undo(_scope(session, scope))
         return None if step is None else self._restore(session, step, step.before, ChangeKind.UNDO)
 
-    def redo(self, session: "PlateSession") -> Optional[DraftChange]:
+    def redo(self, session: "PlateSession", scope: Optional[FrozenSet[str]] = None) -> Optional[DraftChange]:
         """:return: what the redo changed for the device, None if there was nothing to redo (see `undo`)"""
-        step = self.history.redo(_shown_by(session))
+        step = self.history.redo(_scope(session, scope))
         return None if step is None else self._restore(session, step, step.after, ChangeKind.REDO)
 
     def _restore(self, session: "PlateSession", step: Step[DraftState], state: DraftState, kind: ChangeKind) -> DraftChange:
@@ -447,9 +449,9 @@ class ConfigDraft:
                 self._dirty_parts.discard(key)
 
 
-def _shown_by(session: "PlateSession") -> FrozenSet[str]:
-    """:return: the keys of the files and parts a device shows: those its undo and redo look at"""
-    return frozenset(session.file_keys) | frozenset(session.part_keys)
+def _scope(session: "PlateSession", scope: Optional[FrozenSet[str]]) -> FrozenSet[str]:
+    """:return: the keys of the files and parts an undo or redo looks at: the scope, by default all files the device shows"""
+    return frozenset(session.file_keys) | frozenset(session.part_keys) if scope is None else scope
 
 
 def _restored_objects(
