@@ -26,6 +26,7 @@ from openhasp_config_manager.gui.domain.gui_state import (
     GuiStateFile,
     now,
 )
+from openhasp_config_manager.gui.domain.draft.config_draft import ConfigDraft
 from openhasp_config_manager.gui.domain.draft.session import PlateSession
 from openhasp_config_manager.gui.qt.components import ThemedIcons
 from openhasp_config_manager.gui.qt.config_watcher import ConfigWatcher
@@ -68,6 +69,8 @@ class MainWindow(QMainWindow):
         self.config_manager = config_manager
         self.cfg_root = Path(config_manager.cfg_root).resolve()
         self.devices: List[Device] = []
+        # the files as the drafts have them, shared by the drafts of all devices: a file is loaded once
+        self.config_draft = ConfigDraft()
         # one draft per (device name, cmd component): the Device objects are created anew on every reload
         self.sessions: Dict[Tuple[str, str], PlateSession] = {}
         self.device: Optional[Device] = None
@@ -639,7 +642,8 @@ class MainWindow(QMainWindow):
             if alone is not None:
                 self._show_part_alone(alone)
             return
-        self.sessions.pop(self.session_key)
+        # its files (also those other devices show) are as on disk afterwards
+        self.sessions.pop(self.session_key).discard()
         self._page_after_reload[self.session_key] = self.page_layout_editor_widget.current_index
         self.on_device_selected(self.device.name)
 
@@ -656,7 +660,7 @@ class MainWindow(QMainWindow):
             part_includers=loaded.part_includers,
         )
         key = (loaded.device.name, pages_data.name)
-        session = self.sessions.get(key) or PlateSession(device=loaded.device)
+        session = self.sessions.get(key) or PlateSession(device=loaded.device, config=self.config_draft)
         # a draft without changes follows the files on disk, one with changes is kept (Save detects conflicts)
         if not session.is_loaded or not session.is_dirty:
             session.load(loaded.components, loaded.renderer)

@@ -1,4 +1,4 @@
-"""The data of a draft: what a `PlateSession` is made of and what it reports about its changes."""
+"""The data of a draft: what a `ConfigDraft` and its `PlateSession`s are made of and what they report about their changes."""
 
 from dataclasses import dataclass, field
 from enum import Enum
@@ -120,7 +120,10 @@ class DraftEntry:
 
 @dataclass
 class PartObject:
-    """An object of a part (or an `!include` in it) in the draft: the included objects of all its instances share it."""
+    """
+    An object of a part (or an `!include` in it) in the draft: the included objects of all its instances share it. Also an
+    object of a page file (`FileDraft`): the rendered objects of all devices that show the file share it.
+    """
 
     # tells it apart while its index changes
     uid: int
@@ -162,28 +165,34 @@ class PartInstance:
     steps: Tuple[StepKey, ...]
 
 
-class DraftItem(NamedTuple):
-    """An object of the draft in an undo state, see `DraftEntry`."""
+class FileState(NamedTuple):
+    """A file of the draft (a page file or a part) in an undo state. The sources in it are shared with other states: never change them."""
 
-    uid: int
-    index: Optional[int]
-    # None for an included object: its source is the one of its `PartObject` in the state
-    source: Optional[Dict[str, Any]]
-    origin: Optional[ObjectOrigin]
-    scope: Optional[Dict[str, Any]]
-    instance: Optional[Tuple[Tuple[StepKey, ...], int]]
+    # (uid, index in the file (None for an object added in the draft), source) of its objects, in the order of the draft:
+    # of a page file without its directives, of a part with them
+    objects: Tuple[Tuple[int, Optional[int], Dict[str, Any]], ...]
+    # the index of a directive (`!include`) in the file -> the directive as the draft has it; empty for a part
+    directives: Dict[int, Dict[str, Any]]
 
 
 @dataclass(frozen=True)
 class DraftState:
-    """The draft, for undo. The sources in it are shared with other states: never change them."""
+    """
+    The draft, for undo: every file of a `ConfigDraft`, each on its own. A file that didn't change is the same `FileState`
+    in the states before and after an edit (see `changed`), so the states share it.
+    """
 
-    # per component key: its objects, in order
-    objects: Dict[str, Tuple[DraftItem, ...]]
-    # per component key: the index of a directive (`!include`) in the source file -> the directive as the draft has it
-    directives: Dict[str, Dict[int, Dict[str, Any]]]
-    # per part key: (uid, index in the part file, source) of its objects, in order
-    parts: Dict[str, Tuple[Tuple[int, Optional[int], Dict[str, Any]], ...]] = field(default_factory=dict)
+    # per component key (its path): the page file
+    files: Dict[str, FileState]
+    # per part key (its path): the part
+    parts: Dict[str, FileState] = field(default_factory=dict)
+
+    def changed(self, other: "DraftState") -> Tuple[Set[str], Set[str]]:
+        """:return: the keys of the files and of the parts that differ in the other state"""
+        return (
+            {key for key in self.files.keys() | other.files.keys() if self.files.get(key) is not other.files.get(key)},
+            {key for key in self.parts.keys() | other.parts.keys() if self.parts.get(key) is not other.parts.get(key)},
+        )
 
 
 class ChangeKind(Enum):
