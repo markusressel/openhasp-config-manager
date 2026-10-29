@@ -670,6 +670,42 @@ documentation: https://openhasp.haswitchplate.com/latest/commands/
 > openhasp-config-manager cmd -c ./openhasp-configs -d plate35 -C backlight -p "{\"state\":\"on\",\"brightness\":128}"
 ```
 
+## Using the config from code
+
+`openhasp_config_manager.model` gives other Python code, e.g. the code-defined pages of
+[haad](openhasp_config_manager/haad/layout/README.md), the variables and the parts of a config directory as one device sees them,
+rendered exactly like a deployment renders them. It doesn't need Qt.
+
+```python
+from pathlib import Path
+
+from openhasp_config_manager.model import ConfigModel
+
+model = ConfigModel.load(Path("./openhasp-configs"), "plate35")
+
+model.device.screen.width  # after rotation, like `device.screen.width` in the templates
+model.variables()["common"]["margin"]  # the variables of common/ on this device: computed, with the overrides of the device
+model.variables("common/page/mk")  # the variables of another path, like `vars -p common/page/mk -d plate35`
+
+# the objects of one instance of a part, as an `!include` of it with these vars in a file of common/ renders them on page 4
+card = {"obj": "obj", "x": 4, "y": 33, "w": 312, "h": 215}
+for obj in model.render_part(
+    "common/parts/tile/tile.jsonl", page=4, vars={"tile": {"id": 29, "caption": "Elapsed"}}, objects={4: card}
+):
+    print(obj.jsonl, model.describe(obj.origin))
+```
+
+* `render_part` renders a part with the variables of the device, its page as `page_index` and `vars`: templates, percentages in
+  pixels, `theme.obj.*`, validation. `objects` are the other objects of the page by id, as they are sent to the plate: `b4` in the
+  part is one of them (or of the part itself). The objects that the files of the device have on that page don't count, the page
+  replaces them.
+* `expand_part` gives the page, id and type of the objects of an instance before they are rendered: the ids of a part come from
+  its variables alone.
+* Errors are those of `check` and a deployment (`IncludeExpansionError`, `IncludedObjectError`, `TemplateRenderError`). Nothing
+  is written, neither to the config directory nor to a plate.
+* `load()` reads the files once: load the model again after the config changed.
+* `model.device` has the name, folder, IP, screen and the `gui` and `hasp` settings of the device, not its credentials.
+
 ## AppDaemon Integration Utilities
 
 If you want to integrate your openHASP devices with [AppDaemon](https://github.com/AppDaemon/appdaemon), openhasp-config-manager contains

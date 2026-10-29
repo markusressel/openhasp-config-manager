@@ -231,6 +231,45 @@ class DeviceProcessor:
             raise IncludeExpansionError(expansion.errors, self.config_dir)
         return "\n".join(json.dumps(self._render_expanded(obj, template_vars), indent=None) for obj in expansion.objects)
 
+    def expand_sources(self, file: Path, sources: List[Dict[str, Any]]) -> Expansion:
+        """
+        Replace the directives of objects that are not in a file of the device (e.g. a page defined in code, see
+        `openhasp_config_manager.model`), as if they were the objects of a jsonl file at `file`: its variables are those of
+        that path (see `path_variables`), its lines those of one object per line.
+        :param file: a path in the config directory, which doesn't have to exist
+        :param sources: the objects, as written in a file (see parse_jsonl_objects)
+        :return: the objects in their order, and the errors of the directives (see `expand_includes`)
+        """
+        return self.expand_jsonl_objects(self._source_component(file, sources), sources)
+
+    def render_sources(
+        self, file: Path, sources: List[Dict[str, Any]], replaced_page: Optional[int] = None
+    ) -> List[Tuple[ExpandedObject, Dict[str, Any]]]:
+        """
+        Renders objects that are not in a file of the device like the objects of a file at `file` are rendered on a
+        deployment (see `expand_sources`): the object references (`pXbY`, `bY`, `this`) see the objects of the files of the
+        device and these objects, every object goes through the templates and the object processors.
+        :param replaced_page: a page these objects replace on the plate (e.g. a page that is cleared and pushed): the
+            objects of the files of the device on that page are not in the object references, so `bY` is one of `sources`
+        :return: every object after the directives are replaced, with its rendered object
+        :raises IncludeExpansionError: if a directive has an error
+        :raises IncludedObjectError: if an object of a part can't be rendered
+        """
+        component = self._source_component(file, sources)
+        expansion = self.expand_jsonl_objects(component, sources)
+        if expansion.errors:
+            raise IncludeExpansionError(expansion.errors, self.config_dir)
+        template_vars = self._compute_jsonl_template_variables(
+            self._device, component, {component.path: sources}, replaced_page
+        )
+        return [(obj, self._render_expanded(obj, template_vars)) for obj in expansion.objects]
+
+    @staticmethod
+    def _source_component(file: Path, sources: List[Dict[str, Any]]) -> JsonlComponent:
+        """A component for objects that are in no file: one object per line, so the lines of its errors are the objects."""
+        content = "\n".join(json.dumps(source) for source in sources)
+        return JsonlComponent(name=Path(file).name, type="jsonl", path=Path(file), content=content)
+
     def _render_expanded(self, obj: ExpandedObject, template_vars: Dict[str, Any]) -> Dict[str, Any]:
         if not obj.origin.is_included:
             return self.render_jsonl_object(obj.source, template_vars)
@@ -243,20 +282,30 @@ class DeviceProcessor:
         return render_template(component.content, template_vars)
 
     def _compute_jsonl_template_variables(
-        self, device: Device, component: Component, draft_objects: Optional[Dict[Path, List[Dict[str, Any]]]] = None
+        self,
+        device: Device,
+        component: Component,
+        draft_objects: Optional[Dict[Path, List[Dict[str, Any]]]] = None,
+        replaced_page: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
         Computes a map of "variable" -> "evaluated value in the given path context" for the given component.
 
-        :param component: the component to use as a context for evaluating template variables
+        :param component: the component to use as a context for evaluating template variables; one that was not added to
+            this processor (see `render_sources`) needs its objects in `draft_objects`
+        :param replaced_page: leaves the objects of the other components on this page out (see `render_sources`)
         :return: map of "variable" -> "evaluated value in the given path context"
         """
         result = {}
 
-        # object specific variables for all components that the processor currently knows about
-        sorted_components = list(sorted(self._jsonl_components, key=lambda x: x == component))
-        assert sorted_components[-1] == component
+        # object specific variables for all components that the processor currently knows about, the component itself last
+        sorted_components = [c for c in self._jsonl_components if c != component] + [component]
         part_paths = self.part_paths()
+        if component not in self._jsonl_components:
+            # the parts of objects that are in no file only count through them, like the parts of the files
+            part_paths = part_paths | {
+                Path(self.config_dir, path).resolve() for path in directive_paths(draft_objects[component.path])
+            }
         for c in sorted_components:
             # the objects of a part are in the variables through the files that include it (and its own when it is rendered)
             if c != component and Path(c.path).resolve() in part_paths:
@@ -280,6 +329,12 @@ class DeviceProcessor:
                 convert=self._object_value,
                 entry_vars=entry_vars,
             )
+            if replaced_page is not None and c != component:
+                rendered_template_vars = {
+                    name: value
+                    for name, value in rendered_template_vars.items()
+                    if not (_OBJECT_NAME.fullmatch(name) and name.startswith(f"p{replaced_page}b"))
+                }
             # what the objects add, without overriding anything
             add_missing_keys(result, rendered_template_vars)
 

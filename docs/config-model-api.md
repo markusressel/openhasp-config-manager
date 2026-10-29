@@ -1,6 +1,7 @@
 # Design: the config as an API for code-defined pages
 
-Status: proposal, not implemented.
+Status: the first slice, steps 1 and 2, is implemented (`openhasp_config_manager/model/`, `Part` in
+`openhasp_config_manager/haad/layout/components.py`, see "Decisions made during implementation"). Step 3 and "Later" are not.
 
 ## Motivation
 
@@ -38,7 +39,7 @@ class ConfigModel:
     @staticmethod
     def load(config_dir: Path, device: str) -> "ConfigModel": ...
 
-    device: Device                      # name, screen (after rotation), config.json without its secrets
+    device: Device  # name, screen (after rotation), config.json without its secrets
 
     def variables(self, path: str = "common") -> Mapping[str, Any]:
         """The computed variables of a path for this device, like `vars -p <path> -d <device>`, with `device`."""
@@ -53,7 +54,9 @@ class ConfigModel:
         """A part: its entries, its defaults (the variable files of its folders) and its parameters (the names its templates
         use that no variable file defines, e.g. `tile.caption`)."""
 
-    def render_part(self, path: str, *, page: int, vars: Mapping[str, Any], objects: Mapping[int, Mapping] = {}) -> List[RenderedObject]:
+    def render_part(
+        self, path: str, *, page: int, vars: Mapping[str, Any], objects: Mapping[int, Mapping] = {}
+    ) -> List[RenderedObject]:
         """The objects of one instance of a part, as a deployment would send them: templates rendered, percentages in pixels,
         theme applied, validated. `objects`: other objects of the page (by id), for the references of the part (`b4.x`)."""
 
@@ -63,8 +66,8 @@ class ConfigModel:
 
 @dataclass(frozen=True)
 class RenderedObject:
-    jsonl: Mapping[str, Any]            # page, id, obj, ...
-    origin: ObjectOrigin                # the part file and line, the chain of includes (see include-directive.md)
+    jsonl: Mapping[str, Any]  # page, id, obj, ...
+    origin: ObjectOrigin  # the part file and line, the chain of includes (see include-directive.md)
 ```
 
 - Variables and parts are rendered with the variables of the device, as on a deployment: a part in `common/` sees the variables of the
@@ -139,6 +142,64 @@ class MarkusCodePageController(PageController):
 3. **The device of a plate**: a plate uses the device folder of its name. Plates without a `config_dir` can't use parts.
 4. **Module**: `openhasp_config_manager.model`: a model of the config directory that is read, rendered, and later written
    back.
+
+## Decisions made during implementation
+
+What the note above didn't settle, as it was decided for the first slice, with the alternative that was not taken:
+
+1. **How `render_part` reuses the pipeline**: it renders a virtual file `common/<code page N>.jsonl` of the device, which has the
+   given `objects` and one `{"!include": path, "vars": {...vars, "page_index": N}}`, through the same
+   `DeviceProcessor` as `generate` (`DeviceProcessor.render_sources`), and keeps the included objects. So the instance scope, the
+   object references, `ObjectDimensionsProcessor`, `ObjectThemeProcessor` and `JsonlObjectValidator` are the deployment's, and
+   a test compares a rendered part with the `generate` output of the same `!include`. Not taken: a second entry point into
+   `expand_includes` with its own scope and reference handling, which could drift from the deployment.
+2. **The other objects of the page**: the objects that the device's own files have on page N are not visible to the part
+   (`replaced_page`): the code page replaces them, and `b4` must be the code page's `b4`. The objects of the other pages stay
+   visible, as on a deployment. Not taken: all objects of the device, which would let `b4` silently resolve to an object of a
+   JSONL page that the code page replaces.
+3. **`page_index` is the page's**: `vars` can't set `page_index` (raises `ValueError`), and an object of the part on another page,
+   or a page object in `objects` with another page or id than its key, raises. Not taken: letting a part place objects on other
+   pages, which a code page can't push.
+4. **`expand_part`** (not in the note): `ConfigModel.expand_part(path, *, page, vars) -> List[PartObject]` gives the page, id and
+   type (`obj`) of every object of an instance, from the include expansion alone. The page needs the ids (to skip them) and the
+   types (for the object controllers) when it is mounted, before the layout pass that gives the rectangles `render_part`
+   needs. Not taken: rendering the part twice, once with a dummy `area`, which breaks for parts whose ids or types depend on it.
+5. **`describe(origin)`**: `ConfigModel.describe(origin) -> str` names where an object comes from
+   (`common/parts/header/header.jsonl:3 > common/parts/header/label.jsonl:2`) without the virtual file. It is the declaration of
+   the part's objects in the layout dumps and errors.
+6. **`Device` has no credentials**: `model.device` is a frozen `Device(name, path, ip, screen, gui, hasp)`, with the screen after
+   rotation. Not taken: the `Config` of `config.json` with blanked secrets, which still hands out a type with password fields.
+7. **The theme**: the part's objects are rendered with the config's theme (`theme.obj.*`, by `ObjectThemeProcessor`), and
+   `render_page` applies only `ObjectDimensionsProcessor` to them, not the page's `Theme`, so the config's theme is not applied
+   twice and the page's can't override it.
+8. **Binding**: `LabelObjectController.bind_text(entity=, attribute=, get_state=, text=, trigger=)` instead of the note's
+   `part.obj(10).bind(entity=...)`, which would collide with the existing `ObjectController.bind()` (the binding to the plate).
+   It takes the arguments of `Label(...)`, can only be called once and before the label is initialized (raises otherwise). `bind=`
+   stays for later.
+9. **`part.obj(id, cls)`**: the optional `cls` checks the type (`TypeError`) and types the result, e.g.
+   `part.obj(10, LabelObjectController)`. An unknown id raises `ValueError`, a call before the mount `RuntimeError`.
+10. **A part can't move**: it is rendered for the rectangle it has when the page is mounted. A later layout pass that moves it
+    (a node before it collapsing through a bound `hidden`) raises. Not taken: rendering it again and sending the moved objects,
+    which needs the part's objects to be re-rendered with the new `area` and is left for when a page needs it.
+11. **Where a part can't be**: in a `Repeat` (decision 1 above, later), in a `Panel` (the part's objects are placed relative to the
+    screen, not to an object) and in `Page(external=True)` (its objects are pushed). Each raises when the `Part` is created.
+12. **The screen**: the plate's screen must be the screen of the device in the config (after rotation), or the part raises when
+    the page is mounted: `area` and `common.*` would be computed for another screen.
+13. **Templates in `vars` and `objects`**: they are rendered like the `vars` of an `!include` in a file (with the device's
+    variables), because the virtual file is such a file. Not taken: passing them as literal values.
+14. **Loading**: `OpenHaspController.initialize()` loads the model (`self.config_model`) for its `config_dir` before it reads
+    `plate_config`, so a plate config can be built from the variables (haad-home's `MarkusStyle.of(self.config_model).theme`), and
+    passes it to the `PlateController` (`plate.config_model`). The `DeploymentController` still analyzes the config separately, so
+    a start reads the config twice. Not taken: sharing one `ConfigManager` between them, which would tie the model to the
+    deployment's output directory.
+15. **The "layout" of a part that ignores `area`**: the header parts place themselves from `common.header.*`. haad-home puts them
+    in a `Stack` with a fixed `size=` (the header height), together with a `Row` for the items on the right of the bar, instead of
+    `at=Rect(0, 0, 0, 0)` and a second `size=` as in the example above.
+16. **haad-home's style**: `theme.py` has a `MarkusStyle` per plate (`MarkusStyle.of(model)`, `MarkusStyled.style` on pages)
+    instead of module constants, because the variables are those of the plate's device (e.g. `wt32sc01plus_2` overrides
+    `common.margin`). Its pages call `super().register_objects()` first, which binds the time of the header.
+17. **`PlateController.declare_objects(page)`** is public (was `_declare_objects`): haad-home's tests declare and render a page
+    without starting the plate controller, which would connect to the plate.
 
 ## Later
 

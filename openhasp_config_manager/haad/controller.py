@@ -1,9 +1,10 @@
 import asyncio
 import traceback
 from datetime import timedelta
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Optional
 
 from openhasp_config_manager.haad.page.state_updater import StateUpdater
+from openhasp_config_manager.model import ConfigModel
 from openhasp_config_manager.haad.plate import PlateConfig, PlateController
 from openhasp_config_manager.haad.plate.device_factory import MqttBroker, build_device
 
@@ -22,9 +23,11 @@ class OpenHaspController(HaadController):
     def __init__(self, context: HaadContext):
         super().__init__(context)
         self._lwt_task = None
+        self.config_model: Optional[ConfigModel] = None
 
     @property
     def plate_config(self) -> PlateConfig:
+        """The configuration of the plate. It can use `config_model` (None for a plate without a config_dir)."""
         return PlateConfig()
 
     async def initialize(self):
@@ -33,6 +36,9 @@ class OpenHaspController(HaadController):
 
         self._config_dir = self.context.config.config_dir
         self._output_dir = self.context.config.output_dir
+        # the config as the plate's device sees it (a plate uses the device folder of its name), for the parts of its
+        # code-defined pages and for `plate_config`
+        self.config_model = None if self._config_dir is None else ConfigModel.load(self._config_dir, self._name)
 
         plate_config = self.plate_config
         device = None
@@ -61,6 +67,7 @@ class OpenHaspController(HaadController):
             output_dir=self._output_dir,
             device=device,
             layout_dump_dir=self.context.config.layout_dump_dir,
+            config_model=self.config_model,
         )
 
         await self.before_setup_plate()

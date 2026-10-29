@@ -10,7 +10,21 @@ import asyncio
 import math
 import os
 import sys
-from typing import Any, Awaitable, Callable, Dict, Generic, Hashable, List, Literal, Optional, Sequence, TypeVar, TYPE_CHECKING
+from typing import (
+    Any,
+    Awaitable,
+    Callable,
+    Dict,
+    Generic,
+    Hashable,
+    List,
+    Literal,
+    Mapping,
+    Optional,
+    Sequence,
+    TypeVar,
+    TYPE_CHECKING,
+)
 
 from haad.triggers.resolver import TriggerInput
 from haad.util.composition import Composable
@@ -26,6 +40,7 @@ from openhasp_config_manager.haad.objects.switch import SwitchObjectController
 
 if TYPE_CHECKING:
     from openhasp_config_manager.haad.page import EntityRef, PageController
+    from openhasp_config_manager.model import PartObject
 
 T = TypeVar("T", bound=ObjectController)
 
@@ -230,6 +245,11 @@ class Page(Column):
         """relayout() for a caller that holds `lock`."""
         self.layout(self.rect.w, self.rect.h)
         for node in self.nodes():
+            if isinstance(node, Part) and node.rect != node._area:
+                raise ValueError(
+                    f"Part({node.path}) ({node.declaration}) moved from {node._area} to {node.rect}: a part is rendered for "
+                    f"the rectangle it has when the page is mounted, it can't move"
+                )
             obj = node._obj if isinstance(node, _Mounted) else None
             # collapsed nodes keep their old rect
             if obj is None or obj.rect is None or node.rect == obj.rect:
@@ -282,6 +302,11 @@ class Page(Column):
         page.reserve_ids([node.obj_id for node in self.nodes() if isinstance(node, (Leaf, Panel)) and node.obj_id is not None])
         if not self.external and self.rect is None:
             raise ValueError("Page.mount() of an owned page needs a layout() first")
+        # the ids of the parts come from the config: they are known before the ids of the other objects are allocated
+        parts = [node for node in self.nodes() if isinstance(node, Part)]
+        for part in parts:
+            part.expand(page)
+        page.reserve_ids([obj_id for part in parts for obj_id in part.ids])
         await self.mount_nodes(self.children, parent=None)
 
     async def mount_nodes(self, nodes: Sequence[LayoutNode], parent: Optional[ObjectController]):
@@ -292,6 +317,8 @@ class Page(Column):
             elif isinstance(child, Panel):
                 await child._mount(self.controller, child.rect, parent)
                 await self.mount_nodes(child.children, child.obj)
+            elif isinstance(child, Part):
+                await child._mount(self.controller)
             else:
                 await self.mount_nodes(child.children, parent)
 
@@ -612,6 +639,144 @@ class Obj(Leaf[GenericObjectController]):
 
     async def _add(self, page: "PageController", common: Dict[str, Any]) -> GenericObjectController:
         return await page.add_object(self.type, **common)
+
+
+# the variable of a part with the rectangle the layout gives it, see `Part`
+AREA = "area"
+
+# the add_* method of PageController that creates the object controller of an object type of a part; other types: add_object()
+_PART_OBJECT_METHODS = {
+    "label": "add_label",
+    "btn": "add_button",
+    "switch": "add_switch",
+    "slider": "add_slider",
+    "bar": "add_bar",
+    "img": "add_image",
+}
+
+
+class Part(LayoutNode):
+    """
+    The objects of a part of the plate's config directory (a `.jsonl` file for `!include`s, see the README of
+    openhasp-config-manager, "Including objects"), rendered like a deployment renders an `!include` of it with `vars`
+    (`ConfigModel.render_part`): with the variables of the plate's device, and the theme of the config (`theme.obj.*`), not
+    the plate's `Theme`. Needs a plate with a `config_dir`.
+
+    - **Placement**: the part gets the page as `page_index` and its rectangle as `area` (`area.x`, `area.y`, `area.w`,
+      `area.h`, relative to the screen) and places its objects itself: from `area`, or like the parts of JSONL pages from
+      `common.*` and other objects. A part that ignores `area` takes no space with `at=Rect(0, 0, 0, 0)`.
+    - **References**: its objects can refer to the objects of the page (`b4.x`: as they are rendered) and to each other. The
+      other nodes can't refer to them.
+    - **Ids**: the part computes them from its variables, as in the config. The page keeps them free when it allocates the
+      ids of its other objects; an explicit `obj_id` that is one of them raises.
+    - **Objects**: `obj(id)` is the object controller of one of its objects (the type of its `obj`: a
+      `LabelObjectController` for a label), from register_objects() on. They have no bindings: bind them with their methods
+      (e.g. `LabelObjectController.bind_text()`).
+
+    A part is rendered for the rectangle it has when the page is mounted, so it can't move later (a node before it that
+    collapses raises). It can't be in a `Repeat` (yet), a `Panel` (its objects are placed on the page) or a
+    `Page(external=True)` (its objects are pushed).
+    """
+
+    def __init__(self, path: str, vars: Optional[Mapping[str, Any]] = None, **sizing):
+        """
+        :param path: the part, relative to the config directory (as in an `!include`)
+        :param vars: the variables of the part, like the `vars` of an `!include` (templates in them are rendered)
+        :param sizing: size=, weight= or at=, like every node
+        """
+        super().__init__(**sizing)
+        node = self.parent
+        while node is not None:
+            if isinstance(node, Repeat):
+                raise ValueError(f"Part({path}) in a Repeat: the items of a list can't have parts (yet)")
+            if isinstance(node, Panel):
+                raise ValueError(f"Part({path}) in a Panel: the objects of a part are placed on the page, not in an object")
+            node = node.parent
+        if self.page.external:
+            raise ValueError(f"Part({path}) in Page(external=True): the objects of a part are pushed by haad")
+        self.path = path
+        self.vars: Dict[str, Any] = dict(vars or {})
+        if AREA in self.vars:
+            raise ValueError(f"Part({path}): '{AREA}' of a part is its rectangle in the layout, not in vars")
+        # set when the page is mounted: what the config knows of the part's objects before they are rendered, the
+        # rectangle they are rendered for, and their object controllers
+        self.part_objects: Optional[List["PartObject"]] = None
+        self._area: Optional[Rect] = None
+        self._objects: Dict[int, ObjectController] = {}
+
+    @property
+    def ids(self) -> List[int]:
+        """The ids of the part's objects, known from the page's mount() on."""
+        if self.part_objects is None:
+            raise RuntimeError(
+                f"Part({self.path}) ({self.declaration}) is not expanded yet: its ids are known from mount() on"
+            )
+        return [o.id for o in self.part_objects]
+
+    def obj(self, obj_id: int, cls: type[T] = ObjectController) -> T:
+        """
+        The object controller of an object of the part (available from register_objects() on).
+        :param obj_id: the id of the object, as the part computes it
+        :param cls: the type it must have, e.g. LabelObjectController for a label
+        :raises RuntimeError: if the page is not mounted yet
+        :raises ValueError: if the part has no object with that id
+        :raises TypeError: if the object is no `cls`
+        """
+        if not self._objects:
+            raise RuntimeError(
+                f"Part({self.path}) ({self.declaration}) is not mounted yet: use .obj() from register_objects() on"
+            )
+        if obj_id not in self._objects:
+            raise ValueError(f"Part({self.path}) has no object {obj_id}, only: {', '.join(map(str, self._objects))}")
+        obj = self._objects[obj_id]
+        if not isinstance(obj, cls):
+            raise TypeError(f"Object {obj.object_id} of Part({self.path}) is a {type(obj).__name__}, not a {cls.__name__}")
+        return obj
+
+    def _instance_vars(self) -> Dict[str, Any]:
+        area = self._area
+        return {**self.vars, AREA: {"x": area.x, "y": area.y, "w": area.w, "h": area.h}}
+
+    def expand(self, page: "PageController"):
+        """Reads the ids and types of the part's objects from the config, for the rectangle the part has now (see mount())."""
+        model = page.plate.config_model
+        if model is None:
+            raise ValueError(f"Part({self.path}) ({self.declaration}): parts need a plate with a config_dir")
+        screen = model.device.screen
+        if (page.plate.screen.width, page.plate.screen.height) != (screen.width, screen.height):
+            raise ValueError(
+                f"Part({self.path}) ({self.declaration}): the plate's screen {page.plate.screen} is not the one of its device "
+                f"in the config ({screen.width}x{screen.height}), which the part is rendered for"
+            )
+        self._area = self.rect
+        objects = model.expand_part(self.path, page=page.index, vars=self._instance_vars())
+        for part_object in objects:
+            where = f"Part({self.path}) ({self.declaration}): {model.describe(part_object.origin)}"
+            if part_object.page != page.index:
+                raise ValueError(f"{where}: the object is on page {part_object.page}, not on page {page.index} of the part")
+            if part_object.obj is None:
+                raise ValueError(f"{where}: an object of a part on a page pushed by haad needs an obj")
+        self.part_objects = objects
+
+    async def _mount(self, page: "PageController"):
+        model = page.plate.config_model
+        for part_object in self.part_objects:
+            method = _PART_OBJECT_METHODS.get(part_object.obj)
+            if method is not None:
+                obj = await getattr(page, method)(obj_id=part_object.id)
+            else:
+                obj = await page.add_object(part_object.obj, obj_id=part_object.id)
+            obj.part = self
+            obj.declaration = f"{self.declaration} Part {model.describe(part_object.origin)}"
+            self._objects[part_object.id] = obj
+
+    def render(self, page: "PageController", objects: Mapping[int, Mapping[str, Any]]) -> Dict[int, Dict[str, Any]]:
+        """
+        The JSONL objects of the part (see `ConfigModel.render_part`), by id.
+        :param objects: the other objects of the page by id, as they are rendered, for the references of the part
+        """
+        rendered = page.plate.config_model.render_part(self.path, page=page.index, vars=self._instance_vars(), objects=objects)
+        return {obj.jsonl["id"]: dict(obj.jsonl) for obj in rendered}
 
 
 def _declaration_site() -> str:

@@ -20,7 +20,8 @@ def render_page(page, theme: Theme, config: Config, screen_width: int, screen_he
     """
     The JSONL objects of a page's owned objects, in declaration order, preceded by the page object (p<N>b0) with the
     theme's background (except for page 0, which lies over every page). Sets `jsonl` of every object. A page without
-    owned objects renders to nothing.
+    owned objects renders to nothing. The objects of a `Part` are rendered by the config (see `Part.render`), after the
+    other objects.
 
     :param page: the PageController
     :param theme: default properties per object type
@@ -42,8 +43,9 @@ def render_page(page, theme: Theme, config: Config, screen_width: int, screen_he
         )
 
     theme_vars = {"theme": {"obj": {k: dict(v) for k, v in theme.obj.items()}}}
-    result = [] if page.index == 0 else [{"page": page.index, "id": 0, "bg_color": theme.background_color, "bg_grad_dir": 0}]
     for obj in owned:
+        if obj.part is not None:
+            continue
         if obj.parent is not None:
             width, height = obj.parent.jsonl["w"], obj.parent.jsonl["h"]
         else:
@@ -57,8 +59,18 @@ def render_page(page, theme: Theme, config: Config, screen_width: int, screen_he
         data = ObjectThemeProcessor().process(data, config, theme_vars)
         data = ObjectDimensionsProcessor().process(data, config, theme_vars)
         obj.jsonl = data
-        result.append(data)
 
+    # the parts after the other objects, which they can refer to (and to the parts before them). The config renders them,
+    # with its theme: the page's theme is not applied to them. Property changes before the push are applied on top.
+    parts = list(dict.fromkeys(obj.part for obj in owned if obj.part is not None))
+    for position, part in enumerate(parts):
+        rendered = {o.obj_id: o.jsonl for o in owned if o.part is None or o.part in parts[:position]}
+        for obj_id, data in part.render(page, rendered).items():
+            obj = page.objects[obj_id]
+            obj.jsonl = ObjectDimensionsProcessor().process({**data, **obj.static_props}, config, {})
+
+    result = [] if page.index == 0 else [{"page": page.index, "id": 0, "bg_color": theme.background_color, "bg_grad_dir": 0}]
+    result.extend(obj.jsonl for obj in owned)
     JsonlObjectValidator().validate("\n".join(orjson.dumps(o).decode("utf-8") for o in result))
     for line in result:
         size = len(orjson.dumps(line))
