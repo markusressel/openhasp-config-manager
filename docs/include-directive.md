@@ -213,6 +213,17 @@ These were not settled beforehand. Each names the alternative that was not taken
   `"hidden": "{{ 1 if ... else 0 }}"` was sent as `0` and is now sent as `"0"`. The plate converts every value to text when it
   reads JSONL, so this changes nothing there (a deploy uploads such files once). Alternative: a list of boolean properties that
   are converted too.
+- **`for` values see only the including scope**, not `vars` (those are rendered per combination, after the values are known).
+- **A directive with an error includes nothing**, the others of the file are still expanded, and every error is reported (not
+  only the first). A cycle stops at the directive that closes it; the objects before it stay.
+- **At most 1000 instances per directive** (`MAX_INSTANCES`): more is a mistake (openHASP has 12 pages with ids up to 254), and
+  a `for` over `range(10**9)` must not hang a deploy.
+- **An id collision is reported once per object that repeats the name of an object before it** (at the innermost directive
+  of that object), or for the included object if only the first one is included, so a collision isn't reported twice.
+- **Errors in the objects of a part** fail the deploy with the place in the part and the chain (`IncludedObjectError`); the
+  errors of directives are collected first (`IncludeExpansionError`) and reported together.
+- **The defaults of a part come from the YAML files of its folders.** They apply to every file in that folder, like all
+  variable files do: put each part with its own defaults in a folder of its own if they shouldn't be shared.
 - **Problems of included objects point at the part** (file and line of the object in the part, the chain in the message and in
   the `include` field), because the text that has to change is usually there. Errors of a directive point at the directive.
 

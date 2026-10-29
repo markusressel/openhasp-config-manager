@@ -1,3 +1,5 @@
+import json
+import shutil
 from pathlib import Path
 
 from openhasp_config_manager.manager import ConfigManager
@@ -65,3 +67,32 @@ class TestConfigManager(TestBase):
         assert "global_var_value" in content
         assert "global_value" not in content
         assert "test_device_value" in content
+
+    def test_a_file_that_is_only_included_is_not_deployed_on_its_own(self, tmp_path):
+        # GIVEN: a page includes a part that no .cmd file runs
+        cfg_root = tmp_path / "cfg"
+        shutil.copytree(self.cfg_root, cfg_root)
+        (cfg_root / "common" / "parts").mkdir()
+        (cfg_root / "common" / "parts" / "dot.jsonl").write_text(
+            '{"page": 9, "id": "{{ id }}", "obj": "obj", "x": "{{ id * 2 }}"}\n'
+        )
+        (cfg_root / "devices" / "test_device" / "home" / "dots.jsonl").write_text(
+            '{"!include": "common/parts/dot.jsonl", "for": {"id": [1, 2]}}\n'
+        )
+        home_cmd = cfg_root / "devices" / "test_device" / "home.cmd"
+        home_cmd.write_text(home_cmd.read_text().rstrip("\n") + "\nrun L:/home_dots.jsonl\n")
+        variable_manager = VariableManager(cfg_root)
+        variable_manager.read()
+        manager = ConfigManager(cfg_root, tmp_path / "output", variable_manager)
+
+        # WHEN
+        for device in manager.analyze():
+            manager.process(device)
+
+        # THEN
+        output = tmp_path / "output" / "test_device"
+        assert not (output / "common_parts_dot.jsonl").exists()
+        assert [json.loads(line) for line in (output / "home_dots.jsonl").read_text().splitlines()] == [
+            {"page": 9, "id": 1, "obj": "obj", "x": 2},
+            {"page": 9, "id": 2, "obj": "obj", "x": 4},
+        ]

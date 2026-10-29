@@ -153,6 +153,64 @@ class TestCheck:
         assert [issue.message for issue in issues] == ["No device matches the filter: nope"]
 
 
+class TestIncludes:
+    def _processing_errors(self, cfg_root):
+        _, issues = _check(cfg_root)
+        return [issue for issue in issues if issue.message.startswith("Can't process the file: ")]
+
+    def test_an_error_of_a_directive_has_the_file_and_line_of_the_directive_and_the_chain(self, cfg_root):
+        # GIVEN: the part includes a file that doesn't exist
+        (cfg_root / "common" / "parts").mkdir()
+        (cfg_root / "common" / "parts" / "row.jsonl").write_text(
+            '{"page": 9, "id": "{{ id }}"}\n{"!include": "common/parts/nope.jsonl"}\n'
+        )
+        _write(cfg_root, '{"page": 9, "id": 1}\n{"!include": "common/parts/row.jsonl", "for": {"id": [5]}}\n')
+
+        # WHEN
+        [issue] = self._processing_errors(cfg_root)
+
+        # THEN
+        assert issue.severity == Severity.ERROR
+        assert issue.message == "Can't process the file: The file to include doesn't exist: common/parts/nope.jsonl"
+        assert (issue.file, issue.line, issue.included_at) == (
+            "common/parts/row.jsonl",
+            2,
+            (f"{DEVICE}/editor.jsonl:2 (id=5)",),
+        )
+        assert str(issue).startswith("common/parts/row.jsonl:2: error: Can't process the file: The file to include")
+        assert str(issue).endswith(f"(included at {DEVICE}/editor.jsonl:2 (id=5)) [test_device]")
+
+    def test_every_error_of_the_directives_is_reported(self, cfg_root):
+        # GIVEN
+        _write(cfg_root, '{"!import": "a.jsonl"}\n{"!include": "a.json"}\n')
+
+        # WHEN
+        issues = self._processing_errors(cfg_root)
+
+        # THEN
+        assert [(issue.line, issue.included_at) for issue in issues] == [(1, None), (2, None)]
+
+    def test_an_object_of_a_part_that_cant_be_rendered_is_reported_in_the_part(self, cfg_root):
+        # GIVEN
+        (cfg_root / "common" / "dot.jsonl").write_text('// the dot\n{"page": 9, "id": 2, "x": "{{ \'a\' + 1 }}"}\n')
+        _write(cfg_root, '{"!include": "common/dot.jsonl"}\n')
+
+        # WHEN
+        [issue] = self._processing_errors(cfg_root)
+
+        # THEN
+        assert issue.message == 'Can\'t process the file: can only concatenate str (not "int") to str'
+        assert (issue.file, issue.line, issue.included_at) == ("common/dot.jsonl", 2, (f"{DEVICE}/editor.jsonl:1",))
+
+    def test_a_part_alone_is_not_checked(self, cfg_root):
+        # GIVEN: the part needs the variables of an instance
+        (cfg_root / "common" / "dot.jsonl").write_text('{"page": 9, "id": "{{ id }}", "x": "{{ id * 2 }}"}\n')
+        _write(cfg_root, '{"!include": "common/dot.jsonl", "vars": {"id": 3}}\n')
+
+        # THEN
+        assert self._processing_errors(cfg_root) == []
+
+
 class TestUnusedVariables:
     def _unused_file(self, cfg_root):
         _write(cfg_root, '{"page": 9, "id": 1, "obj": "label", "text": "{{ used }}"}\n')

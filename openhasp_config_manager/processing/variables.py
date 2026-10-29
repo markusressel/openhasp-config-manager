@@ -18,6 +18,11 @@ class VariableManager:
         self._cfg_root: Path = Path(cfg_root)
         self._path_vars: Dict[str, Dict] = {}
 
+    @property
+    def cfg_root(self) -> Path:
+        """:return: the config directory"""
+        return self._cfg_root
+
     def read(self):
         """
         Reads all variable definitions from the configuration directory.
