@@ -95,3 +95,38 @@ def test_an_exception_in_a_slot_is_reported_instead_of_aborting(monkeypatch):
         sys.excepthook(*sys.exc_info())
 
     assert printed and reported == [("Unexpected error (see the console)", "ValueError: boom")]
+
+
+def test_a_mode_the_plate_doesnt_know_is_a_warning_with_the_values_it_knows():
+    label = _obj(1, obj="label", mode="dot")
+
+    [problem] = _find([label])
+
+    assert problem.severity == Severity.WARNING
+    assert problem.obj is label
+    assert problem.message == (
+        "p1b1: mode: 'dot' is not one of: expand, break, dots, scroll, loop, crop (did you mean 'dots'?)"
+    )
+
+
+def test_known_values_have_no_problems():
+    objects = [
+        _obj(1, obj="label", mode="dots", align="center"),
+        # the plate ignores the case
+        _obj(2, obj="btn", mode="Scroll", align=3),
+        _obj(3, obj="cpicker", mode="hue"),
+        # mode means something else on a roller (true or false), and isn't checked
+        _obj(4, obj="roller", mode=True),
+        # a template that can't be rendered is a problem of its own
+        _obj(5, obj="label", mode="{{ missing }}"),
+    ]
+
+    assert _find(objects) == []
+
+
+@pytest.mark.parametrize("align", ["middle", 4, True])
+def test_an_align_the_plate_doesnt_know_is_a_warning(align):
+    [problem] = _find([_obj(1, obj="label", align=align)])
+
+    assert problem.severity == Severity.WARNING
+    assert problem.message.startswith(f"p1b1: align: {align!r} is not one of: left, center, right, auto, 0, 1, 2, 3")
