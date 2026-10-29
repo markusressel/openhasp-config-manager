@@ -8,10 +8,10 @@ from openhasp_config_manager.gui.domain.source.completion import (
     CompletionContext,
     complete,
     completion_context,
-    properties_for,
+    keys_for,
     property_insertion,
 )
-from openhasp_config_manager.gui.domain.source.docs import object_type_at_line, property_help
+from openhasp_config_manager.gui.domain.source.docs import directive_help, object_type_at_line, property_help
 from openhasp_config_manager.gui.domain.source.objects import object_at_line
 from openhasp_config_manager.gui.qt.widgets.hover_card import CardContent, HoverCard
 
@@ -37,6 +37,7 @@ class EditorCompletion(QObject):
         super().__init__(editor)
         self._editor = editor
         self._variables: Callable[[], List[str]] = lambda: []
+        self._include_paths: Callable[[], List[str]] = lambda: []
         self.completer = QCompleter(QStringListModel(self), editor)
         self.completer.setWidget(editor)
         self.completer.setCompletionMode(QCompleter.CompletionMode.PopupCompletion)
@@ -58,6 +59,10 @@ class EditorCompletion(QObject):
         """The names of the template variables that can be used in this file (asked when a template is typed)."""
         self._variables = variables
 
+    def set_include_paths(self, paths: Callable[[], List[str]]):
+        """The files an `!include` can name (asked when its path is typed)."""
+        self._include_paths = paths
+
     def show(self, force: bool = False):
         editor = self._editor
         before, _ = editor.edits.text_around_cursor()
@@ -71,8 +76,10 @@ class EditorCompletion(QObject):
         self._context = context
         self._object_type = object_type_at_line(editor.objects(), line_number)
         present = [prop.key for prop in found.properties] if found is not None else []
-        properties = properties_for(self._object_type, context.prefix, present)
-        words = complete(context, properties, self._variables())
+        directive = found is not None and found.is_directive
+        properties = keys_for(self._object_type, context.prefix, present, directive)
+        paths = self._include_paths() if context.kind == "include" else []
+        words = complete(context, properties, self._variables() if context.kind == "variable" else [], paths)
         if not words or (not force and not context.prefix):
             self.popup.hide()
             return
@@ -88,7 +95,7 @@ class EditorCompletion(QObject):
     def _show_docs(self, word: str):
         """Shows what the highlighted entry of the completion list is, next to the list."""
         popup = self.popup
-        found = property_help(word, self._object_type) if self._kind == "property" else None
+        found = (directive_help(word) or property_help(word, self._object_type)) if self._kind == "property" else None
         if found is None or not popup.isVisible():
             self.card.hide()
             return

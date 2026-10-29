@@ -1,4 +1,7 @@
-"""References from one file to another (`run L:/pages.jsonl` in a .cmd file), for Ctrl+click in the text editor. Qt-free."""
+"""
+References from one file to another (`run L:/pages.jsonl` in a .cmd file, the path of an `!include` in a .jsonl file), for
+Ctrl+click in the text editor. Qt-free.
+"""
 
 import re
 from dataclasses import dataclass
@@ -8,20 +11,26 @@ from typing import Iterable, List, Optional, Set
 from openhasp_config_manager.gui.domain.source.syntax import Language
 
 _REFERENCE = re.compile(r"L:/[^\s\"']+?\.(?:jsonl|cmd)(?=$|[\s\"'])")
+# the path of an `!include` (without its quotes)
+_INCLUDE = re.compile(r'"!include"\s*:\s*"([^"]+)"')
 
 
 @dataclass(frozen=True)
 class Link:
     start: int
     end: int
-    # the file name on the plate, without `L:/` (a file link), or the variable (a variable link)
+    # the file name on the plate, without `L:/` (a file link), the path of an `!include` (an include link), or the variable (a
+    # variable link)
     target: str
-    # "file" for a reference to a file, "variable" for a part of a variable in a template, "usages" for the key of a variable
+    # "file" for a reference to a file, "include" for the path of an `!include` (relative to the config directory), "variable" for
+    # a part of a variable in a template, "usages" for the key of a variable
     kind: str = "file"
 
 
 def find_links(line: str, language: Language) -> list:
     """:return: the references to files in a line"""
+    if language == Language.JSONL:
+        return [Link(match.start(1), match.end(1), match.group(1), kind="include") for match in _INCLUDE.finditer(line)]
     if language != Language.CMD:
         return []
     return [Link(match.start(), match.end(), match.group()[len("L:/") :]) for match in _REFERENCE.finditer(line)]
@@ -29,6 +38,11 @@ def find_links(line: str, language: Language) -> list:
 
 def link_at(line: str, column: int, language: Language) -> Optional[Link]:
     return next((link for link in find_links(line, language) if link.start <= column < link.end), None)
+
+
+def include_targets(config_dir: Path) -> List[str]:
+    """:return: the .jsonl files of a config directory as an `!include` names them, sorted, without hidden folders and files"""
+    return sorted(path.relative_to(config_dir).as_posix() for path in link_targets(config_dir) if path.suffix == ".jsonl")
 
 
 def plate_names(path: Path, config_dir: Path) -> Set[str]:

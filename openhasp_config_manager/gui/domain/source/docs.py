@@ -1,4 +1,7 @@
-"""Short explanations of the properties of openHASP objects, for the hover text of the text editor. Qt-free."""
+"""
+Short explanations of the properties of openHASP objects and of the directives of openhasp-config-manager (`!include`), for the
+hover text of the text editor. Qt-free.
+"""
 
 import re
 from dataclasses import dataclass, field, replace
@@ -142,6 +145,18 @@ def _documented(name: str, object_type: Optional[str]) -> Optional[str]:
 
 
 _DOCS_URL = "https://www.openhasp.com/0.7.0/design/"
+_INCLUDE_URL = "https://github.com/markusressel/openhasp-config-manager#including-objects"
+
+# the directive and its keys (see `processing/jsonl/includes.py`)
+DIRECTIVE_DOCS = {
+    "!include": "Replaced by the objects of another .jsonl file (a part), before anything is sent to the plate. The path is "
+    "relative to the config directory, e.g. `common/parts/tile.jsonl`. The part uses variables for what differs between its "
+    'instances, e.g. `"id": "{{ id }}"`. An object is either an openHASP object or a directive.',
+    "vars": 'The variables of the part for this `!include`, e.g. `{"id": 29, "caption": "Elapsed"}`. They win over the '
+    "variables of the file and of the folders of the part. A value can be a template, rendered with the variables of the file.",
+    "for": 'Include the part once for every value: `{"column": [0, 1, 2]}` or `{"dot": "{{ range(1, 6) }}"}`. With several '
+    "names, once for every combination (the first name changes slowest). The values win over `vars`.",
+}
 
 
 @dataclass(frozen=True)
@@ -189,6 +204,16 @@ def property_help(name: str, object_type: Optional[str] = None) -> Optional[Prop
     return PropertyHelp(name, base_text, kind, details, url)
 
 
+def directive_help(name: str) -> Optional[PropertyHelp]:
+    """:return: what a key of a directive object is (`!include`, `vars`, `for`), None if it is none of them"""
+    if name.startswith("!") and name not in DIRECTIVE_DOCS:
+        return PropertyHelp(name, "Unknown directive: the only directive is `!include`.", "Directive", [], _INCLUDE_URL)
+    if name not in DIRECTIVE_DOCS:
+        return None
+    kind = "Directive" if name.startswith("!") else "Key of an `!include`"
+    return PropertyHelp(name, DIRECTIVE_DOCS[name], kind, [], _INCLUDE_URL)
+
+
 def object_type_at_line(objects: List[SourceObject], line_number: int) -> Optional[str]:
     """:return: the `obj` of the object the line (starting at 1) is in, None if there is no object or it has no (single line) type"""
     found = object_at_line(objects, line_number)
@@ -204,8 +229,12 @@ def help_at(objects: List[SourceObject], line: str, line_number: int, column: in
     :return: the help for the property whose key is at a column, None if there is none or it is not known
     """
     for token in tokenize_line(line, Language.JSONL):
-        if token.kind == TokenKind.KEY and token.start <= column <= token.end:
-            return property_help(token.text(line).strip('"'), object_type_at_line(objects, line_number))
+        if token.kind in (TokenKind.KEY, TokenKind.DIRECTIVE) and token.start <= column <= token.end:
+            name = token.text(line).strip('"')
+            found = object_at_line(objects, line_number)
+            if name.startswith("!") or (found is not None and found.is_directive):
+                return directive_help(name)
+            return property_help(name, object_type_at_line(objects, line_number))
     return None
 
 

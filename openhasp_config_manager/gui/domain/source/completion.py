@@ -1,4 +1,7 @@
-"""What can be completed at the cursor in a file: property names of an object, and the variables inside of a template. Qt-free."""
+"""
+What can be completed at the cursor in a file: property names of an object, the variables inside of a template, and the path of
+an `!include`. Qt-free.
+"""
 
 import re
 from dataclasses import dataclass
@@ -46,10 +49,16 @@ def _is_style_variant(name: str) -> bool:
 OBJECT_PROPERTIES = sorted(name for name in _ALL_PROPERTIES if not _is_style_variant(name))
 
 
+# the path of an `!include` that is being typed, up to the cursor
+_INCLUDE_PATH = re.compile(r'"!include"\s*:\s*"([^"]*)$')
+# the keys of a directive object besides the directive itself
+DIRECTIVE_KEYS = ["for", "vars"]
+
+
 @dataclass(frozen=True)
 class CompletionContext:
     # what is being typed
-    kind: str  # "property" or "variable"
+    kind: str  # "property", "variable" or "include" (the path of an `!include`)
     # the part of the word before the cursor
     prefix: str
     # where the word starts in the line
@@ -79,6 +88,8 @@ def completion_context(
     # JSON has no templates and no objects with properties
     if language in (Language.TEXT, Language.JSON):
         return None
+    if language == Language.JSONL and (match := _INCLUDE_PATH.search(line)):
+        return CompletionContext("include", match.group(1), match.start(1))
     open_template = _open_template(line)
     if open_template is not None:
         word_start = len(line)
@@ -179,9 +190,26 @@ def properties_for(object_type: Optional[str], prefix: str = "", present: Iterab
     return sorted(names - set(present))
 
 
+def keys_for(object_type: Optional[str], prefix: str = "", present: Iterable[str] = (), directive: bool = False) -> List[str]:
+    """
+    :param directive: whether the object is a directive (`!include`): it has `vars` and `for`, not the properties of an object
+    :return: the keys to offer in an object (see `properties_for`); `!include` too in an object that has no keys yet
+    """
+    present = list(present)
+    if directive:
+        return [key for key in DIRECTIVE_KEYS if key not in present]
+    return properties_for(object_type, prefix, present) + ([] if present else ["!include"])
+
+
 def complete(
-    context: CompletionContext, properties: Iterable[str] = OBJECT_PROPERTIES, variables: Iterable[str] = ()
+    context: CompletionContext,
+    properties: Iterable[str] = OBJECT_PROPERTIES,
+    variables: Iterable[str] = (),
+    paths: Iterable[str] = (),
 ) -> List[str]:
-    """:return: the words that start with the typed prefix, without the word that is already typed completely"""
-    words = properties if context.kind == "property" else variables
+    """
+    :param paths: the files an `!include` can name (see `include_targets`)
+    :return: the words that start with the typed prefix, without the word that is already typed completely
+    """
+    words = {"property": properties, "variable": variables, "include": paths}[context.kind]
     return sorted({word for word in words if word.startswith(context.prefix) and word != context.prefix})

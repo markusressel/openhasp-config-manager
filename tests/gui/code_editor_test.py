@@ -885,3 +885,76 @@ class TestColorPicker(TestBase):
         assert not editor._picker.isVisible()
         assert editor._colors._edit is None
         editor.close()
+
+
+class TestDirectives(TestBase):
+    def _colors(self, editor, line: int):
+        """:return: (text, color) of the highlighted ranges of a line"""
+        block = editor.document().findBlockByNumber(line - 1)
+        return [
+            (block.text()[fmt.start : fmt.start + fmt.length], fmt.format.foreground().color().name())
+            for fmt in block.layout().formats()
+        ]
+
+    def test_the_keys_of_a_directive_have_their_own_color(self, editor):
+        from openhasp_config_manager.gui.domain.source.syntax import TokenKind
+        from openhasp_config_manager.gui.qt.widgets.code_editor.highlighter import syntax_color
+
+        # WHEN
+        editor.set_text('{\n  "!include": "a.jsonl",\n  "vars": {"vars": 1}\n}\n{"vars": 1}')
+
+        # THEN
+        directive, key = syntax_color(TokenKind.DIRECTIVE).name(), syntax_color(TokenKind.KEY).name()
+        assert ('"!include"', directive) in self._colors(editor, 2)
+        # the key of the directive, and a variable named like it
+        assert self._colors(editor, 3)[0] == ('"vars"', directive)
+        assert ('"vars"', key) in self._colors(editor, 3)
+        assert ('"vars"', key) in self._colors(editor, 5)
+
+        # WHEN: the directive goes away, the lines after it are colored again
+        cursor = editor.textCursor()
+        cursor.setPosition(editor.document().findBlockByNumber(1).position() + 3)
+        cursor.insertText("x")
+
+        # THEN
+        assert self._colors(editor, 3)[0] == ('"vars"', key)
+
+    def test_the_path_of_an_include_is_completed(self, editor):
+        # GIVEN
+        editor.completion.set_include_paths(lambda: ["common/parts/tile.jsonl", "common/page.jsonl"])
+
+        # WHEN
+        _type(editor, '{"!include": "common/pa')
+
+        # THEN
+        assert editor.completion.completer.popup().isVisible()
+        assert editor.completion.completer.model().stringList() == ["common/page.jsonl", "common/parts/tile.jsonl"]
+        QTest.keyClick(editor.completion.completer.popup(), Qt.Key.Key_Down)
+        QTest.keyClick(editor.completion.completer.popup(), Qt.Key.Key_Return)
+        assert editor.toPlainText().startswith('{"!include": "common/parts/tile.jsonl"')
+
+    def test_a_directive_offers_its_keys_with_their_explanation(self, editor):
+        # GIVEN
+        editor.resize(900, 400)
+        editor.set_text('{"!include": "a.jsonl", "')
+        editor.go_to(1, 25)
+
+        # WHEN
+        QTest.keyClick(editor, Qt.Key.Key_Space, Qt.KeyboardModifier.ControlModifier)
+
+        # THEN
+        assert editor.completion.completer.model().stringList() == ["for", "vars"]
+        assert editor.completion.card._kind.text() == "Key of an `!include`"
+
+    def test_ctrl_click_on_the_path_of_an_include(self, editor):
+        # GIVEN
+        editor.set_text('{"!include": "common/parts/tile.jsonl"}')
+        paths = []
+        editor.includeRequested.connect(paths.append)
+        position = QPoint(editor.fontMetrics().horizontalAdvance('{"!include": "common/pa') + 2, 5)
+
+        # WHEN
+        QTest.mouseClick(editor.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.ControlModifier, position)
+
+        # THEN
+        assert paths == ["common/parts/tile.jsonl"]

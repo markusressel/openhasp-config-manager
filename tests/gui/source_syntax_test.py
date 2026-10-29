@@ -3,8 +3,10 @@ from pathlib import Path
 from openhasp_config_manager.gui.domain.source.syntax import (
     Language,
     TokenKind,
+    JsonlState,
     find_templates,
     language_of,
+    tokenize_jsonl,
     tokenize_line,
 )
 from tests import TestBase
@@ -153,3 +155,40 @@ class TestYaml(TestBase):
         assert _kinds("color: '#fff' # c", Language.YAML)[-1] == ("# c", TokenKind.COMMENT)
         assert _kinds("# all", Language.YAML) == [("# all", TokenKind.COMMENT)]
         assert _kinds("a#b", Language.YAML) == [("a#b", TokenKind.STRING)]
+
+
+class TestDirectives(TestBase):
+    def _directive_keys(self, lines):
+        state, result = JsonlState(), []
+        for line in lines:
+            tokens, state = tokenize_jsonl(line, state)
+            result += [token.text(line) for token in tokens if token.kind == TokenKind.DIRECTIVE]
+        return result, state
+
+    def test_the_keys_of_a_directive(self):
+        # GIVEN: `vars` and `for` of an object are no directive keys, nor are the keys inside of `vars`
+        lines = [
+            '{"!include": "a.jsonl", "vars": {"for": 1, "id": 2}, "for": {"i": [1]}}',
+            '{"page": 1, "vars": 1, "for": 2}',
+            "{",
+            '  "!include": "a.jsonl",',
+            '  "vars": {',
+            '    "vars": 1',
+            "  },",
+            '  "for": {"i": [1, 2]}',
+            "}",
+            '{"for": 1}',
+        ]
+
+        # WHEN
+        keys, state = self._directive_keys(lines)
+
+        # THEN
+        assert keys == ['"!include"', '"vars"', '"for"', '"!include"', '"vars"', '"for"']
+        assert state == JsonlState(0, False)
+
+    def test_a_line_alone_knows_only_the_directive(self):
+        assert _kinds('  "!include": "a.jsonl",')[0] == ('"!include"', TokenKind.DIRECTIVE)
+        assert _kinds('  "vars": {},')[0] == ('"vars"', TokenKind.KEY)
+        assert _kinds('{"!x": 1}')[1] == ('"!x"', TokenKind.DIRECTIVE)
+        assert tokenize_jsonl("}}", JsonlState(1, True))[1] == JsonlState(0, False)

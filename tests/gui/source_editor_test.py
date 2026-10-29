@@ -437,6 +437,16 @@ class TestEditorFeatures(TestBase):
         assert "L:/nope.jsonl" in widget._status.text()
         assert widget.current_file == (folder / "devices" / "boot.cmd").resolve()
 
+    def test_ctrl_click_on_an_include_opens_the_part(self, widget, folder):
+        widget.open_file(folder / "a.jsonl")
+
+        widget.current_editor.includeRequested.emit("b.jsonl")
+        assert widget.current_file == (folder / "b.jsonl").resolve()
+
+        widget.current_editor.includeRequested.emit("parts/nope.jsonl")
+        assert widget._status.text() == "The file to include doesn't exist: parts/nope.jsonl"
+        assert widget.current_file == (folder / "b.jsonl").resolve()
+
     def test_hidden_folders_are_not_searched_for_links(self, widget, folder):
         (folder / ".hidden").mkdir()
         (folder / ".hidden" / "x.jsonl").write_text("{}\n")

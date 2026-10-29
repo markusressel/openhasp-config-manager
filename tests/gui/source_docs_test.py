@@ -1,4 +1,10 @@
-from openhasp_config_manager.gui.domain.source.docs import help_at, object_type_at_line, property_help, theme_help_at
+from openhasp_config_manager.gui.domain.source.docs import (
+    directive_help,
+    help_at,
+    object_type_at_line,
+    property_help,
+    theme_help_at,
+)
 from openhasp_config_manager.gui.domain.source.objects import scan_objects
 from tests import TestBase
 
@@ -110,3 +116,22 @@ class TestThemeHelpAt(TestBase):
 
     def test_a_text_that_is_no_yaml_has_no_help(self):
         assert theme_help_at("theme: [", 1, 2) is None
+
+
+class TestDirectiveHelp(TestBase):
+    def test_the_keys_of_a_directive_are_explained(self):
+        # GIVEN
+        lines = ["{", '  "!include": "a.jsonl",', '  "vars": {"x": 1},', '  "for": {"i": [1]}', "}", '{"vars": 1}']
+        objects = scan_objects("\n".join(lines))
+
+        # THEN
+        assert help_at(objects, lines[1], 2, 4).kind == "Directive"
+        assert "relative to the config directory" in help_at(objects, lines[1], 2, 4).summary
+        assert help_at(objects, lines[2], 3, 4).kind == "Key of an `!include`"
+        assert help_at(objects, lines[3], 4, 4).name == "for"
+        # not in a directive: no openHASP property either
+        assert help_at(objects, lines[5], 6, 3) is None
+
+    def test_an_unknown_directive(self):
+        assert directive_help("!inc").summary == "Unknown directive: the only directive is `!include`."
+        assert directive_help("page") is None

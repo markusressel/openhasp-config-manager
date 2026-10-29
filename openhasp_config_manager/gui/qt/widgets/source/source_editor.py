@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import QInputDialog, QMessageBox, QStackedLayout, QTabWidge
 from openhasp_config_manager.gui.dimensions import UiDimensions
 from openhasp_config_manager.gui.domain.source.buffers import DiskChange, SourceBuffer, SourceBuffers, read_text
 from openhasp_config_manager.gui.domain.source.issues import SourceIssue
-from openhasp_config_manager.gui.domain.source.links import link_targets, resolve_link
+from openhasp_config_manager.gui.domain.source.links import include_targets, link_targets, resolve_link
 from openhasp_config_manager.gui.domain.source.syntax import language_of
 from openhasp_config_manager.gui.domain.variables.unused import UnusedVariables
 from openhasp_config_manager.gui.domain.navigation_history import Location, NavigationHistory
@@ -250,6 +250,7 @@ class SourceEditorWidget(QWidget):
         editor = CodeEditor(language_of(buffer.path))
         editor.set_text(buffer.text)
         editor.completion.set_variables(lambda path=buffer.path: self._variables(path))
+        editor.completion.set_include_paths(lambda: include_targets(self._config_dir.resolve()))
         editor.set_definition_finder(lambda name, path=buffer.path: self._definitions(path, name))
         editor.set_app_markers(self._markers.get(buffer.path, []))
         editor.values.set_source(
@@ -267,6 +268,7 @@ class SourceEditorWidget(QWidget):
         editor.issuesChanged.connect(self._update_status)
         editor.renameRequested.connect(lambda path=path: self._rename_id(path))
         editor.linkRequested.connect(lambda target, path=path: self._open_link(path, target))
+        editor.includeRequested.connect(self._open_include)
         editor.definitionRequested.connect(lambda name, path=path: self._open_definition(path, name))
         editor.backRequested.connect(self.go_back)
         editor.forwardRequested.connect(self.go_forward)
@@ -466,6 +468,14 @@ class SourceEditorWidget(QWidget):
         found = resolve_link(target, link_targets(config_dir), config_dir, path)
         if found is None:
             self.show_message(f"No file in the config directory is L:/{target} on the plate")
+            return
+        self.open_file(found)
+
+    def _open_include(self, target: str):
+        """Ctrl+click on the path of an `!include`: open the part."""
+        found = Path(self._config_dir, target)
+        if not found.is_file():
+            self.show_message(f"The file to include doesn't exist: {target}")
             return
         self.open_file(found)
 

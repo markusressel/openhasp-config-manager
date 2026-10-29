@@ -74,3 +74,18 @@ class TestScanObjects(TestBase):
         assert foldable(scan_objects(TEXT)) == [(4, 10)]
         assert foldable(scan_objects('{\n"a": 1\n}')) == [(1, 3)]
         assert foldable(scan_objects('{"a": 1,\n"b": 2}')) == []
+
+
+class TestDirectives(TestBase):
+    def test_a_directive_is_one_object(self):
+        # GIVEN
+        text = '{"page": 1, "id": 1}\n{\n  "!include": "a.jsonl",\n  "vars": {"x": {"y": 1}},\n  "for": {"i": [1, 2]}\n}\n'
+
+        # WHEN
+        objects = scan_objects(text)
+
+        # THEN
+        assert [(obj.start_line, obj.end_line, obj.is_directive) for obj in objects] == [(1, 1, False), (2, 6, True)]
+        assert [prop.key for prop in objects[1].properties] == ["!include", "vars", "for"]
+        assert objects[1].get("!include").value == '"a.jsonl"'
+        assert foldable(objects) == [(2, 6)]

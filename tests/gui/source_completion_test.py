@@ -3,6 +3,7 @@ from openhasp_config_manager.gui.domain.source.completion import (
     Insertion,
     complete,
     completion_context,
+    keys_for,
     properties_for,
     property_insertion,
 )
@@ -160,3 +161,17 @@ class TestInsertion(TestBase):
 
     def test_part_and_state_variants_are_text_for_colors(self):
         assert self._insert('  "bg_color1', 12, "bg_color10", "slider")[0] == '  "bg_color10": ""'
+
+
+class TestDirectives(TestBase):
+    def test_the_path_of_an_include(self):
+        context = completion_context('{"!include": "common/pa', Language.JSONL)
+        assert (context.kind, context.prefix, context.start) == ("include", "common/pa", 14)
+        paths = ["common/parts/tile.jsonl", "common/page.jsonl", "a.jsonl"]
+        assert complete(context, paths=paths) == ["common/page.jsonl", "common/parts/tile.jsonl"]
+        assert completion_context('{"!include": "a.jsonl", "', Language.JSONL).kind == "property"
+
+    def test_the_keys_of_a_directive(self):
+        assert keys_for(None, "", ["!include"], directive=True) == ["for", "vars"]
+        assert keys_for(None, "", ["!include", "vars"], directive=True) == ["for"]
+        assert "!include" in keys_for(None) and "!include" not in keys_for(None, present=["page"])
