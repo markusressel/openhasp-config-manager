@@ -144,6 +144,9 @@ class TestFileTreeWidget(TestBase):
             "devices/plate/old.cmd",
             "devices/plate/old.jsonl",
             "devices/plate/vars.yaml",
+            "common/parts/card.jsonl",
+            "common/parts/label.jsonl",
+            "common/parts/old.jsonl",
         ]:
             (tmp_path / path).parent.mkdir(parents=True, exist_ok=True)
             (tmp_path / path).write_text("")
@@ -157,8 +160,16 @@ class TestFileTreeWidget(TestBase):
                 tmp_path / "common/header.jsonl": "boot.cmd",
                 device / "0_home/content.jsonl": "boot.cmd",
                 tmp_path / "common/dialog/offline.jsonl": "offline.cmd",
+                tmp_path / "common/parts/card.jsonl": "boot.cmd",
+                tmp_path / "common/parts/label.jsonl": "boot.cmd",
             },
             used_variables={device / "vars.yaml": ["title"]},
+            # content includes the card, which includes the label; nothing the plate runs includes old
+            includers={
+                tmp_path / "common/parts/card.jsonl": [device / "0_home/content.jsonl"],
+                tmp_path / "common/parts/label.jsonl": [tmp_path / "common/parts/card.jsonl"],
+                tmp_path / "common/parts/old.jsonl": [device / "old.jsonl"],
+            },
             common_path=tmp_path / "common",
         )
         widget.update_state({"header": {0}, "content": {1, 2, 3}}, page=1, target="content")
@@ -176,6 +187,35 @@ class TestFileTreeWidget(TestBase):
         common, device = (widget.tree.topLevelItem(i) for i in range(2))
         assert common.text(1) == "shared"
         assert common.child(0).child(0).text(1) == "offline.cmd"
+
+    def _child(self, item, *names):
+        for name in names:
+            item = next(item.child(i) for i in range(item.childCount()) if item.child(i).text(0) == name)
+        return item
+
+    def test_parts_the_preview_shows_are_used_and_not_dimmed(self, tmp_path):
+        # GIVEN
+        from PyQt6.QtCore import Qt
+
+        widget = self._widget(tmp_path)
+        common = widget.tree.topLevelItem(0)
+
+        # THEN: also a part that is only included by another part
+        for name in ["card.jsonl", "label.jsonl"]:
+            part = self._child(common, "parts", name)
+            assert part.text(1) == "part"
+            assert part.foreground(0).style() == Qt.BrushStyle.NoBrush
+            assert "The preview shows its objects" in part.toolTip(0)
+        assert "devices/plate/0_home/content.jsonl" in self._child(common, "parts", "card.jsonl").toolTip(0)
+        assert self._visible(self._child(common, "parts")) == ["card.jsonl", "label.jsonl"]
+
+    def test_a_part_that_only_unused_files_include_is_not_used(self, tmp_path):
+        # GIVEN
+        widget = self._widget(tmp_path)
+        widget.set_show_all(True)
+
+        # THEN
+        assert self._child(widget.tree.topLevelItem(0), "parts", "old.jsonl").text(1) == "not used"
 
     def _visible(self, item):
         return [item.child(i).text(0) for i in range(item.childCount()) if not item.child(i).isHidden()]
@@ -360,6 +400,30 @@ class TestUsedFiles(TestBase):
         ]
         assert set(result.values()) == {"boot.cmd"}
 
+    def test_the_files_that_include_a_part(self, tmp_path):
+        # GIVEN: two files include the same part, one of them twice
+        from openhasp_config_manager.gui.domain.file_tree import including_files
+        from openhasp_config_manager.openhasp_client.model.component import JsonlComponent
+
+        def jsonl(name, content=""):
+            return JsonlComponent(name=name, type="jsonl", path=tmp_path / name, content=content)
+
+        jsonls = [
+            jsonl("a.jsonl", '{"!include": "parts/p.jsonl"}\n{"!include": "parts/p.jsonl"}\n{"!include": "nope.jsonl"}'),
+            jsonl("b.jsonl", '{"!include": "parts/p.jsonl"}'),
+            jsonl("parts/p.jsonl", '{"!include": "parts/q.jsonl"}'),
+            jsonl("parts/q.jsonl"),
+        ]
+
+        # WHEN
+        result = including_files(jsonls, tmp_path)
+
+        # THEN
+        assert {
+            part.relative_to(tmp_path).as_posix(): [path.relative_to(tmp_path).as_posix() for path in paths]
+            for part, paths in result.items()
+        } == {"parts/p.jsonl": ["a.jsonl", "b.jsonl"], "parts/q.jsonl": ["parts/p.jsonl"]}
+
 
 class TestTopLevelFolders(TestBase):
     def test_every_top_level_folder_says_what_it_is_for(self, tmp_path, qapp, settings):
@@ -373,7 +437,7 @@ class TestTopLevelFolders(TestBase):
         widget = FileTreeWidget()
 
         # WHEN
-        widget.set_files(scan_file_tree(device), {}, {}, {}, common_path=tmp_path / "common")
+        widget.set_files(scan_file_tree(device), {}, {}, {}, {}, common_path=tmp_path / "common")
 
         # THEN
         roots = [widget.tree.topLevelItem(i) for i in range(3)]

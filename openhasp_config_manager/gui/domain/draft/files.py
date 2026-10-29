@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from openhasp_config_manager.const import DEVICES_FOLDER_NAME, COMMON_FOLDER_NAME
-from openhasp_config_manager.gui.domain.file_tree import FileNode, scan_file_tree, used_files
+from openhasp_config_manager.gui.domain.file_tree import FileNode, including_files, scan_file_tree, used_files
 from openhasp_config_manager.gui.domain.variables.unused import UnusedVariables, find_unused_variables
 from openhasp_config_manager.gui.domain.variables.usages import DeviceFiles, VariableUsages
 from openhasp_config_manager.gui.domain.draft.model import ComponentSource
@@ -228,6 +228,8 @@ class LoadedDevice:
     files: List[FileNode]
     # the .cmd and .jsonl files the plate runs -> the startup script that runs them (see `used_files`)
     used_files: Dict[Path, str]
+    # the parts -> the files that include them (see `including_files`)
+    includers: Dict[Path, List[Path]]
     # where the variables of the YAML files are used, by all devices
     variable_usages: VariableUsages
     # the variable files the device uses -> the names of the variables (see `VariableUsages.used_names`)
@@ -291,6 +293,7 @@ def load_analyzed_device(config_manager: ConfigManager, devices: List[Device], d
         renderer=ProcessorDraftRenderer(device_processor, jsonl_components),
         files=files,
         used_files=used,
+        includers=including_files(device.jsonl, config_manager.cfg_root),
         variable_usages=variable_usages,
         used_variable_files=variable_usages.used_names(device.path),
         unused_variables=find_unused_variables(variable_usages),
