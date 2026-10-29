@@ -42,7 +42,7 @@ class TestPartMode(TestBase):
         self._edit_part_of(editor, 21)
 
         # THEN
-        assert editor.session.part_mode.part == (tmp_path / "cfg/common/parts/dot.jsonl").resolve()
+        assert editor.part_mode.part == (tmp_path / "cfg/common/parts/dot.jsonl").resolve()
         assert not editor.part_bar.isHidden()
         assert "Editing part common/parts/dot.jsonl, instance at" in editor.part_bar.title.text().replace("\u200b", "")
         assert editor.part_bar.instances.currentIndex() == 1
@@ -51,14 +51,14 @@ class TestPartMode(TestBase):
         # the objects around the instance are dimmed
         dimmed = [obj.get("id") for obj in editor.page_objects if editor.page_preview_widget._is_dimmed(obj)]
         assert dimmed == [1, 2, 20, 40, 41]
-        assert editor.target_component == str(editor.session.part_mode.part)
+        assert editor.target_component == str(editor.part_mode.part)
 
     def test_an_edit_in_the_instance_changes_every_instance_and_done_ends_part_mode(self, editor):
         # GIVEN
         self._edit_part_of(editor, 21)
 
         # WHEN
-        editor.session.set_source_value(_object(editor, 21), "text", "-{{ id }}")
+        editor.editing.set_source_value(_object(editor, 21), "text", "-{{ id }}")
 
         # THEN
         assert (_object(editor, 20)["text"], _object(editor, 21)["text"]) == ("-20", "-21")
@@ -68,7 +68,7 @@ class TestPartMode(TestBase):
         editor.part_bar.done.click()
 
         # THEN: the change stays in the draft
-        assert editor.session.part_mode is None
+        assert editor.part_mode is None
         assert editor.part_bar.isHidden()
         assert _object(editor, 20)["text"] == "-20"
         # included objects can be selected (to see where they come from) but not changed
@@ -181,7 +181,7 @@ class TestPartMode(TestBase):
 
         # THEN: the window shows it on its own
         assert requested == [tmp_path / "cfg/common/parts/other.jsonl"]
-        assert editor.session.part_mode is None
+        assert editor.part_mode is None
 
     def test_pasting_into_the_part(self, editor):
         from PyQt6.QtWidgets import QApplication
@@ -199,7 +199,7 @@ class TestPartMode(TestBase):
         assert "label" in QApplication.clipboard().text()
         [pasted] = [item.obj_data for item in editor.page_preview_widget.selected_items()]
         assert editor.session.source_of(pasted)["id"] == "{{ id + 1 }}"
-        assert editor.session.instance_of(pasted) == editor.session.part_mode
+        assert editor.session.instance_of(pasted) == editor.part_mode
         assert (pasted["id"], _object(editor, 21)["id"]) == (22, 21)
         assert editor.action_undo.text() == "Undo Paste 1 object into the part"
 

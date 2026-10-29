@@ -3,7 +3,7 @@ import json
 import keyword
 import re
 from contextlib import contextmanager
-from typing import List, Any, Dict, Callable, Optional, Hashable, Iterator, Tuple
+from typing import List, Any, Dict, Callable, Optional, Hashable, Iterator, Tuple, Union
 
 from PyQt6 import QtCore
 from PyQt6.QtGui import QColor
@@ -34,6 +34,7 @@ from openhasp_config_manager.gui.domain.properties import (
     is_dimension,
 )
 from openhasp_config_manager.gui.domain.file_tree import relative_config_path
+from openhasp_config_manager.gui.domain.draft.part_focus import PartFocus
 from openhasp_config_manager.gui.domain.draft.session import PlateSession
 from openhasp_config_manager.gui.domain.problems import Severity, object_name
 from openhasp_config_manager.gui.domain.source.docs import property_help
@@ -76,6 +77,8 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         self._original_snapshot: Dict = {}
         self._edit_mode = False
         self._session: Optional[PlateSession] = None
+        # the part mode of the editor, None outside of part mode
+        self._part_focus: Optional[PartFocus] = None
         # property -> the text typed so far ("" if none), for those switched to a template that is not valid yet
         self._pending_templates: Dict[str, str] = {}
         self._validator: Optional[PropertyValidator] = None
@@ -127,6 +130,15 @@ class OpenHASPWidgetPropertyEditor(QWidget):
     def set_session(self, session: PlateSession):
         """The draft the edited objects belong to: edits change their source (literal values or templates)."""
         self._session = session
+
+    def set_part_focus(self, focus: Optional[PartFocus]):
+        """The part mode of the editor (None outside of it): which objects can be changed depends on it."""
+        self._part_focus = focus
+
+    @property
+    def _editing(self) -> Union[PlateSession, PartFocus]:
+        """What changes the objects: the part mode, or the draft outside of it."""
+        return self._session if self._part_focus is None else self._part_focus
 
     def set_edit_mode(self, edit_mode: bool):
         """The hint without a selection depends on whether objects can be selected at all."""
@@ -237,7 +249,7 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         obj_data = editable_widget.obj_data
 
         self._add_header(obj_data)
-        if self._session.read_only_reason(obj_data) is not None:
+        if self._editing.read_only_reason(obj_data) is not None:
             # in part mode the objects of the part can be changed like the others
             self._add_included_content(obj_data)
             return
@@ -270,7 +282,7 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         origin = self._session.origin_of(obj_data)
         directive_file = self._session.component_of(obj_data).path
         self._add_notice(
-            self._session.read_only_reason(obj_data),
+            self._editing.read_only_reason(obj_data),
             [
                 UiComponents.create_button(
                     title="Edit the part",
@@ -292,7 +304,7 @@ class OpenHASPWidgetPropertyEditor(QWidget):
                 ),
             ],
         )
-        if self._session.part_mode is None:
+        if self._part_focus is None:
             # in part mode an object of a part inside of the part: its !include is written in the part
             self._add_instance_group(obj_data)
         source = self._session.source_of(obj_data)
@@ -764,9 +776,9 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         # before the size changes, so the scene updates its index
         widget.prepareGeometryChange()
         if key in self._original_snapshot:
-            self._session.set_source_value(widget.obj_data, key, copy.deepcopy(self._original_snapshot[key]))
+            self._editing.set_source_value(widget.obj_data, key, copy.deepcopy(self._original_snapshot[key]))
         else:
-            self._session.remove_source_value(widget.obj_data, key)
+            self._editing.remove_source_value(widget.obj_data, key)
 
     @contextmanager
     def _edit(self, description: str, merge_key: Optional[Hashable] = None) -> Iterator[None]:
@@ -851,7 +863,7 @@ class OpenHASPWidgetPropertyEditor(QWidget):
             if "{{" not in text:
                 error = "Enter a template, e.g. {{ variable }}."
             else:
-                error = self._session.check_template(obj_data, text) or self._session.check_value(obj_data, key, text)
+                error = self._session.check_template(obj_data, text) or self._editing.check_value(obj_data, key, text)
             error_label.setText(error or "")
             error_label.setVisible(error is not None)
             if error is None:
@@ -1007,7 +1019,7 @@ class OpenHASPWidgetPropertyEditor(QWidget):
             return "This is a template: switch to template mode with the { } button."
         if self._validator is not None and (error := self._validator(obj_data, key, value)) is not None:
             return error
-        return self._session.check_value(obj_data, key, value)
+        return self._editing.check_value(obj_data, key, value)
 
     def _on_property_edited(self, key, value, widget):
         """
@@ -1019,7 +1031,7 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         # typing into the field is one step
         typing = ("property", self._session.object_uid(widget.obj_data), key)
         with self._edit(f"Change {key} of {object_name(widget.obj_data)}", merge_key=typing):
-            self._session.set_source_value(widget.obj_data, key, value)
+            self._editing.set_source_value(widget.obj_data, key, value)
 
 
 # how many characters of a value list the closed dropdown needs room for, e.g. "scroll — keep"

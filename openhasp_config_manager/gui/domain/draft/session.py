@@ -8,7 +8,7 @@ from dataclasses import replace
 from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
-from typing import List, Dict, Optional, Any, Set, Tuple, Hashable, Iterator, Callable, NamedTuple
+from typing import TYPE_CHECKING, List, Dict, Optional, Any, Set, Tuple, Hashable, Iterator, Callable, NamedTuple
 
 from jinja2 import TemplateError
 
@@ -49,6 +49,9 @@ from openhasp_config_manager.processing.jsonl.includes import (
 from openhasp_config_manager.processing.template_rendering import THIS, has_nested_templates, referenced_objects
 from openhasp_config_manager.processing.jsonl.jsonl import ObjectDimensionsProcessor, is_numeric_property
 from openhasp_config_manager.processing.jsonl.source_editor import JsonlSourceEditor
+
+if TYPE_CHECKING:
+    from openhasp_config_manager.gui.domain.draft.part_focus import PartFocus
 
 LOGGER = logging.getLogger(__name__)
 
@@ -114,8 +117,9 @@ class PlateSession:
     changed.
 
     The draft keeps the parts too (`PartDraft`): the included objects of all instances of a part object share its source. In
-    part mode (`enter_part_mode`) the objects of one instance of a part can be changed like the objects of a file; every
-    instance follows, and saving writes the part.
+    part mode the objects of one instance of a part can be changed like the objects of a file; every instance follows, and
+    saving writes the part. Part mode belongs to a view of the draft, not to the draft (see `PartFocus`): the methods that
+    depend on it take the instance (`part_instance`), None for the objects of the files.
     """
 
     def __init__(self, device: Device, config: Optional[ConfigDraft] = None):
@@ -141,8 +145,8 @@ class PlateSession:
         # part key (its path as the origins of the included objects have it) -> the part (of the `ConfigDraft`) that the
         # files of the device include
         self._parts: OrderedDict[str, PartDraft] = OrderedDict()
-        # the instance of a part whose objects can be changed, None outside of part mode
-        self._part_mode: Optional[PartInstance] = None
+        # the part modes of the views of the draft, whose instances it keeps up to date (see `PartFocus`)
+        self._part_focuses: List["PartFocus"] = []
 
         # when the draft was read from the files on disk the last time (loaded, reverted)
         self.loaded_at: Optional[datetime] = None
@@ -163,16 +167,17 @@ class PlateSession:
         self._keys = list(files)
         self._install(rendered, files, parts)
         self._loaded = True
+        for focus in self._part_focuses:
+            focus.instance = None
 
     def reset_to_disk(self):
         """
         Discards all changes of the files of the draft and their undo history, also for the other devices that show them.
-        The rendered objects are new objects afterwards. Part mode goes on in the instance that is included at the same place,
-        if there is one. If the files can't be rendered, this raises and the draft stays as it was.
+        The rendered objects are new objects afterwards. Part mode (of each `PartFocus`) goes on in the instance that is
+        included at the same place, if there is one. If the files can't be rendered, this raises and the draft stays as it was.
         """
-        mode = self._part_mode
         # the uids of the parts are new afterwards
-        described = None if mode is None or not self._objects_of_instance(mode) else self.describe_instance(mode)
+        described = self._described_part_focuses()
         try:
             rendered, files, parts = self._render_from_disk(self.components, self._renderer, True)
         except Exception:
@@ -180,7 +185,7 @@ class PlateSession:
             self._set_draft_sources()
             raise
         self._install(rendered, files, parts)
-        self._continue_part_mode(mode, described)
+        self._continue_part_focuses(described)
 
     def discard(self):
         """
@@ -196,11 +201,8 @@ class PlateSession:
         device again from it, like `load`. If that fails, the draft is not loaded anymore (see `is_loaded`), and doesn't
         follow the `ConfigDraft` until it is loaded again.
         """
-        mode = self._part_mode
-        described = None
         try:
-            if mode is not None and self._objects_of_instance(mode):
-                described = self.describe_instance(mode)
+            described = self._described_part_focuses()
             rendered, files, parts = self._render_from_disk(self.components, self._renderer, False, False)
         except Exception:
             LOGGER.exception(f"Could not render {self.device.name if self.device else 'the draft'} again")
@@ -208,19 +210,39 @@ class PlateSession:
             self._loaded = False
             return
         self._install(rendered, files, parts)
-        self._continue_part_mode(mode, described)
+        self._continue_part_focuses(described)
 
     def _install(self, rendered: "_Rendered", files: Dict[str, FileDraft], parts: Dict[str, PartDraft]):
         replaced = self._config.install(self, files, parts)
         self._replace_with(rendered, parts)
         self._config.render_again(*replaced, skip=self)
 
-    def _continue_part_mode(self, mode: Optional[PartInstance], described: Optional[str]):
-        """Part mode goes on in the instance that is included at the same place as before (described), if there is one."""
-        if described is not None:
-            self._part_mode = next(
-                (instance for instance in self.part_instances(mode.part) if self.describe_instance(instance) == described),
-                None,
+    def _described_part_focuses(self) -> List[Tuple["PartFocus", Optional[str]]]:
+        """:return: each `PartFocus` with where its instance is included (see `describe_instance`), None if it has no objects"""
+        return [
+            (focus, self.describe_instance(focus.instance))
+            if focus.instance is not None and self._objects_of_instance(focus.instance)
+            else (focus, None)
+            for focus in self._part_focuses
+        ]
+
+    def _continue_part_focuses(self, described: List[Tuple["PartFocus", Optional[str]]]):
+        """
+        After the draft was rendered again: the part mode of each `PartFocus` goes on in the instance that is included at the
+        same place as before (described), if there is one; otherwise it ends (its instance is None).
+        """
+        for focus, description in described:
+            focus.instance = (
+                None
+                if description is None
+                else next(
+                    (
+                        instance
+                        for instance in self.part_instances(focus.instance.part)
+                        if self.describe_instance(instance) == description
+                    ),
+                    None,
+                )
             )
 
     def _render_from_disk(
@@ -299,7 +321,6 @@ class PlateSession:
         self._working_objects, self._entries, self._include_errors = rendered
         self._parts = parts
         self._last_expansion = None
-        self._part_mode = None
         self.loaded_at = datetime.now(timezone.utc)
 
     @property
@@ -369,22 +390,23 @@ class PlateSession:
         """:return: where an included object is written, and the `!include`s that lead to it; None for the other objects"""
         return self._entry(obj).origin
 
-    def read_only_reason(self, obj: Dict) -> Optional[str]:
+    def read_only_reason(self, obj: Dict, part_instance: Optional[PartInstance] = None) -> Optional[str]:
         """
+        :param part_instance: the instance of a part that is edited in part mode (see `PartFocus`), None outside of part mode
         :return: why the object can't be changed in the draft, None if it can. In part mode only the objects of the part in the
             instance that is edited can be changed.
         """
         entry = self._entry(obj)
         origin = entry.origin
-        mode = self._part_mode
+        mode = part_instance
         if mode is None and origin is None:
             return None
         config_dir = config_root_of(self.device.path)
         if mode is not None:
-            if self._in_part_mode(entry):
+            if self._in_part_mode(entry, mode):
                 return None
             part = display_path(mode.part, config_dir)
-            if self.is_selectable(obj):
+            if self.is_selectable(obj, mode):
                 inner = f"{display_path(origin.file, config_dir)}:{origin.line}"
                 return f"It is included from {inner}, by an {INCLUDE} inside of the part {part}: edit that part."
             return f"In part mode only the objects of the part {part} (of the instance that is shown) can be changed."
@@ -395,11 +417,6 @@ class PlateSession:
         )
 
     # --- part mode ---
-
-    @property
-    def part_mode(self) -> Optional[PartInstance]:
-        """The instance of a part whose objects can be changed (see `enter_part_mode`), None outside of part mode."""
-        return self._part_mode
 
     def part_instances(self, part: Path) -> List[PartInstance]:
         """:return: the instances of a part (the path in any spelling) in the files of the draft, in the order of the draft"""
@@ -425,10 +442,9 @@ class PlateSession:
             raise ValueError(f"{object_name(obj)} is not included from {part or 'a part'}")
         return instance
 
-    def enter_part_mode(self, instance: PartInstance):
+    def check_part_instance(self, instance: PartInstance):
         """
-        Edit the objects of a part in one of its instances: they can be changed like the objects of a file (the other objects
-        can't), and every instance of the part follows. The draft keeps its changes when part mode ends.
+        Check that the objects of a part can be edited in one of its instances (part mode, see `PartFocus`).
         :raises ValueError: if the instance is not in the draft, or the part is also a file of the draft
         """
         if instance not in self.part_instances(instance.part):
@@ -437,18 +453,24 @@ class PlateSession:
             raise ValueError(
                 f"{instance.part.name} is also a page file of the device: change its objects there, not as a part"
             )
-        self._part_mode = instance
 
-    def leave_part_mode(self):
-        self._part_mode = None
+    def add_part_focus(self, focus: "PartFocus"):
+        """Keep the instance of the part mode of a view up to date (see `PartFocus`), until `remove_part_focus`."""
+        self._part_focuses.append(focus)
+
+    def remove_part_focus(self, focus: "PartFocus"):
+        self._part_focuses.remove(focus)
 
     def part_source(self, part: Path) -> ComponentSource:
         """:return: a part of the draft (the path in any spelling) as it was read from disk"""
         return self._part_at(part).component
 
-    def is_selectable(self, obj: Dict) -> bool:
-        """:return: whether the object can be selected: in part mode only the objects of the instance that is edited"""
-        mode = self._part_mode
+    def is_selectable(self, obj: Dict, part_instance: Optional[PartInstance] = None) -> bool:
+        """
+        :param part_instance: the instance of a part that is edited in part mode, None outside of part mode
+        :return: whether the object can be selected: in part mode only the objects of the instance that is edited
+        """
+        mode = part_instance
         if mode is None:
             return True
         entry = self._entry(obj)
@@ -564,12 +586,13 @@ class PlateSession:
 
     # --- editing ---
 
-    def check_value(self, obj: Dict, key: str, value: Any) -> Optional[str]:
+    def check_value(self, obj: Dict, key: str, value: Any, part_instance: Optional[PartInstance] = None) -> Optional[str]:
         """
         Check a value for a property, as written in the source (a literal or a template), before setting it.
+        :param part_instance: the instance of a part that is edited in part mode (see `read_only_reason`)
         :return: why it can't be set, or None if it can
         """
-        reason = self.read_only_reason(obj)
+        reason = self.read_only_reason(obj, part_instance)
         if reason is not None:
             return reason
         try:
@@ -581,13 +604,14 @@ class PlateSession:
             return f"Must be a number, renders to {result!r}."
         return None
 
-    def set_source_value(self, obj: Dict, key: str, value: Any):
+    def set_source_value(self, obj: Dict, key: str, value: Any, part_instance: Optional[PartInstance] = None):
         """
         Set a property as it is written in the source, a literal or a template, and render the object again.
         Nothing changes if the object can't be rendered with it (see check_value).
-        :raises ReadOnlyObjectError: for an included object
+        :param part_instance: the instance of a part that is edited in part mode (see `read_only_reason`)
+        :raises ReadOnlyObjectError: for an included object (outside of the instance of part mode)
         """
-        self._check_editable(obj)
+        self._check_editable(obj, part_instance)
         before = object_name(obj)
         rendered = self._render_with(obj, key, value)
         with self.edit(f"Change {key} of {before}"):
@@ -667,20 +691,21 @@ class PlateSession:
                 result.append(f"{key} is a percentage: {value}")
         return result
 
-    def use_pixel_position(self, obj: Dict):
+    def use_pixel_position(self, obj: Dict, part_instance: Optional[PartInstance] = None):
         """Replace a template or a percentage in x and y with the pixels it renders to, so the object can be moved."""
-        self._check_editable(obj)
+        self._check_editable(obj, part_instance)
         with self.edit(f"Use pixels for x/y of {object_name(obj)}"):
             for key in ("x", "y"):
                 if self.is_template(obj, key) or self.is_percentage(obj, key):
-                    self.set_source_value(obj, key, obj.get(key, 0))
+                    self.set_source_value(obj, key, obj.get(key, 0), part_instance)
 
-    def remove_source_value(self, obj: Dict, key: str):
+    def remove_source_value(self, obj: Dict, key: str, part_instance: Optional[PartInstance] = None):
         """
         Remove a property the draft added to the source (e.g. resetting a theme default that was changed),
         and render the object again.
+        :param part_instance: the instance of a part that is edited in part mode (see `read_only_reason`)
         """
-        self._check_editable(obj)
+        self._check_editable(obj, part_instance)
         before = object_name(obj)
         with self.edit(f"Reset {key} of {before}"):
             entry = self._entry(obj)
@@ -691,36 +716,41 @@ class PlateSession:
             self._render(obj)
             self._render_dependents(obj, before)
 
-    def add_object(self, component: str, source: Dict[str, Any]) -> Optional[Dict]:
+    def add_object(
+        self, component: str, source: Dict[str, Any], part_instance: Optional[PartInstance] = None
+    ) -> Optional[Dict]:
         """
         Add an object to the end of a component (it is drawn on top, and saved to the end of the file).
         :param component: a component key, or in part mode the key of the part (`PartInstance.part`): the object is added to
             every instance then, with templates for its page and id (see `new_part_object_ids`)
+        :param part_instance: the instance of a part that is edited in part mode (see `read_only_reason`)
         :return: the rendered object (in part mode: in the instance that is edited, None if it can't be included there)
+        :raises ReadOnlyObjectError: for a part outside of its part mode
         """
         if component in self._parts:
-            return self._add_part_object(component, source)
+            return self._add_part_object(component, source, part_instance)
         with self.edit(f"Add {source.get('obj', 'object')}"):
             obj = self._create(component, None, copy.deepcopy(source))
             self._working_objects[component].append(obj)
             self._render_dependents(obj)
         return obj
 
-    def duplicate_object(self, obj: Dict, offset: int = 10) -> Dict:
+    def duplicate_object(self, obj: Dict, offset: int = 10, part_instance: Optional[PartInstance] = None) -> Dict:
         """
         Duplicate an object into the same component, with the next free id on its page, moved by `offset`.
         Templates of the original are kept, except for the moved position.
+        :param part_instance: the instance of a part that is edited in part mode (see `read_only_reason`)
         :return: the rendered duplicate
         :raises ReadOnlyObjectError: for an included object (its templates need the variables of its instance)
         """
-        self._check_editable(obj)
+        self._check_editable(obj, part_instance)
         entry = self._entry(obj)
         source = copy.deepcopy(entry.source)
         source["id"] = next_free_id(self._working_objects, obj.get("page", 0))
         source["x"] = obj.get("x", 0) + offset
         source["y"] = obj.get("y", 0) + offset
         with self.edit(f"Duplicate {object_name(obj)}"):
-            return self.add_object(str(entry.origin.file) if entry.is_included else entry.component, source)
+            return self.add_object(str(entry.origin.file) if entry.is_included else entry.component, source, part_instance)
 
     def paste_objects(
         self,
@@ -730,6 +760,7 @@ class PlateSession:
         screen: Tuple[int, int],
         position: Optional[Tuple[int, int]] = None,
         offset: int = 0,
+        part_instance: Optional[PartInstance] = None,
     ) -> List[Dict]:
         """
         Add copies of objects (as written in a source file) to a page of a component, with the next free ids.
@@ -739,11 +770,12 @@ class PlateSession:
         In part mode, objects pasted into the part get a page and an id template like new objects of the part (see
         `add_object`), and are rendered with the variables of the instance that is shown.
         :param screen: the width and height of the screen
+        :param part_instance: the instance of a part that is edited in part mode (see `read_only_reason`)
         :return: the rendered objects (in part mode those of the instance that is shown)
-        :raises ReadOnlyObjectError: for a part outside of part mode
+        :raises ReadOnlyObjectError: for a part outside of its part mode
         """
         if component in self._parts:
-            return self._paste_into_part(component, sources, screen, position, offset)
+            return self._paste_into_part(component, sources, screen, position, offset, part_instance)
         taken = [obj for objects in self._working_objects.values() for obj in objects]
         new_ids: Dict[Any, int] = {}
         prepared = []
@@ -767,9 +799,10 @@ class PlateSession:
         screen: Tuple[int, int],
         position: Optional[Tuple[int, int]],
         offset: int,
+        part_instance: Optional[PartInstance],
     ) -> List[Dict]:
         """Paste into a part in part mode: see `paste_objects`."""
-        mode = self._check_part_mode(key)
+        mode = self._check_part_mode(key, part_instance)
         instance = self._objects_of_instance(mode)
         if not instance:
             raise ValueError("The instance that is shown has no objects anymore: add an object first, or undo")
@@ -791,7 +824,7 @@ class PlateSession:
         rendered = [self._renderer.render_object(sample.component, source, sample.scope) for source in prepared]
         self._place_pasted(prepared, rendered, screen, position, offset)
         with self.edit(f"Paste {len(prepared)} object{'' if len(prepared) == 1 else 's'} into the part"):
-            return self._append_to_part(key, prepared)
+            return self._append_to_part(key, prepared, mode)
 
     @staticmethod
     def _place_pasted(
@@ -815,9 +848,12 @@ class PlateSession:
                 source["x"] = obj.get("x", 0) + x - left
                 source["y"] = obj.get("y", 0) + y - top
 
-    def remove_object(self, obj: Dict):
-        """:raises ReadOnlyObjectError: for an included object"""
-        self._check_editable(obj)
+    def remove_object(self, obj: Dict, part_instance: Optional[PartInstance] = None):
+        """
+        :param part_instance: the instance of a part that is edited in part mode (see `read_only_reason`)
+        :raises ReadOnlyObjectError: for an included object (outside of the instance of part mode)
+        """
+        self._check_editable(obj, part_instance)
         entry = self._entry(obj)
         if entry.is_included:
             part = self._parts[str(entry.origin.file)]
@@ -942,10 +978,11 @@ class PlateSession:
                 else:
                     entry.index = indices[entry.uid]
         self._last_expansion = None
-        mode = self._part_mode
-        if mode is not None and str(mode.steps[0][0]) in written:
-            file, index, loop = mode.steps[0]
-            self._part_mode = replace(mode, steps=((file, moved[str(file)][index], loop),) + mode.steps[1:])
+        for focus in self._part_focuses:
+            mode = focus.instance
+            if mode is not None and str(mode.steps[0][0]) in written:
+                file, index, loop = mode.steps[0]
+                focus.instance = replace(mode, steps=((file, moved[str(file)][index], loop),) + mode.steps[1:])
         if parts:
             # the lines of the included objects in their parts
             self._reinclude(set())
@@ -969,8 +1006,8 @@ class PlateSession:
     def _render(self, obj: Dict):
         self._apply(obj, self._rendered(self._entry(obj)))
 
-    def _check_editable(self, obj: Dict):
-        reason = self.read_only_reason(obj)
+    def _check_editable(self, obj: Dict, part_instance: Optional[PartInstance]):
+        reason = self.read_only_reason(obj, part_instance)
         if reason is not None:
             raise ReadOnlyObjectError(f"{object_name(obj)} can't be changed here. {reason}")
 
@@ -1072,24 +1109,25 @@ class PlateSession:
         self._last_expansion = (key, (objects, errors))
         return objects, errors
 
-    def _add_part_object(self, key: str, source: Dict[str, Any]) -> Optional[Dict]:
+    def _add_part_object(self, key: str, source: Dict[str, Any], part_instance: Optional[PartInstance]) -> Optional[Dict]:
         """Add an object to the end of a part, in part mode: see `add_object`."""
-        self._check_part_mode(key)
+        mode = self._check_part_mode(key, part_instance)
         part = self._parts[key]
         page, object_id = new_part_object_ids([obj.source for obj in part.objects if not is_directive(obj.source)], source)
         source = {**copy.deepcopy(source), "page": page, "id": object_id}
         with self.edit(f"Add {source.get('obj', 'object')} to the part"):
-            added = self._append_to_part(key, [source])
+            added = self._append_to_part(key, [source], mode)
         return added[0] if added else None
 
-    def _check_part_mode(self, key: str) -> PartInstance:
-        """:return: the instance of part mode :raises ReadOnlyObjectError: if the draft is not in part mode of this part"""
-        mode = self._part_mode
+    @staticmethod
+    def _check_part_mode(key: str, part_instance: Optional[PartInstance]) -> PartInstance:
+        """:return: the instance of part mode :raises ReadOnlyObjectError: if it is not an instance of this part"""
+        mode = part_instance
         if mode is None or str(mode.part) != key:
             raise ReadOnlyObjectError(f"Objects are added to {key} in part mode only")
         return mode
 
-    def _append_to_part(self, key: str, sources: List[Dict[str, Any]]) -> List[Dict]:
+    def _append_to_part(self, key: str, sources: List[Dict[str, Any]], instance: PartInstance) -> List[Dict]:
         """
         Add objects to the end of a part (in a running edit), and select them in the instance that is shown.
         :return: their objects in that instance (none if the instance doesn't include them, e.g. a template of the page)
@@ -1097,7 +1135,7 @@ class PlateSession:
         uids = [self._config.new_part_uid() for _ in sources]
         self._parts[key].objects.extend(PartObject(uid, None, source) for uid, source in zip(uids, sources))
         self._reinclude_and_render({key})
-        by_uid = {self._entry(obj).instance[1]: obj for obj in self._objects_of_instance(self._part_mode)}
+        by_uid = {self._entry(obj).instance[1]: obj for obj in self._objects_of_instance(instance)}
         added = [by_uid[uid] for uid in uids if uid in by_uid]
         self._selected_after_edit = added
         return added
@@ -1221,12 +1259,10 @@ class PlateSession:
                 return PartInstance(Path(file), entry.instance[0][: position + 1])
         return None
 
-    def _in_part_mode(self, entry: DraftEntry) -> bool:
+    @staticmethod
+    def _in_part_mode(entry: DraftEntry, mode: PartInstance) -> bool:
         """:return: whether the object is an object of the part of part mode, in the instance that is edited"""
-        mode = self._part_mode
-        return (
-            mode is not None and entry.is_included and Path(entry.origin.file) == mode.part and entry.instance[0] == mode.steps
-        )
+        return entry.is_included and Path(entry.origin.file) == mode.part and entry.instance[0] == mode.steps
 
     def _objects_of_instance(self, instance: PartInstance) -> List[Dict]:
         part = instance.part.resolve()

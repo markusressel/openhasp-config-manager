@@ -162,3 +162,14 @@ Each phase is one PR with tests. Phases on different files run in parallel.
   off by itself.
 - **A part tab renders the whole page** of its instance, also without "Show the page", and only hides the other objects: the object
   references (`b4.w` of a card) have the values of the page.
+
+## Decisions made during implementation
+
+- **Part 3: both ways.** The methods that depend on part mode are those of `PlateSession` with the instance as an argument
+  (`part_instance`, None for the objects of the files), and a `PartFocus` (`gui/domain/draft/part_focus.py`) binds them to its
+  instance. Until part tabs exist (phase 6) the editor owns the focus (`PageLayoutEditorWidget.part_focus`, edits go through
+  `editor.editing`).
+- **The draft keeps the instances of the open focuses up to date.** A `PartFocus` registers with its draft until it is
+  closed: a save moves the instance with the lines of its `!include`, and a reload finds it again by its description (or
+  ends it, `instance` is None then), as for the part mode of the draft before. Alternative: the view finds its instance again
+  after every save and reload, which needs the description from before them.

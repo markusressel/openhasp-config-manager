@@ -6,6 +6,7 @@ import pytest
 from openhasp_config_manager.gui.domain.draft.config_draft import ConfigDraft
 from openhasp_config_manager.gui.domain.draft.files import plan_save, write_save
 from openhasp_config_manager.gui.domain.draft.model import ChangeKind, DraftChange
+from openhasp_config_manager.gui.domain.draft.part_focus import PartFocus
 from openhasp_config_manager.gui.domain.draft.session import PlateSession
 from openhasp_config_manager.gui.domain.problems import object_name
 from tests.gui.helpers import wait_until
@@ -117,10 +118,10 @@ class TestSharedFiles:
         device, other = devices
         changes = _listened(other)
         tile = _objects(other)["p9b20"]
-        device.enter_part_mode(device.instance_of(_objects(device)["p9b20"]))
+        focus = PartFocus(device, device.instance_of(_objects(device)["p9b20"]))
 
         # WHEN
-        device.set_source_value(_objects(device)["p9b20"], "text", "changed")
+        focus.set_source_value(_objects(device)["p9b20"], "text", "changed")
 
         # THEN
         assert tile["text"] == "changed"
@@ -238,8 +239,8 @@ class TestUndo:
     def test_undo_of_an_edit_of_a_shared_part(self, devices):
         # GIVEN
         device, other = devices
-        device.enter_part_mode(device.instance_of(_objects(device)["p9b20"]))
-        device.set_source_value(_objects(device)["p9b20"], "text", "changed")
+        focus = PartFocus(device, device.instance_of(_objects(device)["p9b20"]))
+        focus.set_source_value(_objects(device)["p9b20"], "text", "changed")
 
         # WHEN
         other.undo()
