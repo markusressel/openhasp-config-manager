@@ -471,8 +471,18 @@ class ConfigManager:
         components: List[Component] = device.jsonl + device.cmd + device.images + device.fonts
         for component in components:
             device_processor.add_component(component)
+        device_processor.set_run_paths(self._run_jsonl_paths(device))
 
         return device_processor
+
+    def _run_jsonl_paths(self, device: Device) -> Set[Path]:
+        """:return: the jsonl files the plate runs: those a .cmd file runs, and the `hasp.pages` file"""
+        cmd_components = list(self._find_startup_cmd_components(device.cmd))
+        result = {Path(component.path) for component in self._find_referenced_jsonl_components(cmd_components, device.jsonl)}
+        pages_path = self._compute_component_path_of_pages_config_value(device.path, device.config)
+        if pages_path is not None:
+            result.add(Path(device.path, pages_path))
+        return result
 
     def create_device_validator(self, device: Device):
         """
@@ -543,6 +553,21 @@ class ConfigManager:
         # system components should always be included
         result.update(system_components)
 
+        return result
+
+    def _find_startup_cmd_components(self, cmd_components: List[CmdComponent]) -> Set[CmdComponent]:
+        """
+        :return: the system scripts, and the cmd files they run (directly or through other cmd files).
+            Unlike `_find_referenced_cmd_components`, a cmd file that only an unused cmd file runs doesn't count.
+        """
+        result = set(filter(lambda x: x.name in SYSTEM_SCRIPTS, cmd_components))
+        pending = list(result)
+        while pending:
+            for match in self._find_cmd_references_in_cmd_component(pending.pop()):
+                for component in filter(lambda x: x.name == match, cmd_components):
+                    if component not in result:
+                        result.add(component)
+                        pending.append(component)
         return result
 
     @staticmethod

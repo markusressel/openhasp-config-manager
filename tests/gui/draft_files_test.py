@@ -140,6 +140,24 @@ class TestDraftFiles(TestBase):
         with pytest.raises(KeyError):
             session.variable_value_at(variable_file, "p9b2.text")
 
+    def test_a_page_the_plate_does_not_run_can_not_break_the_others(self, cfg_root):
+        # GIVEN: a page with a variable this device doesn't have, in a .cmd file that no startup script runs
+        page = cfg_root / "common" / "page" / "unused"
+        page.mkdir(parents=True)
+        (page / "page.cmd").write_text("run L:/common_page_unused_content.jsonl\n")
+        (page / "content.jsonl").write_text('{"page": 8, "id": 1, "obj": "label", "text": "{{ index }}"}\n')
+        (page / "vars.yaml").write_text('index: "{{ common.pages.unknown.index }}"\n')
+
+        # WHEN
+        session = _load(cfg_root)
+
+        # THEN
+        [component] = session.components
+        label, button = session.working_objects[component.key]
+        assert label["text"] == "test_device_value"
+        assert session.render_text_at(component.path, "{{ p9b2.text }}") == "B"
+        assert session.check_template(label, "{{ p8b1.text }}") == "Unknown variable: 'p8b1' is undefined"
+
     def test_objects_that_refer_to_themselves_and_to_their_page_follow_changes(self, cfg_root):
         # GIVEN
         (cfg_root / "devices" / "test_device" / "editor.jsonl").write_text(

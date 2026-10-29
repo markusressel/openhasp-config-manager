@@ -451,7 +451,11 @@ class MainWindow(QMainWindow):
             if name != self._selected_name:
                 return  # another device was selected in the meantime
             self._set_devices(loaded.devices)
-            self.select_device(loaded)
+            try:
+                self.select_device(loaded)
+            except Exception as ex:
+                LOGGER.exception(f"Could not load {name}")
+                __on_error(ex)
 
         def __on_error(ex: Exception):
             if name != self._selected_name:
@@ -555,14 +559,22 @@ class MainWindow(QMainWindow):
                 self._show_disk_changes(changes)
                 return
             self._set_devices(loaded.devices)
-            self.select_device(loaded, keep_view=True)
+            try:
+                self.select_device(loaded, keep_view=True)
+            except Exception as ex:
+                LOGGER.exception(f"Could not reload {name}")
+                __show_error(ex)
+                return
             names = sorted(str(path.relative_to(self.cfg_root)) for path in changes)
             self.status.succeeded.emit(f"Reloaded {name}, changed on disk: {', '.join(names[:3])}")
 
         def __on_error(ex: Exception):
+            __finish()
+            __show_error(ex)
+
+        def __show_error(ex: Exception):
             # e.g. a file that is half written: stay with what is shown, the next change loads again
             self._page_after_reload.pop(key, None)
-            __finish()
             self._set_load_error(name, ex)
             self.status.failed.emit(f"Reloading {name} after a change on disk", error_text(ex))
 
@@ -599,19 +611,22 @@ class MainWindow(QMainWindow):
 
     def select_device(self, loaded: LoadedDevice, keep_view: bool = False):
         """
+        Raises if the pages can't be rendered, before anything changed.
+
         :param keep_view: the same device is loaded again: don't change the zoom
         """
-        self.device = loaded.device
-        self.load_error = None
         pages_data = OpenHaspDevicePagesData(
             device=loaded.device, name=loaded.cmd_component.name, jsonl_components=loaded.jsonl_components
         )
         key = (loaded.device.name, pages_data.name)
-        session = self.sessions.setdefault(key, PlateSession(device=loaded.device))
-        session.device = loaded.device
+        session = self.sessions.get(key) or PlateSession(device=loaded.device)
         # a draft without changes follows the files on disk, one with changes is kept (Save detects conflicts)
         if not session.is_loaded or not session.is_dirty:
             session.load(loaded.components, loaded.renderer)
+        session.device = loaded.device
+        self.sessions[key] = session
+        self.device = loaded.device
+        self.load_error = None
         self.session_key = key
         self.file_tree_widget.set_files(
             loaded.files,

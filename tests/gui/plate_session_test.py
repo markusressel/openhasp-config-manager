@@ -94,6 +94,34 @@ class TestPlateSession(TestBase):
         assert session.is_dirty is False
         assert session.changes() == []
 
+    def test_files_that_can_not_be_rendered_keep_the_draft(self):
+        # GIVEN
+        session = _session()
+        button = session.working_objects["a.jsonl"][0]
+        components = session.components
+
+        # WHEN
+        with pytest.raises(TemplateSyntaxError):
+            session.load(components, FakeRenderer({}))
+
+        # THEN
+        assert session.working_objects["a.jsonl"][0] is button
+        assert session.source_of(button)["x"] == "{{ left }}"
+        assert session.changes() == []
+
+        # GIVEN: a change of the draft
+        session.set_source_value(button, "text", "C")
+        session._renderer.variables.pop("left")
+
+        # WHEN
+        with pytest.raises(TemplateSyntaxError):
+            session.reset_to_disk()
+
+        # THEN
+        assert session.working_objects["a.jsonl"][0] is button
+        assert session.is_dirty
+        assert [change.component.key for change in session.changes()] == ["a.jsonl"]
+
     def test_where_objects_are_written(self, tmp_path):
         # GIVEN
         path = tmp_path / "a.jsonl"
