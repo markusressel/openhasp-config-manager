@@ -372,6 +372,47 @@ class TestSaving(TestBase):
         assert x_of_label(window) == 20
 
 
+class TestPartMode(TestBase):
+    @pytest.fixture
+    def part_file(self, cfg_root) -> Path:
+        # written before the window loads the device
+        part = cfg_root / "devices" / "test_device" / "dot.jsonl"
+        part.write_text('{"page": 9, "id": "{{ id }}", "obj": "label", "text": "{{ id }}"}\n')
+        editor = cfg_root / "devices" / "test_device" / "editor.jsonl"
+        editor.write_text(editor.read_text() + '{"!include": "devices/test_device/dot.jsonl", "for": {"id": [20, 21]}}\n')
+        return part.resolve()
+
+    def test_the_files_tree_starts_it_and_saving_writes_the_part(self, part_file, window, editor_file):
+        # GIVEN
+        editor = window.page_layout_editor_widget
+        before = editor_file.read_text()
+
+        # WHEN
+        window.file_tree_widget.editPartRequested.emit(part_file)
+        [first, _second] = window.session.part_instances(part_file)
+        [dot] = window.session.objects_of_instance(first)
+        window.session.set_source_value(dot, "text", "#{{ id }}")
+
+        # THEN
+        wait_until(lambda: (gui_state(window.cfg_root).get("device") or {}).get("part_mode"))
+        state = gui_state(window.cfg_root)["device"]
+        assert state["part_mode"]["part"] == "devices/test_device/dot.jsonl"
+        assert state["new_objects_file"] == "devices/test_device/dot.jsonl"
+        assert state["draft"]["files"] == [
+            {"file": "devices/test_device/dot.jsonl", "changed": ["p9b{{ id }}"], "added": [], "deleted": []}
+        ]
+
+        # WHEN
+        assert window.draft_actions.save()
+
+        # THEN: the part goes on in part mode after the reload
+        assert part_file.read_text() == '{"page": 9, "id": "{{ id }}", "obj": "label", "text": "#{{ id }}"}\n'
+        assert editor_file.read_text() == before
+        wait_until(lambda: window.session.is_loaded and not window.session.is_dirty)
+        assert window.session.part_mode == first
+        assert not editor.part_bar.isHidden()
+
+
 class TestChangesOnDisk(TestBase):
     def test_an_open_file_follows_changes_made_elsewhere(self, window, editor_file):
         window.file_tree_widget.openRequested.emit(editor_file)

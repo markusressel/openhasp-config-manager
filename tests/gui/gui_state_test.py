@@ -18,6 +18,7 @@ from openhasp_config_manager.gui.domain.gui_state import (
     describe_editor,
     describe_files,
     describe_object,
+    describe_part_mode,
     describe_problems,
 )
 from openhasp_config_manager.gui.domain.draft.session import PlateSession
@@ -103,6 +104,36 @@ class TestDescribe(TestBase):
         }
         assert problem["include"] == location["include"]
         json.dumps(location)
+
+    def test_part_mode_names_the_part_and_the_instance(self, cfg_root):
+        # GIVEN
+        (cfg_root / "common" / "dot.jsonl").write_text('{"page": 9, "id": "{{ id }}", "obj": "obj"}\n')
+        (cfg_root / "devices" / "test_device" / "editor.jsonl").write_text(
+            '{"!include": "common/dot.jsonl", "for": {"id": [4, 5]}}\n'
+        )
+        loaded = load_device(_create_config_manager(cfg_root, cfg_root.parent / "output"), "test_device")
+        session = PlateSession(device=loaded.device)
+        session.load(loaded.components, loaded.renderer)
+        assert describe_part_mode(session, cfg_root) is None
+
+        # WHEN
+        instance = session.part_instances(cfg_root / "common" / "dot.jsonl")[1]
+        session.enter_part_mode(instance)
+
+        # THEN
+        assert describe_part_mode(session, cfg_root) == {
+            "part": "common/dot.jsonl",
+            "instance": session.describe_instance(instance),
+            "shared": True,
+        }
+        assert "id=5" in session.describe_instance(instance)
+
+        # WHEN: its objects are all removed
+        [dot] = session.objects_of_instance(instance)
+        session.remove_object(dot)
+
+        # THEN
+        assert describe_part_mode(session, cfg_root)["instance"] is None
 
     def test_object_has_rendered_and_written_geometry(self, session, cfg_root):
         # GIVEN

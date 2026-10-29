@@ -88,6 +88,7 @@ class PagePreviewWidget(QGraphicsView):
         self._darkness = 0
         self._empty_hint: Optional[str] = None
         self._is_movable: Callable[[Dict], bool] = lambda _obj: True
+        self._is_selectable: Callable[[Dict], bool] = lambda _obj: True
         self._is_dimmed: Callable[[Dict], bool] = lambda _obj: False
         # where the mouse pressed on an object that can't be moved, until it is released
         self._locked_press: Optional[Tuple[QtCore.QPoint, EditableWidget]] = None
@@ -187,13 +188,17 @@ class PagePreviewWidget(QGraphicsView):
         for item in self.scene().items():
             if isinstance(item, EditableWidget):
                 item.movable = mode == PreviewMode.Edit and self._is_movable(item.obj_data)
-                item.editable = mode == PreviewMode.Edit
+                item.editable = mode == PreviewMode.Edit and self._is_selectable(item.obj_data)
         self.viewport().update()
         self.modeChanged.emit(mode)
 
     def set_movable_predicate(self, is_movable: Callable[[Dict], bool]):
         """Decides which objects can be dragged in edit mode (others can still be selected)."""
         self._is_movable = is_movable
+
+    def set_selectable_predicate(self, is_selectable: Callable[[Dict], bool]):
+        """Decides which objects can be selected in edit mode (e.g. in part mode only those of the part)."""
+        self._is_selectable = is_selectable
 
     def refresh_items(self):
         """Redraw all objects, e.g. after the edit of an object changed those with templates that refer to it."""
@@ -202,9 +207,15 @@ class PagePreviewWidget(QGraphicsView):
         self.refresh_movable()
 
     def refresh_movable(self):
-        """Ask the movable predicate again, e.g. after the position of an object changed from a template to pixels."""
+        """
+        Ask the movable and selectable predicates again, e.g. after the position of an object changed from a template to
+        pixels. Objects that can't be selected anymore are deselected.
+        """
         for item in self.editable_items():
             item.movable = self.mode == PreviewMode.Edit and self._is_movable(item.obj_data)
+            item.editable = self.mode == PreviewMode.Edit and self._is_selectable(item.obj_data)
+            if not item.editable and item.isSelected():
+                item.setSelected(False)
 
     def set_snap_enabled(self, enabled: bool):
         self.scene().snap_enabled = enabled
@@ -309,7 +320,7 @@ class PagePreviewWidget(QGraphicsView):
             if item is not None:
                 LOGGER.debug(f"Adding '{obj_type}' item to scene: {item}")
                 item.movable = self.mode == PreviewMode.Edit and self._is_movable(item.obj_data)
-                item.editable = self.mode == PreviewMode.Edit
+                item.editable = self.mode == PreviewMode.Edit and self._is_selectable(item.obj_data)
                 item.set_dimmed(self._is_dimmed(item.obj_data))
                 self.scene().addItem(item)
 

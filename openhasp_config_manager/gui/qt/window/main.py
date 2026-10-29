@@ -206,6 +206,7 @@ class MainWindow(QMainWindow):
             parent=self,
         )
         self.file_tree_widget.openRequested.connect(self.source_sync.open_file)
+        self.file_tree_widget.editPartRequested.connect(self.page_layout_editor_widget.edit_part)
         self.jsonl_dock = self._add_dock("Code", "jsonl_dock", self.code_view)
         self.splitDockWidget(self.preview_dock, self.jsonl_dock, Qt.Orientation.Vertical)
 
@@ -616,7 +617,10 @@ class MainWindow(QMainWindow):
         :param keep_view: the same device is loaded again: don't change the zoom
         """
         pages_data = OpenHaspDevicePagesData(
-            device=loaded.device, name=loaded.cmd_component.name, jsonl_components=loaded.jsonl_components
+            device=loaded.device,
+            name=loaded.cmd_component.name,
+            jsonl_components=loaded.jsonl_components,
+            part_includers=loaded.part_includers,
         )
         key = (loaded.device.name, pages_data.name)
         session = self.sessions.get(key) or PlateSession(device=loaded.device)

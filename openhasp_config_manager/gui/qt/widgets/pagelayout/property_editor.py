@@ -65,6 +65,8 @@ class OpenHASPWidgetPropertyEditor(QWidget):
     usePixelPositionClicked = QtCore.pyqtSignal()
     # (path, line): show a file in the text editor at a line, e.g. the part of an included object
     openSourceRequested = QtCore.pyqtSignal(object, int)
+    # an included object: edit its part in part mode, in the instance of the object
+    editPartRequested = QtCore.pyqtSignal(object)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -233,7 +235,8 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         obj_data = editable_widget.obj_data
 
         self._add_header(obj_data)
-        if self._session.is_included(obj_data):
+        if self._session.read_only_reason(obj_data) is not None:
+            # in part mode the objects of the part can be changed like the others
             self._add_included_content(obj_data)
             return
         self._add_locked_position_hint()
@@ -265,6 +268,12 @@ class OpenHASPWidgetPropertyEditor(QWidget):
             self._session.read_only_reason(obj_data),
             [
                 UiComponents.create_button(
+                    title="Edit the part",
+                    icon="puzzle-edit-outline",
+                    tooltip="Edit the objects of the part on the page, in this instance: every instance follows",
+                    on_click=lambda: self.editPartRequested.emit(obj_data),
+                ),
+                UiComponents.create_button(
                     title="Open the part",
                     icon="file-document-edit-outline",
                     tooltip="Show the object in the file it is written in, where every instance of the part changes with it",
@@ -278,7 +287,9 @@ class OpenHASPWidgetPropertyEditor(QWidget):
                 ),
             ],
         )
-        self._add_instance_group(obj_data)
+        if self._session.part_mode is None:
+            # in part mode an object of a part inside of the part: its !include is written in the part
+            self._add_instance_group(obj_data)
         source = self._session.source_of(obj_data)
         for title, keys in group_properties(obj_data):
             group = QGroupBox(title)

@@ -1,5 +1,6 @@
 import logging
 from collections import Counter, OrderedDict
+from pathlib import Path
 from typing import List, Dict, Optional, Any, Callable, Set, Tuple
 
 from PyQt6 import QtCore
@@ -25,7 +26,7 @@ from openhasp_config_manager.gui.domain.draft.page_objects import (
     step_page,
 )
 from openhasp_config_manager.gui.domain.file_tree import default_target_component, relative_config_path
-from openhasp_config_manager.gui.domain.draft.model import ChangeKind, DraftChange
+from openhasp_config_manager.gui.domain.draft.model import ChangeKind, DraftChange, PartInstance
 from openhasp_config_manager.gui.domain.draft.session import PlateSession
 from openhasp_config_manager.gui.domain.touch_actions import page_command
 from openhasp_config_manager.gui.domain.ui_session import DeviceSession
@@ -47,6 +48,7 @@ from openhasp_config_manager.gui.qt.widgets.pagelayout.object_actions import Obj
 from openhasp_config_manager.gui.qt.widgets.pagelayout.plate_link import PlateLink
 from openhasp_config_manager.gui.qt.widgets.pagelayout.preview_overlays import OverlayAnchor
 from openhasp_config_manager.gui.qt.widgets.pagelayout.page_indicator import PageIndicator
+from openhasp_config_manager.gui.qt.widgets.pagelayout.part_mode_bar import PartModeBar
 from openhasp_config_manager.gui.qt.widgets.pagelayout.page_preview_layout import (
     PagePreviewWidget,
     PreviewMode,
@@ -109,6 +111,7 @@ class PageLayoutEditorWidget(QWidget):
         self.property_editor.duplicateObjectClicked.connect(self.object_actions.duplicate_selected)
         self.property_editor.usePixelPositionClicked.connect(self.object_actions.use_pixel_positions)
         self.property_editor.openSourceRequested.connect(self.openSourceRequested)
+        self.property_editor.editPartRequested.connect(self._on_edit_part_requested)
         self.property_editor.set_validator(self._validate_property)
 
         self.jsonl_preview = PageJsonlPreviewWidget()
@@ -145,9 +148,15 @@ class PageLayoutEditorWidget(QWidget):
 
         self.error_banner = ErrorBanner()
         column.addWidget(self.error_banner)
+        self.part_bar = PartModeBar()
+        self.part_bar.instanceChosen.connect(self._on_part_instance_chosen)
+        self.part_bar.doneClicked.connect(self.leave_part_mode)
+        column.addWidget(self.part_bar)
 
         self.page_preview_widget = PagePreviewWidget()
         self.page_preview_widget.set_movable_predicate(lambda obj: self.session is None or self.object_actions.is_movable(obj))
+        # in part mode only the objects of the part
+        self.page_preview_widget.set_selectable_predicate(lambda obj: self.session is None or self.session.is_selectable(obj))
         self.page_preview_widget.commandRequested.connect(self.__on_preview_command)
         self.page_preview_widget.set_group_objects(
             lambda: [obj for objects in self.session.working_objects.values() for obj in objects] if self.session else []
@@ -386,6 +395,7 @@ class PageLayoutEditorWidget(QWidget):
         self.jsonl_preview.set_objects([])
         self.problems_panel.set_problems([])
         self.error_banner.hide()
+        self.part_bar.hide()
         self.problems = []
         self._update_actions()
         self.stateChanged.emit()
@@ -416,6 +426,8 @@ class PageLayoutEditorWidget(QWidget):
         if page is None or (pages and page not in pages):
             page = pages[0] if pages else 1
         self.set_page_index(page)
+        # e.g. the draft was loaded again: it goes on in part mode if the instance is still included
+        self._update_part_mode()
         self.dirtyChanged.emit(self.session.is_dirty)
         # e.g. the draft was reverted: show the reloaded objects
         self.plate.draft_changed()
@@ -474,6 +486,9 @@ class PageLayoutEditorWidget(QWidget):
             self.page_preview_widget.refresh_items()
             self._update_page_views()
             self.property_editor.refresh_after_change()
+        if self.session.part_mode is not None:
+            # the instances of the part can change
+            self._update_part_bar()
         self.dirtyChanged.emit(self.session.is_dirty)
         self.fileStateChanged.emit()
         self._update_undo_actions()
@@ -606,9 +621,14 @@ class PageLayoutEditorWidget(QWidget):
 
     @property
     def target_component(self) -> Optional[str]:
-        """The key of the component new objects of the current page are added to: the one the user chose, or a default."""
+        """
+        The key of the component new objects of the current page are added to: the one the user chose, or a default. In part
+        mode the key of the part.
+        """
         if self.session is None:
             return None
+        if self.session.part_mode is not None:
+            return str(self.session.part_mode.part)
         chosen = self._device_ui_session().target_file
         for component in self.session.components:
             if relative_config_path(component.path, self.session.device.path) == chosen:
@@ -631,10 +651,90 @@ class PageLayoutEditorWidget(QWidget):
         return pages, self.current_index, self.target_component
 
     def highlight_component(self, key: Optional[str]):
-        """Dim all objects that are not in the given component, or none (None)."""
+        """Dim all objects that are not in the given component, or none (None). In part mode the objects of the part stay."""
         self._highlighted_component = key
-        self.page_preview_widget.set_dimmed_predicate(self._outside_of(key))
+        self.page_preview_widget.set_dimmed_predicate(self._dimmed_predicate())
         self._update_jsonl_dimming()
+
+    def _dimmed_predicate(self) -> Callable[[Dict], bool]:
+        if self.session is not None and self.session.part_mode is not None:
+            # the objects around the instance of the part
+            return lambda obj: not self.session.is_selectable(obj)
+        return self._outside_of(self._highlighted_component)
+
+    # --- part mode ---
+
+    def edit_part(self, part: Path, instance: Optional[PartInstance] = None):
+        """
+        Edit a part in part mode: its objects in one instance (the first one of the draft by default) can be changed, and every
+        instance follows. The preview shows the page of the instance, the objects around it dimmed.
+        """
+        if self.session is None:
+            return
+        instances = self.session.part_instances(part)
+        if not instances:
+            self.status.failed.emit(f"Editing the part {part.name}", "the pages of this device don't include it")
+            return
+        instance = instance or instances[0]
+        try:
+            self.session.enter_part_mode(instance)
+        except ValueError as ex:
+            self.status.failed.emit(f"Editing the part {part.name}", str(ex))
+            return
+        if not self.edit_mode:
+            self.set_edit_mode(True)
+        self._update_part_mode()
+        self._go_to_page(self.session.page_of_instance(instance))
+
+    def leave_part_mode(self):
+        """Back to the objects of the files: the changes of the part stay in the draft."""
+        if self.session is None or self.session.part_mode is None:
+            return
+        self.session.leave_part_mode()
+        self._update_part_mode()
+        self._reload_page()
+
+    def _on_edit_part_requested(self, obj: Dict):
+        instance = self.session.instance_of(obj)
+        self.edit_part(instance.part, instance)
+
+    def _on_part_instance_chosen(self, index: int):
+        mode = self.session.part_mode
+        self.edit_part(mode.part, self.session.part_instances(mode.part)[index])
+
+    def _update_part_mode(self):
+        """Show whether the draft is in part mode: the bar, what is dimmed and can be selected."""
+        mode = self.session.part_mode
+        if mode is None:
+            self.part_bar.hide()
+        else:
+            self._update_part_bar()
+        self.page_preview_widget.set_dimmed_predicate(self._dimmed_predicate())
+        self.page_preview_widget.refresh_movable()
+        self.property_editor.refresh()
+        self._update_actions()
+        self.fileStateChanged.emit()
+        self.stateChanged.emit()
+
+    def _update_part_bar(self):
+        mode = self.session.part_mode
+        instances = self.session.part_instances(mode.part)
+        part = self.session.part_source(mode.part)
+        hint = None
+        if part.is_common:
+            includers = self.device_pages_data.part_includers.get(part.path.resolve(), [])
+            devices = sorted({device for device, _path in includers})
+            hint = (
+                f"A shared part: saving it changes every device that includes it ({len(includers)} "
+                f"file{'' if len(includers) == 1 else 's'} of {len(devices)} device{'' if len(devices) == 1 else 's'}: "
+                f"{', '.join(devices)}). Only the instances of {self.session.device.name} are shown."
+            )
+        self.part_bar.show_part(
+            relative_config_path(part.path, self.session.device.path),
+            [self.session.describe_instance(instance) for instance in instances],
+            instances.index(mode) if mode in instances else None,
+            hint,
+        )
 
     def _update_jsonl_dimming(self):
         """

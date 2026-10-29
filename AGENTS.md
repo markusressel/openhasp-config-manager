@@ -101,7 +101,9 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
   plain objects around them. Edit operations check `session.read_only_reason(obj)` (or `_check_editable`, which raises
   `ReadOnlyObjectError`); `origin_of` says where an included object is written. New edit operations must respect this. Only
   the `vars` and `for` of the outermost `!include` change, through `set_directive_value`, which includes the directive again
-  (objects of instances that stay keep their rendered dict).
+  (objects of instances that stay keep their rendered dict). In part mode (`enter_part_mode`) the objects of one instance of
+  a part can be changed: edits go into the draft copy of the part (`PartDraft`), every instance follows (`_reinclude`), and
+  everything else is read-only. `read_only_reason` and `is_selectable` depend on the mode: use them, not `is_included`.
 - **Templates are never replaced implicitly.** Objects whose `x`/`y` is a template or a percentage can't be dragged or nudged; the
   editor explains why, and "Use pixels for x/y" replaces them only when the user asks. Keep this for new edit operations.
 - **Files**: new objects go into the target file chosen in the Files tree (`gui/domain/file_tree.py` follows the folder structure of

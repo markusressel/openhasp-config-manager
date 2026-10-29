@@ -209,6 +209,27 @@ class TestFileTreeWidget(TestBase):
         assert "devices/plate/0_home/content.jsonl" in self._child(common, "parts", "card.jsonl").toolTip(0)
         assert self._visible(self._child(common, "parts")) == ["card.jsonl", "label.jsonl"]
 
+    def test_a_part_the_preview_shows_can_be_edited_from_its_context_menu(self, tmp_path):
+        # GIVEN
+        widget = self._widget(tmp_path)
+        widget.set_show_all(True)
+        requested = []
+        widget.editPartRequested.connect(requested.append)
+        parts = self._child(widget.tree.topLevelItem(0), "parts")
+
+        # WHEN
+        [edit] = [
+            action
+            for action in widget._context_menu(self._child(parts, "label.jsonl")).actions()
+            if action.text() == "Edit the part"
+        ]
+        edit.trigger()
+
+        # THEN: not for a part the preview doesn't show, nor for other files
+        assert requested == [tmp_path / "common/parts/label.jsonl"]
+        for item in [self._child(parts, "old.jsonl"), widget._items_by_key["content"]]:
+            assert "Edit the part" not in [action.text() for action in widget._context_menu(item).actions()]
+
     def test_a_part_that_only_unused_files_include_is_not_used(self, tmp_path):
         # GIVEN
         widget = self._widget(tmp_path)

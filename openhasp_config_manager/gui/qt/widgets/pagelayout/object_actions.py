@@ -19,6 +19,7 @@ from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable
 LOCKED_POSITION_HINT = "the position is a template or a percentage: use pixels for x/y in the properties to move it"
 LOCKED_POSITION_FIX = "To move it, use pixels for x/y in the properties: this replaces the template or percentage."
 INCLUDED_HINT = "an !include puts it into the file: change it in the part, or the vars of the !include"
+PART_MODE_HINT = "in part mode only the objects of the part, in the instance that is shown, can be changed"
 
 
 class ObjectActions(QObject):
@@ -32,10 +33,10 @@ class ObjectActions(QObject):
     def is_movable(self, obj: Dict) -> bool:
         """
         Objects whose position is a template or a percentage can't be dragged: it would replace them with pixels. Included
-        objects can't be changed at all.
+        objects can't be changed at all, except for those of the part in part mode.
         """
         session = self._editor.session
-        return not session.is_included(obj) and not session.has_computed_position(obj)
+        return session.read_only_reason(obj) is None and not session.has_computed_position(obj)
 
     def report_locked(self, items: List[EditableWidget]):
         """Explain why objects can't be moved: in the status bar, and next to the first of them."""
@@ -50,8 +51,8 @@ class ObjectActions(QObject):
         self._editor.page_preview_widget.show_message(f"{name} can't be moved:\n{reasons}\n{LOCKED_POSITION_FIX}", near=first)
 
     def _changeable(self, items: List[EditableWidget], action: str) -> List[EditableWidget]:
-        """:return: the objects that are not included; why the others can't be changed is shown (see `report_included`)"""
-        included = [item for item in items if self._editor.session.is_included(item.obj_data)]
+        """:return: the objects that can be changed; why the others can't is shown (see `report_included`)"""
+        included = [item for item in items if self._editor.session.read_only_reason(item.obj_data) is not None]
         if included:
             self.report_included(included, action)
         return [item for item in items if not any(item is other for other in included)]
@@ -59,7 +60,8 @@ class ObjectActions(QObject):
     def report_included(self, items: List[EditableWidget], action: str):
         """Explain why included objects can't be changed: in the status bar, and next to the first of them."""
         names = ", ".join(object_name(item.obj_data) for item in items)
-        self._editor.status.failed.emit(f"{action} {names}", INCLUDED_HINT)
+        hint = INCLUDED_HINT if self._editor.session.part_mode is None else PART_MODE_HINT
+        self._editor.status.failed.emit(f"{action} {names}", hint)
         first = items[0]
         reason = self._editor.session.read_only_reason(first.obj_data)
         self._editor.page_preview_widget.show_message(
@@ -74,6 +76,16 @@ class ObjectActions(QObject):
         items = self._changeable(items, "Using pixels for")
         if not items:
             return
+        if self._editor.session.part_mode is not None:
+            answer = QMessageBox.question(
+                self._editor,
+                "Use pixels in the part",
+                "This writes the pixels of this instance into the part: every instance of the part gets the same x and y.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+                QMessageBox.StandardButton.Cancel,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
         with self._editor.session.edit(self._describe("Use pixels for x/y of", items)):
             for item in items:
                 self._editor.session.use_pixel_position(item.obj_data)
@@ -165,6 +177,12 @@ class ObjectActions(QObject):
         """
         items = self._editor.page_preview_widget.selected_items()
         if not self._editor.edit_mode or not items:
+            return
+        if self._editor.session.part_mode is not None:
+            names = ", ".join(object_name(item.obj_data) for item in items)
+            self._editor.status.failed.emit(
+                f"Copying {names}", "the objects of a part need the variables of their instance: duplicate them instead"
+            )
             return
         items = self._changeable(items, "Copying")
         if not items:

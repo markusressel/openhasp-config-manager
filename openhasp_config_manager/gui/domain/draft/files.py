@@ -15,7 +15,7 @@ from openhasp_config_manager.manager import ConfigManager
 from openhasp_config_manager.openhasp_client.model.component import CmdComponent, JsonlComponent
 from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.processing.device_processor import DeviceProcessor
-from openhasp_config_manager.processing.jsonl.includes import Expansion
+from openhasp_config_manager.processing.jsonl.includes import Expansion, PartFile
 from openhasp_config_manager.processing.jsonl.source_editor import JsonlSourceEditor, verify_jsonl_source
 from openhasp_config_manager.processing.template_rendering import (
     check_template,
@@ -65,6 +65,23 @@ class ProcessorDraftRenderer:
 
     def expand_objects(self, component: str, sources: List[Dict[str, Any]]) -> Expansion:
         return self._processor.expand_jsonl_objects(self._components[component], sources)
+
+    def set_draft_parts(self, parts: Dict[Path, PartFile]):
+        self._processor.set_draft_parts(parts)
+        self._template_var_cache = {}
+        self._suggestions = {}
+
+    def part_source(self, path: Path) -> ComponentSource:
+        """:return: a part as it is on disk, as a component of the draft (its key is its path)"""
+        part = self._processor.part(str(path))
+        common_dir = Path(self._processor.config_dir, COMMON_FOLDER_NAME).resolve()
+        return ComponentSource(
+            key=str(part.path),
+            path=Path(part.path),
+            content=part.content,
+            is_common=Path(part.path).resolve().is_relative_to(common_dir),
+            sources=part.sources,
+        )
 
     def referenced_objects(
         self, component: str, source: Dict[str, Any], page: Any = None, scope: Optional[Dict[str, Any]] = None
@@ -130,7 +147,10 @@ class ProcessorDraftRenderer:
         """:return: a text with templates, rendered with the variables of a file that has no objects in the draft"""
         return render_template_or_keep(text, self._processor.path_variables(path))
 
-    def template_suggestions(self, component: str) -> List[Tuple[str, Any]]:
+    def template_suggestions(self, component: str, scope: Optional[Dict[str, Any]] = None) -> List[Tuple[str, Any]]:
+        """:param scope: the variables of the instance of a part, for an included object"""
+        if scope:
+            return sorted(flatten_template_variables({**self._vars_of(component), **scope}))
         if component not in self._suggestions:
             self._suggestions[component] = sorted(flatten_template_variables(self._vars_of(component)))
         return self._suggestions[component]
@@ -230,6 +250,8 @@ class LoadedDevice:
     used_files: Dict[Path, str]
     # the parts -> the files that include them (see `including_files`)
     includers: Dict[Path, List[Path]]
+    # the parts of the device -> (device, file) of every file of all devices that includes them, for what saving a part changes
+    part_includers: Dict[Path, List[Tuple[str, Path]]]
     # where the variables of the YAML files are used, by all devices
     variable_usages: VariableUsages
     # the variable files the device uses -> the names of the variables (see `VariableUsages.used_names`)
@@ -280,6 +302,14 @@ def load_analyzed_device(config_manager: ConfigManager, devices: List[Device], d
 
     files = scan_file_tree(device.path)
     used = used_files(device.cmd, device.jsonl, config_manager.cfg_root)
+    includers = including_files(device.jsonl, config_manager.cfg_root)
+    part_includers: Dict[Path, List[Tuple[str, Path]]] = {part: [] for part in includers}
+    for other in devices:
+        for part, paths in including_files(other.jsonl, config_manager.cfg_root).items():
+            if part in part_includers:
+                part_includers[part] += [
+                    (other.name, path) for path in paths if (other.name, path) not in part_includers[part]
+                ]
     variable_usages = VariableUsages(
         config_manager.cfg_root,
         [DeviceFiles(d.path, list(used_files(d.cmd, d.jsonl, config_manager.cfg_root))) for d in devices],
@@ -293,7 +323,8 @@ def load_analyzed_device(config_manager: ConfigManager, devices: List[Device], d
         renderer=ProcessorDraftRenderer(device_processor, jsonl_components),
         files=files,
         used_files=used,
-        includers=including_files(device.jsonl, config_manager.cfg_root),
+        includers=includers,
+        part_includers=part_includers,
         variable_usages=variable_usages,
         used_variable_files=variable_usages.used_names(device.path),
         unused_variables=find_unused_variables(variable_usages),

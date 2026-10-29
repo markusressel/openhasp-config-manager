@@ -36,12 +36,17 @@ None known.
 
 ## 3. Parts (`!include`) in the editor
 
-Included objects are shown and read-only (see `docs/include-directive.md`). Next:
+Included objects are shown and read-only, except in part mode (see `docs/include-directive.md`). Next:
 
 - [ ] Add and remove names of `vars` and `for` in the "Instance" group of the Properties panel (only their values can be changed;
   `PlateSession.set_directive_value` takes any mapping already).
-- [ ] **A mode to edit a part itself.** Open a part "as a definition": one instance is shown (chosen from the files that include it,
-  or with the part's defaults), edits are written into the part file, and every instance follows.
+- [ ] Part mode for a part that no file of the device includes (with the part's defaults), and from the text editor of a part.
+- [ ] Paste into a part in part mode: give the pasted objects `page` and `id` templates like those of the part's objects
+  (`gui/domain/draft/part_ids.py`), instead of refusing it.
+- [ ] Change the `vars` and `for` of an `!include` inside of a part in part mode (the "Instance" group is hidden there; only the
+  outermost `!include` of a page file can be changed today).
+- [ ] After a save that moves the objects of a part to other lines, the undo states keep the lines of the included objects from
+  before (`ObjectOrigin.line` in `DraftState`): undoing past the save shows the old lines of the part until the next reload.
 - [ ] Copy an included object as a plain object (its values rendered with the variables of its instance). Copying is refused today,
   since the templates of the part need those variables.
 - [ ] The values next to the templates in the text editor of a part are rendered with the variables of its folder only, not with
@@ -52,7 +57,7 @@ Included objects are shown and read-only (see `docs/include-directive.md`). Next
 - [ ] The draft expands the directives of every file again after each edit (for the object references). Cache the instances of a
   directive while its text and its scope stay the same, if large configs make editing slow. Measured on the user's config
   (`touch_down_1`): about 0.45 s per edit of a property or of `vars`, most of it in `jsonl_template_variables` (expanding and
-  copying the variables of every file).
+  copying the variables of every file). An edit in part mode takes 0.4 to 0.8 s there.
 
 ## 4. Composed pages (haad layouts) in the editor
 
