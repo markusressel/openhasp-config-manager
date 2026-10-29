@@ -4,6 +4,7 @@ import time
 
 from PyQt6 import QtCore, QtGui
 
+from openhasp_config_manager.gui.domain.meter_geometry import arc_angles, value_fraction
 from openhasp_config_manager.gui.domain.style_parts import Part
 from openhasp_config_manager.gui.domain.touch_values import ArcDrag, arc_last_angle, arc_value
 from openhasp_config_manager.gui.domain.interaction import is_true
@@ -22,7 +23,6 @@ from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing 
     plate_font,
     round_pen,
     to_color,
-    value_fraction,
 )
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
 
@@ -50,25 +50,6 @@ class HaspArcItem(EditableWidget):
     See https://www.openhasp.com/0.7.0/design/objects/arc/
     """
 
-    def angles(self):
-        """:return: (start, sweep) of the background arc and (start, sweep) of the indicator, in degrees clockwise from 3 o'clock"""
-        rotation = number(self.obj_data.get("rotation"), 0)
-        start = number(self.style("start_angle", _DEFAULT_START), _DEFAULT_START) + rotation
-        end = number(self.style("end_angle", _DEFAULT_END), _DEFAULT_END) + rotation
-        sweep = (end - start) % 360 or 360
-        part = value_fraction(self.data) * sweep
-        kind = int(number(self.obj_data.get("type"), 0))
-        if kind == 1:
-            if part < sweep / 2:
-                indicator = (start + part, sweep / 2 - part)
-            else:
-                indicator = (start + sweep / 2, part - sweep / 2)
-        elif kind == 2:
-            indicator = (start + part, sweep - part)
-        else:
-            indicator = (start, part)
-        return (start, sweep), indicator
-
     def paint(self, painter, option, widget=None):
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
         track_width = number(self.style("line_width", _DEFAULT_LINE_WIDTH), _DEFAULT_LINE_WIDTH)
@@ -77,7 +58,13 @@ class HaspArcItem(EditableWidget):
         full = centered_square(self.obj_w, self.obj_h)
         inset = max(track_width, indicator_width) / 2 + knob_radius
         rect = full.adjusted(inset, inset, -inset, -inset)
-        (start, sweep), (ind_start, ind_sweep) = self.angles()
+        (start, sweep), (ind_start, ind_sweep) = arc_angles(
+            number(self.style("start_angle", _DEFAULT_START), _DEFAULT_START),
+            number(self.style("end_angle", _DEFAULT_END), _DEFAULT_END),
+            number(self.obj_data.get("rotation"), 0),
+            int(number(self.obj_data.get("type"), 0)),
+            value_fraction(self.data),
+        )
 
         # the plate behind the arcs, and the disc inside of them (the main part: `bg_color`, `border_width`, ...)
         draw_box(painter, full, box_style(self, Part.MAIN, _PLATE_DEFAULTS))

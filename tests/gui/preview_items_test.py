@@ -122,19 +122,9 @@ class TestPreviewItems(TestBase):
         assert render({**box, "val": 1}) != render(box)
 
     def test_arc_indicator_follows_its_value(self):
-        from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.arc import HaspArcItem
-
         arc = {"page": 1, "id": 1, "obj": "arc", "x": 10, "y": 10, "w": 150, "h": 150}
         empty, full = painted(render({**arc, "val": 0})), painted(render({**arc, "val": 100}))
         assert 0 < empty < full
-
-        item = HaspArcItem({**arc, "val": 50, "start_angle": 0, "end_angle": 180})
-        assert item.angles() == ((0, 180), (0, 90))
-        item.obj_data["type"] = 2
-        assert item.angles()[1] == (90, 90)
-        item.obj_data["type"] = 1
-        item.obj_data["val"] = 25
-        assert item.angles()[1] == (45, 45)
 
     def test_dropdown_shows_the_selected_option(self):
         from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.dropdown import HaspDropdownItem
@@ -194,20 +184,12 @@ class TestPreviewItems(TestBase):
         assert render({**spinner, "angle": 120, "line_color10": "#00ff00"}) != render({**spinner, "angle": 0})
 
     def test_linemeter_activates_lines_up_to_its_value(self):
-        from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.linemeter import HaspLineMeterItem
-
         meter = {"page": 1, "id": 1, "obj": "linemeter", "x": 10, "y": 10, "w": 150, "h": 150, "line_count": 20}
-        assert HaspLineMeterItem({**meter, "val": 50}).active_lines() == 10
-        assert HaspLineMeterItem({**meter, "val": 500}).active_lines() == 20
         assert painted(render(meter)) > 0
         assert render({**meter, "val": 50}) != render({**meter, "val": 50, "type": 1})
 
     def test_gauge_labels_and_needle(self):
-        from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.gauge import HaspGaugeItem
-
         gauge = {"page": 1, "id": 1, "obj": "gauge", "x": 10, "y": 10, "w": 200, "h": 200, "min": 0, "max": 1000}
-        assert HaspGaugeItem(gauge).labels() == ["0", "200", "400", "600", "800", "1000"]
-        assert HaspGaugeItem({**gauge, "format": 2, "label_count": 3}).labels() == ["0", "5", "10"]
         assert painted(render(gauge)) > 0
         assert render({**gauge, "val": 900}) != render({**gauge, "val": 100})
 

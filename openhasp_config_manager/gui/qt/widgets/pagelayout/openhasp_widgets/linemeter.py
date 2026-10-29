@@ -1,5 +1,6 @@
 from PyQt6 import QtCore, QtGui
 
+from openhasp_config_manager.gui.domain.meter_geometry import active_lines, value_fraction
 from openhasp_config_manager.gui.domain.style_parts import Part
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.box import box_style, draw_box
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.default_theme import DISC_DEFAULTS
@@ -10,7 +11,6 @@ from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing 
     polar,
     scale_start,
     to_color,
-    value_fraction,
 )
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
 
@@ -31,10 +31,6 @@ class HaspLineMeterItem(EditableWidget):
     See https://www.openhasp.com/0.7.0/design/objects/linemeter/
     """
 
-    def active_lines(self) -> int:
-        count = int(number(self.obj_data.get("line_count"), _DEFAULT_LINE_COUNT))
-        return round(value_fraction(self.data) * count)
-
     def paint(self, painter, option, widget=None):
         draw_box(painter, self.obj_rect, box_style(self, Part.MAIN, DISC_DEFAULTS))
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
@@ -51,7 +47,8 @@ class HaspLineMeterItem(EditableWidget):
         )
         radius = min(self.obj_w, self.obj_h) / 2 - _LINE_INSET
         center = self.obj_rect.center()
-        active, reverse = self.active_lines(), int(number(self.obj_data.get("type"), 0)) == 1
+        active = active_lines(int(number(self.obj_data.get("line_count"), _DEFAULT_LINE_COUNT)), value_fraction(self.data))
+        reverse = int(number(self.obj_data.get("type"), 0)) == 1
         inactive_color = to_color(self.obj_data.get("scale_end_color"), _INACTIVE)
         active_color = to_color(self.style("line_color", self.style("line_color", _ACTIVE), Part.INDICATOR), _ACTIVE)
         grad_color = to_color(self.obj_data.get("scale_grad_color"), _ACTIVE)
