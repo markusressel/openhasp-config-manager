@@ -24,6 +24,26 @@ class TestVariableManager(TestBase):
             "key_also_present_in_device_vars": "test_device_value",
         }
 
+    def test_a_resolved_path_while_the_config_directory_is_relative(self, tmp_path, monkeypatch):
+        # GIVEN: the config directory given relative to the working directory (`gui -c ./configs`)
+        monkeypatch.chdir(self.cfg_root.parent)
+        variable_manager = VariableManager(Path(".", self.cfg_root.name))
+        variable_manager.read()
+        page = Path(self.cfg_root.name, "devices", "test_device", "home", "page.jsonl")
+
+        # WHEN: e.g. the path of a file the editor shows
+        result = variable_manager.get_vars(page.resolve())
+
+        # THEN
+        assert result == variable_manager.get_vars(page)
+        assert result["global"] == {"var": "global_var_value"}
+
+        # WHEN
+        variable_manager.add_var(key="A", value="B", path=page.resolve())
+
+        # THEN
+        assert variable_manager.get_vars(page)["A"] == "B"
+
     def test_add_var(self, tmp_path):
         # GIVEN
         variable_manager = VariableManager(self.cfg_root)

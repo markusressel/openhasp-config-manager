@@ -47,7 +47,7 @@ class VariableManager:
         if path is None:
             path = self._cfg_root
 
-        relative_path = Path(self._cfg_root, path.relative_to(self._cfg_root))
+        relative_path = self._in_cfg_root(path)
         if relative_path.is_file():
             relative_path = relative_path.parent
         relative_path_str = str(relative_path)
@@ -99,8 +99,7 @@ class VariableManager:
         """
         result = {}
 
-        toplevel_path = self._cfg_root
-        relative_path = Path(toplevel_path, path.relative_to(toplevel_path))
+        relative_path = self._in_cfg_root(path)
         if relative_path.is_file():
             relative_path = relative_path.parent
 
@@ -115,6 +114,17 @@ class VariableManager:
             result = merge_dict_recursive(result, self._path_vars.get(current_path_str, {}))
 
         return result
+
+    def _in_cfg_root(self, path: Path) -> Path:
+        """
+        :param path: a path in the config directory, in any spelling (e.g. resolved while the config directory is relative)
+        :return: the path as the config directory spells it, which the variables are stored by
+        :raises ValueError: if the path is not in the config directory
+        """
+        try:
+            return Path(self._cfg_root, path.relative_to(self._cfg_root))
+        except ValueError:
+            return Path(self._cfg_root, path.resolve().relative_to(self._cfg_root.resolve()))
 
     def _read(self, path: Path) -> Dict[str, Dict]:
         """

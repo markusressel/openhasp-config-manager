@@ -56,6 +56,19 @@ class TestDraftFiles(TestBase):
         assert session.is_template(label, "text") is True
         assert component.is_common is False
 
+    def test_files_of_a_relative_config_directory_are_rendered_by_their_resolved_path(self, cfg_root, monkeypatch):
+        # GIVEN: the config directory relative to the working directory (`gui -c ./cfg`), and a file outside the draft,
+        # which the text editor knows by its resolved path
+        monkeypatch.chdir(cfg_root.parent)
+        session = _load(Path(".", cfg_root.name))
+        part = (cfg_root / "common" / "parts" / "label.jsonl").resolve()
+
+        # WHEN
+        rendered = session.render_text_at(part, "{{ key_also_present_in_device_vars }}")
+
+        # THEN
+        assert rendered == "test_device_value"
+
     def test_save_patches_the_source_and_keeps_comments_and_templates(self, cfg_root):
         # GIVEN
         session = _load(cfg_root)
