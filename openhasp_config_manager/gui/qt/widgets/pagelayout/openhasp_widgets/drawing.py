@@ -8,6 +8,7 @@ from PyQt6 import QtCore, QtGui
 
 from openhasp_config_manager.gui.domain import fonts
 from openhasp_config_manager.gui.domain.fonts import BUILT_IN_FONT_SIZES, FontKind, resolve_font
+from openhasp_config_manager.gui.domain.meter_geometry import number
 
 DEFAULT_TEXT = "#FFFFFF"
 # the font of the plate if an object doesn't say
@@ -126,25 +127,6 @@ def wrap_lines(font: QtGui.QFont, text: str, width: float) -> list:
                 line = candidate
         lines.append(line)
     return lines
-
-
-def number(value, default: float) -> float:
-    """:return: the value of a property as a number, the default if it is none (e.g. a template that is not rendered)"""
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return default
-
-
-def fraction(value, minimum, maximum) -> float:
-    """:return: where a value is between the minimum and the maximum (0 to 1), 0 if the range is empty"""
-    low, high = number(minimum, 0), number(maximum, 100)
-    return 0.0 if high <= low else max(0.0, min((number(value, low) - low) / (high - low), 1.0))
-
-
-def value_fraction(obj_data: dict) -> float:
-    """:return: where the `val` of an object is between its `min` and `max` (0 to 1)"""
-    return fraction(obj_data.get("val", 0), obj_data.get("min", 0), obj_data.get("max", 100))
 
 
 def selected_index(obj_data: dict) -> int:

@@ -1,6 +1,7 @@
 from PyQt6 import QtCore
 
 from openhasp_config_manager.gui.domain.bar_values import indicator_span
+from openhasp_config_manager.gui.domain.meter_geometry import value_fraction
 from openhasp_config_manager.gui.domain.style_parts import Part
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.box import box_style, draw_box, padding
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.default_theme import (
@@ -8,7 +9,6 @@ from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.default_
     TRACK_DEFAULTS,
     TRACK_PADDING,
 )
-from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import value_fraction
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
 
 

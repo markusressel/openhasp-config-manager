@@ -1,6 +1,7 @@
 from PyQt6 import QtCore
 
 from openhasp_config_manager.gui.domain.bar_values import SLIDER_RANGE, bar_range, pressed_knob, slider_type
+from openhasp_config_manager.gui.domain.meter_geometry import fraction
 from openhasp_config_manager.gui.domain.style_parts import Part
 from openhasp_config_manager.gui.domain.touch_values import slider_value
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.bar import HaspBarItem
@@ -11,7 +12,7 @@ from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.default_
     TRACK_DEFAULTS,
     TRACK_PADDING,
 )
-from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import fraction, number
+from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import number
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import SELECTION_MARGIN
 
 

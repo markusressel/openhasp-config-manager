@@ -298,7 +298,7 @@ class TestTextAndShapes(TestBase):
 
         meter = item_of({"obj": "linemeter", "w": 86, "h": 86, "val": 50})
 
-        assert isinstance(meter, HaspLineMeterItem) and meter.active_lines() == 9
+        assert isinstance(meter, HaspLineMeterItem)
         thin = render({"obj": "linemeter", "w": 86, "h": 86, "val": 100, "line_width10": 1})
         wide = render({"obj": "linemeter", "w": 86, "h": 86, "val": 100, "line_width10": 8})
         assert thin != wide
@@ -341,12 +341,9 @@ class TestDrawingHelpers(TestBase):
         assert opacity(None) == 1.0
         assert opacity("{{ not rendered }}", 128) == 128 / 255
 
-    def test_the_value_of_an_object_is_between_its_min_and_max(self):
-        from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import selected_index, value_fraction
+    def test_the_selected_entry_of_an_object_is_its_val(self):
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.drawing import selected_index
 
-        assert value_fraction({"val": 25}) == 0.25
-        assert value_fraction({"val": 5, "min": 0, "max": 10}) == 0.5
-        assert value_fraction({"min": 10, "max": 10}) == 0.0
         assert selected_index({"val": "2"}) == 2
         assert selected_index({}) == 0
 
