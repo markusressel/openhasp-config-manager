@@ -17,8 +17,8 @@ class DraftRenderer(Protocol):
         """Templates that refer to other objects (`{{ p1b2.x }}`) see these source objects, per component key."""
         ...
 
-    def check_template(self, component: str, template: str) -> Optional[str]:
-        """:return: why the template can't be rendered, or None if it can"""
+    def check_template(self, component: str, template: str, name: Optional[str] = None) -> Optional[str]:
+        """:return: why the template can't be rendered (in the object `name`, for `this` and `bY`), or None if it can"""
         ...
 
     def template_suggestions(self, component: str) -> List[Tuple[str, Any]]:

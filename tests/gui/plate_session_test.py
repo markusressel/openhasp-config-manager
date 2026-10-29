@@ -30,7 +30,7 @@ class FakeRenderer:
     def set_draft_sources(self, sources: Dict[str, List[Dict[str, Any]]]):
         pass
 
-    def check_template(self, component: str, template: str) -> Optional[str]:
+    def check_template(self, component: str, template: str, name: Optional[str] = None) -> Optional[str]:
         return None if template.strip("{} ") in self.variables else "Unknown variable"
 
     def template_suggestions(self, component: str) -> List[Tuple[str, Any]]:

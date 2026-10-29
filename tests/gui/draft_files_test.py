@@ -127,6 +127,26 @@ class TestDraftFiles(TestBase):
         with pytest.raises(KeyError):
             session.variable_value_at(variable_file, "p9b2.text")
 
+    def test_objects_that_refer_to_themselves_and_to_their_page_follow_changes(self, cfg_root):
+        # GIVEN
+        (cfg_root / "devices" / "test_device" / "editor.jsonl").write_text(
+            '{"page": 9, "id": 1, "obj": "label", "x": "{{ b2.x + 5 }}", "h": 20, "w": "{{ this.h * 2 }}"}\n'
+            '{"page": 9, "id": 2, "obj": "btn", "x": 10}\n'
+        )
+        session = _load(cfg_root)
+        [component] = session.components
+        label, button = session.working_objects[component.key]
+        assert (label["x"], label["w"]) == (15, 40)
+
+        # WHEN
+        session.set_source_value(button, "x", 30)
+        session.set_source_value(label, "h", 25)
+
+        # THEN
+        assert (label["x"], label["w"]) == (35, 50)
+        assert session.check_template(label, "{{ this.h + b2.x }}") is None
+        assert session.check_template(label, "{{ b3.x }}") == "Unknown variable: 'b3' is undefined"
+
     def test_suggestions_contain_the_variables_of_a_deployment(self, cfg_root):
         # GIVEN
         session = _load(cfg_root)

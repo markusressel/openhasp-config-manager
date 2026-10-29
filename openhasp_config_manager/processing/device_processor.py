@@ -18,6 +18,7 @@ from openhasp_config_manager.processing.jsonl import JsonlObjectProcessor
 from openhasp_config_manager.processing.jsonl.jsonl import ObjectDimensionsProcessor
 from openhasp_config_manager.processing.preprocessor.jsonl_preprocessor import JsonlPreProcessor
 from openhasp_config_manager.processing.template_rendering import (
+    object_variables,
     render_dict_recursive,
     render_template,
     render_template_or_keep,
@@ -122,10 +123,18 @@ class DeviceProcessor:
         :return: the rendered object
         """
         render = render_template_or_keep if keep_unresolved else render_template
+
+        def rendered(key: str) -> Any:
+            value = source_object.get(key, "0")
+            return render(value, template_vars) if isinstance(value, str) else value
+
+        # `this` and `bY` (see `object_variables`): the page and the id say which object it is
+        name = f"p{rendered('page')}b{rendered('id')}"
+        object_vars = {**template_vars, **object_variables(name, template_vars)}
         normalized_object = {}
         for key, value in source_object.items():
             if isinstance(value, str):
-                normalized_object[key] = render(value, template_vars)
+                normalized_object[key] = render(value, object_vars)
             else:
                 normalized_object[key] = value
 
@@ -167,7 +176,10 @@ class DeviceProcessor:
             # `result` becomes what the variables of this component start with: everything before it, and its own variables
             merge_dict_into(result, component_template_vars)
             rendered_template_vars = render_dict_recursive(
-                input=c_result, template_vars=merge_dict_shared(result, c_result), convert=self._object_value
+                input=c_result,
+                template_vars=merge_dict_shared(result, c_result),
+                convert=self._object_value,
+                entry_vars=object_variables,
             )
             # what the objects add, without overriding anything
             add_missing_keys(result, rendered_template_vars)

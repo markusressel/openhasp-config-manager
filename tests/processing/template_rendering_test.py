@@ -8,6 +8,7 @@ from openhasp_config_manager.processing.template_rendering import (
     check_template,
     evaluate_template,
     is_single_template,
+    object_variables,
     referenced_variables,
     render_variables,
     render_dict_recursive,
@@ -654,6 +655,67 @@ class TestObjectsThatReferToEachOther(TestBase):
         # THEN
         assert result == {"p1b1": {"w": 20, "nested": {"a": "1"}}, "p1b2": {"w": 15}}
         assert ["p1b1", "nested", "a"] in calls and ["p1b1", "nested"] not in calls
+
+
+class TestThisAndObjectsOfThePage(TestBase):
+    def test_the_names_of_an_object(self):
+        # GIVEN
+        objects = {"p3b4": {"x": 1}, "p3b45": {"h": 2}, "p4b4": {"x": 3}, "other": {"x": 4}}
+
+        # WHEN
+        result = object_variables("p3b45", objects)
+
+        # THEN
+        assert result == {"this": {"h": 2}, "b4": {"x": 1}, "b45": {"h": 2}}
+        assert result["this"] is objects["p3b45"]
+
+    def test_an_object_that_is_not_in_the_variables_and_names_that_are_no_objects(self):
+        # THEN
+        assert object_variables("p3b9", {"p3b4": {"x": 1}}) == {"b4": {"x": 1}}
+        assert object_variables("{{ page }}", {"p3b4": {"x": 1}}) == {}
+
+    def test_objects_refer_to_themselves_and_to_their_page(self):
+        # GIVEN: `this` and `bY` before what they use is resolved, also later in the dict
+        objects = {
+            "p3b1": {"page": 3, "id": 1, "w": "{{ this.h }}", "h": "{{ (b2.h | int) * 2 }}", "text": "Page {{ this.page }}"},
+            "p3b2": {"page": 3, "id": 2, "h": "{{ size }}"},
+            "p4b2": {"page": 4, "id": 2, "h": 100},
+        }
+
+        # WHEN
+        result = render_dict_recursive(objects, {"size": 5, **objects}, entry_vars=object_variables)
+
+        # THEN
+        assert result["p3b1"] == {"page": 3, "id": 1, "w": "10", "h": "10", "text": "Page 3"}
+
+    def test_the_names_are_only_there_while_the_entry_is_rendered(self):
+        # GIVEN: variables with the same names, which the objects hide
+        objects = {"p1b1": {"x": "{{ this.y }}", "y": 1}}
+        template_vars = {"this": {"y": "variable"}, "b1": "variable", "after": "{{ this }}"}
+
+        # WHEN
+        result = render_dict_recursive(
+            {**objects, "after": "{{ this.y }}", "b": "{{ b1 }}"}, {**template_vars, **objects}, entry_vars=object_variables
+        )
+
+        # THEN
+        assert result == {"p1b1": {"x": "1", "y": 1}, "after": "variable", "b": "variable"}
+
+    def test_an_object_whose_name_is_a_template(self):
+        # GIVEN
+        objects = {"p{{ page }}b1": {"w": "{{ this.h }}", "h": 3}}
+
+        # WHEN
+        result = render_dict_recursive(objects, {"page": 2, **objects}, entry_vars=object_variables)
+
+        # THEN
+        assert result == {"p2b1": {"w": "3", "h": 3}}
+
+    def test_objects_named_without_their_page(self):
+        # THEN
+        assert referenced_objects("{{ b2.x + p1b3.y }} {{ this.w }}", {}, page=4) == {"p4b2", "p1b3"}
+        assert referenced_objects("{{ b2.x }}", {}) == set()
+        assert referenced_objects("{{ p1b2.x }}", {}, page=4) == {"p1b2"}
 
 
 class TestRenderTemplateOrKeep(TestBase):

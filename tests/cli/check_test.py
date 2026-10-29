@@ -120,6 +120,19 @@ class TestCheck:
         # THEN
         assert any(issue.severity == Severity.ERROR and "not closed" in issue.message for issue in issues)
 
+    def test_this_and_the_objects_of_the_page_are_no_unknown_variables(self, cfg_root):
+        # GIVEN
+        _write(
+            cfg_root,
+            '{"page": 9, "id": 1, "obj": "label", "w": "{{ this.h }}", "h": 9, "x": "{{ b2.x }}"}\n{"page": 9, "id": 2, "x": 1}\n',
+        )
+
+        # WHEN
+        _, issues = _check(cfg_root)
+
+        # THEN
+        assert issues == []
+
     def test_variables_that_depend_on_each_other_in_a_cycle_are_an_error(self, cfg_root):
         # GIVEN
         (cfg_root / "computed.vars.yaml").write_text('a: "{{ b }}"\nb: "{{ a + 1 }}"\n')

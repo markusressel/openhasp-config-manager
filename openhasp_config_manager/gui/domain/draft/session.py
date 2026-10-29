@@ -1,5 +1,6 @@
 import copy
 import itertools
+import re
 from collections import OrderedDict
 from contextlib import contextmanager
 from dataclasses import replace
@@ -22,12 +23,14 @@ from openhasp_config_manager.gui.domain.draft.edit_history import EditHistory
 from openhasp_config_manager.gui.domain.draft.page_objects import next_free_id
 from openhasp_config_manager.gui.domain.problems import object_name
 from openhasp_config_manager.openhasp_client.model.device import Device
-from openhasp_config_manager.processing.template_rendering import has_nested_templates, referenced_objects
+from openhasp_config_manager.processing.template_rendering import THIS, has_nested_templates, referenced_objects
 from openhasp_config_manager.processing.jsonl.jsonl import ObjectDimensionsProcessor, is_numeric_property
 from openhasp_config_manager.processing.jsonl.source_editor import JsonlSourceEditor
 
 # stands for every object: the objects a template refers to can't be told
 ANY_OBJECT = "*"
+# the object itself in its templates
+_THIS = re.compile(rf"\b{THIS}\b")
 
 
 @lru_cache(maxsize=64)
@@ -151,7 +154,8 @@ class PlateSession:
         return any(self.is_template(obj, key) or self.is_percentage(obj, key) for key in ("x", "y"))
 
     def check_template(self, obj: Dict, template: str) -> Optional[str]:
-        return self._renderer.check_template(self._entry(obj).component, template)
+        """:return: why a template can't be rendered in a property of the object (`this` is the object), None if it can"""
+        return self._renderer.check_template(self._entry(obj).component, template, object_name(obj))
 
     def template_suggestions(self, obj: Dict) -> List[Tuple[str, Any]]:
         return self._renderer.template_suggestions(self._entry(obj).component)
@@ -474,7 +478,18 @@ class PlateSession:
         :param name_before: the name of `changed` (`p1b2`) before the change, if the change could rename it
         """
         self._set_draft_sources()
+        if id(changed) in self._entries and self._refers_to_itself(changed):
+            # it was rendered with the variables from before the change
+            self._render(changed)
         self._render_referring({object_name(changed)} | ({name_before} if name_before else set()), skip=[changed])
+
+    def _refers_to_itself(self, obj: Dict) -> bool:
+        """:return: whether a template of the object uses the object (`this`, or its name)"""
+        entry = self._entry(obj)
+        values = [value for value in entry.source.values() if isinstance(value, str) and "{{" in value]
+        return any(_THIS.search(value) for value in values) or bool(
+            self._references_of(entry, obj.get("page")) & {object_name(obj), ANY_OBJECT}
+        )
 
     def _set_draft_sources(self):
         self._renderer.set_draft_sources(
@@ -487,18 +502,21 @@ class PlateSession:
         for objects in self._working_objects.values():
             for obj in objects:
                 entry = self._entry(obj)
-                if not any(obj is other for other in skip) and self._references_of(entry) & names_or_any:
+                if not any(obj is other for other in skip) and self._references_of(entry, obj.get("page")) & names_or_any:
                     rendered = self._renderer.render_object(entry.component, entry.source)
                     if rendered != obj:
                         self._apply(obj, rendered)
 
-    def _references_of(self, entry: DraftEntry) -> Set[str]:
-        """:return: the objects the templates of an object refer to (`ANY_OBJECT` if that can't be told)"""
+    def _references_of(self, entry: DraftEntry, page: Any) -> Set[str]:
+        """
+        :param page: the page of the object, for the objects of its page it names without a page (`b2`)
+        :return: the objects the templates of an object refer to (`ANY_OBJECT` if that can't be told)
+        """
         values = [value for value in entry.source.values() if isinstance(value, str)]
         if any(has_nested_templates(value) for value in values):
             # the names are built by templates, which need the variables of the component
-            return self._renderer.referenced_objects(entry.component, entry.source)
-        return set().union(*(referenced_objects(value, {}) for value in values))
+            return self._renderer.referenced_objects(entry.component, entry.source, page)
+        return set().union(*(referenced_objects(value, {}, page) for value in values))
 
     def _render_with(self, obj: Dict, key: str, value: Any) -> Dict:
         """:return: the object rendered with a different source value, without changing it"""

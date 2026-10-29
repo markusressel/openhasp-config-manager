@@ -332,6 +332,16 @@ The numeric properties of other objects (`page`, `id`, `x`, `y`, `w`, `h`, `min`
 `pad_*`, `margin_*`, ...) are numbers, with percentages already turned into pixels, so you can calculate with them directly:
 `"{{ p1b1.x + p1b1.w + 4 }}"`. Other properties are text, as they are written.
 
+Two shorter names help with objects of the same page:
+
+* `this` is the object itself: `"w": "{{ this.h }}"` makes it square, `"text": "Page {{ this.page }}"`.
+* `bY` is the object with the id `Y` on the page of the object, like `pXbY` without the page:
+  `"x": "{{ b4.x + common.card.padding }}"` instead of `"x": "{{ p{{ common.pages.printer.index }}b4.x + common.card.padding }}"`.
+
+Like `pXbY`, they work for objects later in the file, for the object itself and for objects of other files of the device.
+They can't be used in `page` and `id` (these say which object it is), and inside of object templates they hide variables
+with the same names.
+
 #### 📦 Variables & Scoping
 
 Besides accessing other objects, you can also define custom variables yourself, which can then

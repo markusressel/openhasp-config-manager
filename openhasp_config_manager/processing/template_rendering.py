@@ -20,9 +20,10 @@ Templates in the config files are Jinja2 with some differences:
 import copy
 import logging
 import re
+from contextlib import contextmanager
 from contextvars import ContextVar
 from functools import lru_cache
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, Iterator, List, Optional, Set, Tuple
 
 import jinja2
 from jinja2 import BaseLoader, Template, TemplateError, TemplateSyntaxError, UndefinedError, meta, nodes
@@ -243,6 +244,34 @@ def _end_of_expression(text: str, start: int) -> int:
 
 
 _OBJECT_NAME = re.compile(r"\bp\d+b\d+\b")
+# an object of the page of the object a template is in (`b4`), openHASP's `pXbY` without the page
+_PAGE_OBJECT_NAME = re.compile(r"\bb(\d+)\b")
+# the parts of the name of an object
+_OBJECT_PARTS = re.compile(r"p(\d+)b(\d+)")
+# the name of the object itself in its templates
+THIS = "this"
+
+
+def object_variables(name: str, template_vars: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    The names a template of an object has for objects, besides `pXbY`: `this` is the object itself, and `bY` is object `Y` on the
+    page of the object. They refer to the objects in the variables, as far as they are rendered.
+    :param name: the object the template is in, e.g. `p3b45`
+    :param template_vars: the variables with the objects by their names (`p3b4`)
+    :return: these names with their objects, to add to the variables of the template (nothing for a name that is not `pXbY`)
+    """
+    match = _OBJECT_PARTS.fullmatch(name)
+    if match is None:
+        return {}
+    page = match[1]
+    result = {
+        f"b{parts[2]}": value
+        for key, value in template_vars.items()
+        if (parts := _OBJECT_PARTS.fullmatch(str(key))) is not None and parts[1] == page
+    }
+    if name in template_vars:
+        result[THIS] = template_vars[name]
+    return result
 
 
 def has_nested_templates(content: str) -> bool:
@@ -250,24 +279,31 @@ def has_nested_templates(content: str) -> bool:
     return _find_nested_template(content) is not None
 
 
-def referenced_objects(content: str, template_vars: Dict[str, Any]) -> Optional[Set[str]]:
+def referenced_objects(content: str, template_vars: Dict[str, Any], page: Any = None) -> Optional[Set[str]]:
     """
     :param template_vars: the variables for the templates inside of templates, which are rendered first (see `render_template`)
+    :param page: the page of the object the text is in, for the objects named without their page (`b2` is `p<page>b2`)
     :return: the objects (`p1b2`) that the templates in a text name, also when a template builds the name
         (`{{ p{{ page }}b2.x }}` names `p3b2` if `page` is 3). None if that can't be told because a nested template is not valid.
     """
     if "{{" not in content and "{%" not in content:
         return set()
     try:
-        return set(_OBJECT_NAME.findall(render_nested_templates(content, template_vars)))
+        rendered = render_nested_templates(content, template_vars)
     except TemplateError:
         return None
+    names = set(_OBJECT_NAME.findall(rendered))
+    if page is not None:
+        names |= {f"p{page}b{object_id}" for object_id in _PAGE_OBJECT_NAME.findall(rendered)}
+    return names
 
 
 # what could not be rendered: where it is, and why
 Unresolved = Tuple[str, str]
 # changes a value that was rendered, by its keys in the dict (e.g. ["p1b2", "x"]): see `render_dict_recursive`
 Converter = Callable[[List[str], Any], Any]
+# more variables for the templates of an entry of the dict: (its key, the variables) -> the names and their values
+EntryVariables = Callable[[str, Dict[str, Any]], Dict[str, Any]]
 
 
 def render_dict_recursive(
@@ -275,6 +311,7 @@ def render_dict_recursive(
     template_vars: Dict,
     result_key_path: List[str] = None,
     convert: Optional[Converter] = None,
+    entry_vars: Optional[EntryVariables] = None,
 ) -> Dict[str, Any]:
     """
     Resolve the templates in the keys and values of a dict (and of the dicts and lists in it), which may refer to each
@@ -286,13 +323,16 @@ def render_dict_recursive(
     :param result_key_path: the keys of the dict within the variables, for the dicts inside of `input`
     :param convert: changes every value that is not a dict when it is resolved, before other templates use it (called with its
         keys and the value, returns the value to use), e.g. to turn the numbers of object properties into numbers
+    :param entry_vars: variables only for the templates of an entry of `input` (not of the dicts inside of it), e.g. `this` for
+        an object (see `object_variables`). Called with the key of the entry and the variables, every time the entry is
+        rendered; a dict entry is in the variables at its key while it is rendered, so they can refer to what is resolved of it.
     :return: the dict with its templates rendered
     :raises TemplateRenderError: if a template is not valid
     """
     variables = copy.deepcopy(template_vars)
     path = result_key_path or []
     _mark_pending(variables, input, path)
-    result, unresolved = _render_dict(input, variables, path, convert)
+    result, unresolved = _render_dict(input, variables, path, convert, entry_vars)
     if unresolved:
         warn("Can't render these templates: " + "; ".join(f"{name} ({reason})" for name, reason in unresolved))
     return result
@@ -309,7 +349,11 @@ def _mark_pending(variables: Dict, input: Dict, path: List[str]):
 
 
 def _render_dict(
-    input: Dict, template_vars: Dict, path: List[str], convert: Optional[Converter]
+    input: Dict,
+    template_vars: Dict,
+    path: List[str],
+    convert: Optional[Converter],
+    entry_vars: Optional[EntryVariables] = None,
 ) -> Tuple[Dict[str, Any], List[Unresolved]]:
     # `template_vars` is changed: every resolved entry is added to it at its place, for the templates that follow
     result = {}
@@ -328,7 +372,15 @@ def _render_dict(
                     unresolved.append((name, f"the key {key_unresolved}"))
                     continue
 
-            rendered_value, value_unresolved = _render_value(value, template_vars, path + [rendered_key], name, convert)
+            if entry_vars is None:
+                rendered_value, value_unresolved = _render_value(value, template_vars, path + [rendered_key], name, convert)
+            else:
+                if isinstance(value, dict):
+                    _container(template_vars, path).setdefault(rendered_key, {})
+                with _overlaid(template_vars, entry_vars(rendered_key, template_vars)):
+                    rendered_value, value_unresolved = _render_value(
+                        value, template_vars, path + [rendered_key], name, convert
+                    )
             if value_unresolved:
                 unresolved += value_unresolved
                 if isinstance(value, dict):
@@ -338,9 +390,7 @@ def _render_dict(
                 rendered_value = convert(path + [rendered_key], rendered_value)
 
             # later templates can use it
-            target = template_vars
-            for path_key in path:
-                target = target.setdefault(path_key, {})
+            target = _container(template_vars, path)
             target.pop(key, None)
             target[rendered_key] = rendered_value
             result[rendered_key] = rendered_value
@@ -351,6 +401,32 @@ def _render_dict(
         if unresolved_names == last_unresolved_names:
             return {**result, **partial}, unresolved
         last_unresolved_names = unresolved_names
+
+
+def _container(template_vars: Dict, path: List[str]) -> Dict:
+    """:return: the dict of the variables at the path, created if it is not there"""
+    target = template_vars
+    for path_key in path:
+        target = target.setdefault(path_key, {})
+    return target
+
+
+_MISSING = object()
+
+
+@contextmanager
+def _overlaid(template_vars: Dict, extra: Dict[str, Any]) -> Iterator[None]:
+    """The variables have the extra names in this block (they win), and are as before afterwards."""
+    saved = {key: template_vars.get(key, _MISSING) for key in extra}
+    template_vars.update(extra)
+    try:
+        yield
+    finally:
+        for key, value in saved.items():
+            if value is _MISSING:
+                del template_vars[key]
+            else:
+                template_vars[key] = value
 
 
 def _render_value(

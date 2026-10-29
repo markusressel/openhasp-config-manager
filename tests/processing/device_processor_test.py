@@ -295,3 +295,43 @@ class TestObjectReferences(TestBase):
         # THEN
         assert result[1] == '{"page": 1, "id": 2, "x": 170, "w": 148, "h": 16}'
         assert result[2] == '{"page": 1, "id": 3, "text": "12!", "y": 178}'
+
+    def test_this_and_the_objects_of_the_own_page(self):
+        # GIVEN: `b4` is later in the file, and on two pages
+        content = textwrap.dedent("""
+            {"page": 1, "id": 1, "x": "{{ b4.x + 2 }}", "h": 20, "w": "{{ this.h }}", "text": "p{{ this.page }}"}
+            {"page": 2, "id": 1, "x": "{{ b4.x + 2 }}"}
+            {"page": 1, "id": 4, "x": "{{ 10 * 2 }}"}
+            {"page": 2, "id": 4, "x": 100}
+            """)
+
+        # WHEN
+        result = self._render(content).splitlines()
+
+        # THEN
+        assert result[0] == '{"page": 1, "id": 1, "x": 22, "h": 20, "w": 20, "text": "p1"}'
+        assert result[1] == '{"page": 2, "id": 1, "x": 102}'
+
+    def test_objects_of_the_page_in_other_files(self):
+        # GIVEN: the header of the page is in another file
+        device = Device(
+            name="test_device",
+            path=Path(self.cfg_root, "devices", "test_device"),
+            config=self.default_config,
+            cmd=[],
+            jsonl=[],
+            images=[],
+            fonts=[],
+            output_dir=None,
+        )
+        processor = DeviceProcessor(device, [ObjectDimensionsProcessor()], VariableManager(self.cfg_root))
+        folder = Path(self.cfg_root, "devices", "test_device")
+        header = JsonlComponent(name="h.jsonl", type="jsonl", path=folder / "h.jsonl", content='{"page": 1, "id": 2, "h": 30}')
+        content = JsonlComponent(
+            name="c.jsonl", type="jsonl", path=folder / "c.jsonl", content='{"page": 1, "id": 5, "y": "{{ b2.h + 4 }}"}'
+        )
+        processor.add_component(header)
+        processor.add_component(content)
+
+        # THEN
+        assert processor.normalize(device, content) == '{"page": 1, "id": 5, "y": 34}'
