@@ -102,6 +102,24 @@ class TestTemplateCompleter(TestBase):
         assert result.startswith('{{ <b style="color: #ff0000;">a</b>&lt;<b style="color: #ff0000;">b</b> }}')
         assert result.endswith('<span style="color: #888;">= &#x27;x&#x27;</span>')
 
+    def test_choosing_a_variable_inserts_it_at_the_cursor_and_keeps_the_text(self):
+        from PyQt6.QtWidgets import QLineEdit
+
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.template_completer import TemplateCompleter
+
+        # GIVEN a text with a template, the cursor in the template
+        editor = QLineEdit("Temp: {{ dev }} °C")
+        completer = TemplateCompleter(editor, [("{{ device.ip }}", "1.2.3.4"), ("{{ theme.name }}", "dark")])
+        editor.setCursorPosition(len("Temp: {{ dev"))
+        editor.textEdited.emit(editor.text())
+
+        # WHEN
+        completer._on_activated(completer._model.index(0, 0))
+
+        # THEN
+        assert editor.text() == "Temp: {{ device.ip }} °C"
+        assert editor.cursorPosition() == len("Temp: {{ device.ip")
+
 
 @pytest.mark.usefixtures("qapp")
 class TestPagePreviewWidget(TestBase):

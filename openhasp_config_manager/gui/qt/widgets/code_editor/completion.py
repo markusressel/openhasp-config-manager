@@ -14,6 +14,7 @@ from openhasp_config_manager.gui.domain.source.completion import (
     value_choice,
     value_insertion,
     value_words,
+    variable_insertion,
 )
 from openhasp_config_manager.gui.domain.source.docs import (
     PropertyHelp,
@@ -142,6 +143,9 @@ class EditorCompletion(QObject):
         elif self._kind == "value":
             choice = value_choice(self._object_type, context.key, word)
             insertion = value_insertion(block.text(), cursor.positionInBlock(), context, word, choice)
+            start, end, text, after = insertion.start, insertion.end, insertion.text, insertion.cursor
+        elif self._kind == "variable":
+            insertion = variable_insertion(block.text(), cursor.positionInBlock(), context, word)
             start, end, text, after = insertion.start, insertion.end, insertion.text, insertion.cursor
         else:
             start, end, text = context.start, cursor.positionInBlock(), word

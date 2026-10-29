@@ -6,7 +6,12 @@ from PyQt6.QtGui import QStandardItemModel, QStandardItem, QTextDocument, QPalet
 from PyQt6.QtWidgets import QCompleter, QLineEdit, QStyledItemDelegate, QStyleOptionViewItem, QStyle, QApplication
 
 from openhasp_config_manager.gui.dimensions import UiDimensions
-from openhasp_config_manager.gui.domain.fuzzy import filter_template_suggestions, template_query
+from openhasp_config_manager.gui.domain.fuzzy import filter_template_suggestions, template_variable
+from openhasp_config_manager.gui.domain.source.completion import (
+    CompletionContext,
+    template_field_context,
+    variable_insertion,
+)
 from openhasp_config_manager.gui.qt.theme import current_colors
 
 _TEMPLATE_ROLE = QtCore.Qt.ItemDataRole.UserRole
@@ -20,8 +25,10 @@ _MIN_POPUP_WIDTH = 420
 
 class TemplateCompleter(QtCore.QObject):
     """
-    Suggests template variables for a template field: fuzzy matched against what was typed (without the braces),
-    best match first, with the matched characters highlighted. Choosing one replaces the text of the field.
+    Suggests template variables for a template field: fuzzy matched against the variable that is typed at the cursor, best match
+    first, with the matched characters highlighted. Choosing one writes it at the cursor like the text editor does (see
+    `variable_insertion`): inside of a template the name, else the word before the cursor becomes a template. The rest of the
+    text stays.
     """
 
     def __init__(self, editor: QLineEdit, suggestions: Sequence[Tuple[str, Any]]):
@@ -29,6 +36,8 @@ class TemplateCompleter(QtCore.QObject):
         self._editor = editor
         self._suggestions = suggestions
         self._model = QStandardItemModel(self)
+        # what is completed, from the last edit
+        self._context: CompletionContext = template_field_context("")
 
         self._completer = QCompleter(self)
         self._completer.setWidget(editor)
@@ -44,7 +53,12 @@ class TemplateCompleter(QtCore.QObject):
         editor.textEdited.connect(self._on_text_edited)
 
     def _on_text_edited(self, text: str):
-        matches = filter_template_suggestions(template_query(text), self._suggestions)
+        self._context = template_field_context(text[: self._editor.cursorPosition()])
+        # outside of a template every variable is only offered while the field is empty, not after each space of a text
+        if self._context.kind == "template" and not self._context.prefix and text:
+            matches = []
+        else:
+            matches = filter_template_suggestions(self._context.prefix, self._suggestions)
         self._model.clear()
         for match in matches:
             item = QStandardItem(match.template)
@@ -62,8 +76,14 @@ class TemplateCompleter(QtCore.QObject):
         popup.setCurrentIndex(self._model.index(0, 0))
 
     def _on_activated(self, index: QtCore.QModelIndex):
-        self._editor.setText(index.data(_TEMPLATE_ROLE))
-        self._editor.setFocus()
+        editor = self._editor
+        text = editor.text()
+        insertion = variable_insertion(
+            text, editor.cursorPosition(), self._context, template_variable(index.data(_TEMPLATE_ROLE))
+        )
+        editor.setText(text[: insertion.start] + insertion.text + text[insertion.end :])
+        editor.setCursorPosition(insertion.cursor)
+        editor.setFocus()
 
 
 def _format_value(value: Any) -> str:

@@ -12,6 +12,8 @@ from openhasp_config_manager.gui.domain.source.completion import (
     value_choice,
     value_insertion,
     value_words,
+    template_field_context,
+    variable_insertion,
 )
 from openhasp_config_manager.gui.domain.object_type_docs import is_text_property
 from openhasp_config_manager.gui.domain.source.docs import property_help
@@ -216,6 +218,44 @@ class TestPlaceholders(TestBase):
         assert insert('{"text": "%ho"}', 13, "%hostname%") == ('{"text": "%hostname%"}', 20)
         assert insert('{"text": "%ho|stn%"}'.replace("|", ""), 13, "%hostname%") == ('{"text": "%hostname%"}', 20)
         assert insert('{"text": "%"}', 11, "%ip%") == ('{"text": "%ip%"}', 14)
+
+
+def _insert_variable(text: str, word: str):
+    """:param text: with a `|` where the cursor is :return: the text after choosing the word, with a `|` where the cursor goes"""
+    column = text.index("|")
+    text = text.replace("|", "")
+    context = template_field_context(text[:column])
+    insertion = variable_insertion(text, column, context, word)
+    result = text[: insertion.start] + insertion.text + text[insertion.end :]
+    return result[: insertion.cursor] + "|" + result[insertion.cursor :]
+
+
+class TestVariables(TestBase):
+    def test_a_template_field_completes_inside_of_the_template_at_the_cursor(self):
+        assert template_field_context("Temp: {{ a }} and {{ dev") == CompletionContext("variable", "dev", 21)
+        assert template_field_context("{{ ") == CompletionContext("variable", "", 3)
+
+    def test_a_template_field_completes_the_word_before_the_cursor_outside_of_templates(self):
+        assert template_field_context("Temp: {{ a }} dev") == CompletionContext("template", "dev", 14)
+        assert template_field_context("") == CompletionContext("template", "", 0)
+
+    @pytest.mark.parametrize(
+        "text, expected",
+        [
+            # the name at the cursor, the rest of the text stays
+            ("Temp: {{ dev| }} °C", "Temp: {{ device.ip| }} °C"),
+            # also what is typed of the name after the cursor
+            ("{{ dev|ic.x }}", "{{ device.ip| }}"),
+            ("{{ a }} {{ |", "{{ a }} {{ device.ip| }}"),
+            # a template that is not closed before the next one gets its braces
+            ("{{ de| {{ b }}", "{{ device.ip| }} {{ b }}"),
+            # outside of a template the word becomes one
+            ("Temp: dev| °C", "Temp: {{ device.ip }}| °C"),
+            ("|", "{{ device.ip }}|"),
+        ],
+    )
+    def test_insertion(self, text, expected):
+        assert _insert_variable(text, "device.ip") == expected
 
 
 class TestValues(TestBase):

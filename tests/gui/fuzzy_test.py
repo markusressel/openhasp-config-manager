@@ -3,7 +3,7 @@ import pytest
 # pfzy is in the optional ui group
 pytest.importorskip("pfzy")
 
-from openhasp_config_manager.gui.domain.fuzzy import filter_template_suggestions, template_query
+from openhasp_config_manager.gui.domain.fuzzy import filter_template_suggestions, template_variable
 from tests import TestBase
 
 SUGGESTIONS = [
@@ -29,11 +29,11 @@ class TestFuzzy(TestBase):
         assert all(s.positions == () for s in result)
 
     @pytest.mark.parametrize(
-        "text, expected",
-        [("{{ device.i", "device.i"), ("{{ }}", ""), ("  bg ", "bg")],
+        "template, expected",
+        [("{{ device.ip }}", "device.ip"), ("{{loop}}", "loop")],
     )
-    def test_template_query(self, text, expected):
-        assert template_query(text) == expected
+    def test_template_variable(self, template, expected):
+        assert template_variable(template) == expected
 
     def test_filter_sorts_by_score_and_maps_positions_into_the_template(self):
         # WHEN
