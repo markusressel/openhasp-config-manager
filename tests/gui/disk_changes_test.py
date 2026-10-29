@@ -243,13 +243,38 @@ class TestGuiStateFile(TestBase):
         assert "editor.jsonl" in state["load_error"]["message"]
         assert state["last_operation"]["ok"] is False
 
+    def test_the_state_has_an_image_of_the_preview_that_follows_changes_on_disk(self, window, cfg_root):
+        # GIVEN
+        from PyQt6.QtGui import QImage
+
+        wait_until(lambda: (gui_state(cfg_root).get("device") or {}).get("preview"))
+        state = gui_state(cfg_root)
+        preview = state["device"]["preview"]
+        image = QImage(str(cfg_root / preview["file"]))
+        assert (image.width(), image.height()) == (state["device"]["screen"]["width"], state["device"]["screen"]["height"])
+        assert state["preview_command"] == f"openhasp-config-manager preview -c {cfg_root}"
+        loaded = state["device"]["loaded"]
+        before = image.copy()
+
+        # WHEN
+        (cfg_root / "devices" / "test_device" / "editor.jsonl").write_text(EDITOR_JSONL.replace('"x": 10', '"x": 200'))
+
+        # THEN: the state says it read the file, and the image shows it
+        wait_until(lambda: gui_state(cfg_root)["device"]["loaded"] > loaded)
+        image = QImage(str(cfg_root / gui_state(cfg_root)["device"]["preview"]["file"]))
+        assert image != before
+
     def test_the_state_says_when_the_gui_is_closed(self, window, cfg_root):
+        # GIVEN
+        wait_until(lambda: (cfg_root / ".openhasp-config-manager" / "preview.png").exists())
+
         # WHEN
         window.quit_discarding_drafts()
 
         # THEN
         state = gui_state(cfg_root)
         assert state["running"] is False
+        assert not (cfg_root / ".openhasp-config-manager" / "preview.png").exists()
         qwait(500)
         assert gui_state(cfg_root)["running"] is False
 

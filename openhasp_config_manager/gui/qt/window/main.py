@@ -29,6 +29,7 @@ from openhasp_config_manager.gui.domain.gui_state import (
 from openhasp_config_manager.gui.domain.draft.session import PlateSession
 from openhasp_config_manager.gui.qt.components import ThemedIcons
 from openhasp_config_manager.gui.qt.config_watcher import ConfigWatcher
+from openhasp_config_manager.gui.qt.preview_image import png_bytes, render_plate
 from openhasp_config_manager.gui.qt.window.gui_state_publisher import GuiStatePublisher
 from openhasp_config_manager.gui.qt.window.draft_actions import DraftActions
 from openhasp_config_manager.gui.qt.window.file_actions import FileActions
@@ -102,7 +103,11 @@ class MainWindow(QMainWindow):
         self.status.failed.connect(lambda description, error: self._on_operation(False, f"{description}: {error}"))
         # tells tools that edit the config files next to the GUI what the user has open
         self._state_publisher = GuiStatePublisher(
-            GuiStateFile(self.cfg_root), lambda running=True: collect_gui_state(self, running), parent=self
+            GuiStateFile(self.cfg_root),
+            lambda running=True: collect_gui_state(self, running),
+            # and what they look like
+            preview=lambda: png_bytes(render_plate(self.page_layout_editor_widget.page_preview_widget)),
+            parent=self,
         )
 
         self.setWindowTitle("openhasp-config-manager")

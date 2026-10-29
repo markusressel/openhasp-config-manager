@@ -5,6 +5,7 @@ import re
 from collections import OrderedDict
 from contextlib import contextmanager
 from dataclasses import replace
+from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
 from typing import List, Dict, Optional, Any, Set, Tuple, Hashable, Iterator, Callable, NamedTuple
@@ -136,6 +137,8 @@ class PlateSession:
         self._part_mode: Optional[PartInstance] = None
 
         self._dirty = False
+        # when the draft was read from the files on disk the last time (loaded, reverted)
+        self.loaded_at: Optional[datetime] = None
 
     def load(self, components: List[ComponentSource], renderer: DraftRenderer):
         """
@@ -229,6 +232,7 @@ class PlateSession:
         self._last_expansion = None
         self._part_mode = None
         self._dirty = False
+        self.loaded_at = datetime.now(timezone.utc)
 
     @property
     def is_part_alone(self) -> bool:

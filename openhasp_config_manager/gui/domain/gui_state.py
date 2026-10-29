@@ -19,6 +19,8 @@ LOGGER = logging.getLogger(__name__)
 # the folder in the config directory the GUI shares its state in, for tools that work on the config files
 STATE_DIR_NAME = ".openhasp-config-manager"
 STATE_FILE_NAME = "gui-state.json"
+# the plate as the preview shows it (see README)
+PREVIEW_FILE_NAME = "preview.png"
 README_FILE_NAME = "README.md"
 SCHEMA_VERSION = 1
 
@@ -40,11 +42,16 @@ Read the file before and after you edit, and trust it only while it is current:
   recent (it changes whenever anything else does).
 - Without the GUI, `openhasp-config-manager check -c <config dir> [--json]` reports the same problems for all devices and pages, and
   what a deployment would fail on (exit code 1 on errors). Run it after your edits too (`check_command` is that command).
+- To see the pages, look at the images: `preview.png` is the page the GUI shows (see `device.preview`), `preview_command`
+  renders any page from the files on disk.
 - All paths are relative to the config directory (the parent of this folder). Lines start at 1.
 
 ## Format (`schema` 1)
 
 - `check_command`: the command that checks this config directory without the GUI (all devices and pages).
+- `preview_command`: the command that renders all pages of all devices from the files on disk, without the GUI, into
+  `.openhasp-config-manager/preview/<device>/page_<n>.png` (it prints the path of each image). Add `-d <device>` and `-p <page>`
+  for fewer, `--scale 2` for larger images.
 - `devices`: names of the devices in the config directory.
 - `device`: the device that is open, or `null`.
   - `name`, `folder`, `cmd` (the script whose pages are shown), `screen` (`width`, `height`).
@@ -63,6 +70,15 @@ Read the file before and after you edit, and trust it only while it is current:
     `!include` that shows the part (`<part> (alone).jsonl`, a file that doesn't exist).
   - `draft`: `modified` is `true` if the user has unsaved changes in the GUI. They are not in the files yet, and a file the user
     changed on disk meanwhile can't be saved over. `files` lists, per file, the `changed`, `added` and `deleted` objects.
+  - `loaded`: when the GUI read the files of the device from disk the last time (with milliseconds). It reloads them after
+    they changed (unless the draft has changes, see `files_changed_on_disk`): after you edited a file, wait until `loaded` is
+    later than your change (or `load_error` says why it can't load) before you trust the rest of `device`, `problems` and the
+    preview.
+  - `preview`: the image of the plate as the GUI shows it, or `null`: `file` (a PNG in the native resolution of the plate,
+    `.openhasp-config-manager/preview.png`) and `updated` (when the image changed the last time). It shows the open `page`
+    with the unsaved changes, the selected objects with a frame and, in part mode, the other objects dimmed. It is written
+    before the state, so it is the image of the state you read. Other pages and devices, from the files on disk:
+    `openhasp-config-manager preview -c <config dir> [-d <device>] [-p <page>]` (see `preview_command`).
 - `editor`: the text editor of the GUI, where files are edited as text. `mode` (`source`, `split`, `rendered`: which of the text editor and the
   rendered JSONL are shown), `current` (the file of the tab that is shown, or `null`), and `files`, the open tabs:
   `file`, `dirty` (the text has changes that are not saved: the file on disk is the older version), `conflict` (the file changed on
@@ -85,6 +101,20 @@ Read the file before and after you edit, and trust it only while it is current:
   `sending`, `out_of_sync_pages` (pages that may show something else on the plate than in the GUI).
 - `last_operation`: the last save, deploy or failure the GUI reported: `ok`, `message`, `time`.
 """
+
+
+def ensure_state_folder(config_dir: Path) -> Path:
+    """:return: the state folder of the config directory (see README), created if it doesn't exist"""
+    folder = config_dir / STATE_DIR_NAME
+    folder.mkdir(exist_ok=True)
+    # the folder ignores itself, no matter how the user's repository is set up
+    gitignore = folder / ".gitignore"
+    if not gitignore.exists():
+        gitignore.write_text("*\n")
+    readme = folder / README_FILE_NAME
+    if not readme.exists() or readme.read_text() != README:
+        readme.write_text(README)
+    return folder
 
 
 def now() -> str:
@@ -251,7 +281,10 @@ class GuiStateFile:
     def __init__(self, config_dir: Path):
         self.folder = config_dir / STATE_DIR_NAME
         self.path = self.folder / STATE_FILE_NAME
+        self.preview_path = self.folder / PREVIEW_FILE_NAME
         self._last_content: Optional[str] = None
+        self._last_preview: Optional[bytes] = None
+        self._preview_updated: Optional[str] = None
         self._failed = False
 
     def write(self, state: Dict[str, Any]):
@@ -273,12 +306,33 @@ class GuiStateFile:
         self._failed = False
         self._last_content = compared
 
+    def write_preview(self, png: Optional[bytes]) -> Optional[Dict[str, Any]]:
+        """
+        Replace the image of the preview atomically, if it changed.
+        :param png: the image, None if no page is shown (the image is removed)
+        :return: what the state says about the image (`device.preview`, see README), None without one
+        """
+        if png is None:
+            self._last_preview = None
+            try:
+                self.preview_path.unlink(missing_ok=True)
+            except OSError as ex:
+                LOGGER.warning(f"Can't remove the preview {self.preview_path}: {ex}")
+            return None
+        if png != self._last_preview or not self.preview_path.exists():
+            try:
+                self._ensure_folder()
+                with tempfile.NamedTemporaryFile("wb", dir=self.folder, prefix=".preview-", suffix=".tmp", delete=False) as tmp:
+                    tmp.write(png)
+                os.replace(tmp.name, self.preview_path)
+            except OSError as ex:
+                if not self._failed:
+                    LOGGER.warning(f"Can't write the preview to {self.preview_path}: {ex}")
+                self._failed = True
+                return None
+            self._last_preview = png
+            self._preview_updated = now()
+        return {"file": f"{STATE_DIR_NAME}/{PREVIEW_FILE_NAME}", "updated": self._preview_updated}
+
     def _ensure_folder(self):
-        self.folder.mkdir(exist_ok=True)
-        # the folder ignores itself, no matter how the user's repository is set up
-        gitignore = self.folder / ".gitignore"
-        if not gitignore.exists():
-            gitignore.write_text("*\n")
-        readme = self.folder / README_FILE_NAME
-        if not readme.exists() or readme.read_text() != README:
-            readme.write_text(README)
+        ensure_state_folder(self.folder.parent)

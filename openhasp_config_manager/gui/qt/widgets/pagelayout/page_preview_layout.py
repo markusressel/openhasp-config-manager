@@ -25,6 +25,7 @@ from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable
 from openhasp_config_manager.gui.qt.widgets.pagelayout.plate_scene import PlateScene
 from openhasp_config_manager.gui.qt.widgets.pagelayout.preview_overlays import OverlayAnchor, overlay_layout
 from openhasp_config_manager.openhasp_client.icons import IntegratedIcon
+from openhasp_config_manager.openhasp_client.model.device import Device
 
 LOGGER = logging.getLogger(__name__)
 
@@ -166,6 +167,15 @@ class PagePreviewWidget(QGraphicsView):
     def image_file(self, src: str) -> Optional[Path]:
         """:return: the file the `src` of an object means, if the device has it"""
         return find_image_file(src, self._image_files)
+
+    def set_device(self, device: Device):
+        """Show the plate of a device: its screen size, images and fonts."""
+        screen = device.config.openhasp_config_manager.device.screen
+        self.set_screen_size(screen.width, screen.height)
+        self.set_image_files({image.name: image.path for image in device.images})
+        self.set_font_files(
+            {font.name: font.path for font in [*device.fonts, *device.images] if font.name.endswith((".ttf", ".bin"))}
+        )
 
     def set_screen_size(self, width: int, height: int):
         self.scene().setSceneRect(0, 0, width, height)
