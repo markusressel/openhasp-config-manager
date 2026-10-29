@@ -11,6 +11,7 @@ from openhasp_config_manager.gui.domain.gui_state import (
     STATE_DIR_NAME,
     GuiStateFile,
     describe_connection,
+    describe_device,
     EditorTab,
     describe_draft,
     describe_editor,
@@ -202,6 +203,88 @@ class TestDescribe(TestBase):
                 }
             ],
         }
+
+    def test_device_describes_what_the_editor_shows(self, session, cfg_root):
+        # GIVEN
+        [component] = session.components
+        label, button = session.working_objects[component.key]
+        session.set_source_value(label, "x", 20)
+
+        # WHEN
+        result = describe_device(
+            session,
+            session.device,
+            cmd="boot.cmd",
+            page=9,
+            edit_mode=True,
+            live_preview=False,
+            selection=[button],
+            target_component=component.key,
+            config_dir=cfg_root,
+        )
+
+        # THEN
+        assert result == {
+            "name": "test_device",
+            "folder": "devices/test_device",
+            "cmd": "boot.cmd",
+            "screen": {"width": 480, "height": 320},
+            "files": describe_files(session.components, session.working_objects, cfg_root),
+            "page": 9,
+            "pages": [9],
+            "edit_mode": True,
+            "live_preview": False,
+            "selection": [describe_object(session, button, cfg_root)],
+            "new_objects_file": "devices/test_device/editor.jsonl",
+            "part_mode": None,
+            "draft": describe_draft(session, cfg_root),
+            "loaded": session.loaded_at.isoformat(timespec="milliseconds"),
+        }
+        assert result["draft"]["modified"]
+        json.dumps(result)
+
+    def test_device_without_a_file_for_new_objects(self, session, cfg_root):
+        # WHEN
+        result = describe_device(
+            session,
+            session.device,
+            cmd="boot.cmd",
+            page=9,
+            edit_mode=False,
+            live_preview=True,
+            selection=[],
+            target_component=None,
+            config_dir=cfg_root,
+        )
+
+        # THEN
+        assert (result["new_objects_file"], result["selection"], result["live_preview"]) == (None, [], True)
+
+    def test_device_in_part_mode_puts_new_objects_into_the_part(self, cfg_root):
+        # GIVEN
+        part = cfg_root / "common" / "dot.jsonl"
+        part.write_text('{"page": 9, "id": "{{ id }}", "obj": "obj"}\n')
+        write_page(cfg_root, '{"!include": "common/dot.jsonl", "for": {"id": [4]}}\n')
+        session = load_session(cfg_root)
+        [instance] = session.part_instances(part)
+        session.enter_part_mode(instance)
+
+        # WHEN
+        result = describe_device(
+            session,
+            session.device,
+            cmd="boot.cmd",
+            page=9,
+            edit_mode=True,
+            live_preview=False,
+            selection=[],
+            target_component=str(part),
+            config_dir=cfg_root,
+        )
+
+        # THEN
+        assert result["new_objects_file"] == "common/dot.jsonl"
+        assert result["part_mode"] == describe_part_mode(session, cfg_root)
 
     def test_files_have_their_pages(self, session, cfg_root):
         # THEN
