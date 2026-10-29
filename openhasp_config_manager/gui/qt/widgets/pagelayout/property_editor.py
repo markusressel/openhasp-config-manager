@@ -165,7 +165,7 @@ class OpenHASPWidgetPropertyEditor(QWidget):
             if self._edit_mode:
                 hint = "Select an object on the plate to edit its properties."
             else:
-                hint = "Switch to edit mode (Ctrl+E) to select and change objects."
+                hint = "Turn on Edit (Ctrl+E) to select and change objects."
             self._add_hint(hint)
             return
 

@@ -177,10 +177,10 @@ class PageLayoutEditorWidget(QWidget):
 
         self.action_edit_mode = create(
             self,
-            "Edit mode",
+            "Edit",
             "pencil",
             shortcut="Ctrl+E",
-            tooltip="Edit mode: select, move and change objects. Off: interact with the page like on the plate",
+            tooltip="On: select, move and change objects. Off: interact with the page like on the plate",
             checkable=True,
         )
         self.action_edit_mode.toggled.connect(self._on_edit_mode_toggled)
