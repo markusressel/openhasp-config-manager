@@ -160,8 +160,8 @@ class TestYaml(TestBase):
 class TestDirectives(TestBase):
     def _directive_keys(self, lines):
         state, result = JsonlState(), []
-        for line in lines:
-            tokens, state = tokenize_jsonl(line, state)
+        for i, line in enumerate(lines):
+            tokens, state = tokenize_jsonl(line, state, following=lambda: lines[i + 1 :])
             result += [token.text(line) for token in tokens if token.kind == TokenKind.DIRECTIVE]
         return result, state
 
@@ -186,6 +186,44 @@ class TestDirectives(TestBase):
         # THEN
         assert keys == ['"!include"', '"vars"', '"for"', '"!include"', '"vars"', '"for"']
         assert state == JsonlState(0, False)
+
+    def test_vars_and_for_before_the_directive(self):
+        # GIVEN: `vars` and `for` written before the `"!include"` of their object, on one line and on several
+        lines = [
+            '{"vars": {"for": 1}, "for": {"i": [1]}, "!include": "a.jsonl"}',
+            "{",
+            '  "for": {"i": [1, 2]},',
+            '  "vars": {',
+            '    "vars": 1',
+            "  },",
+            '  "!include": "a.jsonl"',
+            "}",
+            '{"vars": 1} {"!include": "a.jsonl"}',
+        ]
+
+        # WHEN
+        keys, state = self._directive_keys(lines)
+
+        # THEN
+        assert keys == ['"vars"', '"for"', '"!include"', '"for"', '"vars"', '"!include"', '"!include"']
+        assert state == JsonlState(0, False)
+
+    def test_the_lines_after_are_read_only_until_the_object_ends(self):
+        # GIVEN
+        read = []
+
+        def following():
+            for line in ['  "id": 1', "}", '{"!include": "a.jsonl"}']:
+                read.append(line)
+                yield line
+
+        # WHEN
+        tokens, state = tokenize_jsonl('{"vars": 1,', state=JsonlState(), following=following)
+
+        # THEN: the `"!include"` of the next object doesn't count
+        assert tokens[1].kind == TokenKind.KEY
+        assert state == JsonlState(1, False)
+        assert read == ['  "id": 1', "}"]
 
     def test_a_line_alone_knows_only_the_directive(self):
         assert _kinds('  "!include": "a.jsonl",')[0] == ('"!include"', TokenKind.DIRECTIVE)
