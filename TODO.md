@@ -38,8 +38,8 @@ None known.
 
 Included objects are shown and read-only (see `docs/include-directive.md`). Next:
 
-- [ ] **Edit the `vars` of an instance in the properties panel.** An included object shows the `vars` and `for` values of its
-  `!include`; changing one writes the directive (in the including file), and all objects of the instance are rendered again.
+- [ ] Add and remove names of `vars` and `for` in the "Instance" group of the Properties panel (only their values can be changed;
+  `PlateSession.set_directive_value` takes any mapping already).
 - [ ] **A mode to edit a part itself.** Open a part "as a definition": one instance is shown (chosen from the files that include it,
   or with the part's defaults), edits are written into the part file, and every instance follows.
 - [ ] Copy an included object as a plain object (its values rendered with the variables of its instance). Copying is refused today,
@@ -50,7 +50,9 @@ Included objects are shown and read-only (see `docs/include-directive.md`). Next
 - [ ] `vars` and `for` written before the `"!include"` key of a directive are highlighted as plain keys (the highlighter reads the
   lines from the top).
 - [ ] The draft expands the directives of every file again after each edit (for the object references). Cache the instances of a
-  directive while its text and its scope stay the same, if large configs make editing slow.
+  directive while its text and its scope stay the same, if large configs make editing slow. Measured on the user's config
+  (`touch_down_1`): about 0.45 s per edit of a property or of `vars`, most of it in `jsonl_template_variables` (expanding and
+  copying the variables of every file).
 
 ## 4. Composed pages (haad layouts) in the editor
 

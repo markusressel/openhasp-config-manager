@@ -97,9 +97,11 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
   (`ScrollDriver.tick`, `HaspTabviewItem.read_swipe`) and end animations with `finish_animation()` instead of waiting.
   An `action` that sets a property of an object (`p1b2.val=50`, `touch_actions.object_command`) changes it in the preview; every
   other command is only reported (`commandRequested`).
-- **Included objects are read-only** in the draft: `PlateSession` keeps the directives of a file as written and saves only its
+- **Included objects are read-only** in the draft: `PlateSession` keeps a draft copy of the directives of a file and saves its
   plain objects around them. Edit operations check `session.read_only_reason(obj)` (or `_check_editable`, which raises
-  `ReadOnlyObjectError`); `origin_of` says where an included object is written. New edit operations must respect this.
+  `ReadOnlyObjectError`); `origin_of` says where an included object is written. New edit operations must respect this. Only
+  the `vars` and `for` of the outermost `!include` change, through `set_directive_value`, which includes the directive again
+  (objects of instances that stay keep their rendered dict).
 - **Templates are never replaced implicitly.** Objects whose `x`/`y` is a template or a percentage can't be dragged or nudged; the
   editor explains why, and "Use pixels for x/y" replaces them only when the user asks. Keep this for new edit operations.
 - **Files**: new objects go into the target file chosen in the Files tree (`gui/domain/file_tree.py` follows the folder structure of

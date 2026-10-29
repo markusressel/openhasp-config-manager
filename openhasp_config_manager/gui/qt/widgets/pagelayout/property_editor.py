@@ -1,6 +1,7 @@
 import copy
+import json
 from contextlib import contextmanager
-from typing import List, Any, Dict, Callable, Optional, Hashable, Iterator
+from typing import List, Any, Dict, Callable, Optional, Hashable, Iterator, Tuple
 
 from PyQt6 import QtCore
 from PyQt6.QtGui import QColor
@@ -34,6 +35,7 @@ from openhasp_config_manager.gui.domain.file_tree import relative_config_path
 from openhasp_config_manager.gui.domain.draft.session import PlateSession
 from openhasp_config_manager.gui.domain.problems import Severity, object_name
 from openhasp_config_manager.gui.domain.source.docs import property_help
+from openhasp_config_manager.processing.jsonl.includes import FOR, INCLUDE, VARS, IncludeStep
 from openhasp_config_manager.gui.qt.components import UiComponents, ThemedIcons
 from openhasp_config_manager.gui.qt.layouts import clear_layout, frozen
 from openhasp_config_manager.gui.qt.widgets.pagelayout.icon_picker import IconPickerDialog
@@ -77,6 +79,13 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         self._shows_content = False
         # an edit of this panel is running (see `_edit`)
         self._applying = False
+        # (vars or for, name) of the fields of an `!include` switched to a template that was not applied yet -> the text
+        self._pending_directive_templates: Dict[Tuple[str, str], str] = {}
+        # the field of an `!include` that was edited last, to type on in it when the panel is made again for the same object
+        # (e.g. because the edit added objects): (object, vars or for, name, cursor position)
+        self._directive_focus: Optional[Tuple[Dict, str, str, int]] = None
+        # what shows values of the selected object that an edit of this panel changes, without making the panel again
+        self._value_updates: List[Callable[[], None]] = []
 
         self.outer_layout = QVBoxLayout(self)
         self.outer_layout.setContentsMargins(0, 0, 0, 0)
@@ -134,6 +143,7 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         else:
             self._original_snapshot = {}
         self._pending_templates = {}
+        self._pending_directive_templates = {}
 
         self.refresh()
         self.scroll_area.verticalScrollBar().setValue(0)
@@ -204,6 +214,7 @@ class OpenHASPWidgetPropertyEditor(QWidget):
     def _create_content(self):
         # the labels it is about are made again
         self.hover.reset()
+        self._value_updates = []
         if not self._editable_widgets:
             if self._edit_mode:
                 hint = "Select an object on the plate to edit its properties."
@@ -244,9 +255,12 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         self._add_remove_button()
 
     def _add_included_content(self, obj_data: Dict):
-        """An included object can't be changed: why, where to change it, and its properties (read-only)."""
+        """
+        An included object can't be changed: why, where to change it, the `vars` and `for` of its `!include` (which can be
+        changed), and its properties (read-only).
+        """
         origin = self._session.origin_of(obj_data)
-        directive = origin.includes[0]
+        directive_file = self._session.component_of(obj_data).path
         self._add_notice(
             self._session.read_only_reason(obj_data),
             [
@@ -260,10 +274,11 @@ class OpenHASPWidgetPropertyEditor(QWidget):
                     title="Go to the !include",
                     icon="file-code-outline",
                     tooltip="Show the directive that includes the part, with its vars",
-                    on_click=lambda: self.openSourceRequested.emit(directive.file, directive.line),
+                    on_click=lambda: self.openSourceRequested.emit(directive_file, self._session.line_of(obj_data)),
                 ),
             ],
         )
+        self._add_instance_group(obj_data)
         source = self._session.source_of(obj_data)
         for title, keys in group_properties(obj_data):
             group = QGroupBox(title)
@@ -274,8 +289,228 @@ class OpenHASPWidgetPropertyEditor(QWidget):
                 value.setTextInteractionFlags(QtCore.Qt.TextInteractionFlag.TextSelectableByMouse)
                 if key in source and source[key] != obj_data[key]:
                     value.setToolTip(f"In the part: {source[key]}")
+                # a change of the vars renders the object again
+                self._value_updates.append(lambda value=value, key=key: value.setText(str(obj_data.get(key, ""))))
                 form_layout.addRow(UiComponents.create_label(f"{key}:"), value)
             self.main_layout.addWidget(group)
+
+    def _add_instance_group(self, obj_data: Dict):
+        """
+        The `vars` and `for` of the `!include` in the file of the draft that includes the object, as fields, and the
+        `!include`s inside of parts on the way to it (read-only: they are written in the parts).
+        """
+        origin = self._session.origin_of(obj_data)
+        component = self._session.component_of(obj_data)
+        directive = self._session.directive_of(obj_data)
+        group = QGroupBox("Instance")
+        column = _plain_layout(QVBoxLayout(group))
+        column.setContentsMargins(UiDimensions.one, UiDimensions.one, UiDimensions.one, UiDimensions.one)
+        column.setSpacing(UiDimensions.one)
+
+        where = f"{relative_config_path(component.path, self._session.device.path)}:{self._session.line_of(obj_data)}"
+        row = _plain_layout(QHBoxLayout())
+        row.addWidget(UiComponents.create_label(f"The {INCLUDE} at {where}", role="hint", word_wrap=True), 1)
+        if component.is_common:
+            row.addWidget(
+                _badge("shared", "A file of the common folder: changing the !include changes every device that loads it."),
+                0,
+                QtCore.Qt.AlignmentFlag.AlignTop,
+            )
+        column.addLayout(row)
+        if component.is_common:
+            column.addWidget(
+                UiComponents.create_label(
+                    f"The {INCLUDE} is in a shared file: saving a change changes the pages of every device that loads it.",
+                    role="hint",
+                    word_wrap=True,
+                )
+            )
+
+        for key, title, empty in [
+            (VARS, "vars", "No vars: the part has the variables of the file."),
+            (FOR, "for", "No for: the part is included once."),
+        ]:
+            column.addWidget(UiComponents.create_label(title, role="section"))
+            values = directive.get(key, {})
+            if not values:
+                column.addWidget(UiComponents.create_label(empty, role="hint", word_wrap=True))
+                continue
+            form = QFormLayout()
+            form.setLabelAlignment(QtCore.Qt.AlignmentFlag.AlignRight)
+            form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+            # a var that is a mapping (e.g. `progress_bar: {id: 30, text: ...}`) has a field for each of its values
+            for name in _leaf_names(values) if key == VARS else values:
+                form.addRow(UiComponents.create_label(f"{name}:"), self._create_directive_field(obj_data, key, name))
+            column.addLayout(form)
+
+        for step in origin.includes[1:]:
+            column.addLayout(self._create_nested_include_row(step))
+        self.main_layout.addWidget(group)
+
+    def _create_nested_include_row(self, step: IncludeStep) -> QVBoxLayout:
+        """An `!include` inside of a part: where it is, its values for this instance, and a button to go to it."""
+        layout = _plain_layout(QVBoxLayout())
+        where = f"{relative_config_path(step.file, self._session.device.path)}:{step.line}"
+        values = ", ".join(f"{name}={value!r}" for name, value in {**step.vars, **step.loop}.items())
+        text = f"Inside of the part, the {INCLUDE} at {where}" + (f" ({values})" if values else "")
+        layout.addWidget(UiComponents.create_label(text, role="hint", word_wrap=True))
+        layout.addWidget(
+            UiComponents.create_button(
+                title="Go to the !include",
+                icon="file-code-outline",
+                tooltip="It is written in a part: change it there",
+                on_click=lambda: self.openSourceRequested.emit(step.file, step.line),
+            ),
+            0,
+            QtCore.Qt.AlignmentFlag.AlignLeft,
+        )
+        return layout
+
+    def _create_directive_field(self, obj_data: Dict, key: str, name: str) -> QWidget:
+        """
+        The editor of a value of `vars` or `for` of an `!include`: a literal value (JSON, or a text for a var that is a text)
+        or a template, switched by the button next to it. The values of this instance are shown below it.
+        :param name: the name of the variable, with dots for a value inside of a mapping (`progress_bar.id`)
+        """
+        value = _value_at(self._session.directive_of(obj_data)[key], name)
+        is_template = _is_template(value)
+        template_mode = is_template or (key, name) in self._pending_directive_templates
+        step = self._session.origin_of(obj_data).includes[0]
+        # a var whose value is a text is edited as a text, everything else as JSON
+        as_text = key == VARS and isinstance(_value_at(step.vars, name), str)
+
+        container = QWidget()
+        row = _plain_layout(QHBoxLayout(container))
+        column = _plain_layout(QVBoxLayout())
+        row.addLayout(column, 1)
+        if template_mode:
+            text = value if is_template else self._pending_directive_templates[(key, name)]
+        else:
+            text = value if as_text else json.dumps(value, ensure_ascii=False)
+        editor = UiComponents.create_edittext(text=text)
+        editor.setObjectName(f"{key}.{name}")
+        if template_mode:
+            editor.setPlaceholderText("{{ variable }}")
+            editor.setToolTip(
+                "A Jinja template, rendered with the variables of the file of the !include"
+                + (" and the for variables" if key == VARS else "")
+            )
+            suggestions = self._session.template_suggestions(obj_data)
+            if key == VARS:
+                suggestions = [(f"{{{{ {loop} }}}}", loop_value) for loop, loop_value in step.loop.items()] + suggestions
+            TemplateCompleter(editor, suggestions)
+        elif key == FOR:
+            editor.setToolTip("The values of the loop variable, a JSON list: the part is included once for each")
+        else:
+            editor.setToolTip("The value of the variable: a text, or a JSON value (a number, a list, ...)")
+        # the start of a long template is what tells it apart
+        editor.setCursorPosition(0)
+        column.addWidget(editor)
+
+        value_label = UiComponents.create_label("", role="hint", word_wrap=True)
+        error_label = UiComponents.create_label("", role="error", word_wrap=True)
+        column.addWidget(value_label)
+        column.addWidget(error_label)
+        error_label.hide()
+
+        def show_value():
+            if not any(widget.obj_data is obj_data for widget in self._editable_widgets):
+                # the edit removed the object (e.g. its loop value), the panel shows another selection
+                return
+            current = self._session.origin_of(obj_data).includes[0]
+            if key == FOR:
+                value_label.setText(f"This instance: {current.loop[name]!r}")
+            else:
+                value_label.setText(f"= {_value_at(current.vars, name)!r}")
+            value_label.setVisible(key == FOR or _is_template(_value_at(self._session.directive_of(obj_data)[key], name)))
+
+        def apply(new_text: str):
+            new_value, error = _parse_directive_value(new_text, key, as_text, template_mode)
+            mapping = self._session.directive_of(obj_data)[key]
+            if error is None:
+                mapping = _with_value_at(mapping, name, new_value)
+                if mapping != self._session.directive_of(obj_data)[key]:
+                    error = self._session.check_directive_value(obj_data, key, mapping)
+            error_label.setText(error or "")
+            error_label.setVisible(error is not None)
+            if template_mode and error is not None:
+                # the panel is made again e.g. after an undo: keep what was typed
+                self._pending_directive_templates[(key, name)] = new_text
+            if error is not None or mapping == self._session.directive_of(obj_data)[key]:
+                return
+            self._pending_directive_templates.pop((key, name), None)
+            self._directive_focus = (obj_data, key, name, editor.cursorPosition())
+            # typing into the field is one step
+            typing = ("directive", self._session.component_of(obj_data).key, self._session.source_index(obj_data), key, name)
+            try:
+                with self._edit(f"Change {key}.{name} of the {INCLUDE}", merge_key=typing):
+                    self._session.set_directive_value(obj_data, key, mapping)
+            finally:
+                self._directive_focus = None
+            show_value()
+
+        show_value()
+        self._value_updates.append(show_value)
+        focus = self._directive_focus
+        if focus is not None and focus[0] is obj_data and focus[1:3] == (key, name):
+            # the edit made the panel again (it added or removed objects): go on typing
+            self._directive_focus = None
+            editor.setFocus()
+            editor.setCursorPosition(focus[3])
+        elif template_mode and not is_template and editor.text() == _EMPTY_TEMPLATE:
+            # just switched to a template: type the expression right away
+            editor.setCursorPosition(len("{{ "))
+            QtCore.QTimer.singleShot(0, editor.setFocus)
+        elif template_mode and not is_template:
+            apply(editor.text())
+        editor.textChanged.connect(apply)
+
+        toggle = QToolButton()
+        toggle.setCheckable(True)
+        toggle.setChecked(template_mode)
+        toggle.setAutoRaise(True)
+        ThemedIcons.apply(toggle, "code-braces")
+        toggle.setToolTip("Use a template (Jinja, with the variables of the file of the !include) instead of a value")
+        toggle.toggled.connect(lambda checked: self._set_directive_template_mode(obj_data, key, name, checked))
+        row.addWidget(toggle, 0, QtCore.Qt.AlignmentFlag.AlignTop)
+        return container
+
+    def _set_directive_template_mode(self, obj_data: Dict, key: str, name: str, enabled: bool):
+        if enabled:
+            self._pending_directive_templates[(key, name)] = _EMPTY_TEMPLATE
+        else:
+            self._pending_directive_templates.pop((key, name), None)
+            if _is_template(_value_at(self._session.directive_of(obj_data)[key], name)):
+                # keep the values of this instance, as literals
+                mapping = _with_value_at(
+                    self._session.directive_of(obj_data)[key], name, self._instance_values(obj_data, key, name)
+                )
+                error = self._session.check_directive_value(obj_data, key, mapping)
+                if error is None:
+                    with self._edit(f"Change {key}.{name} of the {INCLUDE}"):
+                        self._session.set_directive_value(obj_data, key, mapping)
+        self.refresh()
+
+    def _instance_values(self, obj_data: Dict, key: str, name: str) -> Any:
+        """
+        :return: the value of a var of the instance of the object, or for a loop variable the values of all instances of the
+            `!include` (each once, in their order)
+        """
+        step = self._session.origin_of(obj_data).includes[0]
+        if key == VARS:
+            return _value_at(step.vars, name)
+        values = []
+        for objects in self._session.working_objects.values():
+            for other in objects:
+                origin = self._session.origin_of(other)
+                if (
+                    origin is not None
+                    and self._session.component_of(other).key == self._session.component_of(obj_data).key
+                    and self._session.source_index(other) == self._session.source_index(obj_data)
+                    and origin.includes[0].loop[name] not in values
+                ):
+                    values.append(origin.includes[0].loop[name])
+        return values
 
     def _add_hint(self, text: str):
         hint = UiComponents.create_label(text, role="hint", word_wrap=True)
@@ -427,9 +662,15 @@ class OpenHASPWidgetPropertyEditor(QWidget):
             self._applying = False
 
     def refresh_after_change(self):
-        """Show the values after the draft changed, unless this panel changed it: rebuilding it would interrupt typing."""
+        """
+        Show the values after the draft changed. If this panel changed it, only the values that its edit changes are updated:
+        making the panel again would interrupt typing.
+        """
         if not self._applying:
             self.refresh()
+            return
+        for update in self._value_updates:
+            update()
 
     def _create_property_field(self, obj_data: Dict, key: str, widget: EditableWidget) -> QWidget:
         """The editor of a property: a literal value, or a template, switched by the button next to it."""
@@ -669,6 +910,60 @@ _CHOICE_MIN_CHARACTERS = 12
 
 # what the field of a property starts with when it is switched to a template
 _EMPTY_TEMPLATE = "{{  }}"
+
+
+def _is_template(value: Any) -> bool:
+    return isinstance(value, str) and ("{{" in value or "{%" in value)
+
+
+def _leaf_names(variables: Dict[str, Any], prefix: str = "") -> List[str]:
+    """:return: the names of the values of `vars`, with dots for those inside of mappings (`progress_bar.id`)"""
+    result = []
+    for name, value in variables.items():
+        if isinstance(value, dict) and value:
+            result += _leaf_names(value, f"{prefix}{name}.")
+        else:
+            result.append(f"{prefix}{name}")
+    return result
+
+
+def _value_at(variables: Dict[str, Any], name: str) -> Any:
+    """:return: the value of a name of `_leaf_names`"""
+    value: Any = variables
+    for part in name.split("."):
+        value = value[part]
+    return value
+
+
+def _with_value_at(variables: Dict[str, Any], name: str, value: Any) -> Dict[str, Any]:
+    """:return: a copy of the variables with another value for a name of `_leaf_names`, in the same order"""
+    first, _dot, rest = name.partition(".")
+    return {**variables, first: _with_value_at(variables[first], rest, value) if rest else value}
+
+
+def _parse_directive_value(text: str, key: str, as_text: bool, template: bool) -> Tuple[Any, Optional[str]]:
+    """
+    :param as_text: the value is a text (a var whose value is a text), not JSON
+    :param template: the text is a template
+    :return: the value of a field of `vars` or `for` as it is written in the `!include`, or why it is none
+    """
+    if template:
+        if not _is_template(text):
+            return None, "Enter a template, e.g. {{ variable }}."
+        return text, None
+    if as_text:
+        if _is_template(text):
+            return None, "This is a template: switch to template mode with the { } button."
+        return text, None
+    try:
+        value = json.loads(text)
+    except ValueError:
+        if key == FOR:
+            return None, "Write a JSON list of values, e.g. [1, 2, 3], or use a template."
+        return None, 'Write a JSON value, e.g. 12, "a text" or [1, 2], or use a template.'
+    if key == FOR and not isinstance(value, list):
+        return None, "Write a JSON list of values, e.g. [1, 2, 3], or use a template."
+    return value, None
 
 
 def _badge(text: str, tooltip: str) -> QLabel:

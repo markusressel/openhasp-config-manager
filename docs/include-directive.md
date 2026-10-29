@@ -183,8 +183,16 @@ of the directive in the open file):
 - **Preview and draft** (`PlateSession`): included objects are shown like all others, but are read-only as objects of the
   page: they can't be dragged, nudged, resized, edited, deleted, cut or duplicated. The editor explains why (like it does
   for templates) and offers to open the part file or to go to the directive. Save never writes included objects into the
-  including file: the session keeps the directives of a file as they are and only saves its plain objects. Undo/redo, Live
-  preview (the included objects are sent like all others) and the Files tree keep working.
+  including file: the session keeps the directives of a file and only saves its plain objects and the changed `vars` and
+  `for` of its directives. Undo/redo, Live preview (the included objects are sent like all others) and the Files tree keep
+  working.
+- **The instance of an included object** (the "Instance" group in the Properties panel): the `vars` and `for` of the
+  outermost `!include` (the one in the file of the draft) are fields, a literal value or a template (`{ }`), with the
+  values of the selected instance next to them. A var that is a mapping has a field for each of its values
+  (`progress_bar.id`). A change (`PlateSession.set_directive_value`) writes the directive in the draft and includes it
+  again: every object of its instances is rendered again (with `for`, of all instances), objects that refer to them follow,
+  and instances can be added or removed. The `!include`s inside of parts are listed read-only, with a button to go to them.
+  A directive in the common folder is marked "shared".
 - **Text editor**: directive keys (`"!include"`, and `"vars"`/`"for"` of a directive) have their own token kind
   (`TokenKind.DIRECTIVE`); Ctrl+click on the path opens the part; hover explains `!include`, `vars` and `for`; the path is
   completed after `"!include": "`; the errors of the file's directives are marked in it; a directive is one object for
@@ -246,10 +254,36 @@ These were not settled beforehand. Each names the alternative that was not taken
 - **Errors that need the config** (a missing part, a cycle, templates of `vars`) are marked from the draft (as loaded), errors of
   the text alone (`directive_error`) while typing.
 
+### Editing the `vars` and `for` of an instance
+
+- **The draft keeps a copy of each directive**, by its component and its index in the file, next to the objects, and the
+  undo states have it. Alternative: a `DraftEntry` for each directive among the objects, which every reader of the objects
+  would have had to skip. `changes()` writes the changed keys of a directive (the whole `vars` or `for` mapping) with the
+  `JsonlSourceEditor`, so the rest of the file keeps its text and comments.
+- **A change expands the whole file again**, with the changed directive in its place, and takes the objects of that
+  directive. Objects of the same instance (same part file and index, same loop values and directives on the way) keep their
+  rendered dict, with the new scope; the others are added or removed. Alternative: new objects for every instance, which
+  would lose the selection and the items of the preview on every keystroke. The undo states hold the origin and scope of
+  included objects, so undo gives back the instances as they were.
+- **Only errors the change makes block it**: the errors of the expansion with the change that the file doesn't have
+  without it (an error of another directive doesn't block it). They are shown at the field, not in the problems: the
+  draft doesn't change, so it has no problem. Alternative: refuse any change while the file has an error.
+- **Literal values**: a var whose value is a text stays a text (typing `12` gives `"12"`), every other value is JSON, a
+  loop variable a JSON list. A template is what the `{ }` button switches to, like for properties. Alternative: JSON for
+  all values, which makes every text need quotes.
+- **Fields apply while typing**, like the property fields, and the panel isn't made again for it (only the values that
+  changed are updated). An edit that adds or removes objects reloads the page; the edited object stays selected if it is
+  still included, and its field gets the focus back.
+- **The draft writes its directives in the order of the file** (also those that include nothing), so a directive is never
+  further down in the draft than in the file. The expansion finds the line of a directive in the file by its place, which
+  raised an `IndexError` for a directive that includes nothing after objects were added.
+- **No cache per directive.** On the user's config an edit of `vars` takes as long as an edit of a property (about 0.45 s,
+  most of it the object references of every file, see TODO.md); checking the change takes milliseconds.
+- **Names of `vars` can't be added or removed in the panel** (the session takes any mapping): see TODO.md.
+
 ## Later
 
 - `!extends`: an object that takes the properties of a part object and overrides some of them.
-- Editing the `vars` of an instance in the properties panel.
 - Editing a part "definition" in a mode of its own (show one instance, write changes into the part file).
 - Templates in the `!include` path.
 - `vars` values that refer to objects (`"x": "{{ b4.x + 10 }}"`): they would have to be rendered per object, after the

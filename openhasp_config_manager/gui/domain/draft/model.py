@@ -96,8 +96,18 @@ class DraftEntry:
         return self.origin is not None
 
 
-# the objects of the draft, for undo: per component key (uid, index in the source file, source) of its objects, in order
-DraftState = Dict[str, Tuple[Tuple[int, Optional[int], Dict[str, Any]], ...]]
+# an object of the draft in an undo state: (uid, index in the source file, source, origin, scope), see `DraftEntry`
+DraftItem = Tuple[int, Optional[int], Dict[str, Any], Optional[ObjectOrigin], Optional[Dict[str, Any]]]
+
+
+@dataclass(frozen=True)
+class DraftState:
+    """The draft, for undo. The sources in it are shared with other states: never change them."""
+
+    # per component key: its objects, in order
+    objects: Dict[str, Tuple[DraftItem, ...]]
+    # per component key: the index of a directive (`!include`) in the source file -> the directive as the draft has it
+    directives: Dict[str, Dict[int, Dict[str, Any]]]
 
 
 class ChangeKind(Enum):
@@ -126,6 +136,9 @@ class DraftChange:
     removed: bool
     # the pages of the changed and added objects; for an undo or redo also of the removed ones and where objects were before
     pages: Set[Any]
+    # the objects to select afterwards instead of the added ones, e.g. the object whose `!include` was changed (empty if it
+    # is gone); None selects the added ones
+    selected: Optional[List[Dict]] = None
 
     @property
     def adds_or_removes(self) -> bool:

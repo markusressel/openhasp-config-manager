@@ -468,7 +468,7 @@ class PageLayoutEditorWidget(QWidget):
         elif change.kind == ChangeKind.SAVE:
             pass
         elif change.adds_or_removes:
-            self._reload_page(select=change.added)
+            self._reload_page(select=change.added if change.selected is None else change.selected)
         else:
             # objects with templates that refer to the changed ones may have changed too
             self.page_preview_widget.refresh_items()

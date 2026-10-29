@@ -62,7 +62,13 @@ def editor_files():
 
 
 @pytest.fixture
-def editor(qapp, async_loop, plate, tmp_path, monkeypatch, editor_files):
+def boot_cmd():
+    """:return: the startup script of the device (classes override it)"""
+    return "run L:/home_page.jsonl\nrun L:/editor.jsonl\n"
+
+
+@pytest.fixture
+def editor(qapp, async_loop, plate, tmp_path, monkeypatch, editor_files, boot_cmd):
     from openhasp_config_manager.gui.qt.operations import OperationStatus
     from openhasp_config_manager.gui.qt.widgets.pagelayout import OpenHaspDevicePagesData, plate_link
     from openhasp_config_manager.gui.qt.widgets.pagelayout.page_layout_editor import PageLayoutEditorWidget
@@ -75,7 +81,7 @@ def editor(qapp, async_loop, plate, tmp_path, monkeypatch, editor_files):
     for name, content in editor_files.items():
         (root / name).parent.mkdir(parents=True, exist_ok=True)
         (root / name).write_text(content)
-    (device_dir / "boot.cmd").write_text("run L:/home_page.jsonl\nrun L:/editor.jsonl\n")
+    (device_dir / "boot.cmd").write_text(boot_cmd)
     loaded = load_device(_create_config_manager(root, tmp_path / "output"), "test_device")
     session = PlateSession(device=loaded.device)
     session.load(loaded.components, loaded.renderer)
@@ -629,13 +635,16 @@ class TestLockedPosition(TestBase):
         assert offered() is True
 
 
+DOT_JSONL = '{"page": 9, "id": "{{ id }}", "obj": "label", "x": "{{ id * 10 }}", "text": "{{ prefix }}{{ id }}"}\n'
+DOT_INCLUDE = '{"!include": "common/parts/dot.jsonl", "vars": {"prefix": ""}, "for": {"id": [20, 21]}}\n'
+
+
 class TestIncludedObjects(TestBase):
     @pytest.fixture
     def editor_files(self):
         return {
-            "common/parts/dot.jsonl": '{"page": 9, "id": "{{ id }}", "obj": "label", "x": "{{ id * 10 }}", "text": "{{ id }}"}\n',
-            "devices/test_device/editor.jsonl": EDITOR_JSONL
-            + '{"!include": "common/parts/dot.jsonl", "for": {"id": [20, 21]}}\n',
+            "common/parts/dot.jsonl": DOT_JSONL,
+            "devices/test_device/editor.jsonl": EDITOR_JSONL + DOT_INCLUDE,
         }
 
     def _select(self, editor, obj_id: int):
@@ -717,10 +726,166 @@ class TestIncludedObjects(TestBase):
         root = tmp_path / "cfg"
         assert requested == [(root / "common/parts/dot.jsonl", 1), (root / "devices/test_device/editor.jsonl", 4)]
         assert "Remove Object" not in buttons and "Duplicate Object" not in buttons
-        assert editor.property_editor.findChildren(QLineEdit) == []
+        # only the vars and for of the !include can be changed
+        assert {field.objectName(): field.text() for field in editor.property_editor.findChildren(QLineEdit)} == {
+            "vars.prefix": "",
+            "for.id": "[20, 21]",
+        }
         texts = [label.text() for label in editor.property_editor.findChildren(QLabel)]
-        assert {"p9b21", "label", "common/parts/dot.jsonl:1", "included"} <= set(texts)
+        assert {"p9b21", "label", "common/parts/dot.jsonl:1", "included", "This instance: 21"} <= set(texts)
+        assert "The !include at devices/test_device/editor.jsonl:4" in texts
+        assert "shared" not in texts
         assert "210" in texts
+
+    def _field(self, editor, name: str):
+        from PyQt6.QtWidgets import QLineEdit
+
+        return editor.property_editor.findChild(QLineEdit, name)
+
+    def _error(self, field) -> str:
+        from PyQt6.QtWidgets import QLabel
+
+        [label] = [label for label in field.parentWidget().findChildren(QLabel) if label.property("role") == "error"]
+        return label.text()
+
+    def test_a_var_edit_renders_the_instances_again_without_making_the_panel_again(self, editor):
+        from PyQt6.QtWidgets import QLabel
+
+        # GIVEN
+        obj = self._select(editor, 21)
+        field = self._field(editor, "vars.prefix")
+
+        # WHEN
+        field.setText("#")
+
+        # THEN
+        assert (_object(editor, 20)["text"], obj["text"]) == ("#20", "#21")
+        assert self._field(editor, "vars.prefix") is field
+        assert "#21" in [label.text() for label in editor.property_editor.findChildren(QLabel)]
+        assert editor.session.is_dirty is True
+        assert editor.action_undo.text() == "Undo Change vars.prefix of the !include"
+
+        # WHEN: typing on is the same step
+        field.setText("#:")
+        editor.undo()
+
+        # THEN
+        assert obj["text"] == "21"
+
+    def test_a_for_edit_adds_instances_and_keeps_the_selection(self, editor):
+        # GIVEN
+        obj = self._select(editor, 21)
+
+        # WHEN
+        self._field(editor, "for.id").setText("[20, 21, 22]")
+
+        # THEN
+        assert _object(editor, 22)["x"] == 220
+        assert [item.obj_data for item in editor.page_preview_widget.selected_items()] == [obj]
+        assert self._field(editor, "for.id").text() == "[20, 21, 22]"
+
+    def test_an_invalid_value_is_shown_and_not_applied(self, editor):
+        # GIVEN
+        self._select(editor, 21)
+        field = self._field(editor, "for.id")
+
+        # WHEN: not JSON yet
+        field.setText("[20,")
+
+        # THEN
+        assert self._error(field) == "Write a JSON list of values, e.g. [1, 2, 3], or use a template."
+
+        # WHEN: an id that another object has
+        field.setText("[1, 21]")
+
+        # THEN
+        assert self._error(field).startswith("p9b1 of common/parts/dot.jsonl:1 (id=1) is also the id of")
+        assert editor.session.is_dirty is False
+        assert [obj.get("id") for obj in editor.page_objects if obj.get("page") == 9] == [1, 2, 20, 21]
+
+    def test_a_template_value(self, editor):
+        from PyQt6.QtWidgets import QToolButton
+
+        # GIVEN
+        self._select(editor, 21)
+        toggle = self._field(editor, "for.id").parentWidget().findChild(QToolButton)
+
+        # WHEN
+        toggle.setChecked(True)
+        self._field(editor, "for.id").setText("{{ range(21, 24) }}")
+
+        # THEN
+        assert {21, 22, 23} <= {obj.get("id") for obj in editor.page_objects}
+        assert editor.session.source_of(_object(editor, 21))["text"] == "{{ prefix }}{{ id }}"
+
+    def test_the_live_preview_deletes_the_removed_instances(self, editor, plate):
+        # GIVEN
+        editor.plate.action_live_preview.setChecked(True)
+        wait_until(lambda: plate.calls and plate.calls[-1] == ("set_page", 9))
+        self._select(editor, 20)
+        plate.clear()
+
+        # WHEN
+        self._field(editor, "for.id").setText("[20]")
+
+        # THEN
+        wait_until(lambda: plate.calls)
+        assert plate.calls == [("delete_object_id", 9, 21)]
+
+
+class TestNestedVars(TestBase):
+    @pytest.fixture
+    def editor_files(self):
+        return {
+            "common/parts/bar.jsonl": '{"page": 9, "id": "{{ bar.id }}", "obj": "label", "text": "{{ bar.text }}"}\n',
+            "devices/test_device/editor.jsonl": EDITOR_JSONL
+            + '{"!include": "common/parts/bar.jsonl", "vars": {"bar": {"id": 30, "text": "2:35"}}}\n',
+        }
+
+    def test_a_var_that_is_a_mapping_has_a_field_for_each_value(self, editor):
+        from PyQt6.QtWidgets import QLineEdit
+
+        # GIVEN
+        editor.set_edit_mode(True)
+        obj = _object(editor, 30)
+        editor.page_preview_widget.select_object(obj)
+        fields = {field.objectName(): field for field in editor.property_editor.findChildren(QLineEdit)}
+        assert {name: field.text() for name, field in fields.items()} == {"vars.bar.id": "30", "vars.bar.text": "2:35"}
+
+        # WHEN: the text stays a text, also when it looks like a number
+        fields["vars.bar.text"].setText("12")
+
+        # THEN
+        assert obj["text"] == "12"
+        assert editor.session.directive_of(obj)["vars"] == {"bar": {"id": 30, "text": "12"}}
+
+        # WHEN: the id is JSON
+        fields["vars.bar.id"].setText("31")
+
+        # THEN
+        assert editor.session.directive_of(_object(editor, 31))["vars"] == {"bar": {"id": 31, "text": "12"}}
+
+
+class TestSharedInclude(TestBase):
+    @pytest.fixture
+    def editor_files(self):
+        return {"common/parts/dot.jsonl": DOT_JSONL, "common/editor.jsonl": EDITOR_JSONL + DOT_INCLUDE}
+
+    @pytest.fixture
+    def boot_cmd(self):
+        return "run L:/common_editor.jsonl\n"
+
+    def test_a_directive_in_the_common_folder_is_marked_as_shared(self, editor):
+        from PyQt6.QtWidgets import QLabel
+
+        # WHEN
+        editor.set_edit_mode(True)
+        editor.page_preview_widget.select_object(_object(editor, 20))
+
+        # THEN
+        texts = [label.text() for label in editor.property_editor.findChildren(QLabel)]
+        assert "shared" in texts
+        assert "The !include is in a shared file: saving a change changes the pages of every device that loads it." in texts
 
 
 class TestPropertyDocs(TestBase):
