@@ -17,6 +17,7 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QLabel,
     QHBoxLayout,
+    QComboBox,
 )
 
 from openhasp_config_manager.gui.dimensions import UiDimensions
@@ -39,6 +40,7 @@ from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable
 from openhasp_config_manager.gui.qt.widgets.hover_card import CardContent
 from openhasp_config_manager.gui.qt.widgets.pagelayout.property_hover import PropertyLabelHover
 from openhasp_config_manager.gui.qt.widgets.pagelayout.template_completer import TemplateCompleter
+from openhasp_config_manager.validation.property_values import matching_choice, value_choices
 
 # marks a property that an object does not have
 _MISSING = object()
@@ -487,7 +489,10 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         def apply(new_value: Any):
             self._apply_value(widget, key, new_value, error_label)
 
-        if isinstance(value, bool):
+        if choices := value_choices(obj_data.get("obj"), key):
+            editor = self._create_choice_editor(choices, value, apply)
+            row.addWidget(editor, 1)
+        elif isinstance(value, bool):
             editor = QCheckBox()
             editor.setChecked(value)
             editor.toggled.connect(apply)
@@ -514,6 +519,22 @@ class OpenHASPWidgetPropertyEditor(QWidget):
 
         column.addWidget(error_label)
         return container
+
+    @staticmethod
+    def _create_choice_editor(choices, value: Any, apply: Callable[[Any], None]) -> QComboBox:
+        """A list of the values a property takes, with what each means. A value that is none of them stays, marked as such."""
+        editor = QComboBox()
+        for choice in choices:
+            editor.addItem(f"{_shown(choice.value)} \N{EM DASH} {choice.meaning}", choice.value)
+        current = matching_choice(choices, value)
+        if current is None:
+            editor.insertItem(0, f"{_shown(value)} \N{EM DASH} not a value the plate takes", value)
+            editor.setCurrentIndex(0)
+        else:
+            editor.setCurrentIndex(choices.index(current))
+        editor.setToolTip("The values this property takes")
+        editor.currentIndexChanged.connect(lambda index: apply(editor.itemData(index)))
+        return editor
 
     def _create_color_editor(self, value: str, apply: Callable[[Any], None], row) -> QLineEdit:
         editor = UiComponents.create_edittext(text=value)
@@ -600,6 +621,11 @@ class OpenHASPWidgetPropertyEditor(QWidget):
 
 # what the field of a property starts with when it is switched to a template
 _EMPTY_TEMPLATE = "{{  }}"
+
+
+def _shown(value: Any) -> str:
+    """A value the way it is written in a file: `true`, `1`, `dots`."""
+    return str(value).lower() if isinstance(value, bool) else str(value)
 
 
 def _plain_layout[L: QHBoxLayout | QVBoxLayout](layout: L) -> L:
