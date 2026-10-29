@@ -33,6 +33,20 @@ class TestOpenHaspWidgets(TestBase):
         # THEN
         assert label.text_item.toPlainText() == ""
 
+    def test_a_placeholder_is_shown_with_an_example_value(self):
+        # GIVEN
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.button import HaspButtonItem
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.label import HaspLabelItem
+
+        # WHEN
+        label = HaspLabelItem(obj_data={"obj": "label", "x": 0, "y": 0, "w": 100, "h": 40, "text": "%IP%"})
+        button = HaspButtonItem(obj_data={"obj": "btn", "x": 0, "y": 0, "w": 100, "h": 40, "text": "IP: %ip%"})
+
+        # THEN
+        assert label.text_item.toPlainText() == "192.168.1.42"
+        # the plate replaces only a text that is the placeholder and nothing else
+        assert button.text_item.toPlainText() == "IP: %ip%"
+
     def test_label_text_starts_at_the_top_whatever_the_height(self):
         # GIVEN
         from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.label import HaspLabelItem

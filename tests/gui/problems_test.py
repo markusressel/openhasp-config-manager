@@ -1,6 +1,13 @@
 import pytest
 
 from openhasp_config_manager.gui.domain.problems import Severity, find_problems, geometry_value
+from openhasp_config_manager.gui.domain.source.placeholders import (
+    PLACEHOLDERS,
+    placeholder_problems,
+    replaced_placeholder,
+    sdbm,
+    shown_text,
+)
 
 
 def _find(objects):
@@ -130,3 +137,62 @@ def test_an_align_the_plate_doesnt_know_is_a_warning(align):
 
     assert problem.severity == Severity.WARNING
     assert problem.message.startswith(f"p1b1: align: {align!r} is not one of: left, center, right, auto, 0, 1, 2, 3")
+
+
+def _text(text, obj_type="label"):
+    return placeholder_problems({"page": 1, "id": 1, "obj": obj_type, "text": text})
+
+
+class TestPlaceholders:
+    def test_the_hashes_are_those_of_the_firmware(self):
+        # `ATTR_TEXT_MAC`, ... in `src/hasp/hasp_attribute.h` of openHASP 0.7.0-rc13
+        hashes = {"%mac%": 38107, "%ip%": 41785, "%hostname%": 10125, "%model%": 54561, "%version%": 60178, "%ssid%": 62981}
+
+        assert {name: sdbm(name) for name in PLACEHOLDERS} == hashes
+
+    def test_a_placeholder_is_replaced_in_any_case_and_only_as_the_whole_text(self):
+        assert replaced_placeholder("%HostName%") is PLACEHOLDERS["%hostname%"]
+        assert replaced_placeholder(" %ip%") is None
+        assert replaced_placeholder("%ip%!") is None
+        # the hash skips digits, the length doesn't
+        assert replaced_placeholder("%i1p%") is None
+
+    def test_the_preview_shows_an_example_value_instead_of_a_placeholder(self):
+        assert shown_text("%version%") == "0.7.0-rc13"
+        assert shown_text("Version %version%") == "Version %version%"
+        assert shown_text(42) == 42
+
+    def test_placeholders_that_are_replaced_have_no_problems(self):
+        for obj_type in ("btn", "label", "msgbox", "BTN"):
+            assert _text("%ip%", obj_type) == []
+        assert _text("Desk") == []
+        assert _text("50%") == []
+        assert _text("50% to 80%") == []
+
+    def test_an_unknown_placeholder_is_a_warning(self):
+        assert _text("%address%") == [
+            "%address% is no placeholder of openHASP, the plate shows it as written "
+            "(the placeholders: %ip%, %hostname%, %ssid%, %model%, %version%, %mac%)"
+        ]
+
+    def test_a_placeholder_in_a_longer_text_is_a_warning(self):
+        assert _text("%ip% / %ssid%") == [
+            "openHASP replaces %ip% only when it is the whole text, the plate shows it as written",
+            "openHASP replaces %ssid% only when it is the whole text, the plate shows it as written",
+        ]
+
+    def test_a_placeholder_in_an_object_whose_text_is_not_replaced_is_a_warning(self):
+        expected = ["openHASP replaces %ip% only in the text of a btn, label or msgbox, not of a checkbox"]
+
+        assert _text("%ip%", "checkbox") == expected
+        assert _text("IP: %ip%", "checkbox") == expected
+
+    def test_a_template_that_can_not_be_rendered_is_not_a_placeholder_problem(self):
+        assert _text("{{ ip }} %ip%") == []
+        assert placeholder_problems({"page": 1, "id": 1, "obj": "label"}) == []
+
+    def test_find_problems_reports_placeholders_as_warnings(self):
+        [problem] = _find([_obj(1, obj="label", text="IP: %ip%")])
+
+        assert problem.severity == Severity.WARNING
+        assert problem.message.startswith("p1b1: text: openHASP replaces %ip% only when it is the whole text")
