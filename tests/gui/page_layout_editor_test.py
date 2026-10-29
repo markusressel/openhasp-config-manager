@@ -644,6 +644,63 @@ class TestIncludedObjects(TestBase):
         assert "210" in texts
 
 
+class TestPropertyDocs(TestBase):
+    def _label(self, editor, key):
+        from PyQt6.QtWidgets import QLabel
+
+        editor.set_edit_mode(True)
+        editor.page_preview_widget.select_object(_object(editor, 1))
+        return next(label for label in editor.property_editor.findChildren(QLabel) if label.text() == f"{key}:")
+
+    def test_the_name_of_a_property_explains_it(self, editor):
+        # GIVEN the panel, which is in a dock of the main window (here a window of its own)
+        panel = editor.property_editor
+        panel.resize(400, 800)
+        panel.show()
+        hover = panel.hover
+
+        # WHEN
+        hover.show_for(self._label(editor, "text"))
+
+        # THEN on the window, not in the narrow panel
+        assert hover.card.isVisible()
+        assert hover.card.parentWidget() is panel.window()
+        assert hover.card._name.text() == "text"
+
+    def test_a_property_that_is_not_in_the_file_says_so(self, editor):
+        # GIVEN a property that the file doesn't have (e.g. a default of the theme)
+        from PyQt6.QtWidgets import QLabel
+
+        self._label(editor, "text")
+        panel = editor.property_editor
+        container = panel._create_property_label("bg_color", panel._editable_widgets[0].obj_data)
+        label = next(label for label in container.findChildren(QLabel) if label.text() == "bg_color:")
+
+        # WHEN
+        content = editor.property_editor.hover._contents[label]()
+
+        # THEN
+        assert [message for _, message in content.issues] == [
+            "Not in the file: a default of the theme or computed. Changing it writes it to the file."
+        ]
+        assert content.help.name == "bg_color"
+
+    def test_the_card_goes_away_when_the_panel_is_made_again(self, editor):
+        # GIVEN
+        panel = editor.property_editor
+        panel.resize(400, 800)
+        panel.show()
+        hover = panel.hover
+        hover._label = self._label(editor, "text")
+        hover.show_for(hover._label)
+
+        # WHEN
+        editor.property_editor.refresh()
+
+        # THEN
+        assert not hover.card.isVisible()
+
+
 class TestUndo(TestBase):
     def _select(self, editor, obj_id: int):
         editor.set_edit_mode(True)
@@ -884,6 +941,39 @@ class TestPropertyEditor(TestBase):
         # THEN
         assert self._template_field(editor).text() == "{{ nope"
         assert editor.session.is_template(obj, "text") is False
+
+    def test_a_template_starts_with_its_braces_and_the_cursor_between_them(self, editor):
+        # GIVEN
+        editor.set_edit_mode(True)
+        editor.property_editor.set_session(editor.session)
+        obj = _object(editor, 1)
+        editor.page_preview_widget.select_object(obj)
+        widget = editor.property_editor._editable_widgets[0]
+
+        # WHEN
+        editor.property_editor._set_template_mode(widget, "text", True)
+
+        # THEN nothing is checked or written yet
+        field = self._template_field(editor)
+        assert (field.text(), field.cursorPosition()) == ("{{  }}", 3)
+        assert editor.session.is_template(obj, "text") is False
+        assert obj["text"] == "A"
+
+    def test_typing_into_the_braces_makes_a_template(self, editor):
+        # GIVEN
+        editor.set_edit_mode(True)
+        editor.property_editor.set_session(editor.session)
+        obj = _object(editor, 1)
+        editor.page_preview_widget.select_object(obj)
+        editor.property_editor._set_template_mode(editor.property_editor._editable_widgets[0], "text", True)
+        field = self._template_field(editor)
+
+        # WHEN
+        field.insert("1 + 1")
+
+        # THEN
+        assert field.text() == "{{ 1 + 1 }}"
+        assert editor.session.is_template(obj, "text") is True
 
     def test_typing_does_not_rebuild_the_panel_but_a_move_does(self, editor, monkeypatch):
         # GIVEN
