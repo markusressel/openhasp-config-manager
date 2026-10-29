@@ -2,9 +2,10 @@
 
 import shutil
 from pathlib import Path
-from typing import Mapping
+from typing import Mapping, Optional
 
 from openhasp_config_manager.cli.common import _create_config_manager
+from openhasp_config_manager.gui.domain.draft.config_draft import ConfigDraft
 from openhasp_config_manager.gui.domain.draft.files import load_device
 from openhasp_config_manager.gui.domain.draft.session import PlateSession
 from openhasp_config_manager.manager import ConfigManager
@@ -42,9 +43,12 @@ def create_config_manager(cfg_root: Path) -> ConfigManager:
     return _create_config_manager(cfg_root, cfg_root.parent / "output")
 
 
-def load_session(cfg_root: Path, device: str = TEST_DEVICE) -> PlateSession:
-    """:return: the draft of the device, loaded from the files like the GUI does"""
+def load_session(cfg_root: Path, device: str = TEST_DEVICE, config: Optional[ConfigDraft] = None) -> PlateSession:
+    """
+    :param config: the files as the drafts of the devices have them, shared with other drafts (a new one by default)
+    :return: the draft of the device, loaded from the files like the GUI does
+    """
     loaded = load_device(create_config_manager(cfg_root), device)
-    session = PlateSession(device=loaded.device)
+    session = PlateSession(device=loaded.device, config=config)
     session.load(loaded.components, loaded.renderer)
     return session

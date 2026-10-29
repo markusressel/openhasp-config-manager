@@ -73,6 +73,11 @@ class EditHistory(Generic[S]):
         self._undo.clear()
         self._redo.clear()
 
+    def drop(self, dropped: Callable[[Step[S]], bool]):
+        """Forget the steps (to undo and to redo) for which `dropped` is true, e.g. those of a file that was loaded again."""
+        self._undo = [step for step in self._undo if not dropped(step)]
+        self._redo = [step for step in self._redo if not dropped(step)]
+
     def mapped(self, translate: Callable[[S], S]) -> "EditHistory[S]":
         """:return: a copy with every state translated, e.g. after the states were saved and are read back differently"""
         result = EditHistory(self._limit)

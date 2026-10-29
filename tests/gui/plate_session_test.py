@@ -526,11 +526,13 @@ class TestUndo(TestBase):
         # WHEN
         session.set_source_value(label, "text", "C")
 
-        # THEN only the changed source is a new copy
+        # THEN only the changed source is a new copy, and the file that didn't change is the same state
         after = session._state()
-        assert after.objects["a.jsonl"][0][2] is before.objects["a.jsonl"][0][2]
-        assert after.objects["a.jsonl"][1][2] is not before.objects["a.jsonl"][1][2]
-        assert before.objects["a.jsonl"][1][2]["text"] == "B"
+        assert after.files["a.jsonl"].objects[0][2] is before.files["a.jsonl"].objects[0][2]
+        assert after.files["a.jsonl"].objects[1][2] is not before.files["a.jsonl"].objects[1][2]
+        assert before.files["a.jsonl"].objects[1][2]["text"] == "B"
+        assert after.files["b.jsonl"] is before.files["b.jsonl"]
+        assert before.changed(after) == ({"a.jsonl"}, set())
 
 
 class TestListeners(TestBase):
