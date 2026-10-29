@@ -1,17 +1,20 @@
 import os
 import shlex
 from importlib import metadata
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from openhasp_config_manager.gui.domain.gui_state import (
     SCHEMA_VERSION,
     EditorTab,
+    PreviewTab,
     describe_connection,
     describe_device,
     describe_editor,
     describe_problems,
+    describe_tabs,
     now,
 )
+from openhasp_config_manager.gui.qt.window.device_tabs import PartTab
 
 
 def collect_gui_state(window, running: bool = True) -> Dict[str, Any]:
@@ -46,6 +49,7 @@ def collect_gui_state(window, running: bool = True) -> Dict[str, Any]:
         "check_command": f"openhasp-config-manager check -c {shlex.quote(str(root))} --json",
         "preview_command": f"openhasp-config-manager preview -c {shlex.quote(str(root))}",
         "devices": [device.name for device in window.devices],
+        **describe_tabs(_preview_tabs(window), _active_index(window), root),
         "device": device,
         "editor": describe_editor(window.code_view.mode.value, _editor_tabs(window), window.source_editor.current_file, root),
         "problems": problems,
@@ -63,3 +67,28 @@ def _editor_tabs(window) -> List[EditorTab]:
         line, column = window.source_editor.editor_of(path).cursor_line_column
         tabs.append(EditorTab(path, buffer.is_dirty, buffer.conflict, line, column))
     return tabs
+
+
+def _preview_tabs(window) -> List[PreviewTab]:
+    tabs = []
+    for tab in window.device_tabs.tabs:
+        part = tab if isinstance(tab, PartTab) else None
+        loaded = tab.device is not None and tab.editor.session is not None
+        tabs.append(
+            PreviewTab(
+                device=tab.name,
+                part=None if part is None else part.part,
+                instance=None if part is None or not part.focus.is_active else part.focus.describe(),
+                alone=part is not None and part.alone,
+                page=tab.editor.current_index if loaded else None,
+                connection=window.connections.get(tab.name).status,
+                live_preview=window.connections.link(tab.name).live,
+                unsaved=tab.dirty,
+            )
+        )
+    return tabs
+
+
+def _active_index(window) -> Optional[int]:
+    active = window.device_tabs.active
+    return None if active is None else window.device_tabs.tabs.index(active)

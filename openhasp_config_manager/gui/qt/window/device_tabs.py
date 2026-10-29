@@ -82,6 +82,8 @@ class DeviceTabs(QtCore.QObject):
     opened = QtCore.pyqtSignal(object)
     # the × of a tab was clicked: the window decides (see `close`)
     closeRequested = QtCore.pyqtSignal(object)
+    # the user moved a tab to another place
+    moved = QtCore.pyqtSignal()
 
     def __init__(self, create_editor: Callable[[], PageLayoutEditorWidget], parent: Optional[QtCore.QObject] = None):
         super().__init__(parent)
@@ -134,10 +136,14 @@ class DeviceTabs(QtCore.QObject):
         self.activate(tab)
         return tab
 
-    def open_part(self, name: str, part: Path, focus: PartFocus) -> PartTab:
-        """A new part tab of a device, next to the active tab. It becomes the active one when the caller activates it."""
+    def open_part(self, name: str, part: Path, focus: PartFocus, after: Optional[DeviceTab] = None) -> PartTab:
+        """
+        A new part tab of a device, next to the active tab. It becomes the active one when the caller activates it.
+        :param after: the tab to put it next to, instead of the active one
+        """
         tab = PartTab(name, self._take_editor(), part, focus)
-        self._add(tab, len(self.tabs) if self.active is None else self.tabs.index(self.active) + 1)
+        after = after or self.active
+        self._add(tab, len(self.tabs) if after is None else self.tabs.index(after) + 1)
         return tab
 
     def _take_editor(self) -> PageLayoutEditorWidget:
@@ -234,3 +240,4 @@ class DeviceTabs(QtCore.QObject):
 
     def _on_tab_moved(self, source: int, target: int):
         self.tabs.insert(target, self.tabs.pop(source))
+        self.moved.emit()

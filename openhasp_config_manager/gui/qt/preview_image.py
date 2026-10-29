@@ -1,6 +1,6 @@
 """
 Images of the plate preview, for tools that can't look at the GUI (e.g. an LLM that edits the config files): the GUI writes
-the page it shows next to its state file, and the `preview` command renders pages of the files on disk.
+the page of each open device next to its state file, and the `preview` command renders pages of the files on disk.
 """
 from typing import Dict, Iterable, Optional
 

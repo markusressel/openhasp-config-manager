@@ -154,11 +154,15 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
   (`gui/qt/window/source_sync.py`) connects the editor with the draft: selecting an object shows its line, the cursor selects its object,
   the problems of the page are marked in their files, open tabs are remembered in `UiSession.open_files`. Tests of the editor go into `tests/gui/code_editor/` or `tests/gui/source_editor_test.py`.
 - **State file**: the GUI writes `<config dir>/.openhasp-config-manager/gui-state.json` for tools that edit the config files next to it
-  (what is open, the text editor tabs, selection, draft, problems, load errors, connection). The format is documented in `README` in `gui/domain/gui_state.py`
+  (the open tabs and the active one, the text editor tabs, selection, draft, problems, load errors, connection; the keys other
+  than `tabs` are about the active tab). The format is documented in `README` in `gui/domain/gui_state.py`
   (written into that folder). `MainWindow._collect_gui_state` builds it, `GuiStatePublisher` writes it debounced. When you add state
   worth knowing for such tools, add it there, bump `SCHEMA_VERSION` only for breaking changes, and keep that README current. Never put
-  credentials or plate configuration in it. Next to it, `GuiStatePublisher` writes `preview.png`, the plate as the preview shows it
-  (`render_plate` in `gui/qt/preview_image.py`, which the `preview` command uses too, for pages of the files on disk).
+  credentials or plate configuration in it. Next to it, `GuiStatePublisher` writes `preview.png`, the plate as the active tab shows it,
+  and `preview/<device>/current.png` for each open device, as the tab of the device that was active last shows it (rendered
+  again only when that device's editor reported a change, `request(device)`; removed with the last tab of the device and on
+  start). Both use `render_plate` in `gui/qt/preview_image.py`, which the `preview` command uses too, for pages of the files on
+  disk (`preview/<device>/page_<n>.png`: don't use those names for the GUI).
 - **Plate actions** (`PlateLink` in `gui/qt/widgets/pagelayout/plate_link.py`, one per device, shared by its tabs; it sends the
   page of the tab of the device that was active last, `set_view`; names and tooltips agreed with the user): *Live preview* sends the draft to the plate while editing (nothing is stored
   on it), *Restore plate* rebuilds the pages from the files on the plate like a restart, *Deploy* uploads the saved files. *Revert*
@@ -169,7 +173,10 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
   (`gui/domain/live_preview.py`), more are refused, nothing is turned off by itself. The status shows in a dot in each tab's
   title, in the Plates dock (`gui/qt/widgets/plates_panel.py`, a row per open device) and, for the active tab, the status bar.
 - **Remembered state**: what should survive a restart for a config directory or a device goes into `UiSession`/`DeviceSession`
-  (`gui/domain/ui_session.py`) as a dataclass field with a default, then `ui_session.save()` (`gui/qt/ui_session_store.py`). App-wide
+  (`gui/domain/ui_session.py`) as a dataclass field with a default, then `ui_session.save()` (`gui/qt/ui_session_store.py`).
+  The open tabs (`UiSession.open_tabs`, `MainWindow._remember_tabs`) are opened again on start (`_restore_tabs`; part
+  tabs once their device is loaded, found by the description of their instance); tabs of devices or parts that are gone are
+  skipped, and Live preview is never turned on again. App-wide
   preferences (window geometry, theme, view toggles) are plain `QSettings` keys.
 - **Preview controls** float inside the preview (`PagePreviewWidget.add_overlay`); `fit_to_view` keeps their rows free, so the plate is
   never covered. Messages about an object go next to it (`show_message`), errors also to the status bar (`OperationStatus.failed`).

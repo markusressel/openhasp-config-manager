@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from pathlib import Path
-from typing import Any, Optional, List, Dict, Set, Tuple
+from typing import Any, Callable, Optional, List, Dict, Set, Tuple
 
 from PyQt6 import QtCore
 from PyQt6.QtCore import Qt, QSettings
@@ -26,12 +26,14 @@ from openhasp_config_manager.gui.domain.live_preview import live_preview_refusal
 from openhasp_config_manager.gui.domain.gui_state import (
     GuiStateFile,
     now,
+    relative,
 )
 from openhasp_config_manager.gui.domain.draft.config_draft import ConfigDraft
 from openhasp_config_manager.gui.domain.draft.model import PartInstance
 from openhasp_config_manager.gui.domain.draft.page_objects import get_navigable_page_indices
 from openhasp_config_manager.gui.domain.draft.part_focus import PartFocus
 from openhasp_config_manager.gui.domain.draft.session import PlateSession
+from openhasp_config_manager.gui.domain.ui_session import TabSession
 from openhasp_config_manager.gui.qt.components import ThemedIcons
 from openhasp_config_manager.gui.qt.config_watcher import ConfigWatcher
 from openhasp_config_manager.gui.qt.preview_image import png_bytes, render_plate
@@ -96,8 +98,12 @@ class MainWindow(QMainWindow):
         self.load_error: Optional[Dict[str, Any]] = None
         self.last_operation: Optional[Dict[str, Any]] = None
         self.disk_changes: List[str] = []
-        # select the device of the last session once the devices are loaded the first time
+        # open the tabs of the last session once the devices are loaded the first time
         self._restore_selection = True
+        # while the tabs of the last session are opened: the part tabs to open once their device is loaded, by device
+        self._parts_to_restore: Dict[str, List[TabSession]] = {}
+        # the tab of the last session that was active, if it is one of `_parts_to_restore`
+        self._part_to_activate: Optional[TabSession] = None
         # what is restored on the next start: the selected device, the file for new objects, ...
         self.ui_session = UiSessionStore(Path(config_manager.cfg_root), QSettings())
 
@@ -109,7 +115,7 @@ class MainWindow(QMainWindow):
             GuiStateFile(self.cfg_root),
             lambda running=True: collect_gui_state(self, running),
             # and what they look like
-            preview=lambda: png_bytes(render_plate(self.page_layout_editor_widget.page_preview_widget)),
+            previews=self._plate_images,
             parent=self,
         )
 
@@ -148,6 +154,7 @@ class MainWindow(QMainWindow):
         self.device_tabs.opened.connect(self._on_tab_opened)
         self.device_tabs.activated.connect(self._on_tab_activated)
         self.device_tabs.closeRequested.connect(self.close_tab)
+        self.device_tabs.moved.connect(self._on_tabs_changed)
         self._toolbar = self.page_layout_editor_widget.toolbar
         self.addToolBar(self._toolbar)
 
@@ -292,9 +299,10 @@ class MainWindow(QMainWindow):
         editor.dirtyChanged.connect(active(lambda dirty: self.status_bar.set_dirty(dirty)))
         editor.dirtyChanged.connect(active(lambda _: self._update_draft_actions()))
         editor.dirtyChanged.connect(lambda _: self._update_tab_title(self.device_tabs.tab_of(editor)))
-        editor.stateChanged.connect(active(self._state_publisher.request))
-        editor.dirtyChanged.connect(active(lambda _: self._state_publisher.request()))
-        editor.pageChanged.connect(active(lambda *_: self._state_publisher.request()))
+        # the state file describes every tab, and the image of each open device
+        editor.stateChanged.connect(lambda: self._on_editor_state_changed(editor))
+        editor.dirtyChanged.connect(lambda _: self._on_editor_state_changed(editor))
+        editor.pageChanged.connect(lambda *_: self._on_editor_state_changed(editor))
         editor.selectedObjectComponentChanged.connect(active(lambda key: self.file_tree_widget.reveal(key)))
         editor.fileStateChanged.connect(active(self._update_file_tree_state))
         editor.editPartRequested.connect(active(lambda part, instance: self.edit_part(part, instance, editor.session)))
@@ -502,6 +510,9 @@ class MainWindow(QMainWindow):
                 # loading or failed: what the tab showed before the devices were loaded
                 self._show_tab(self.device_tabs.active)
             return
+        if restore and self._restore_tabs(devices):
+            return
+        # a session without tabs (of an older version, or each was skipped): its device
         name = self.ui_session.session.selected_device if restore else None
         if name is not None and any(device.name == name for device in devices):
             self.on_device_selected(name)
@@ -590,6 +601,7 @@ class MainWindow(QMainWindow):
         def __on_error(ex: Exception):
             if not __current():
                 return
+            self._skip_parts_to_restore(name, "the device can't be loaded")
             self._set_load_error(name, ex)
             for tab in self.device_tabs.of_device(name):
                 tab.message = lambda panel: panel.show_error(
@@ -672,6 +684,7 @@ class MainWindow(QMainWindow):
             self.center_stack.setCurrentWidget(editor)
         self.ui_session.session.selected_device = None if tab is None else tab.name
         self.ui_session.save()
+        self._remember_tabs()
         self.device_list_widget.set_devices(self.devices, selected=self._selected_name)
         self._update_draft_actions()
         self._state_publisher.request()
@@ -698,11 +711,13 @@ class MainWindow(QMainWindow):
         tab.editor.set_plate(None)
         if not others:
             self.device_logs.drop(tab.name)
+            self._skip_parts_to_restore(tab.name, "its tab was closed")
         editor = self.device_tabs.close(tab)
         if editor is not None:
             self._delete_editor(editor)
         self.connections.close(tab.name, tab)
         self._update_plates()
+        self._on_tabs_changed()
         return True
 
     def _ask_to_save_part_alone(self, tab: PartTab) -> bool:
@@ -732,13 +747,14 @@ class MainWindow(QMainWindow):
             self.connections.link(name).forget_sent()
         if self._selected_name == name:
             self.status_bar.set_connection(status)
-            self._state_publisher.request()
+        self._state_publisher.request()
         self._update_plates()
 
     def _on_live_changed(self, name: str):
         for tab in self.device_tabs.of_device(name):
             self.device_tabs.update_title(tab)
         self._update_plates()
+        self._state_publisher.request()
 
     def _live_preview_refusal(self, name: str) -> Optional[str]:
         """:return: why Live preview can't be turned on for a device, None if it can"""
@@ -1011,6 +1027,7 @@ class MainWindow(QMainWindow):
             self._update_tab_title(shown)
             if (shown is tab or fresh) and not keep_view:
                 editor.page_preview_widget.fit_to_view()
+        self._restore_part_tabs(loaded.device.name)
         if self.device_tabs.active is not None and self.device_tabs.active.name == loaded.device.name:
             self._show_tab(self.device_tabs.active)
 
@@ -1056,7 +1073,14 @@ class MainWindow(QMainWindow):
         except ValueError as ex:
             self.status.failed.emit(f"Editing the part {part.name}", str(ex))
             return
-        opened = self.device_tabs.open_part(name, part, focus)
+        self.device_tabs.activate(self._open_part_tab(tab, part, focus))
+
+    def _open_part_tab(self, tab: DeviceTab, part: Path, focus: PartFocus, after: Optional[DeviceTab] = None) -> PartTab:
+        """
+        A part tab of the device of a loaded tab, next to the active tab (or `after`), not activated.
+        :param part: resolved
+        """
+        opened = self.device_tabs.open_part(tab.name, part, focus, after)
         # what was loaded of the device is shared by its tabs
         opened.device, opened.loaded, opened.pages_data, opened.session_key = (
             tab.device,
@@ -1069,7 +1093,7 @@ class MainWindow(QMainWindow):
         # a part tab is for editing the part
         opened.editor.set_edit_mode(True)
         self._update_tab_title(opened)
-        self.device_tabs.activate(opened)
+        return opened
 
     def _show_part_tab(self, tab: PartTab, session: PlateSession, page: Optional[int]) -> bool:
         """
@@ -1125,6 +1149,116 @@ class MainWindow(QMainWindow):
             tab.editor.set_data(session=alone, device_pages_data=tab.pages_data, focus=tab.focus)
             self._update_tab_title(tab)
             self._update_draft_actions()
+
+    # --- the tabs of the last session ---
+
+    def _restore_tabs(self, devices: List[Device]) -> bool:
+        """
+        Open the tabs of the last session again, with the one that was active. Tabs of devices and parts that don't exist
+        anymore are skipped. The part tabs open once their device is loaded (see `_restore_part_tabs`), with the tab of the
+        pages of their device, also if that one was closed. Live preview stays off.
+        :return: whether a tab was opened
+        """
+        session = self.ui_session.session
+        saved = session.open_tabs
+        active = saved[session.active_tab] if session.active_tab is not None and 0 <= session.active_tab < len(saved) else None
+        names = {device.name for device in devices}
+        restored = []
+        for entry in saved:
+            if entry.device not in names:
+                LOGGER.info(f"Not opening the tab of {entry.device} of the last session: the device doesn't exist anymore")
+            elif entry.part is not None and not (self.cfg_root / entry.part).is_file():
+                LOGGER.info(f"Not opening the tab of {entry.part} of the last session: the part doesn't exist anymore")
+            else:
+                restored.append(entry)
+        if not restored:
+            return False
+        for entry in restored:
+            if entry.part is not None:
+                self._parts_to_restore.setdefault(entry.device, []).append(entry)
+        self._part_to_activate = active if active in restored and active.part is not None else None
+        for entry in restored:
+            if self.device_tabs.find(entry.device) is None:
+                self.on_device_selected(entry.device)
+        if active in restored:
+            self.device_tabs.activate(self.device_tabs.find(active.device))
+        self._remember_tabs()
+        return True
+
+    def _restore_part_tabs(self, name: str):
+        """Open the part tabs of the last session of a device that was loaded (see `_restore_tabs`)."""
+        entries = self._parts_to_restore.pop(name, [])
+        tab = self.device_tabs.find(name)
+        for entry in entries:
+            part = (self.cfg_root / entry.part).resolve()
+            pages = self.sessions[tab.session_key]
+            if self.device_tabs.find_part(name, part) is not None:
+                continue
+            if pages.component_at(part) is not None:
+                LOGGER.info(f"Not opening the tab of {entry.part} of the last session: it is a page file of {name} now")
+                continue
+            instances = pages.part_instances(part)
+            if instances:
+                instance = next((i for i in instances if pages.describe_instance(i) == entry.instance), instances[0])
+                focus = PartFocus(pages, instance)
+            else:
+                alone = self._load_part_alone(tab.device, part)
+                if alone is None:
+                    continue
+                focus = PartFocus(alone, alone.part_instances(part)[0])
+            opened = self._open_part_tab(tab, part, focus, after=self.device_tabs.of_device(name)[-1])
+            # unless the user chose another tab while the device was loading
+            if entry is self._part_to_activate and self.device_tabs.active is tab:
+                self.device_tabs.activate(opened)
+        if entries:
+            self._on_tabs_changed()
+
+    def _skip_parts_to_restore(self, name: str, reason: str):
+        """The part tabs of the last session of a device can't be opened (see `_restore_tabs`)."""
+        for entry in self._parts_to_restore.pop(name, []):
+            LOGGER.info(f"Not opening the tab of {entry.part} of the last session: {reason}")
+        self._remember_tabs()
+
+    def _remember_tabs(self):
+        """The open tabs and the active one are opened again on the next start (not before those of the last one are opened)."""
+        if self._restore_selection or self._parts_to_restore:
+            return
+        tabs = [self._tab_session(tab) for tab in self.device_tabs.tabs]
+        active = None if self.device_tabs.active is None else self.device_tabs.tabs.index(self.device_tabs.active)
+        session = self.ui_session.session
+        if (session.open_tabs, session.active_tab) != (tabs, active):
+            session.open_tabs, session.active_tab = tabs, active
+            self.ui_session.save()
+
+    def _tab_session(self, tab: DeviceTab) -> TabSession:
+        if not isinstance(tab, PartTab):
+            return TabSession(tab.name)
+        instance = tab.focus.describe() if tab.focus.is_active and not tab.alone else None
+        return TabSession(tab.name, relative(tab.part, self.cfg_root), instance)
+
+    def _on_tabs_changed(self):
+        self._remember_tabs()
+        self._state_publisher.request()
+
+    def _on_editor_state_changed(self, editor: PageLayoutEditorWidget):
+        """What an editor shows changed (e.g. the instance of a part tab), also in the background."""
+        tab = self.device_tabs.tab_of(editor)
+        if tab is not None:
+            self._remember_tabs()
+        self._state_publisher.request(None if tab is None else tab.name)
+
+    def _plate_images(self) -> Dict[str, Callable[[], bytes]]:
+        """
+        What renders the image of the plate of each open device for the state file: as the tab of the device that was active
+        last shows it (the one Live preview sends), once the device is loaded.
+        """
+        result = {}
+        for name in self.connections.names:
+            view = self.connections.link(name).view
+            tab = None if view is None else self.device_tabs.tab_of(view)
+            if tab is not None and tab.device is not None and view.session is not None:
+                result[name] = lambda view=view: png_bytes(render_plate(view.page_preview_widget))
+        return result
 
 
 def create_application_settings():

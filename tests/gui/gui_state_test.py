@@ -10,6 +10,7 @@ from openhasp_config_manager.gui.domain.gui_state import (
     README,
     STATE_DIR_NAME,
     GuiStateFile,
+    PreviewTab,
     describe_connection,
     describe_device,
     EditorTab,
@@ -19,6 +20,7 @@ from openhasp_config_manager.gui.domain.gui_state import (
     describe_object,
     describe_part_mode,
     describe_problems,
+    describe_tabs,
 )
 from openhasp_config_manager.gui.domain.draft.part_focus import PartFocus
 from openhasp_config_manager.gui.domain.draft.session import PlateSession
@@ -310,6 +312,36 @@ class TestDescribe(TestBase):
         }
         assert describe_editor("rendered", [], None, cfg_root) == {"mode": "rendered", "current": None, "files": []}
 
+    def test_tabs(self, cfg_root):
+        # GIVEN
+        connecting = ConnectionStatus.connecting()
+        tabs = [
+            PreviewTab("plate", None, None, False, 1, connecting, live_preview=True, unsaved=False),
+            PreviewTab("plate", cfg_root / "common" / "dot.jsonl", "page.jsonl:2", False, 3, connecting, True, True),
+            PreviewTab("other", None, None, False, None, ConnectionStatus(), live_preview=False, unsaved=False),
+        ]
+
+        # THEN
+        result = describe_tabs(tabs, 1, cfg_root)
+        assert result["active_tab"] == 1
+        assert result["tabs"][1] == {
+            "kind": "part",
+            "device": "plate",
+            "part": "common/dot.jsonl",
+            "instance": "page.jsonl:2",
+            "alone": False,
+            "page": 3,
+            "connection": connecting.link.value,
+            "live_preview": True,
+            "unsaved": True,
+        }
+        assert [(tab["kind"], tab["part"], tab["page"]) for tab in result["tabs"]] == [
+            ("device", None, 1),
+            ("part", "common/dot.jsonl", 3),
+            ("device", None, None),
+        ]
+        assert describe_tabs([], None, cfg_root) == {"tabs": [], "active_tab": None}
+
     def test_connection(self):
         # WHEN
         status = ConnectionStatus.connecting().with_broker(False, "x" * 600).with_send_failed(3)
@@ -385,3 +417,40 @@ class TestGuiStateFile(TestBase):
 
         # THEN
         assert not file.preview_path.exists()
+
+    def test_the_images_of_the_devices_are_removed_when_they_are_closed_and_on_start(self, tmp_path, monkeypatch):
+        # GIVEN: images of an earlier run, and of the `preview` command
+        monkeypatch.setattr("openhasp_config_manager.gui.domain.gui_state.now", lambda: "t1")
+        folder = tmp_path / STATE_DIR_NAME / "preview"
+        for path in [folder / "gone" / "current.png", folder / "plate" / "page_1.png", folder / "plate" / "current.png"]:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"old")
+        file = GuiStateFile(tmp_path)
+
+        # WHEN: on start
+        file.remove_device_previews()
+
+        # THEN: those of the `preview` command stay
+        assert sorted(path.relative_to(folder).as_posix() for path in folder.rglob("*")) == ["plate", "plate/page_1.png"]
+
+        # WHEN
+        written = file.write_device_preview("plate", b"one")
+        file.write_device_preview("other", b"two")
+
+        # THEN
+        assert written == {"file": ".openhasp-config-manager/preview/plate/current.png", "updated": "t1"}
+        assert file.device_preview_path("plate").read_bytes() == b"one"
+        assert file.has_device_preview("other") and file.device_preview("other")["file"].endswith("other/current.png")
+
+        # WHEN: the last tab of `other` was closed
+        file.remove_device_previews(keep=["plate"])
+
+        # THEN
+        assert not (folder / "other").exists() and not file.has_device_preview("other")
+        assert file.device_preview("plate") == written
+
+        # WHEN: `plate` shows no page
+        assert file.write_device_preview("plate", None) is None
+
+        # THEN
+        assert not file.device_preview_path("plate").exists() and (folder / "plate" / "page_1.png").exists()

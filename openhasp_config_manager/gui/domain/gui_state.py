@@ -21,8 +21,12 @@ LOGGER = logging.getLogger(__name__)
 # the folder in the config directory the GUI shares its state in, for tools that work on the config files
 STATE_DIR_NAME = ".openhasp-config-manager"
 STATE_FILE_NAME = "gui-state.json"
-# the plate as the preview shows it (see README)
+# the plate as the preview of the active tab shows it (see README)
 PREVIEW_FILE_NAME = "preview.png"
+# the plate of each open device as its tab shows it: `preview/<device>/current.png`, next to the images of the pages from the
+# files on disk that the `preview` command writes there (`page_<n>.png`)
+DEVICE_PREVIEW_DIR_NAME = "preview"
+DEVICE_PREVIEW_FILE_NAME = "current.png"
 README_FILE_NAME = "README.md"
 SCHEMA_VERSION = 1
 
@@ -44,8 +48,9 @@ Read the file before and after you edit, and trust it only while it is current:
   recent (it changes whenever anything else does).
 - Without the GUI, `openhasp-config-manager check -c <config dir> [--json]` reports the same problems for all devices and pages, and
   what a deployment would fail on (exit code 1 on errors). Run it after your edits too (`check_command` is that command).
-- To see the pages, look at the images: `preview.png` is the page the GUI shows (see `device.preview`), `preview_command`
-  renders any page from the files on disk.
+- To see the pages, look at the images: `preview.png` is the page the active tab of the GUI shows (see `device.preview`),
+  `preview/<device>/current.png` the page of each open device (see `tabs`), `preview_command` renders any page from the files
+  on disk.
 - All paths are relative to the config directory (the parent of this folder). Lines start at 1.
 
 ## Format (`schema` 1)
@@ -55,7 +60,23 @@ Read the file before and after you edit, and trust it only while it is current:
   `.openhasp-config-manager/preview/<device>/page_<n>.png` (it prints the path of each image). Add `-d <device>` and `-p <page>`
   for fewer, `--scale 2` for larger images.
 - `devices`: names of the devices in the config directory.
-- `device`: the device that is open, or `null`.
+- `tabs`: the tabs of the GUI, in their order. A tab shows the pages of a device, or one part of a device (a part tab, "Edit
+  the part"). Several devices can be open at once, each with its own connection to its plate; the other keys of this file
+  (`device`, `problems`, `connection`) are about the active tab only.
+  - `kind`: `device` or `part`. `device`: the name of the device.
+  - `part`: the part of a part tab (the file), else `null`. `instance`: the `!include` whose objects the part tab shows and
+    changes (as in `part_mode`), else `null`. `alone`: `true` if the part tab shows the part on its own (see `part_mode`).
+  - `page`: the page the tab shows, `null` while the device loads.
+  - `connection`: the state of the connection to the plate of the device (as `connection.state`). `live_preview`: whether
+    the draft is sent to the plate of the device while editing, also from other tabs.
+  - `unsaved`: whether the files the tab shows have unsaved changes (of a part tab: the part and the files that include the
+    instance).
+  - `preview`: the image of the plate of the device as the GUI shows it, or `null` while the device loads: `file`
+    (`.openhasp-config-manager/preview/<device>/current.png`) and `updated`, as `device.preview`. It shows the page of the tab of
+    the device that was active last (a device has one image, also with several tabs), with its unsaved changes. The image is
+    removed when the last tab of the device closes.
+- `active_tab`: the index of the active tab in `tabs`, `null` without tabs.
+- `device`: the device of the active tab, or `null`.
   - `name`, `folder`, `cmd` (the script whose pages are shown), `screen` (`width`, `height`).
   - `files`: the .jsonl files the plate loads, in the order it loads them, with the `pages` each has objects on and whether
     it is `shared` (in `common/`, used by other devices too). Later files are drawn on top.
@@ -76,8 +97,8 @@ Read the file before and after you edit, and trust it only while it is current:
     they changed (unless the draft has changes, see `files_changed_on_disk`): after you edited a file, wait until `loaded` is
     later than your change (or `load_error` says why it can't load) before you trust the rest of `device`, `problems` and the
     preview.
-  - `preview`: the image of the plate as the GUI shows it, or `null`: `file` (a PNG in the native resolution of the plate,
-    `.openhasp-config-manager/preview.png`) and `updated` (when the image changed the last time). It shows the open `page`
+  - `preview`: the image of the plate as the active tab shows it, or `null`: `file` (a PNG in the native resolution of the
+    plate, `.openhasp-config-manager/preview.png`, the same image as the `preview` of the tab) and `updated` (when the image changed the last time). It shows the open `page`
     with the unsaved changes, the selected objects with a frame and, in part mode, only the objects of the instance (the
     other objects dimmed if the user turned on "Show the page"). It is written
     before the state, so it is the image of the state you read. Other pages and devices, from the files on disk:
@@ -100,7 +121,7 @@ Read the file before and after you edit, and trust it only while it is current:
 - `load_error`: why the device could not be loaded (e.g. invalid JSON in a file), or `null`. The GUI keeps showing the last good
   state until the files can be loaded again.
 - `files_changed_on_disk`: files that changed while the draft has unsaved changes (the GUI asks the user what to do), else `[]`.
-- `connection`: `state` (`no_device`, `connecting`, `broker_unreachable`, `plate_unknown`, `plate_online`, `plate_offline`), `error`,
+- `connection`: the connection to the plate of the device of the active tab: `state` (`no_device`, `connecting`, `broker_unreachable`, `plate_unknown`, `plate_online`, `plate_offline`), `error`,
   `sending`, `out_of_sync_pages` (pages that may show something else on the plate than in the GUI).
 - `last_operation`: the last save, deploy or failure the GUI reported: `ok`, `message`, `time`.
 """
@@ -315,6 +336,48 @@ def describe_editor(mode: str, tabs: List[EditorTab], current: Optional[Path], c
     }
 
 
+@dataclass(frozen=True)
+class PreviewTab:
+    """A tab of the preview (see `MainWindow.device_tabs`), as the state file describes it."""
+
+    device: str
+    # the part of a part tab, None for a tab of the pages of the device
+    part: Optional[Path]
+    # where the instance of a part tab is included (see `PartFocus.describe`), None if it has no objects or in a device tab
+    instance: Optional[str]
+    # a part tab that shows the part on its own
+    alone: bool
+    # None while the device loads
+    page: Optional[int]
+    connection: ConnectionStatus
+    live_preview: bool
+    unsaved: bool
+
+
+def describe_tabs(tabs: List[PreviewTab], active: Optional[int], config_dir: Path) -> Dict[str, Any]:
+    """
+    :param active: the index of the active tab, None without tabs
+    :return: the `tabs` (without their `preview`) and `active_tab` of the state (see README)
+    """
+    return {
+        "tabs": [
+            {
+                "kind": "device" if tab.part is None else "part",
+                "device": tab.device,
+                "part": None if tab.part is None else relative(tab.part, config_dir),
+                "instance": tab.instance,
+                "alone": tab.alone,
+                "page": tab.page,
+                "connection": tab.connection.link.value,
+                "live_preview": tab.live_preview,
+                "unsaved": tab.unsaved,
+            }
+            for tab in tabs
+        ],
+        "active_tab": active,
+    }
+
+
 def describe_connection(status: ConnectionStatus) -> Dict[str, Any]:
     return {
         "state": status.link.value,
@@ -324,6 +387,46 @@ def describe_connection(status: ConnectionStatus) -> Dict[str, Any]:
     }
 
 
+class _Image:
+    """An image in the state folder, replaced atomically when it changed."""
+
+    def __init__(self, path: Path):
+        self.path = path
+        self._last: Optional[bytes] = None
+        self._updated: Optional[str] = None
+
+    def write(self, png: bytes, config_dir: Path) -> Dict[str, Any]:
+        """
+        :return: what the state says about the image (see `device.preview` in README)
+        :raises OSError: if it can't be written
+        """
+        if png != self._last or not self.path.exists():
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            with tempfile.NamedTemporaryFile(
+                "wb", dir=self.path.parent, prefix=".preview-", suffix=".tmp", delete=False
+            ) as tmp:
+                tmp.write(png)
+            os.replace(tmp.name, self.path)
+            self._last = png
+            self._updated = now()
+        return self.reference(config_dir)
+
+    @property
+    def written(self) -> bool:
+        """Whether the image was written and is still there."""
+        return self._last is not None and self.path.exists()
+
+    def reference(self, config_dir: Path) -> Dict[str, Any]:
+        return {"file": relative(self.path, config_dir), "updated": self._updated}
+
+    def remove(self):
+        self._last = None
+        try:
+            self.path.unlink(missing_ok=True)
+        except OSError as ex:
+            LOGGER.warning(f"Can't remove the preview {self.path}: {ex}")
+
+
 class GuiStateFile:
     """
     The state file of the GUI in the config directory (see README). Writing it never fails the app: a config directory
@@ -331,12 +434,14 @@ class GuiStateFile:
     """
 
     def __init__(self, config_dir: Path):
-        self.folder = config_dir / STATE_DIR_NAME
+        self.config_dir = config_dir.resolve()
+        self.folder = self.config_dir / STATE_DIR_NAME
         self.path = self.folder / STATE_FILE_NAME
         self.preview_path = self.folder / PREVIEW_FILE_NAME
         self._last_content: Optional[str] = None
-        self._last_preview: Optional[bytes] = None
-        self._preview_updated: Optional[str] = None
+        self._preview = _Image(self.preview_path)
+        # the images of the open devices (see `write_device_preview`), by device
+        self._device_previews: Dict[str, _Image] = {}
         self._failed = False
 
     def write(self, state: Dict[str, Any]):
@@ -360,31 +465,67 @@ class GuiStateFile:
 
     def write_preview(self, png: Optional[bytes]) -> Optional[Dict[str, Any]]:
         """
-        Replace the image of the preview atomically, if it changed.
+        Replace the image of the preview of the active tab (`preview.png`) atomically, if it changed.
         :param png: the image, None if no page is shown (the image is removed)
         :return: what the state says about the image (`device.preview`, see README), None without one
         """
-        if png is None:
-            self._last_preview = None
-            try:
-                self.preview_path.unlink(missing_ok=True)
-            except OSError as ex:
-                LOGGER.warning(f"Can't remove the preview {self.preview_path}: {ex}")
+        return self._write_image(self._preview, png)
+
+    def device_preview_path(self, device: str) -> Path:
+        return self.folder / DEVICE_PREVIEW_DIR_NAME / device / DEVICE_PREVIEW_FILE_NAME
+
+    def has_device_preview(self, device: str) -> bool:
+        """Whether the image of a device was written (see `write_device_preview`) and is still there."""
+        image = self._device_previews.get(device)
+        return image is not None and image.written
+
+    def write_device_preview(self, device: str, png: Optional[bytes]) -> Optional[Dict[str, Any]]:
+        """
+        Replace the image of an open device (`preview/<device>/current.png`) atomically, if it changed.
+        :param png: the image, None if the device shows no page (the image is removed)
+        :return: what the state says about the image (`tabs[].preview`, see README), None without one
+        """
+        image = self._device_previews.setdefault(device, _Image(self.device_preview_path(device)))
+        return self._write_image(image, png)
+
+    def device_preview(self, device: str) -> Optional[Dict[str, Any]]:
+        """:return: what the state says about the image of a device that was written last, None without one"""
+        if not self.has_device_preview(device):
             return None
-        if png != self._last_preview or not self.preview_path.exists():
+        return self._device_previews[device].reference(self.config_dir)
+
+    def remove_device_previews(self, keep: Sequence[str] = ()):
+        """
+        Remove the images of the devices that are not open anymore (their last tab closed), and those left by an earlier run
+        (on start, with nothing to `keep`). The images of the `preview` command next to them stay.
+        """
+        folder = self.folder / DEVICE_PREVIEW_DIR_NAME
+        paths = {self.device_preview_path(device) for device in self._device_previews}
+        if folder.is_dir():
+            paths |= set(folder.glob(f"*/{DEVICE_PREVIEW_FILE_NAME}"))
+        kept = {self.device_preview_path(device) for device in keep}
+        for path in paths - kept:
+            image = self._device_previews.pop(path.parent.name, None) or _Image(path)
+            if path.exists():
+                image.remove()
             try:
-                self._ensure_folder()
-                with tempfile.NamedTemporaryFile("wb", dir=self.folder, prefix=".preview-", suffix=".tmp", delete=False) as tmp:
-                    tmp.write(png)
-                os.replace(tmp.name, self.preview_path)
-            except OSError as ex:
-                if not self._failed:
-                    LOGGER.warning(f"Can't write the preview to {self.preview_path}: {ex}")
-                self._failed = True
-                return None
-            self._last_preview = png
-            self._preview_updated = now()
-        return {"file": f"{STATE_DIR_NAME}/{PREVIEW_FILE_NAME}", "updated": self._preview_updated}
+                # the folder of a device the `preview` command didn't write images into
+                path.parent.rmdir()
+            except OSError:
+                pass
+
+    def _write_image(self, image: _Image, png: Optional[bytes]) -> Optional[Dict[str, Any]]:
+        if png is None:
+            image.remove()
+            return None
+        try:
+            self._ensure_folder()
+            return image.write(png, self.config_dir)
+        except OSError as ex:
+            if not self._failed:
+                LOGGER.warning(f"Can't write the preview to {image.path}: {ex}")
+            self._failed = True
+            return None
 
     def _ensure_folder(self):
-        ensure_state_folder(self.folder.parent)
+        ensure_state_folder(self.config_dir)
