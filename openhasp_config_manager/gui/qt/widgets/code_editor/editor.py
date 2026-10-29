@@ -296,47 +296,50 @@ class CodeEditor(QPlainTextEdit):
         self.gutter.setGeometry(QRect(area.left(), area.top(), self.gutter_width(), area.height()))
 
     def paint_gutter(self, event):
-        painter = QPainter(self.gutter)
-        palette = self.palette()
-        painter.fillRect(event.rect(), palette.color(QPalette.ColorRole.AlternateBase))
-        current = self.textCursor().blockNumber()
-        block = self.firstVisibleBlock()
-        number = block.blockNumber()
-        top = round(self.blockBoundingGeometry(block).translated(self.contentOffset()).top())
-        height = self.fontMetrics().height()
-        fold_starts = {start for start, _ in self.folding.ranges()}
-        while block.isValid() and top <= event.rect().bottom():
-            bottom = top + round(self.blockBoundingRect(block).height())
-            if block.isVisible() and bottom >= event.rect().top():
-                markers = self.markers_at(number + 1)
-                if markers:
-                    worst = Severity.ERROR if any(m.severity == Severity.ERROR for m in markers) else Severity.WARNING
-                    painter.setBrush(_marker_color(worst))
-                    painter.setPen(Qt.PenStyle.NoPen)
-                    size = height // 2
-                    painter.drawEllipse(4, top + (height - size) // 2, size, size)
-                self.values.paint_swatch(painter, block.text(), top, height)
-                font = painter.font()
-                font.setBold(number == current)
-                painter.setFont(font)
-                painter.setPen(
-                    palette.color(QPalette.ColorRole.WindowText if number == current else QPalette.ColorRole.PlaceholderText)
-                )
-                painter.drawText(
-                    0, top, self.gutter.width() - 6 - _FOLD_WIDTH, height, Qt.AlignmentFlag.AlignRight, str(number + 1)
-                )
-                if number + 1 in fold_starts:
-                    painter.drawText(
-                        self.gutter.width() - _FOLD_WIDTH - 2,
-                        top,
-                        _FOLD_WIDTH,
-                        height,
-                        Qt.AlignmentFlag.AlignCenter,
-                        "▸" if self.folding.is_folded(number + 1) else "▾",
+        # also ended when painting fails: an active painter makes Qt warn on every paint after it
+        with QPainter(self.gutter) as painter:
+            palette = self.palette()
+            painter.fillRect(event.rect(), palette.color(QPalette.ColorRole.AlternateBase))
+            current = self.textCursor().blockNumber()
+            block = self.firstVisibleBlock()
+            number = block.blockNumber()
+            top = round(self.blockBoundingGeometry(block).translated(self.contentOffset()).top())
+            height = self.fontMetrics().height()
+            fold_starts = {start for start, _ in self.folding.ranges()}
+            while block.isValid() and top <= event.rect().bottom():
+                bottom = top + round(self.blockBoundingRect(block).height())
+                if block.isVisible() and bottom >= event.rect().top():
+                    markers = self.markers_at(number + 1)
+                    if markers:
+                        worst = Severity.ERROR if any(m.severity == Severity.ERROR for m in markers) else Severity.WARNING
+                        painter.setBrush(_marker_color(worst))
+                        painter.setPen(Qt.PenStyle.NoPen)
+                        size = height // 2
+                        painter.drawEllipse(4, top + (height - size) // 2, size, size)
+                    self.values.paint_swatch(painter, block.text(), top, height)
+                    font = painter.font()
+                    font.setBold(number == current)
+                    painter.setFont(font)
+                    painter.setPen(
+                        palette.color(
+                            QPalette.ColorRole.WindowText if number == current else QPalette.ColorRole.PlaceholderText
+                        )
                     )
-            block = block.next()
-            top = bottom
-            number += 1
+                    painter.drawText(
+                        0, top, self.gutter.width() - 6 - _FOLD_WIDTH, height, Qt.AlignmentFlag.AlignRight, str(number + 1)
+                    )
+                    if number + 1 in fold_starts:
+                        painter.drawText(
+                            self.gutter.width() - _FOLD_WIDTH - 2,
+                            top,
+                            _FOLD_WIDTH,
+                            height,
+                            Qt.AlignmentFlag.AlignCenter,
+                            "▸" if self.folding.is_folded(number + 1) else "▾",
+                        )
+                block = block.next()
+                top = bottom
+                number += 1
 
     # --- selections: current line, brackets, issues, search ---
 
@@ -510,10 +513,10 @@ class CodeEditor(QPlainTextEdit):
 
     def paintEvent(self, event):
         super().paintEvent(event)
-        painter = QPainter(self.viewport())
-        self._paint_current_line(painter)
-        self.values.paint_values(painter, event.rect())
-        painter.end()
+        # see paint_gutter
+        with QPainter(self.viewport()) as painter:
+            self._paint_current_line(painter)
+            self.values.paint_values(painter, event.rect())
 
     def _paint_current_line(self, painter: QPainter):
         """
