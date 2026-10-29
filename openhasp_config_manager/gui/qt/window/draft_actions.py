@@ -59,6 +59,8 @@ class DraftActions:
             self._window.own_writes.written(change.path.resolve(), change.content)
         # own writes are no change on disk for the watcher, but open tabs of the files must follow them
         self._window.source_editor.external_changes({change.path.resolve() for change in changes})
+        # and the tabs of other devices that show them
+        self._window.mark_changed_in_background_tabs({change.path.resolve() for change in changes})
         # the files are what the draft holds now: no need to load them again
         session.mark_saved({change.path: change.content for change in changes})
         self._window.status.succeeded.emit(f"Saved {len(changes)} file{'' if len(changes) == 1 else 's'}")

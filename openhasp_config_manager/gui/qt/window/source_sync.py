@@ -39,7 +39,7 @@ class SourceEditorSync(QtCore.QObject):
         super().__init__(parent)
         self._source_editor = source_editor
         self._code_view = code_view
-        self._page_editor = page_editor
+        self._page_editor: Optional[PageLayoutEditorWidget] = None
         self._session = session
         self._ui_session = ui_session
         self._config_dir = config_dir
@@ -48,19 +48,37 @@ class SourceEditorSync(QtCore.QObject):
         self._variable_usages: Optional[VariableUsages] = None
         self._restoring_open_files = False
 
-        page_editor.stateChanged.connect(self.update_markers)
-        page_editor.stateChanged.connect(self.update_file_view)
-        page_editor.page_preview_widget.selectionChanged.connect(self._select_in_file_view)
-        page_editor.page_preview_widget.selectionChanged.connect(self._reveal_selection)
+        self.set_page_editor(page_editor)
         source_editor.objectAtCursorChanged.connect(self._select_object_of_cursor)
-        page_editor.openSourceRequested.connect(self.open_source)
         source_editor.stateChanged.connect(self._remember_open_files)
         source_editor.stateChanged.connect(self.update_file_view)
         source_editor.set_variables(self.variables_of_file)
         source_editor.set_definition_finder(self.find_definition)
         source_editor.set_usages_finder(self.find_usages)
         source_editor.set_value_source(self.variable_value, self.render_text)
-        page_editor.stateChanged.connect(source_editor.refresh_values)
+
+    def set_page_editor(self, page_editor: PageLayoutEditorWidget):
+        """Follow another page editor: of the active tab of the preview."""
+        previous, self._page_editor = self._page_editor, page_editor
+        for editor, connect in [(previous, False), (page_editor, True)]:
+            if editor is None:
+                continue
+            for signal, slot in [
+                (editor.stateChanged, self.update_markers),
+                (editor.stateChanged, self.update_file_view),
+                (editor.stateChanged, self._source_editor.refresh_values),
+                (editor.page_preview_widget.selectionChanged, self._select_in_file_view),
+                (editor.page_preview_widget.selectionChanged, self._reveal_selection),
+                (editor.openSourceRequested, self.open_source),
+            ]:
+                if connect:
+                    signal.connect(slot)
+                else:
+                    signal.disconnect(slot)
+        if previous is not None:
+            self.update_markers()
+            self.update_file_view()
+            self._source_editor.refresh_values()
 
     def open_file(self, path: Path):
         """Show a file in the text editor, for editing (not as a preview)."""

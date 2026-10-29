@@ -72,10 +72,11 @@ def floating_bar(
             button.setToolButtonStyle(
                 Qt.ToolButtonStyle.ToolButtonTextBesideIcon if item in with_text else Qt.ToolButtonStyle.ToolButtonIconOnly
             )
+            # in the bar first: shown without a parent, the button would be a window of its own for a moment
+            row.addWidget(button)
             # an action that is hidden hides its button
             button.setVisible(item.isVisible())
             item.changed.connect(lambda button=button, action=item: button.setVisible(action.isVisible()))
-            row.addWidget(button)
         else:
             row.addWidget(item)
     return bar
