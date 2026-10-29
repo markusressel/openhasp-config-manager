@@ -20,6 +20,7 @@ from openhasp_config_manager.gui.domain.draft.files import (
     load_device,
 )
 from openhasp_config_manager.gui.domain.config_changes import OwnWrites
+from openhasp_config_manager.gui.domain.connection import LinkState
 from openhasp_config_manager.gui.domain.gui_state import (
     GuiStateFile,
     now,
@@ -231,6 +232,12 @@ class MainWindow(QMainWindow):
         self.connection = ConnectionController(self)
         self.connection.changed.connect(self.status_bar.set_connection)
         self.connection.changed.connect(lambda _: self._state_publisher.request())
+        # a plate that went offline (e.g. restarted) shows its files again, not what Live preview sent
+        self.connection.changed.connect(
+            lambda status: (
+                self.page_layout_editor_widget.plate.forget_sent() if status.link == LinkState.PLATE_OFFLINE else None
+            )
+        )
         self.status_bar.set_connection(self.connection.status)
         self.page_layout_editor_widget.plate.pageOutOfSync.connect(self.connection.page_out_of_sync)
         self.page_layout_editor_widget.plate.pageDeployed.connect(self.connection.page_deployed)

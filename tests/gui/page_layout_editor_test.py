@@ -152,6 +152,82 @@ class TestLivePreview(TestBase):
         wait_until(lambda: plate.calls)
         assert plate.calls == [("delete_object_id", 9, 2)]
 
+    def _go_to(self, editor, plate, index: int):
+        editor._go_to_page(index)
+        wait_until(lambda: plate.calls and plate.calls[-1] == ("set_page", index))
+
+    def test_a_page_that_was_sent_before_is_only_shown(self, editor, plate):
+        # GIVEN
+        self._start(editor, plate)
+        self._go_to(editor, plate, 1)
+        assert ("clear_page", 1) in plate.calls
+        plate.clear()
+
+        # WHEN
+        self._go_to(editor, plate, 9)
+
+        # THEN
+        assert plate.calls == [("set_page", 9)]
+
+    def test_changes_of_a_page_that_is_not_shown_are_sent_when_it_is(self, editor, plate):
+        # GIVEN
+        self._start(editor, plate)
+        self._go_to(editor, plate, 1)
+        self._go_to(editor, plate, 9)
+        plate.clear()
+
+        # WHEN
+        label = next(obj for obj in editor.session.working_objects[_key(editor, "editor.jsonl")] if obj.get("id") == 50)
+        editor.session.set_source_value(label, "x", 7)
+        self._go_to(editor, plate, 1)
+
+        # THEN
+        assert plate.calls == [("jsonl", {"page": 1, "id": 50, "x": 7}), ("set_page", 1)]
+
+    def test_objects_removed_from_a_page_that_is_not_shown_are_deleted_when_it_is(self, editor, plate):
+        # GIVEN
+        self._start(editor, plate)
+        self._go_to(editor, plate, 1)
+        self._go_to(editor, plate, 9)
+        plate.clear()
+
+        # WHEN
+        label = next(obj for obj in editor.session.working_objects[_key(editor, "editor.jsonl")] if obj.get("id") == 50)
+        editor.session.remove_object(label)
+        self._go_to(editor, plate, 1)
+
+        # THEN
+        assert plate.calls == [("delete_object_id", 1, 50), ("set_page", 1)]
+
+    def test_a_page_the_editor_left_before_it_was_sent_is_not_sent(self, editor, plate, monkeypatch):
+        # GIVEN: sending the first page takes a while
+        from openhasp_config_manager.gui.qt.widgets.pagelayout import plate_link
+
+        monkeypatch.setattr(plate_link, "SEND_DELAY_SECONDS", 0.05)
+        editor.plate.action_live_preview.setChecked(True)
+
+        # WHEN
+        editor._go_to_page(1)
+        editor._go_to_page(9)
+
+        # THEN: page 9 was sent once, and is shown again
+        wait_until(lambda: plate.calls.count(("set_page", 9)) == 2)
+        assert ("clear_page", 1) not in plate.calls
+        assert plate.calls.count(("clear_page", 9)) == 1
+
+    def test_forgotten_pages_are_sent_in_full_again(self, editor, plate):
+        # GIVEN
+        self._start(editor, plate)
+        self._go_to(editor, plate, 1)
+        plate.clear()
+
+        # WHEN: e.g. the plate restarted
+        editor.plate.forget_sent()
+        self._go_to(editor, plate, 9)
+
+        # THEN
+        assert plate.calls[0] == ("clear_page", 9)
+
     def test_clear_page_is_disabled_while_it_is_on(self, editor, plate):
         # WHEN
         self._start(editor, plate)
