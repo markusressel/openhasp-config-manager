@@ -240,8 +240,8 @@ class MainWindow(QMainWindow):
             busy.changed.connect(lambda _: self._update_draft_actions())
 
     def _on_edit_mode_toggled(self, enabled: bool):
-        if enabled:
-            self.properties_dock.show()
+        # the properties can only be changed in edit mode
+        self.properties_dock.setVisible(enabled)
 
     def _size_docks(self):
         self.resizeDocks([self.preview_dock, self.jsonl_dock], [520, 280], Qt.Orientation.Vertical)
