@@ -234,6 +234,27 @@ class TestActions(TestBase):
         assert action_commands("p3", "up") == ["page 3"]
         assert action_commands("next", "down") == []
 
+    def test_the_old_page_numbers_wrap_like_on_the_plate(self):
+        # HASP_NUM_PAGES + 1 to 3 are prev, back and next
+        assert action_commands("p13", "up") == ["page prev"]
+        assert action_commands("p14", "up") == ["page back"]
+        assert action_commands("p15", "up") == ["page next"]
+        # the page is an uint8_t
+        assert action_commands("p258", "up") == ["page 2"]
+        assert action_commands("p256", "up") == []
+        assert action_commands("p0", "up") == []
+        assert action_commands("p", "up") == []
+
+    def test_the_plate_ignores_what_it_reads_differently(self):
+        # GIVEN actions the plate doesn't take as pages
+        # THEN they do nothing
+        assert action_commands("P3", "up") == []
+        assert action_commands(" next", "up") == []
+        # and no action runs on a lost press
+        assert action_commands('{"lost": "page 2"}', "lost") == []
+        # a JSON object may start with white space
+        assert action_commands(' \n{"up": "page 2"}', "up") == ["page 2"]
+
     def test_a_json_action_has_commands_per_event(self):
         action = '{"down": "page 2", "up": ["page 5", "p1b2.val 1"], "long": "page back"}'
 
