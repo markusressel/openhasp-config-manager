@@ -8,6 +8,7 @@ from openhasp_config_manager.const import COMMON_FOLDER_NAME
 from openhasp_config_manager.gui.domain.draft.model import ComponentSource
 from openhasp_config_manager.manager import CONFIG_FILE_NAME
 from openhasp_config_manager.openhasp_client.model.component import CmdComponent, JsonlComponent
+from openhasp_config_manager.processing.jsonl.includes import included_paths
 
 
 class FileKind(Enum):
@@ -95,14 +96,18 @@ def _kind_of(file: Path, with_config: bool) -> Optional[FileKind]:
     return _KINDS.get(file.suffix)
 
 
-def used_files(cmd_components: List[CmdComponent], jsonl_components: List[JsonlComponent]) -> Dict[Path, str]:
+def used_files(
+    cmd_components: List[CmdComponent], jsonl_components: List[JsonlComponent], config_dir: Path
+) -> Dict[Path, str]:
     """
     The .cmd and .jsonl files the plate runs: the startup scripts (`STARTUP_SCRIPTS`) and everything they run, directly
-    or through other .cmd files.
+    or through other .cmd files, and the .jsonl files those include (`!include`, also through other parts).
+    :param config_dir: the config directory, which the paths of `!include`s are relative to
     :return: the path of each used file -> the startup script that runs it (the first one, if several do)
     """
     cmds = {component.name: component for component in cmd_components}
     jsonls = {component.name: component for component in jsonl_components}
+    by_path = {Path(component.path).resolve(): component for component in jsonl_components}
     result: Dict[Path, str] = {}
 
     def visit(cmd: CmdComponent, script: str):
@@ -112,9 +117,18 @@ def used_files(cmd_components: List[CmdComponent], jsonl_components: List[JsonlC
         for command in cmd.commands:
             name = command.split("/")[-1]
             if name.endswith(".jsonl") and name in jsonls:
-                result.setdefault(jsonls[name].path, script)
+                use_jsonl(jsonls[name], script)
             elif name.endswith(".cmd") and name in cmds:
                 visit(cmds[name], script)
+
+    def use_jsonl(jsonl: JsonlComponent, script: str):
+        if jsonl.path in result:
+            return
+        result[jsonl.path] = script
+        for path in included_paths(jsonl.content):
+            part = by_path.get(Path(config_dir, path).resolve())
+            if part is not None:
+                use_jsonl(part, script)
 
     for script in STARTUP_SCRIPTS:
         if script in cmds:

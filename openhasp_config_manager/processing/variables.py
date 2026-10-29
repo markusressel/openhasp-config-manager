@@ -1,9 +1,10 @@
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 import yaml
 from yaml import Loader
 
+from openhasp_config_manager.processing.template_rendering import render_variables
 from openhasp_config_manager.util import merge_dict_recursive
 
 
@@ -16,6 +17,11 @@ class VariableManager:
     def __init__(self, cfg_root: Path):
         self._cfg_root: Path = Path(cfg_root)
         self._path_vars: Dict[str, Dict] = {}
+
+    @property
+    def cfg_root(self) -> Path:
+        """:return: the config directory"""
+        return self._cfg_root
 
     def read(self):
         """
@@ -53,19 +59,28 @@ class VariableManager:
         combined = merge_dict_recursive(combined, vars)
         self._path_vars[relative_path_str] = combined
 
-    def get_vars(self, path: Path) -> Dict[str, Any]:
+    def get_vars(self, path: Path, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         Returns the variable definitions and values for a given path.
 
         The resulting map will be a combination of all variables available within each
         of the directories along the given path. Variable definitions found in a lower (longer) path
-        will override the ones that might be present higher up the path.
+        will override the ones that might be present higher up the path. Values that are templates are computed from the
+        other variables of the path (see `render_variables`).
 
         :param path: the path context to use for variable evaluation
+        :param context: more variables the templates can use (e.g. `device`), which are not part of the result
         :return: a map of "variable name" -> "variable value given the path context"
+        :raises TemplateRenderError: if a template can't be computed
         """
-        path_vars = self._get_vars_for_path(path)
-        return path_vars
+        return render_variables(self.get_raw_vars(path), context)
+
+    def get_raw_vars(self, path: Path) -> Dict[str, Any]:
+        """
+        :return: the variables of a path like `get_vars`, with the templates of their values as they are written (to merge them
+            with other variables before they are computed)
+        """
+        return self._get_vars_for_path(path)
 
     def _get_vars_for_path(self, path: Path) -> Dict[str, Any]:
         """

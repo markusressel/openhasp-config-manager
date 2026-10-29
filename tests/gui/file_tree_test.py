@@ -316,7 +316,7 @@ class TestUsedFiles(TestBase):
         jsonls = [jsonl(name) for name in ["a.jsonl", "b.jsonl", "c.jsonl", "d.jsonl"]]
 
         # WHEN
-        result = used_files(cmds, jsonls)
+        result = used_files(cmds, jsonls, Path("."))
 
         # THEN
         assert {str(path): script for path, script in result.items()} == {
@@ -327,6 +327,38 @@ class TestUsedFiles(TestBase):
             "online.cmd": "online.cmd",
             "c.jsonl": "online.cmd",
         }
+
+    def test_files_included_by_the_files_that_are_run(self, tmp_path):
+        # GIVEN: a part includes another one, and a file with invalid JSON is run
+        from openhasp_config_manager.gui.domain.file_tree import used_files
+        from openhasp_config_manager.openhasp_client.model.component import CmdComponent, JsonlComponent
+
+        def jsonl(name, content=""):
+            return JsonlComponent(name=name, type="jsonl", path=tmp_path / name, content=content)
+
+        boot = CmdComponent(
+            name="boot.cmd", type="cmd", path=tmp_path / "boot.cmd", content="", commands=["run L:/a.jsonl", "run L:/b.jsonl"]
+        )
+        jsonls = [
+            jsonl("a.jsonl", '{"page": 1, "id": 1}\n{"!include": "parts/p.jsonl"}\n{"!include": "parts/nope.jsonl"}'),
+            jsonl("b.jsonl", '{"page": 1, "id": }'),
+            jsonl("parts/p.jsonl", '{"!include": "parts/q.jsonl"}\n{"!include": "a.jsonl"}'),
+            jsonl("parts/q.jsonl"),
+            jsonl("parts/unused.jsonl"),
+        ]
+
+        # WHEN
+        result = used_files([boot], jsonls, tmp_path)
+
+        # THEN
+        assert sorted(path.relative_to(tmp_path).as_posix() for path in result) == [
+            "a.jsonl",
+            "b.jsonl",
+            "boot.cmd",
+            "parts/p.jsonl",
+            "parts/q.jsonl",
+        ]
+        assert set(result.values()) == {"boot.cmd"}
 
 
 class TestTopLevelFolders(TestBase):

@@ -405,6 +405,32 @@ class TestMarkersAndCompletion(TestBase):
         assert marker.line == 3
         assert "outside of the screen" in marker.message
 
+    def test_errors_of_the_directives_are_marked_where_they_are(self, cfg_root, create_window, editor_file):
+        # GIVEN: written before the window loads the device
+        editor_file.write_text(EDITOR_JSONL + '{"!include": "common/nope.jsonl"}\n')
+        window = create_window()
+        wait_until(lambda: window.devices)
+        window.on_device_selected("test_device")
+        wait_until(lambda: window.session is not None and window.session.is_loaded)
+
+        # WHEN
+        window.file_tree_widget.openRequested.emit(editor_file)
+
+        # THEN
+        wait_until(lambda: window.source_editor.current_editor._app_markers)
+        [marker] = window.source_editor.current_editor._app_markers
+        assert marker.line == EDITOR_JSONL.count("\n") + 1
+        assert marker.severity == Severity.ERROR
+        assert marker.message.endswith("The file to include doesn't exist: common/nope.jsonl")
+
+    def test_the_page_editor_can_show_a_file_at_a_line(self, window, editor_file):
+        # WHEN
+        window.page_layout_editor_widget.openSourceRequested.emit(editor_file, 2)
+
+        # THEN
+        assert window.source_editor.current_file == editor_file
+        assert window.source_editor.current_editor.cursor_line_column[0] == 2
+
     def test_variables_of_the_files_of_the_device_are_offered(self, window, editor_file):
         names = window.source_sync.variables_of_file(editor_file)
         assert names

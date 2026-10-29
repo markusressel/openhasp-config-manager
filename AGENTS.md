@@ -61,6 +61,12 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
   device communication) runs through `run_async` (`gui/qt/async_bridge.py`) so the window stays responsive; never block the Qt main thread.
 - Templates: everything that renders or inspects a Jinja2 template goes through `processing/template_rendering.py` (nested templates,
   unknown variables staying as written, ...). Don't use `jinja2` directly elsewhere; add a test there for every new case (100 % coverage).
+- Directives (`!include`, README "Including objects", design in `docs/include-directive.md`): `processing/jsonl/includes.py` expands
+  them (`expand_includes`) before the object references are resolved, so the object map of `pXbY` contains the included objects,
+  each with the scope of its instance. Every expanded object has an `ObjectOrigin` (part file, line, chain of `IncludeStep`s);
+  report problems of included objects at the part with that chain (`check.py`, the GUI). A part only counts through its instances:
+  it is uploaded only if a `.cmd` runs it. Code that reads the objects of a file must go through
+  `DeviceProcessor.expand_jsonl_objects`, not the raw sources, or it misses included objects and sees directives as objects.
 - `OpenHaspClient` is async: every call must be awaited. A missing `await` fails silently (the coroutine never runs), which once broke
   deploy, upload and screenshots.
 
@@ -91,6 +97,9 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
   (`ScrollDriver.tick`, `HaspTabviewItem.read_swipe`) and end animations with `finish_animation()` instead of waiting.
   An `action` that sets a property of an object (`p1b2.val=50`, `touch_actions.object_command`) changes it in the preview; every
   other command is only reported (`commandRequested`).
+- **Included objects are read-only** in the draft: `PlateSession` keeps the directives of a file as written and saves only its
+  plain objects around them. Edit operations check `session.read_only_reason(obj)` (or `_check_editable`, which raises
+  `ReadOnlyObjectError`); `origin_of` says where an included object is written. New edit operations must respect this.
 - **Templates are never replaced implicitly.** Objects whose `x`/`y` is a template or a percentage can't be dragged or nudged; the
   editor explains why, and "Use pixels for x/y" replaces them only when the user asks. Keep this for new edit operations.
 - **Files**: new objects go into the target file chosen in the Files tree (`gui/domain/file_tree.py` follows the folder structure of

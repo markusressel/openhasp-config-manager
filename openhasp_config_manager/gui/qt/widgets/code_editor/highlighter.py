@@ -3,7 +3,7 @@ from typing import Dict
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor, QFont, QSyntaxHighlighter, QTextCharFormat
 
-from openhasp_config_manager.gui.domain.source.syntax import Language, TokenKind, tokenize_line
+from openhasp_config_manager.gui.domain.source.syntax import JsonlState, Language, TokenKind, tokenize_jsonl, tokenize_line
 from openhasp_config_manager.gui.qt.theme import ThemeMode, current_mode
 
 # syntax colors: (dark theme, light theme)
@@ -18,6 +18,7 @@ _SYNTAX_COLORS = {
     TokenKind.PLACEHOLDER: ("#4EC9B0", "#267F99"),
     TokenKind.COMMAND: ("#569CD6", "#0000FF"),
     TokenKind.ARGUMENT: ("#CE9178", "#A31515"),
+    TokenKind.DIRECTIVE: ("#4EC9B0", "#267F99"),
 }
 
 
@@ -44,11 +45,21 @@ class SourceHighlighter(QSyntaxHighlighter):
         self._color_formats: Dict[str, QTextCharFormat] = {}
 
     def highlightBlock(self, text: str):
-        for token in tokenize_line(text, self._language):
+        for token in self._tokens(text):
             if token.kind == TokenKind.COLOR:
                 self.setFormat(token.start, token.end - token.start, self._color_format(token.text(text)[2:-1]))
             else:
                 self.setFormat(token.start, token.end - token.start, self._formats[token.kind])
+
+    def _tokens(self, text: str):
+        if self._language != Language.JSONL:
+            return tokenize_line(text, self._language)
+        # the state of a block says where the next line starts: in a directive object or not (see `tokenize_jsonl`)
+        previous = self.previousBlockState()
+        state = JsonlState() if previous < 0 else JsonlState(previous // 2, bool(previous % 2))
+        tokens, after = tokenize_jsonl(text, state)
+        self.setCurrentBlockState(after.depth * 2 + int(after.directive))
+        return tokens
 
     def _color_format(self, hex_value: str) -> QTextCharFormat:
         """The color of a color string as the background of the string, with a readable text color."""

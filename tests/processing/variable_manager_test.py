@@ -1,5 +1,8 @@
 from pathlib import Path
 
+import pytest
+
+from openhasp_config_manager.processing.template_rendering import TemplateRenderError
 from openhasp_config_manager.processing.variables import VariableManager
 from tests import TestBase
 
@@ -126,3 +129,36 @@ class TestVariableManager(TestBase):
 
         assert result == {"menu": {"items": ["a", "b"], "values": 3}}
         assert render_template("{{ menu.items[1] }}{{ menu.values }}", result) == "b3"
+
+    def test_templates_are_computed_with_the_variables_of_the_path(self, tmp_path):
+        # GIVEN: a computed value, and a device that overrides what it is computed from
+        (tmp_path / "global.vars.yaml").write_text('margin: 4\ncard:\n  x: "{{ margin }}"\n  w: "{{ 100 - card.x * 2 }}"\n')
+        device_path = tmp_path / "devices" / "plate"
+        device_path.mkdir(parents=True)
+        (device_path / "vars.yaml").write_text("margin: 10\n")
+        variable_manager = VariableManager(tmp_path)
+        variable_manager.read()
+
+        # THEN
+        assert variable_manager.get_vars(tmp_path)["card"] == {"x": 4, "w": 92}
+        assert variable_manager.get_vars(device_path)["card"] == {"x": 10, "w": 80}
+        assert variable_manager.get_raw_vars(device_path)["card"]["x"] == "{{ margin }}"
+
+    def test_the_context_can_be_used_but_is_not_part_of_the_result(self, tmp_path):
+        # GIVEN
+        (tmp_path / "vars.yaml").write_text('half: "{{ device.width / 2 }}"\n')
+        variable_manager = VariableManager(tmp_path)
+        variable_manager.read()
+
+        # THEN
+        assert variable_manager.get_vars(tmp_path, {"device": {"width": 320}}) == {"half": 160}
+
+    def test_a_template_that_cannot_be_computed_is_an_error(self, tmp_path):
+        # GIVEN
+        (tmp_path / "vars.yaml").write_text('a: "{{ b }}"\nb: "{{ a }}"\n')
+        variable_manager = VariableManager(tmp_path)
+        variable_manager.read()
+
+        # THEN
+        with pytest.raises(TemplateRenderError, match="cycle: a -> b -> a"):
+            variable_manager.get_vars(tmp_path)

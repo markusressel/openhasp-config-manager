@@ -5,20 +5,39 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Protocol, Set, Tuple
 
+from openhasp_config_manager.processing.jsonl.includes import Expansion, ObjectOrigin
+
 
 class DraftRenderer(Protocol):
     """
     Renders source objects like a deployment does (see DeviceProcessor), with the template variables of their component.
     """
 
-    def render_object(self, component: str, source: Dict[str, Any]) -> Dict[str, Any]: ...
-
-    def set_draft_sources(self, sources: Dict[str, List[Dict[str, Any]]]):
-        """Templates that refer to other objects (`{{ p1b2.x }}`) see these source objects, per component key."""
+    def render_object(self, component: str, source: Dict[str, Any], scope: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """:param scope: the variables of the instance of a part, for an included object (see `ExpandedObject.scope`)"""
         ...
 
-    def check_template(self, component: str, template: str) -> Optional[str]:
-        """:return: why the template can't be rendered, or None if it can"""
+    def expand_objects(self, component: str, sources: List[Dict[str, Any]]) -> Expansion:
+        """:return: the objects of a component with its directives (`!include`) replaced by the objects they include"""
+        ...
+
+    def set_draft_sources(self, sources: Dict[str, List[Dict[str, Any]]]):
+        """
+        Templates that refer to other objects (`{{ p1b2.x }}`) see these source objects, per component key: the objects as
+        written in the files, with their directives.
+        """
+        ...
+
+    def referenced_objects(
+        self, component: str, source: Dict[str, Any], page: Any = None, scope: Optional[Dict[str, Any]] = None
+    ) -> Set[str]:
+        """:return: the objects (`p1b2`) the templates of a source object refer to, `ANY_OBJECT` if that can't be told"""
+        ...
+
+    def check_template(
+        self, component: str, template: str, name: Optional[str] = None, scope: Optional[Dict[str, Any]] = None
+    ) -> Optional[str]:
+        """:return: why the template can't be rendered (in the object `name`, for `this` and `bY`), or None if it can"""
         ...
 
     def template_suggestions(self, component: str) -> List[Tuple[str, Any]]:
@@ -31,6 +50,14 @@ class DraftRenderer(Protocol):
 
     def render_text(self, component: str, text: str) -> str:
         """:return: a text with templates, rendered like a deployment does :raises jinja2.TemplateError: if it can't be"""
+        ...
+
+    def path_variable_value(self, path: Path, name: str) -> Any:
+        """:return: the value of a variable for a file that has no objects in the draft :raises KeyError: if it has none"""
+        ...
+
+    def render_path_text(self, path: Path, text: str) -> str:
+        """:return: a text with templates, rendered with the variables of a file that has no objects in the draft"""
         ...
 
 
@@ -58,6 +85,15 @@ class DraftEntry:
     source: Dict[str, Any]
     # tells the object apart in the undo history: the rendered dict of an object is a new one after its removal is undone
     uid: int
+    # for an object that an `!include` of the file includes: where it is written (`index` is the one of the outermost
+    # directive then, and `source` is the object of the part, which the draft doesn't change)
+    origin: Optional[ObjectOrigin] = None
+    # the variables of the instance of the part, for an included object
+    scope: Optional[Dict[str, Any]] = None
+
+    @property
+    def is_included(self) -> bool:
+        return self.origin is not None
 
 
 # the objects of the draft, for undo: per component key (uid, index in the source file, source) of its objects, in order

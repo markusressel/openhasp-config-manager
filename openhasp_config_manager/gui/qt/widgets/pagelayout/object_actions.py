@@ -18,6 +18,7 @@ from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable
 
 LOCKED_POSITION_HINT = "the position is a template or a percentage: use pixels for x/y in the properties to move it"
 LOCKED_POSITION_FIX = "To move it, use pixels for x/y in the properties: this replaces the template or percentage."
+INCLUDED_HINT = "an !include puts it into the file: change it in the part, or the vars of the !include"
 
 
 class ObjectActions(QObject):
@@ -29,11 +30,18 @@ class ObjectActions(QObject):
         self._paste_cascade = PasteCascade()
 
     def is_movable(self, obj: Dict) -> bool:
-        """Objects whose position is a template or a percentage can't be dragged: it would replace them with pixels."""
-        return not self._editor.session.has_computed_position(obj)
+        """
+        Objects whose position is a template or a percentage can't be dragged: it would replace them with pixels. Included
+        objects can't be changed at all.
+        """
+        session = self._editor.session
+        return not session.is_included(obj) and not session.has_computed_position(obj)
 
     def report_locked(self, items: List[EditableWidget]):
         """Explain why objects can't be moved: in the status bar, and next to the first of them."""
+        items = self._changeable(items, "Moving")
+        if not items:
+            return
         names = ", ".join(f"p{item.obj_data.get('page')}b{item.obj_id}" for item in items)
         self._editor.status.failed.emit(f"Moving {names}", LOCKED_POSITION_HINT)
         first = items[0]
@@ -41,10 +49,30 @@ class ObjectActions(QObject):
         name = f"p{first.obj_data.get('page')}b{first.obj_id}"
         self._editor.page_preview_widget.show_message(f"{name} can't be moved:\n{reasons}\n{LOCKED_POSITION_FIX}", near=first)
 
+    def _changeable(self, items: List[EditableWidget], action: str) -> List[EditableWidget]:
+        """:return: the objects that are not included; why the others can't be changed is shown (see `report_included`)"""
+        included = [item for item in items if self._editor.session.is_included(item.obj_data)]
+        if included:
+            self.report_included(included, action)
+        return [item for item in items if not any(item is other for other in included)]
+
+    def report_included(self, items: List[EditableWidget], action: str):
+        """Explain why included objects can't be changed: in the status bar, and next to the first of them."""
+        names = ", ".join(object_name(item.obj_data) for item in items)
+        self._editor.status.failed.emit(f"{action} {names}", INCLUDED_HINT)
+        first = items[0]
+        reason = self._editor.session.read_only_reason(first.obj_data)
+        self._editor.page_preview_widget.show_message(
+            f"{object_name(first.obj_data)} can't be changed here:\n{reason}", near=first
+        )
+
     def use_pixel_positions(self):
         """Replace the templates and percentages in x and y of the selected objects with pixels, so they can be moved."""
         items = self._editor.page_preview_widget.selected_items()
         if not self._editor.edit_mode or not items:
+            return
+        items = self._changeable(items, "Using pixels for")
+        if not items:
             return
         with self._editor.session.edit(self._describe("Use pixels for x/y of", items)):
             for item in items:
@@ -118,6 +146,10 @@ class ObjectActions(QObject):
         items = self._editor.page_preview_widget.selected_items()
         if not self._editor.edit_mode or not items:
             return
+        # their templates need the variables of their instance
+        items = self._changeable(items, "Duplicating")
+        if not items:
+            return
         with self._editor.session.edit(self._describe("Duplicate", items)):
             for item in items:
                 try:
@@ -127,11 +159,18 @@ class ObjectActions(QObject):
                     break
 
     def copy_selected(self):
-        """Copy the selected objects (with the objects inside of them) to the clipboard, as JSONL with their templates."""
+        """
+        Copy the selected objects (with the objects inside of them) to the clipboard, as JSONL with their templates. Not the
+        included ones: their templates need the variables of their instance.
+        """
         items = self._editor.page_preview_widget.selected_items()
         if not self._editor.edit_mode or not items:
             return
+        items = self._changeable(items, "Copying")
+        if not items:
+            return
         objects = with_descendants(self._editor.page_objects, [item.obj_data for item in items])
+        objects = [obj for obj in objects if not self._editor.session.is_included(obj)]
         QApplication.clipboard().setText(objects_to_text([self._editor.session.source_of(obj) for obj in objects]))
         self._paste_cascade.reset()
 
@@ -168,6 +207,9 @@ class ObjectActions(QObject):
     def remove_selected(self):
         items = self._editor.page_preview_widget.selected_items()
         if not self._editor.edit_mode or not items:
+            return
+        items = self._changeable(items, "Removing")
+        if not items:
             return
         names = ", ".join(f"p{item.obj_data.get('page')}b{item.obj_id}" for item in items)
         answer = QMessageBox.question(

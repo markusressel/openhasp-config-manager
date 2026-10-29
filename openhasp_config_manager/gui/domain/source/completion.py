@@ -1,7 +1,7 @@
 """
 What can be completed at the cursor in a file: property names of an object, the values of a property that takes one of a few
-(`"mode": "dots"`, see `value_choices`), the variables inside of a template, and the placeholders of openHASP in a `text` (`%ip%`,
-see `placeholders.py`). Qt-free.
+(`"mode": "dots"`, see `value_choices`), the variables inside of a template, the placeholders of openHASP in a `text` (`%ip%`, see
+`placeholders.py`), and the path of an `!include`. Qt-free.
 """
 
 import re
@@ -57,10 +57,16 @@ def _is_style_variant(name: str) -> bool:
 OBJECT_PROPERTIES = sorted(name for name in _ALL_PROPERTIES if not _is_style_variant(name))
 
 
+# the path of an `!include` that is being typed, up to the cursor
+_INCLUDE_PATH = re.compile(r'"!include"\s*:\s*"([^"]*)$')
+# the keys of a directive object besides the directive itself
+DIRECTIVE_KEYS = ["for", "vars"]
+
+
 @dataclass(frozen=True)
 class CompletionContext:
     # what is being typed
-    kind: str  # "property", "value", "variable" or "placeholder"
+    kind: str  # "property", "value", "variable", "placeholder" or "include" (the path of an `!include`)
     # the part of the word before the cursor
     prefix: str
     # where the word starts in the line
@@ -92,6 +98,8 @@ def completion_context(
     # JSON has no templates and no objects with properties
     if language in (Language.TEXT, Language.JSON):
         return None
+    if language == Language.JSONL and (match := _INCLUDE_PATH.search(line)):
+        return CompletionContext("include", match.group(1), match.start(1))
     open_template = _open_template(line)
     if open_template is not None:
         word_start = len(line)
@@ -263,13 +271,26 @@ def properties_for(object_type: Optional[str], prefix: str = "", present: Iterab
     return sorted(names - set(present))
 
 
+def keys_for(object_type: Optional[str], prefix: str = "", present: Iterable[str] = (), directive: bool = False) -> List[str]:
+    """
+    :param directive: whether the object is a directive (`!include`): it has `vars` and `for`, not the properties of an object
+    :return: the keys to offer in an object (see `properties_for`); `!include` too in an object that has no keys yet
+    """
+    present = list(present)
+    if directive:
+        return [key for key in DIRECTIVE_KEYS if key not in present]
+    return properties_for(object_type, prefix, present) + ([] if present else ["!include"])
+
+
 def complete(
     context: CompletionContext,
     properties: Iterable[str] = OBJECT_PROPERTIES,
     variables: Iterable[str] = (),
+    paths: Iterable[str] = (),
     values: Iterable[str] = (),
 ) -> List[str]:
     """
+    :param paths: the files an `!include` can name (see `include_targets`)
     :param values: the values of the property of which the value is typed (see `value_words`)
     :return: the words that start with the typed prefix, without the word that is already typed completely (a value stays: the
         list shows what it means)
@@ -279,5 +300,5 @@ def complete(
     if context.kind == "value":
         # in the order of their meaning (0, 1, 2 or left, center, right), the ones that start with what is typed
         return [word for word in values if word.lower().startswith(context.prefix.lower())]
-    words = properties if context.kind == "property" else variables
+    words = {"property": properties, "variable": variables, "include": paths}[context.kind]
     return sorted({word for word in words if word.startswith(context.prefix) and word != context.prefix})

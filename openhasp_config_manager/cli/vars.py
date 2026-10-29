@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Dict, List
 
 from openhasp_config_manager.console import error, echo
+from openhasp_config_manager.manager import ConfigManager
 from openhasp_config_manager.processing.variables import VariableManager
 
 
@@ -28,7 +29,9 @@ async def c_vars(config_dir: Path, path: str):
     try:
         variable_manager = VariableManager(cfg_root=config_dir)
         variable_manager.read()
-        variables = variable_manager.get_vars(Path(config_dir, path))
+        # nothing is written: the output directory is only needed by the manager
+        config_manager = ConfigManager(config_dir, Path("./nonexistent"), variable_manager)
+        variables = config_manager.variables_of_path(Path(config_dir, path))
         formatted = await _format_variables(variables)
         echo(formatted)
     except Exception as ex:

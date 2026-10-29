@@ -55,6 +55,8 @@ class OpenHASPWidgetPropertyEditor(QWidget):
     removeObjectClicked = QtCore.pyqtSignal()
     duplicateObjectClicked = QtCore.pyqtSignal()
     usePixelPositionClicked = QtCore.pyqtSignal()
+    # (path, line): show a file in the text editor at a line, e.g. the part of an included object
+    openSourceRequested = QtCore.pyqtSignal(object, int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -127,6 +129,10 @@ class OpenHASPWidgetPropertyEditor(QWidget):
 
     def _create_file_label(self, obj_data: Dict) -> QWidget:
         """The file the object is defined in."""
+        origin = self._session.origin_of(obj_data)
+        if origin is not None:
+            location = relative_config_path(origin.file, self._session.device.path)
+            return UiComponents.create_label(f"{location}:{origin.line}  ·  included", role="hint", word_wrap=True)
         component = self._session.component_of(obj_data)
         location = relative_config_path(component.path, self._session.device.path)
         label = UiComponents.create_label(
@@ -167,6 +173,9 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         )
         self.main_layout.addWidget(header)
         self.main_layout.addWidget(self._create_file_label(obj_data))
+        if self._session.is_included(obj_data):
+            self._add_included_content(obj_data)
+            return
         self._add_locked_position_hint()
 
         for title, keys in group_properties(obj_data):
@@ -184,6 +193,42 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         self._add_reset_all_button(editable_widget, obj_data)
         self._add_duplicate_button()
         self._add_remove_button()
+
+    def _add_included_content(self, obj_data: Dict):
+        """An included object can't be changed: why, where to change it, and its properties (read-only)."""
+        self.main_layout.addWidget(
+            UiComponents.create_label(self._session.read_only_reason(obj_data), role="hint", word_wrap=True)
+        )
+        origin = self._session.origin_of(obj_data)
+        directive = origin.includes[0]
+        self.main_layout.addWidget(
+            UiComponents.create_button(
+                title="Open the part",
+                icon="file-document-edit-outline",
+                tooltip="Show the object in the file it is written in, where every instance of the part changes with it",
+                on_click=lambda: self.openSourceRequested.emit(origin.file, origin.line),
+            )
+        )
+        self.main_layout.addWidget(
+            UiComponents.create_button(
+                title="Go to the !include",
+                icon="file-code-outline",
+                tooltip="Show the directive that includes the part, with its vars",
+                on_click=lambda: self.openSourceRequested.emit(directive.file, directive.line),
+            )
+        )
+        source = self._session.source_of(obj_data)
+        for title, keys in group_properties(obj_data):
+            group = QGroupBox(title)
+            form_layout = QFormLayout(group)
+            form_layout.setLabelAlignment(QtCore.Qt.AlignmentFlag.AlignRight)
+            for key in keys:
+                value = UiComponents.create_label(str(obj_data[key]), word_wrap=True)
+                value.setTextInteractionFlags(QtCore.Qt.TextInteractionFlag.TextSelectableByMouse)
+                if key in source and source[key] != obj_data[key]:
+                    value.setToolTip(f"In the part: {source[key]}")
+                form_layout.addRow(UiComponents.create_label(f"{key}:"), value)
+            self.main_layout.addWidget(group)
 
     def _add_hint(self, text: str):
         hint = UiComponents.create_label(text, role="hint", word_wrap=True)

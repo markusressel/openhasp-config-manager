@@ -85,3 +85,23 @@ class TestDuplicateIds(TestBase):
             _issues('{"page": 1, "id": 3}\n{"page": 2, "id": 3}\n{"page": 2, "id": "{{ a }}"}\n{"page": 2, "id": "{{ a }}"}')
             == []
         )
+
+
+class TestDirectives(TestBase):
+    def test_what_is_wrong_with_a_directive_is_marked_at_its_key(self):
+        # GIVEN
+        text = '{"page": 1, "id": 1}\n  {\n  // "!x"\n  "!include": "a.json"\n}\n{"!import": "a.jsonl"}\n'
+
+        # WHEN
+        issues = find_source_issues(text, Language.JSONL)
+
+        # THEN
+        assert [(issue.line, issue.column, issue.length, issue.severity) for issue in issues] == [
+            (4, 2, 10, Severity.ERROR),
+            (6, 1, 9, Severity.ERROR),
+        ]
+        assert issues[0].message == "An !include includes a .jsonl file, not: a.json"
+        assert issues[1].message == "Unknown directive !import: the only directive is !include"
+
+    def test_a_valid_directive_has_no_issues(self):
+        assert _issues('{"!include": "a.jsonl", "vars": {"id": 1}, "for": {"i": "{{ range(3) }}"}}\n') == []

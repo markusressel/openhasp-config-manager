@@ -35,6 +35,11 @@ class SourceObject:
     def get(self, key: str) -> Optional[SourceProperty]:
         return next((prop for prop in self.properties if prop.key == key), None)
 
+    @property
+    def is_directive(self) -> bool:
+        """Whether the object is a directive (`!include`), not an openHASP object."""
+        return any(prop.key.startswith("!") for prop in self.properties)
+
 
 class _PropertyBuilder:
     def __init__(self, line: int):
@@ -99,7 +104,7 @@ def scan_objects(text: str) -> List[SourceObject]:
             elif depth == 1 and char == ":" and builder is not None and not builder.has_colon:
                 builder.has_colon = True
                 continue
-            if depth == 1 and builder is None and token.kind == TokenKind.KEY:
+            if depth == 1 and builder is None and token.kind in (TokenKind.KEY, TokenKind.DIRECTIVE):
                 builder = _PropertyBuilder(number)
             if builder is not None:
                 builder.add(number, line, token)
