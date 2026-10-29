@@ -6,7 +6,7 @@ from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable
 class HaspTabItem(EditableWidget):
     """
     A tab of a tabview (`parentid`). It has no place of its own: the tabview draws its button, so the preview draws nothing
-    for it. Select it in the text editor.
+    for it. Select it in the text editor. The objects on it are drawn on its page in the tabview (`HaspTabviewItem.tab_page`).
     See https://www.openhasp.com/0.7.0/design/objects/tabview/
     """
 

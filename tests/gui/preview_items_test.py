@@ -243,7 +243,7 @@ class TestPreviewItems(TestBase):
         assert painted(render({**box, "radius": 25})) < painted(render(box))
 
     def test_tabview_shows_the_buttons_of_its_tabs(self):
-        from openhasp_config_manager.gui.domain.tabs import last_tabview_id, tab_texts
+        from openhasp_config_manager.gui.domain.tabs import last_tabview_id, tab_of, tab_texts
         from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.tabview import HaspTabviewItem
 
         view = {"page": 1, "id": 2, "obj": "tabview", "x": 0, "y": 0, "w": 300, "h": 200}
@@ -254,6 +254,8 @@ class TestPreviewItems(TestBase):
         ]
         assert tab_texts(objects, view) == ["Lights"]
         assert last_tabview_id(objects, 1) == 2 and last_tabview_id(objects, 2) is None
+        assert tab_of(objects, {"page": 1, "id": 5, "obj": "btn", "parentid": 3}) is objects[1]
+        assert tab_of(objects, {"page": 1, "id": 5, "obj": "btn", "parentid": 2}) is None
 
         item = HaspTabviewItem(view)
         assert item.button_area().height() == 62
@@ -269,6 +271,54 @@ class TestPreviewItems(TestBase):
         tab = {"page": 1, "id": 3, "obj": "tab", "parentid": 2, "text": "Lights"}
         assert painted(render(tab)) == 0
         assert render(tabview, tab) != render(tabview)
+
+    def test_objects_on_a_tab_are_drawn_on_its_page_only_while_it_is_active(self):
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.page_preview_layout import PagePreviewWidget
+
+        # GIVEN: a tabview with its buttons on top (62 high), a button on each of its two tabs, the second reaching out of it
+        tabview = {"page": 1, "id": 2, "obj": "tabview", "x": 20, "y": 30, "w": 300, "h": 200, "val": 1}
+        tabs = [{"page": 1, "id": 3 + n, "obj": "tab", "parentid": 2} for n in range(2)]
+        first = {"page": 1, "id": 5, "obj": "btn", "x": 10, "y": 10, "w": 50, "h": 50, "parentid": 3}
+        second = {"page": 1, "id": 6, "obj": "btn", "x": 250, "y": 100, "w": 100, "h": 100, "parentid": 4}
+
+        # WHEN
+        view = PagePreviewWidget()
+        view.set_objects([tabview, *tabs, first, second])
+
+        # THEN: x/y are relative to the content of the tab, only the active tab is shown
+        items = {item.obj_id: item for item in view.editable_items()}
+        assert (items[6].scenePos().x(), items[6].scenePos().y()) == (20 + 250, 30 + 62 + 100)
+        assert items[6].isVisible() and not items[5].isVisible()
+        # the button is cut off at the tabview
+        image = render(tabview, *tabs, first, second)
+        assert image.pixel(20 + 300 + 5, 30 + 62 + 150) == 0xFF000000
+        assert image.pixel(20 + 300 - 5, 30 + 62 + 50) != image.pixel(20 + 300 - 5, 30 + 62 + 150)
+
+    def test_an_object_that_gets_a_tab_as_parent_moves_onto_it(self):
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.page_preview_layout import PagePreviewWidget
+
+        # GIVEN
+        tabview = {"page": 1, "id": 2, "obj": "tabview", "x": 20, "y": 30, "w": 300, "h": 200}
+        tab = {"page": 1, "id": 3, "obj": "tab", "parentid": 2}
+        button = {"page": 1, "id": 5, "obj": "btn", "x": 10, "y": 10, "w": 50, "h": 50}
+        view = PagePreviewWidget()
+        view.set_objects([tabview, tab, button])
+        item = next(item for item in view.editable_items() if item.obj_id == 5)
+        assert item.scenePos().x() == 10
+
+        # WHEN
+        button["parentid"] = 3
+        view.refresh_items()
+
+        # THEN
+        assert (item.scenePos().x(), item.scenePos().y()) == (30, 30 + 62 + 10)
+
+        # WHEN it isn't on the tab anymore
+        del button["parentid"]
+        view.refresh_items()
+
+        # THEN
+        assert item.parentItem() is None and item.scenePos().x() == 10
 
     def test_button_matrix_splits_options_into_rows(self):
         from openhasp_config_manager.gui.domain.button_matrix import MatrixButton, matrix_rows

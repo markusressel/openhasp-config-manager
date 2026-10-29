@@ -157,3 +157,33 @@ class TestPreviewTabview(TestBase):
         view._indev.release((200, 130))
 
         assert item.data["val"] == 0
+
+    def test_an_object_on_the_active_tab_is_touched_only_inside_of_the_tab(self):
+        # GIVEN: a button on the second tab that reaches out of the tabview, and one on the first tab
+        button = {"page": 1, "id": 20, "obj": "btn", "x": 250, "y": 50, "w": 100, "h": 50, "parentid": 13}
+        hidden = {"page": 1, "id": 21, "obj": "btn", "x": 250, "y": 50, "w": 100, "h": 50, "parentid": 12}
+        view = preview({**TABVIEW, "val": 1}, *TABS, button, hidden)
+
+        # WHEN the finger is on the button inside of the tab
+        view.finger((270, 62 + 75), 0.0)
+
+        # THEN it is pressed, not the one of the hidden tab
+        assert widget(view, 20).is_pressed
+        view._indev.release((270, 62 + 75))
+
+        # WHEN the finger is on the part of the button outside of the tabview
+        view.finger((320, 62 + 75), 0.0)
+
+        # THEN
+        assert not widget(view, 20).is_pressed
+        view._indev.release((320, 62 + 75))
+
+    def test_switching_the_tab_shows_its_objects(self):
+        button = {"page": 1, "id": 20, "obj": "btn", "x": 10, "y": 10, "w": 100, "h": 50, "parentid": 14}
+        view = preview(TABVIEW, *TABS, button)
+        item = widget(view, 11)
+        assert not widget(view, 20).isVisible()
+
+        lift(view, *center(item, item.button_rects()[2]))
+
+        assert widget(view, 20).isVisible()
