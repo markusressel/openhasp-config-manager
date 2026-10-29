@@ -716,7 +716,7 @@ class TestIncludedObjects(TestBase):
         assert "Remove Object" not in buttons and "Duplicate Object" not in buttons
         assert editor.property_editor.findChildren(QLineEdit) == []
         texts = [label.text() for label in editor.property_editor.findChildren(QLabel)]
-        assert "common/parts/dot.jsonl:1  ·  included" in texts
+        assert {"p9b21", "label", "common/parts/dot.jsonl:1", "included"} <= set(texts)
         assert "210" in texts
 
 

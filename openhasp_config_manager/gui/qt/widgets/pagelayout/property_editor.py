@@ -18,6 +18,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QHBoxLayout,
     QComboBox,
+    QSizePolicy,
 )
 
 from openhasp_config_manager.gui.dimensions import UiDimensions
@@ -137,20 +138,61 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         self.refresh()
         self.scroll_area.verticalScrollBar().setValue(0)
 
-    def _create_file_label(self, obj_data: Dict) -> QWidget:
-        """The file the object is defined in."""
+    def _add_header(self, obj_data: Dict):
+        """The name and type of the object, and the file it is defined in, above a line."""
+        title_row = UiComponents.create_row(alignment=QtCore.Qt.AlignmentFlag.AlignVCenter)
+        title_row.addWidget(UiComponents.create_label(object_name(obj_data), role="title"))
+        title_row.addWidget(_badge(str(obj_data.get("obj", "?")), "The type of the object"))
+        title_row.addStretch(1)
+        self.main_layout.addLayout(title_row)
+        self.main_layout.addLayout(self._create_file_row(obj_data))
+
+        line = QFrame()
+        line.setProperty("role", "separator")
+        line.setFixedHeight(1)
+        self.main_layout.addWidget(line)
+
+    def _create_file_row(self, obj_data: Dict) -> QHBoxLayout:
+        """The file the object is defined in, marked if it is a part or a shared file."""
         origin = self._session.origin_of(obj_data)
         if origin is not None:
-            location = relative_config_path(origin.file, self._session.device.path)
-            return UiComponents.create_label(f"{location}:{origin.line}  ·  included", role="hint", word_wrap=True)
-        component = self._session.component_of(obj_data)
-        location = relative_config_path(component.path, self._session.device.path)
-        label = UiComponents.create_label(
-            location + ("  ·  shared" if component.is_common else ""), role="hint", word_wrap=True
-        )
-        if component.is_common:
-            label.setToolTip("A file of the common folder: saving it changes the pages of every device that loads it.")
-        return label
+            location = f"{relative_config_path(origin.file, self._session.device.path)}:{origin.line}"
+            badge = _badge("included", "The object is written in a part, which an !include puts into the page")
+        else:
+            component = self._session.component_of(obj_data)
+            location = relative_config_path(component.path, self._session.device.path)
+            badge = None
+            if component.is_common:
+                badge = _badge(
+                    "shared", "A file of the common folder: saving it changes the pages of every device that loads it."
+                )
+        # a long path wraps (at the slashes)
+        row = _plain_layout(QHBoxLayout())
+        icon = UiComponents.create_icon_label("file-document-outline", size=UiDimensions.two)
+        row.addWidget(icon, 0, QtCore.Qt.AlignmentFlag.AlignTop)
+        label = UiComponents.create_label(location, role="hint", word_wrap=True)
+        label.setTextInteractionFlags(QtCore.Qt.TextInteractionFlag.TextSelectableByMouse)
+        row.addWidget(label, 1)
+        if badge is not None:
+            row.addWidget(badge, 0, QtCore.Qt.AlignmentFlag.AlignTop)
+        return row
+
+    def _add_notice(self, text: str, buttons: List[QWidget]):
+        """A note about the object, with what can be done about it, in a box."""
+        box = QFrame()
+        box.setProperty("role", "notice")
+        column = _plain_layout(QVBoxLayout(box))
+        column.setContentsMargins(UiDimensions.one, UiDimensions.one, UiDimensions.one, UiDimensions.one)
+        column.setSpacing(UiDimensions.one)
+        row = _plain_layout(QHBoxLayout())
+        row.setSpacing(UiDimensions.one)
+        icon = UiComponents.create_icon_label("information-outline", size=UiDimensions.two)
+        row.addWidget(icon, 0, QtCore.Qt.AlignmentFlag.AlignTop)
+        row.addWidget(UiComponents.create_label(text, word_wrap=True), 1)
+        column.addLayout(row)
+        for button in buttons:
+            column.addWidget(button, 0, QtCore.Qt.AlignmentFlag.AlignLeft)
+        self.main_layout.addWidget(box)
 
     def refresh(self):
         """Rebuilds the editor from the current data, e.g. after the object was moved in the preview."""
@@ -179,12 +221,7 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         editable_widget = self._editable_widgets[0]
         obj_data = editable_widget.obj_data
 
-        header = UiComponents.create_label(
-            f"{obj_data.get('obj', '?')}  p{obj_data.get('page', '?')}b{obj_data.get('id', '?')}",
-            role="title",
-        )
-        self.main_layout.addWidget(header)
-        self.main_layout.addWidget(self._create_file_label(obj_data))
+        self._add_header(obj_data)
         if self._session.is_included(obj_data):
             self._add_included_content(obj_data)
             return
@@ -208,26 +245,24 @@ class OpenHASPWidgetPropertyEditor(QWidget):
 
     def _add_included_content(self, obj_data: Dict):
         """An included object can't be changed: why, where to change it, and its properties (read-only)."""
-        self.main_layout.addWidget(
-            UiComponents.create_label(self._session.read_only_reason(obj_data), role="hint", word_wrap=True)
-        )
         origin = self._session.origin_of(obj_data)
         directive = origin.includes[0]
-        self.main_layout.addWidget(
-            UiComponents.create_button(
-                title="Open the part",
-                icon="file-document-edit-outline",
-                tooltip="Show the object in the file it is written in, where every instance of the part changes with it",
-                on_click=lambda: self.openSourceRequested.emit(origin.file, origin.line),
-            )
-        )
-        self.main_layout.addWidget(
-            UiComponents.create_button(
-                title="Go to the !include",
-                icon="file-code-outline",
-                tooltip="Show the directive that includes the part, with its vars",
-                on_click=lambda: self.openSourceRequested.emit(directive.file, directive.line),
-            )
+        self._add_notice(
+            self._session.read_only_reason(obj_data),
+            [
+                UiComponents.create_button(
+                    title="Open the part",
+                    icon="file-document-edit-outline",
+                    tooltip="Show the object in the file it is written in, where every instance of the part changes with it",
+                    on_click=lambda: self.openSourceRequested.emit(origin.file, origin.line),
+                ),
+                UiComponents.create_button(
+                    title="Go to the !include",
+                    icon="file-code-outline",
+                    tooltip="Show the directive that includes the part, with its vars",
+                    on_click=lambda: self.openSourceRequested.emit(directive.file, directive.line),
+                ),
+            ],
         )
         source = self._session.source_of(obj_data)
         for title, keys in group_properties(obj_data):
@@ -296,15 +331,17 @@ class OpenHASPWidgetPropertyEditor(QWidget):
                 f"{len(locked)} of {len(self._editable_widgets)} objects have a template or a percentage in x or y, "
                 "so they can't be dragged."
             )
-        self.main_layout.addWidget(UiComponents.create_label(text, role="hint", word_wrap=True))
-        self.main_layout.addWidget(
-            UiComponents.create_button(
-                title="Use pixels for x/y",
-                icon="lock-open-variant-outline",
-                tooltip="Replace the templates and percentages in x and y with the pixels they show now, "
-                "so the object can be moved.\nOther objects that use the same variables don't follow it anymore.",
-                on_click=self.usePixelPositionClicked.emit,
-            )
+        self._add_notice(
+            text,
+            [
+                UiComponents.create_button(
+                    title="Use pixels for x/y",
+                    icon="lock-open-variant-outline",
+                    tooltip="Replace the templates and percentages in x and y with the pixels they show now, "
+                    "so the object can be moved.\nOther objects that use the same variables don't follow it anymore.",
+                    on_click=self.usePixelPositionClicked.emit,
+                )
+            ],
         )
 
     def _add_reset_all_button(self, editable_widget, obj_data):
@@ -632,6 +669,14 @@ _CHOICE_MIN_CHARACTERS = 12
 
 # what the field of a property starts with when it is switched to a template
 _EMPTY_TEMPLATE = "{{  }}"
+
+
+def _badge(text: str, tooltip: str) -> QLabel:
+    """A small framed word next to a name, e.g. the type of an object."""
+    badge = UiComponents.create_label(text, role="badge")
+    badge.setToolTip(tooltip)
+    badge.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+    return badge
 
 
 def _shown(value: Any) -> str:
