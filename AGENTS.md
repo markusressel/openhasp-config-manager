@@ -27,9 +27,9 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
 
 | Task                         | Command                                                     |
 |------------------------------|-------------------------------------------------------------|
-| Tests                        | `make test` (= `cd tests && poetry run pytest`, 100 % coverage of `processing/template_rendering.py` required) |
+| Tests                        | `make test` (= `cd tests && poetry run pytest`, 90 % coverage of `processing/template_rendering.py` required) |
 | Single test                  | `cd tests && ../.venv/bin/pytest manager_analyze_test.py -k <name>` |
-| haad integration tests       | `make test-haad` (runs in `../haad`'s uv environment, 100 % coverage required) |
+| haad integration tests       | `make test-haad` (runs in `../haad`'s uv environment, 90 % coverage required) |
 | Lint (CI runs `ruff check .`) | `make lint`                                                |
 | Check a config directory     | `.venv/bin/openhasp-config-manager check -c <dir> [--json]` (`check.py`) |
 | Format                       | `make format`                                               |
@@ -60,7 +60,7 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
 - GUI: keep logic that does not need Qt in `gui/domain/` so it can be tested without a display. Long-running work (config analysis,
   device communication) runs through `run_async` (`gui/qt/async_bridge.py`) so the window stays responsive; never block the Qt main thread.
 - Templates: everything that renders or inspects a Jinja2 template goes through `processing/template_rendering.py` (nested templates,
-  unknown variables staying as written, ...). Don't use `jinja2` directly elsewhere; add a test there for every new case (100 % coverage).
+  unknown variables staying as written, ...). Don't use `jinja2` directly elsewhere; test new cases there.
 - Directives (`!include`, README "Including objects", design in `docs/include-directive.md`): `processing/jsonl/includes.py` expands
   them (`expand_includes`) before the object references are resolved, so the object map of `pXbY` contains the included objects,
   each with the scope of its instance. Every expanded object has an `ObjectOrigin` (part file, line, chain of `IncludeStep`s);
@@ -131,7 +131,7 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
   (`external_changes`: clean tabs reload, tabs with changes show a banner). Saving a tab goes through `_on_source_saved`, which treats
   it like an external change for the draft (reload, or the *Reload from disk* banner if the draft has changes). `SourceEditorSync`
   (`gui/qt/window/source_sync.py`) connects the editor with the draft: selecting an object shows its line, the cursor selects its object,
-  the problems of the page are marked in their files, open tabs are remembered in `UiSession.open_files`. A new editor feature needs a test in `tests/gui/code_editor_test.py` or `source_editor_test.py`.
+  the problems of the page are marked in their files, open tabs are remembered in `UiSession.open_files`. Tests of the editor go into `tests/gui/code_editor_test.py` or `source_editor_test.py`.
 - **State file**: the GUI writes `<config dir>/.openhasp-config-manager/gui-state.json` for tools that edit the config files next to it
   (what is open, the text editor tabs, selection, draft, problems, load errors, connection). The format is documented in `README` in `gui/domain/gui_state.py`
   (written into that folder). `MainWindow._collect_gui_state` builds it, `GuiStatePublisher` writes it debounced. When you add state
@@ -153,13 +153,25 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
 
 ## Testing
 
-- Add or adjust tests with every behavioural change. `pytest-asyncio` runs in auto mode (`tests/pytest.ini`).
+- Test what can break in a way that matters: domain logic (`processing/`, `gui/domain/`, the draft), every bug you fix
+  (a test that fails without the fix), file formats and protocols (the state file, what is sent to the plate). Don't write tests
+  for thin Qt wiring, layout or wording that a screenshot or a run of the app shows as well; one window test per feature
+  (it starts, the main path works) is enough. Prefer a few tests of behaviour over many of single methods.
+- Coverage gates: 90 % of `processing/template_rendering.py` (`make test`, CI) and of `openhasp_config_manager/haad` (`make test-haad`).
+  Nothing else has a gate.
+- `pytest-asyncio` runs in auto mode (`tests/pytest.ini`).
 - `tests/haad` and `tests/ad` are skipped unless haad or AppDaemon are installed (`tests/conftest.py`), `tests/gui` unless the `gui`
   extra is. CI runs the core, `gui` and `ad` tests as separate jobs (`.github/workflows/pythonpackage.yml`); AppDaemon needs Python <3.14. `tests/haad/README.md`
   explains the haad test setup (golden masters, `FakePlate`).
 - The GUI can be checked headless with `QT_QPA_PLATFORM=offscreen` and `QWidget.grab()` to render screenshots.
+- Shared setup, don't write it again in a test module: `tests/helpers.py` (Qt-free) has `copy_test_config` (a copy of
+  `tests/_test_cfg_root` with extra files), `write_page` (a file of the test device that its `boot.cmd` runs),
+  `create_config_manager` and `load_session` (the draft of a device, loaded like the GUI does). `TestBase.cfg_root` is the
+  test config itself: read it, never write into it.
 - GUI tests: `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest tests/gui`. Fixtures in `tests/gui/conftest.py`: `qapp`,
-  `async_loop` (the background asyncio loop of the app) and `settings`.
+  `async_loop` (the background asyncio loop of the app), `settings`, `create_window` and `window` (a main window with the test
+  device loaded, for the `cfg_root` fixture of the module); helpers in `tests/gui/helpers.py` (`wait_until`, `gui_state`, ...).
+  Wait for conditions with `wait_until`, not with fixed `qwait`s.
 - Never touch the user's real GUI settings: tests that use `QSettings` (directly or through `MainWindow`, `UiSessionStore`, the Files
   tree, ...) need the `settings` fixture, and headless runs of the app outside of pytest need `XDG_CONFIG_HOME` set to a temporary
   directory.

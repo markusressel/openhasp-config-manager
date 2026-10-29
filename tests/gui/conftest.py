@@ -83,3 +83,15 @@ def create_window(settings, async_loop, cfg_root, tmp_path, monkeypatch):
     yield create
     for window in windows:
         window.quit_discarding_drafts()
+
+
+@pytest.fixture
+def window(create_window):
+    """A main window (see `create_window`) with the test device loaded."""
+    from tests.gui.helpers import wait_until
+
+    window = create_window()
+    wait_until(lambda: window.devices)
+    window.on_device_selected("test_device")
+    wait_until(lambda: window.session is not None and window.session.is_loaded)
+    return window

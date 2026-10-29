@@ -1,18 +1,15 @@
-import shutil
 from pathlib import Path
 
 import pytest
 
-from openhasp_config_manager.cli.common import _create_config_manager
 from openhasp_config_manager.gui.domain.draft.files import (
     SaveConflictError,
     flatten_template_variables,
-    load_device,
     plan_save,
     write_save,
 )
-from openhasp_config_manager.gui.domain.draft.session import PlateSession
 from tests import TestBase
+from tests.helpers import copy_test_config, load_session, write_page
 
 EDITOR_JSONL = """// objects for the editor test
 {
@@ -29,25 +26,15 @@ EDITOR_JSONL = """// objects for the editor test
 
 @pytest.fixture
 def cfg_root(tmp_path) -> Path:
-    root = tmp_path / "cfg"
-    shutil.copytree(Path(__file__).parent.parent / "_test_cfg_root", root)
-    device = root / "devices" / "test_device"
-    (device / "editor.jsonl").write_text(EDITOR_JSONL)
-    (device / "boot.cmd").write_text("run L:/editor.jsonl\n")
+    root = copy_test_config(tmp_path)
+    write_page(root, EDITOR_JSONL)
     return root
-
-
-def _load(cfg_root: Path) -> PlateSession:
-    loaded = load_device(_create_config_manager(cfg_root, cfg_root.parent / "output"), "test_device")
-    session = PlateSession(device=loaded.device)
-    session.load(loaded.components, loaded.renderer)
-    return session
 
 
 class TestDraftFiles(TestBase):
     def test_load_renders_templates_like_a_deployment(self, cfg_root):
         # WHEN
-        session = _load(cfg_root)
+        session = load_session(cfg_root)
 
         # THEN
         [component] = session.components
@@ -60,7 +47,7 @@ class TestDraftFiles(TestBase):
         # GIVEN: the config directory relative to the working directory (`gui -c ./cfg`), and a file outside the draft,
         # which the text editor knows by its resolved path
         monkeypatch.chdir(cfg_root.parent)
-        session = _load(Path(".", cfg_root.name))
+        session = load_session(Path(".", cfg_root.name))
         part = (cfg_root / "common" / "parts" / "label.jsonl").resolve()
 
         # WHEN
@@ -79,7 +66,7 @@ class TestDraftFiles(TestBase):
         monkeypatch.chdir(cfg_root.parent)
 
         # WHEN
-        session = _load(Path(".", cfg_root.name))
+        session = load_session(Path(".", cfg_root.name))
 
         # THEN
         [component] = session.components
@@ -88,7 +75,7 @@ class TestDraftFiles(TestBase):
 
     def test_save_patches_the_source_and_keeps_comments_and_templates(self, cfg_root):
         # GIVEN
-        session = _load(cfg_root)
+        session = load_session(cfg_root)
         [component] = session.components
         label, button = session.working_objects[component.key]
 
@@ -114,12 +101,12 @@ class TestDraftFiles(TestBase):
             '{"page": 9, "id": 3, "obj": "label", "text": "new"}\n'
         )
         # and it loads again
-        reloaded = _load(cfg_root)
+        reloaded = load_session(cfg_root)
         assert [obj["id"] for obj in reloaded.working_objects[component.key]] == [1, 3]
 
     def test_save_refuses_files_that_changed_on_disk(self, cfg_root):
         # GIVEN
-        session = _load(cfg_root)
+        session = load_session(cfg_root)
         [component] = session.components
         session.set_source_value(session.working_objects[component.key][0], "x", 42)
         component.path.write_text(EDITOR_JSONL + '{"page": 9, "id": 9}\n')
@@ -130,7 +117,7 @@ class TestDraftFiles(TestBase):
 
     def test_the_value_of_a_variable_and_a_rendered_text(self, cfg_root):
         # GIVEN
-        session = _load(cfg_root)
+        session = load_session(cfg_root)
         [component] = session.components
 
         # THEN
@@ -145,7 +132,7 @@ class TestDraftFiles(TestBase):
         # GIVEN: a variable computed from the screen and another variable
         variable_file = cfg_root / "computed.vars.yaml"
         variable_file.write_text('margin: 4\ncard:\n  w: "{{ device.screen.width - margin * 2 }}"\n')
-        session = _load(cfg_root)
+        session = load_session(cfg_root)
         [component] = session.components
 
         # THEN: the objects, and a variable file open in the text editor, see the computed value
@@ -166,7 +153,7 @@ class TestDraftFiles(TestBase):
         (page / "vars.yaml").write_text('index: "{{ common.pages.unknown.index }}"\n')
 
         # WHEN
-        session = _load(cfg_root)
+        session = load_session(cfg_root)
 
         # THEN
         [component] = session.components
@@ -181,7 +168,7 @@ class TestDraftFiles(TestBase):
             '{"page": 9, "id": 1, "obj": "label", "x": "{{ b2.x + 5 }}", "h": 20, "w": "{{ this.h * 2 }}"}\n'
             '{"page": 9, "id": 2, "obj": "btn", "x": 10}\n'
         )
-        session = _load(cfg_root)
+        session = load_session(cfg_root)
         [component] = session.components
         label, button = session.working_objects[component.key]
         assert (label["x"], label["w"]) == (15, 40)
@@ -197,7 +184,7 @@ class TestDraftFiles(TestBase):
 
     def test_suggestions_contain_the_variables_of_a_deployment(self, cfg_root):
         # GIVEN
-        session = _load(cfg_root)
+        session = load_session(cfg_root)
         [component] = session.components
         label = session.working_objects[component.key][0]
 
@@ -211,7 +198,7 @@ class TestDraftFiles(TestBase):
 
     def test_template_check(self, cfg_root):
         # GIVEN
-        session = _load(cfg_root)
+        session = load_session(cfg_root)
         [component] = session.components
         label = session.working_objects[component.key][0]
 
@@ -222,7 +209,7 @@ class TestDraftFiles(TestBase):
 
     def test_templates_see_the_objects_of_the_draft(self, cfg_root):
         # GIVEN
-        session = _load(cfg_root)
+        session = load_session(cfg_root)
         [component] = session.components
         label, button = session.working_objects[component.key]
         session.set_source_value(button, "w", 50)
@@ -239,7 +226,7 @@ class TestDraftFiles(TestBase):
 
     def test_only_objects_that_refer_to_a_changed_object_are_rendered_again(self, cfg_root, monkeypatch):
         # GIVEN
-        session = _load(cfg_root)
+        session = load_session(cfg_root)
         [component] = session.components
         label, button = session.working_objects[component.key]
         session.set_source_value(button, "w", 50)
@@ -263,7 +250,7 @@ class TestDraftFiles(TestBase):
 
     def test_objects_that_refer_to_an_object_follow_its_removal_and_new_id(self, cfg_root):
         # GIVEN
-        session = _load(cfg_root)
+        session = load_session(cfg_root)
         [component] = session.components
         label, button = session.working_objects[component.key]
         session.set_source_value(label, "text", "{{ p9b2.text }}")
@@ -282,7 +269,7 @@ class TestDraftFiles(TestBase):
 
     def test_objects_that_build_the_name_of_the_object_they_refer_to_follow_it(self, cfg_root):
         # GIVEN
-        session = _load(cfg_root)
+        session = load_session(cfg_root)
         [component] = session.components
         label, button = session.working_objects[component.key]
         session.set_source_value(button, "w", 50)
@@ -298,7 +285,7 @@ class TestDraftFiles(TestBase):
 
     def test_objects_with_a_name_that_can_not_be_resolved_follow_every_change(self, cfg_root):
         # GIVEN
-        session = _load(cfg_root)
+        session = load_session(cfg_root)
         [component] = session.components
 
         # THEN
@@ -306,7 +293,7 @@ class TestDraftFiles(TestBase):
 
     def test_undo_renders_the_objects_that_refer_to_the_restored_ones(self, cfg_root):
         # GIVEN
-        session = _load(cfg_root)
+        session = load_session(cfg_root)
         [component] = session.components
         label, button = session.working_objects[component.key]
         session.set_source_value(label, "text", "{{ p9b2.text }}")
@@ -328,7 +315,7 @@ class TestDraftFiles(TestBase):
 
     def test_after_saving_the_draft_is_the_files_and_the_history_goes_on(self, cfg_root):
         # GIVEN
-        session = _load(cfg_root)
+        session = load_session(cfg_root)
         [component] = session.components
         label, button = session.working_objects[component.key]
         session.set_source_value(label, "x", 42)
@@ -344,7 +331,7 @@ class TestDraftFiles(TestBase):
         assert session.is_dirty is False
         assert session.changes() == []
         [saved] = session.components
-        loaded = _load(cfg_root)
+        loaded = load_session(cfg_root)
         [reloaded] = loaded.components
         assert (saved.content, saved.sources) == (reloaded.content, reloaded.sources)
         # the lines of the objects are those of the saved file, also of the added one
@@ -374,7 +361,7 @@ class TestDraftFiles(TestBase):
 
     def test_saving_again_after_saving(self, cfg_root):
         # GIVEN
-        session = _load(cfg_root)
+        session = load_session(cfg_root)
         [component] = session.components
         label = session.working_objects[component.key][0]
         session.set_source_value(label, "x", 42)

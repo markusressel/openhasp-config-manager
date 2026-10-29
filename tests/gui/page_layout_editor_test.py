@@ -1,17 +1,15 @@
 import math
-import shutil
 import threading
-from pathlib import Path
 
 import orjson
 import pytest
 
-from openhasp_config_manager.cli.common import _create_config_manager
 from openhasp_config_manager.gui.domain.draft.files import load_device
 from openhasp_config_manager.gui.domain.draft.session import PlateSession
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 from tests import TestBase
 from tests.gui.helpers import wait_until
+from tests.helpers import DEVICE_DIR, copy_test_config, create_config_manager
 
 EDITOR_JSONL = """{"page": 9, "id": 1, "obj": "label", "text": "A", "x": 10}
 {"page": 9, "id": 2, "obj": "btn", "text": "B"}
@@ -75,14 +73,8 @@ def editor(qapp, async_loop, plate, tmp_path, monkeypatch, editor_files, boot_cm
 
     monkeypatch.setattr(plate_link, "SEND_DELAY_SECONDS", 0)
 
-    root = tmp_path / "cfg"
-    shutil.copytree(Path(__file__).parent.parent / "_test_cfg_root", root)
-    device_dir = root / "devices" / "test_device"
-    for name, content in editor_files.items():
-        (root / name).parent.mkdir(parents=True, exist_ok=True)
-        (root / name).write_text(content)
-    (device_dir / "boot.cmd").write_text(boot_cmd)
-    loaded = load_device(_create_config_manager(root, tmp_path / "output"), "test_device")
+    root = copy_test_config(tmp_path, {**editor_files, f"{DEVICE_DIR}/boot.cmd": boot_cmd})
+    loaded = load_device(create_config_manager(root), "test_device")
     session = PlateSession(device=loaded.device)
     session.load(loaded.components, loaded.renderer)
 

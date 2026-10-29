@@ -1,4 +1,3 @@
-import shutil
 from pathlib import Path
 
 import pytest
@@ -6,14 +5,12 @@ import pytest
 from openhasp_config_manager.gui.domain.log_history import LogLinkState
 from tests import TestBase
 from tests.gui.helpers import qwait, wait_until
+from tests.helpers import DEVICE_DIR, copy_test_config
 
 
 @pytest.fixture
 def cfg_root(tmp_path) -> Path:
-    root = tmp_path / "cfg"
-    shutil.copytree(Path(__file__).parent.parent / "_test_cfg_root", root)
-    (root / "devices" / "test_device" / "boot.cmd").write_text("run L:/home_page.jsonl\n")
-    return root
+    return copy_test_config(tmp_path, {f"{DEVICE_DIR}/boot.cmd": "run L:/home_page.jsonl\n"})
 
 
 class TestSelectedDeviceIsRemembered(TestBase):

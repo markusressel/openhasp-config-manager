@@ -21,11 +21,7 @@ def cfg_root(tmp_path) -> Path:
 
 
 @pytest.fixture
-def window(create_window):
-    window = create_window()
-    wait_until(lambda: window.devices)
-    window.on_device_selected("test_device")
-    wait_until(lambda: window.session is not None and window.session.is_loaded)
+def window(window):
     window.page_layout_editor_widget.set_page_index(9)
     window.page_layout_editor_widget.set_edit_mode(True)
     return window
