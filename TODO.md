@@ -4,28 +4,25 @@ Open work and known issues. Done items are removed; the git history has them.
 
 ## 1. Bugs
 
-None known.
-
-- [ ] **More property values to check** (`validation/property_values.py` knows names, ranges, parts and states): `action` takes `prev`,
-  `next`, `back`, `p<page>` or a JSON object of events and commands. Read how 0.7 runs a JSON action (`my_obj_set_action` and
-  the event handlers) before warning about anything, so that working actions aren't reported.
+- [ ] Touching an object in the preview runs some actions differently than the plate (`gui/domain/touch_actions.py`): it runs
+  `p13` as page 13 (the plate runs `p13`/`p14`/`p15` as page prev/back/next), and it accepts `P3` and the event `lost`, which the plate
+  ignores. `check` already follows the plate (`action_problems` in `validation/property_values.py`).
+- [ ] Typing in a large file is slow: about 1 s per keystroke in a file of 25,000 lines. `CodeEditor.update_selections`
+  (`_bracket_selections`, `matching_bracket`) and `object_at_cursor` (`scan_objects`) tokenize the whole document on every keystroke.
+- [ ] A rare segfault in the `gui` CI job, in `tests/gui/log_view_test.py::test_streams_while_active_and_stops_when_hidden` (once, a
+  rerun passed; it doesn't happen locally when the module runs alone). The main thread was processing Qt events in `wait_until`, so
+  probably something an earlier GUI test left behind. Run `pytest tests/gui` many times to find the test that leaves it.
 
 ## 2. Editor
 
-- [ ] **Fact-check the preview against openHASP/LVGL.** The widgets in `gui/qt/widgets/pagelayout/openhasp_widgets/` are drawn
-  with Qt from what was seen on a plate, not from the source. Defaults come from openHASP's own LVGL theme (in its source code), and
-  the preview uses guesses instead: e.g. `button.py` falls back to our green `#558B2F`, `drawing.py` has `DEFAULT_ACCENT` and
-  `DEFAULT_TRACK`, `base_object.py` has `_DEFAULT_RADIUS = 4`. Read the theme and object code of openHASP 0.7.0 (and the LVGL version
-  it uses), list the real defaults per object, part and state (radius, border, padding, gradients, colors, fonts), fix the widgets,
-  and compare them with a screenshot of the same page from a plate (`openhasp-config-manager screenshot`).
-  Then try to remove `FONT_SCALE = 0.7` in `drawing.py`: it is probably a fudge factor for the difference between Qt's and LVGL's text
-  rendering. Check how a font id maps to a font on the plate (family, pixel size) and use the real metrics.
-- [ ] Insert template variables inside longer texts (the suggestions replace the whole value today).
+- [ ] Compare the preview with the plate: the defaults in `gui/domain/default_theme.py` were measured on a plate, not read from
+  openHASP's theme source. Check them against the theme code of openHASP 0.7 (and its LVGL version) per object, part and state, and
+  compare a page with a screenshot of it from a plate (`openhasp-config-manager screenshot`).
 - [ ] Placeholders (`"text": "%ip%"`, `gui/domain/source/placeholders.py`): `check` could warn about texts openHASP won't replace (an
   unknown `%...%`, a placeholder inside a longer text like `"IP: %ip%"`, a placeholder in the `text` of a type other than `btn`,
   `label` or `msgbox`), and the page preview could show an example value instead of `%ip%`. The editor only knows them in .jsonl
   files, not in commands of .cmd files (`p1b2.text=%ip%`).
-- [ ] Preview of the new object types: objects inside a `tab` (`parentid`) and the open list of a `dropdown` are not drawn.
+- [ ] Objects inside a `tab` (`parentid`) are not drawn in the preview.
 - [ ] "Move to file" for an object.
 - [ ] Files tree: drag and drop to move files and folders (the context menu has "Move to…"), and moving fonts (`.ttf`): the pages
   name fonts without `L:/`, so their references are not changed and moving a folder with a font is refused.
@@ -44,15 +41,11 @@ Included objects are shown and read-only, except in part mode (see `docs/include
   unresolved: offer to show it on a page of the device, with the objects of that page in its references.
 - [ ] Change the `vars` and `for` of an `!include` inside of a part in part mode (the "Instance" group is hidden there; only the
   outermost `!include` of a page file can be changed today).
-- [ ] After a save that moves the objects of a part to other lines, the undo states keep the lines of the included objects from
-  before (`ObjectOrigin.line` in `DraftState`): undoing past the save shows the old lines of the part until the next reload.
 - [ ] Copy an included object as a plain object (its values rendered with the variables of its instance). Copying is refused today,
   since the templates of the part need those variables.
 - [ ] The values next to the templates in the text editor of a part are rendered with the variables of its folder only, not with
   those of an instance (`vars`, `for`, `this`, `bY` are unknown there): show them for one instance.
 - [ ] A cursor in a directive could select the objects it includes in the preview (today nothing is selected).
-- [ ] `vars` and `for` written before the `"!include"` key of a directive are highlighted as plain keys (the highlighter reads the
-  lines from the top).
 - [ ] The draft expands the directives of every file again after each edit (for the object references). Cache the instances of a
   directive while its text and its scope stay the same, if large configs make editing slow. Measured on the user's config
   (`touch_down_1`): about 0.45 s per edit of a property or of `vars`, most of it in `jsonl_template_variables` (expanding and
@@ -80,37 +73,15 @@ into JSONL objects.
   `run /online.cmd` rebuild the plate like a restart (the docs don't give the startup order).
 - [ ] Verify what the runtime and Live preview rely on: `delete` cascading to children, a single JSONL add onto a shown page, and the
   `x`/`y`/`w`/`h` commands.
-- [ ] Optional: a preview that follows the real plate (its state topics: touch events, values), where clicking can trigger the same action
-  as touching the plate.
-- [ ] Postponed: compare the draft with the plate. openHASP 0.7.0 has no command to list objects, dump a page or read a whole object
-  back, only single property getters (`command/p1b2.text` with an empty payload answers on `state/p1b2`, see
-  `OpenHaspClient.get_object_property`). So only the objects the draft knows can be compared, one round trip per property; objects that
-  exist only on the plate stay invisible. Probing every id and screenshots were rejected.
 
-## 6. Packaging and installation
-
-The `gui` extra is done (`pip install 'openhasp-config-manager[gui]'`); AppDaemon and haad are installed by their own environments.
-
-- [ ] Keep the API client free of CLI and GUI dependencies (click, PyQt6, …), so haad and AppDaemon projects only pull what they use.
-  (`OpenHaspClient` still imports the console helpers from `openhasp_config_manager.console`.) If that is not enough, split the API
-  client into its own package.
-- [ ] A future TUI becomes a `tui` extra the same way.
-
-## 7. Code structure
-
-Found in a review of the text editor and preview work, not done yet:
+## 6. Code structure
 
 - [ ] `check.py` (CLI, no Qt) imports the editor's domain from `gui/domain/` (`draft/session`, `draft/files`, `problems`,
   `gui_state.relative`). It works because `gui/domain` is Qt-free, but the layering is upside down: move the Qt-free model of the
   pages (draft, problems, page objects) out of `gui/`, into `openhasp_config_manager/model/` (the Qt-free model that
   code-defined pages use, `docs/config-model-api.md`).
-- [ ] The geometry of some preview items is computed in their Qt classes (`HaspArcItem.angles`, `HaspGaugeItem.labels`,
-  `HaspLineMeterItem.active_lines`, `drawing.fraction`): move it to `gui/domain` like `line_points.py` and `button_matrix.py`, so it is
-  tested without Qt.
-- [ ] `collect_gui_state` (`gui/qt/window/gui_state_collector.py`) builds the `device` part of the state file by hand: a `describe_device` in `gui_state.py`
-  would make it testable without a window, like the other parts.
 
-## 8. The config model (`docs/config-model-api.md`)
+## 7. The config model (`docs/config-model-api.md`)
 
 The first slice (`ConfigModel.load()`, `variables()`, `expand_part()`, `render_part()`, the `Part` leaf) is done. Next, as pages need it:
 
