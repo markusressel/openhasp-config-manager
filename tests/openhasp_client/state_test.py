@@ -1,3 +1,5 @@
+import asyncio
+
 import orjson
 
 from openhasp_config_manager.manager import ConfigManager
@@ -11,9 +13,14 @@ class FakeMqttClient:
 
     def __init__(self):
         self.callbacks = {}
+        self.subscribed = asyncio.Event()
+        self.subscribed.set()
 
     async def subscribe(self, topic, callback):
         self.callbacks.setdefault(topic, []).append(callback)
+
+    async def wait_until_subscribed(self):
+        await self.subscribed.wait()
 
     async def cancel_callback(self, topic=None, callback=None):
         for topic in self.callbacks:
@@ -86,3 +93,17 @@ class TestGetObjectProperty(TestBase):
 
         # THEN
         assert state == "on"
+
+    async def test_the_request_is_sent_once_the_subscription_is_active(self, tmp_path, monkeypatch):
+        # GIVEN the connection is not subscribed yet
+        client, mqtt = self._client(tmp_path, monkeypatch, {"p1b45.w": [{"w": 192}]})
+        mqtt.subscribed.clear()
+        request = asyncio.ensure_future(client.get_object_property("p1b45", "w"))
+        await asyncio.sleep(0)
+        assert not request.done()
+
+        # WHEN
+        mqtt.subscribed.set()
+
+        # THEN the answer to the request is received
+        assert await request == 192

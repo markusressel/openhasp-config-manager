@@ -242,12 +242,14 @@ class OpenHaspClient:
             callback=_callback,
         )
 
-        await self.command(
-            keyword=command_keyword,
-        )
+        async def _request():
+            # the plate answers at once: the answer would be lost if the subscription weren't active yet
+            await self._mqtt_client.wait_until_subscribed()
+            await self.command(keyword=command_keyword)
+            return await future
 
         try:
-            return await asyncio.wait_for(future, timeout=timeout)
+            return await asyncio.wait_for(_request(), timeout=timeout)
         except asyncio.TimeoutError:
             self.LOGGER.warning(f"Timeout: Device did not respond to {listen_path} within {timeout}s")
             return None
