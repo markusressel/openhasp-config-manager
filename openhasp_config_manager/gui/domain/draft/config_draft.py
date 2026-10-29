@@ -350,9 +350,8 @@ class ConfigDraft:
             change = other._sync(before, after, kind, step.description)
             if other is session:
                 result = change
-        if result is None:
-            # the step changed only files that the device doesn't show
-            result = DraftChange(kind=kind, description=step.description, objects=[], added=[], removed=False, pages=set())
+        # the step changed a file that the device shows (see `undo`)
+        assert result is not None
         return result
 
     def mark_saved(self, saver: "PlateSession", written: Dict[Path, str]):
