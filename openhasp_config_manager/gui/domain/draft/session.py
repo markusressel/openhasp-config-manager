@@ -535,18 +535,42 @@ class PlateSession:
     def set_directive_value(self, obj: Dict, key: str, value: Dict[str, Any]):
         """
         Set the `vars` or `for` of the outermost `!include` of an included object (the whole mapping, as written in the file:
-        values or templates), and include its part again: objects of its instances that stay keep their rendered dict (and
-        are rendered again), the others are added or removed. The object stays selected if it is still included.
+        values or templates; names can be added and removed, an empty mapping removes the key), and include its part again:
+        objects of its instances that stay keep their rendered dict (and are rendered again), the others are added or
+        removed. The object stays selected if it is still included, otherwise the object that takes its place when a name
+        of `for` was added or removed (see `_successor`).
         :raises InvalidDirectiveError: if the directive would have an error (see `check_directive_value`); nothing changes then
         """
         error = self.check_directive_value(obj, key, value)
         if error is not None:
             raise InvalidDirectiveError(error)
         entry = self._entry(obj)
+        loop = dict(entry.origin.includes[0].loop)
         with self.edit(f"Change {key} of the {INCLUDE} at line {self.line_of(obj)}"):
             self._directives[entry.component][entry.index] = self._changed_directive(obj, key, value)
             self._reinclude_and_render(set())
-            self._selected_after_edit = [obj] if id(obj) in self._entries else []
+            successor = obj if id(obj) in self._entries else self._successor(entry, loop)
+            self._selected_after_edit = [] if successor is None else [successor]
+
+    def _successor(self, before: DraftEntry, loop: Dict[str, Any]) -> Optional[Dict]:
+        """
+        :param before: an included object that is gone after its `!include` changed
+        :param loop: the loop variables of its instance
+        :return: the object of the same part object in the first instance whose loop variables agree with these on the names
+            both have (a name of `for` was added or removed), None if there is none
+        """
+        (_file, index, _loop), *inner = before.instance[0]
+        for obj in self._working_objects[before.component]:
+            entry = self._entry(obj)
+            if not entry.is_included or entry.instance[1] != before.instance[1]:
+                continue
+            (_file, other_index, _loop), *other_inner = entry.instance[0]
+            other_loop = entry.origin.includes[0].loop
+            if (other_index, other_inner) == (index, inner) and all(
+                other_loop[name] == loop[name] for name in other_loop.keys() & loop.keys()
+            ):
+                return obj
+        return None
 
     def computed_position_reasons(self, obj: Dict, max_length: int = 40) -> List[str]:
         """:return: why the position is computed, e.g. ["x is a template: {{ nav.x }}", "y is a percentage: 15%"]"""
@@ -812,7 +836,7 @@ class PlateSession:
             self._component_changes(part.component, {}, [(obj.index, obj.source) for obj in part.objects])
             for part in self._parts.values()
         ]
-        return [changes for changes in result if changes.changes or changes.deletions or changes.additions]
+        return [changes for changes in result if changes.changes or changes.removals or changes.deletions or changes.additions]
 
     @staticmethod
     def _component_changes(
@@ -830,7 +854,7 @@ class PlateSession:
         for index, directive in directives.items():
             removed = set(component.sources[index]) - set(directive)
             if removed:
-                raise AssertionError(f"Removing keys from a directive is not supported: {removed}")
+                component_changes.removals[index] = removed
             changed = {key: value for key, value in directive.items() if component.sources[index].get(key) != value}
             if changed:
                 component_changes.changes[index] = copy.deepcopy(changed)
@@ -1024,10 +1048,16 @@ class PlateSession:
         return result + directives
 
     def _changed_directive(self, obj: Dict, key: str, value: Dict[str, Any]) -> Dict[str, Any]:
-        """:return: the outermost `!include` of an included object with another `vars` or `for`"""
+        """
+        :return: the outermost `!include` of an included object with another `vars` or `for`, without the key if the
+            mapping is empty
+        """
         if key not in INCLUDE_KEYS:
             raise ValueError(f"An {INCLUDE} has only {VARS} and {FOR} to change, not {key}")
-        return {**self.directive_of(obj), key: copy.deepcopy(value)}
+        directive = {**self.directive_of(obj), key: copy.deepcopy(value)}
+        if not value:
+            directive.pop(key)
+        return directive
 
     def _expand_directive(
         self, component: str, index: int, directive: Dict[str, Any]

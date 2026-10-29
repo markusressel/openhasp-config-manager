@@ -214,7 +214,7 @@ def describe_draft(session: PlateSession, config_dir: Path) -> Dict[str, Any]:
         files.append(
             {
                 "file": relative(changes.component.path, config_dir),
-                "changed": [object_name(sources[index]) for index in sorted(changes.changes)],
+                "changed": [object_name(sources[index]) for index in sorted(set(changes.changes) | set(changes.removals))],
                 "added": [object_name(source) for source in changes.additions],
                 "deleted": [object_name(sources[index]) for index in sorted(changes.deletions)],
             }

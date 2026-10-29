@@ -382,6 +382,48 @@ class TestDirectiveEdits:
         # THEN
         assert {"p9b25", "p9b26"} <= set(_objects(session))
 
+    def test_names_can_be_added_and_the_last_one_removes_the_key(self, cfg_root):
+        # GIVEN
+        _write_page(
+            cfg_root,
+            DIRECTIVE_PAGE_JSONL.replace('"vars": {"anchor": 1}', '"vars": {"note": "x"}').replace(
+                '"for": {"id": [20, 30]}', '"for": {"id": [20, 30], "anchor": [1]}'
+            ),
+        )
+        session = load_session(cfg_root)
+        changes = []
+        session.add_listener(changes.append)
+
+        # WHEN: a name is added to the for
+        session.set_directive_value(_objects(session)["p9b20"], "for", {"id": [20, 30], "anchor": [1], "row": [0]})
+
+        # THEN: the instances are new, the object of the instance with the same id is selected
+        tile = _objects(session)["p9b20"]
+        assert changes[-1].selected == [tile]
+
+        # WHEN: the last name of the vars is removed
+        session.set_directive_value(tile, "vars", {})
+
+        # THEN
+        assert session.directive_of(tile) == {
+            "!include": "common/parts/tile.jsonl",
+            "for": {"id": [20, 30], "anchor": [1], "row": [0]},
+        }
+        assert session.origin_of(tile).includes[0].loop == {"id": 20, "anchor": 1, "row": 0}
+        [change] = plan_save(session)
+        directive = (
+            '  // the tiles\n  "!include": "common/parts/tile.jsonl",\n  "for": {"id": [20, 30], "anchor": [1], "row": [0]}\n}'
+        )
+        assert directive in change.content
+
+        # WHEN
+        session.undo()
+
+        # THEN
+        assert session.directive_of(tile)["vars"] == {"note": "x"}
+        [change] = plan_save(session)
+        assert '"vars": {"note": "x"},' in change.content
+
     def test_after_a_save_the_directive_has_its_new_place(self, session, cfg_root):
         # GIVEN: an object before the directive is removed and saved
         tile = _objects(session)["p9b20"]

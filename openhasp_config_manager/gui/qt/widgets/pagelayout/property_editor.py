@@ -1,5 +1,7 @@
 import copy
 import json
+import keyword
+import re
 from contextlib import contextmanager
 from typing import List, Any, Dict, Callable, Optional, Hashable, Iterator, Tuple
 
@@ -35,7 +37,7 @@ from openhasp_config_manager.gui.domain.file_tree import relative_config_path
 from openhasp_config_manager.gui.domain.draft.session import PlateSession
 from openhasp_config_manager.gui.domain.problems import Severity, object_name
 from openhasp_config_manager.gui.domain.source.docs import property_help
-from openhasp_config_manager.processing.jsonl.includes import FOR, INCLUDE, VARS, IncludeStep
+from openhasp_config_manager.processing.jsonl.includes import FOR, INCLUDE, INCLUDE_KEYS, VARS, IncludeStep
 from openhasp_config_manager.gui.qt.components import UiComponents, ThemedIcons
 from openhasp_config_manager.gui.qt.layouts import clear_layout, frozen
 from openhasp_config_manager.gui.qt.widgets.pagelayout.icon_picker import IconPickerDialog
@@ -349,17 +351,26 @@ class OpenHASPWidgetPropertyEditor(QWidget):
             (FOR, "for", "No for: the part is included once."),
         ]:
             column.addWidget(UiComponents.create_label(title, role="section"))
+            # what is wrong with adding or removing a name of the section
+            error_label = UiComponents.create_label("", role="error", word_wrap=True)
+            error_label.setObjectName(f"{key}-error")
+            error_label.hide()
             values = directive.get(key, {})
             if not values:
                 column.addWidget(UiComponents.create_label(empty, role="hint", word_wrap=True))
-                continue
-            form = QFormLayout()
-            form.setLabelAlignment(QtCore.Qt.AlignmentFlag.AlignRight)
-            form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
-            # a var that is a mapping (e.g. `progress_bar: {id: 30, text: ...}`) has a field for each of its values
-            for name in _leaf_names(values) if key == VARS else values:
-                form.addRow(UiComponents.create_label(f"{name}:"), self._create_directive_field(obj_data, key, name))
-            column.addLayout(form)
+            else:
+                form = QFormLayout()
+                form.setLabelAlignment(QtCore.Qt.AlignmentFlag.AlignRight)
+                form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+                # a var that is a mapping (e.g. `progress_bar: {id: 30, text: ...}`) has a field for each of its values
+                for name in _leaf_names(values) if key == VARS else values:
+                    form.addRow(
+                        self._create_directive_label(obj_data, key, name, error_label),
+                        self._create_directive_field(obj_data, key, name),
+                    )
+                column.addLayout(form)
+            column.addLayout(self._create_directive_add_row(obj_data, key, error_label))
+            column.addWidget(error_label)
 
         for step in origin.includes[1:]:
             column.addLayout(self._create_nested_include_row(step))
@@ -383,6 +394,94 @@ class OpenHASPWidgetPropertyEditor(QWidget):
             QtCore.Qt.AlignmentFlag.AlignLeft,
         )
         return layout
+
+    def _create_directive_label(self, obj_data: Dict, key: str, name: str, error_label: QLabel) -> QWidget:
+        """The name of a value of `vars` or `for`, with a button that removes it from the `!include`."""
+        container = QWidget()
+        row = UiComponents.create_row(container, alignment=QtCore.Qt.AlignmentFlag.AlignRight)
+        row.setSpacing(UiDimensions.half)
+        remove = UiComponents.create_button(
+            title="",
+            icon="close",
+            tooltip=f"Remove {name} from {key}",
+            variant="flat",
+            on_click=lambda: self._remove_directive_name(obj_data, key, name, error_label),
+        )
+        remove.setObjectName(f"remove {key}.{name}")
+        remove.setFixedSize(UiDimensions.three, UiDimensions.three)
+        row.addWidget(remove)
+        row.addWidget(UiComponents.create_label(f"{name}:"))
+        return container
+
+    def _create_directive_add_row(self, obj_data: Dict, key: str, error_label: QLabel) -> QHBoxLayout:
+        """A name and a value to add to `vars` or `for` of the `!include` (with Enter or the button)."""
+        row = _plain_layout(QHBoxLayout())
+        name_editor = UiComponents.create_edittext()
+        name_editor.setObjectName(f"{key} new name")
+        name_editor.setPlaceholderText("name")
+        name_editor.setToolTip(
+            "A new variable of the part" if key == VARS else "A new loop variable: the part is included once for each value"
+        )
+        value_editor = UiComponents.create_edittext()
+        value_editor.setObjectName(f"{key} new value")
+        value_editor.setPlaceholderText("value" if key == VARS else "[1, 2, 3]")
+        value_editor.setToolTip(
+            "A text, a JSON value (a number, a list, ...) or a template"
+            if key == VARS
+            else "The values of the loop variable: a JSON list or a template"
+        )
+        add = QToolButton()
+        add.setAutoRaise(True)
+        ThemedIcons.apply(add, "plus")
+        add.setToolTip(f"Add the name to {key}")
+        add.setObjectName(f"add {key}")
+
+        def apply():
+            self._add_directive_name(obj_data, key, name_editor.text().strip(), value_editor.text(), error_label)
+
+        name_editor.returnPressed.connect(apply)
+        value_editor.returnPressed.connect(apply)
+        add.clicked.connect(apply)
+        row.addWidget(name_editor, 1)
+        row.addWidget(value_editor, 2)
+        row.addWidget(add)
+        return row
+
+    def _add_directive_name(self, obj_data: Dict, key: str, name: str, text: str, error_label: QLabel):
+        directive = self._session.directive_of(obj_data)
+        error = _directive_name_error(name, directive)
+        value = None
+        if error is None:
+            value, error = _parse_new_directive_value(text, key)
+        if error is None:
+            mapping = {**directive.get(key, {}), name: value}
+            error = self._session.check_directive_value(obj_data, key, mapping)
+        error_label.setText(error or "")
+        error_label.setVisible(error is not None)
+        if error is not None:
+            return
+        # the panel is made again for the new field
+        with self._session.edit(f"Add {key}.{name} to the {INCLUDE}"):
+            self._session.set_directive_value(obj_data, key, mapping)
+        # go on with its value
+        added = self.findChild(QLineEdit, f"{key}.{name}")
+        if added is not None:
+            added.setFocus()
+
+    def _remove_directive_name(self, obj_data: Dict, key: str, name: str, error_label: QLabel):
+        """Remove a name of `vars` or `for`: the last one removes the key from the `!include`."""
+        mapping = _without_value_at(self._session.directive_of(obj_data)[key], name)
+        error = self._session.check_directive_value(obj_data, key, mapping)
+        error_label.setText(error or "")
+        error_label.setVisible(error is not None)
+        if error is not None:
+            return
+        for pending in [pending for pending in self._pending_directive_templates if pending[0] == key]:
+            if pending[1] == name or pending[1].startswith(f"{name}."):
+                self._pending_directive_templates.pop(pending)
+        # the panel is made again without the field
+        with self._session.edit(f"Remove {key}.{name} from the {INCLUDE}"):
+            self._session.set_directive_value(obj_data, key, mapping)
 
     def _create_directive_field(self, obj_data: Dict, key: str, name: str) -> QWidget:
         """
@@ -957,6 +1056,51 @@ def _with_value_at(variables: Dict[str, Any], name: str, value: Any) -> Dict[str
     """:return: a copy of the variables with another value for a name of `_leaf_names`, in the same order"""
     first, _dot, rest = name.partition(".")
     return {**variables, first: _with_value_at(variables[first], rest, value) if rest else value}
+
+
+def _without_value_at(variables: Dict[str, Any], name: str) -> Dict[str, Any]:
+    """:return: a copy of the variables without a name of `_leaf_names`, and without the mappings that are empty then"""
+    first, _dot, rest = name.partition(".")
+    result = dict(variables)
+    if rest:
+        result[first] = _without_value_at(variables[first], rest)
+        if result[first]:
+            return result
+    result.pop(first)
+    return result
+
+
+# names that the templates of objects use for objects (`this`, `b4`): a variable with such a name is hidden there
+_OBJECT_NAME = re.compile(r"this|b\d+")
+
+
+def _directive_name_error(name: str, directive: Dict[str, Any]) -> Optional[str]:
+    """:return: why a name can't be added to `vars` or `for` of the `!include`, None if it can"""
+    if not name:
+        return "Enter a name."
+    if not name.isidentifier() or keyword.iskeyword(name):
+        return f"{name} is not a name that templates can use: letters, digits and _, not starting with a digit."
+    if _OBJECT_NAME.fullmatch(name):
+        return f"{name} is the name of an object in the templates."
+    for key in INCLUDE_KEYS:
+        if name in directive.get(key, {}):
+            return f"{name} is already in {key}."
+    return None
+
+
+def _parse_new_directive_value(text: str, key: str) -> Tuple[Any, Optional[str]]:
+    """
+    :return: the value of a new name of `vars` or `for` as it is written in the `!include` (a template, JSON, or for a var
+        a text if it is no JSON), or why it is none
+    """
+    if _is_template(text):
+        return text, None
+    if key == VARS:
+        try:
+            return json.loads(text), None
+        except ValueError:
+            return text, None
+    return _parse_directive_value(text, key, as_text=False, template=False)
 
 
 def _parse_directive_value(text: str, key: str, as_text: bool, template: bool) -> Tuple[Any, Optional[str]]:

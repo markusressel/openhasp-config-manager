@@ -134,3 +134,44 @@ class TestJsonlSourceEditor(TestBase):
     def test_verify_raises_on_different_objects(self):
         with pytest.raises(ValueError):
             verify_jsonl_source(SOURCE, [])
+
+    def test_removes_properties_of_a_single_line_object(self):
+        source = '{"!include": "common/parts/dot.jsonl", "vars": {"a": 1}, "for": {"id": [1, 2]}}\n'
+
+        # WHEN: in the middle and at the end, one at a time
+        middle = JsonlSourceEditor(source).apply({}, set(), [], removals={0: {"vars"}})
+        end = JsonlSourceEditor(source).apply({}, set(), [], removals={0: {"for"}})
+
+        # THEN
+        assert middle == '{"!include": "common/parts/dot.jsonl", "for": {"id": [1, 2]}}\n'
+        assert end == '{"!include": "common/parts/dot.jsonl", "vars": {"a": 1}}\n'
+
+    def test_removes_a_run_of_properties_and_changes_the_others(self):
+        # WHEN
+        result = JsonlSourceEditor(SOURCE).apply({1: {"text": "Sleep"}}, set(), [], removals={1: {"id", "obj"}})
+
+        # THEN
+        assert '{"page": 1, "text": "Sleep"}' in result
+
+    def test_removes_the_first_properties_of_a_multiline_object_and_keeps_the_comments(self):
+        # WHEN
+        result = JsonlSourceEditor(SOURCE).apply({}, set(), [], removals={0: {"page"}, 2: {"page", "id"}})
+
+        # THEN
+        assert '{\n  // limits navigation to page numbers between first_page and last_page\n  "id": 0,' in result
+        assert '{\n  "obj": "label",\n}' in result
+        verify_jsonl_source(
+            result,
+            [
+                {"id": 0, "prev": "{{ common.navbar.last_page }}"},
+                {"page": 1, "id": 2, "obj": "btn", "text": "Work"},
+                {"obj": "label"},
+            ],
+        )
+
+    def test_removes_every_property(self):
+        assert JsonlSourceEditor('{"page": 1, "id": 2,}\n').apply({}, set(), [], removals={0: {"page", "id"}}) == "{}\n"
+
+    def test_removing_a_property_the_object_doesnt_have_raises(self):
+        with pytest.raises(KeyError):
+            JsonlSourceEditor(SOURCE).apply({}, set(), [], removals={1: {"x"}})
