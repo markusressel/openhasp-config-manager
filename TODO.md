@@ -54,7 +54,7 @@ Included objects are shown and read-only, except in a part tab (see `docs/includ
 Left over from the implementation:
 
 - [ ] A file that is a page file of one device and a part included by another one has two drafts in the
-  `ConfigDraft`: in `files` and in `parts`). Editing both and saving fails with `SaveConflictError`.
+  `ConfigDraft`: in `files` and in `parts`. Editing both and saving fails with `SaveConflictError`.
 - [ ] The tab of a part that no page includes has a draft of its own (placeholder vars), so Save in another tab doesn't write it,
   and it may hold a second copy of a part the shared draft has too. Share the `ConfigDraft` with it.
 - [ ] Restoring the tabs on start doesn't restore their page and zoom, and part tabs come back after the other tabs of their device
