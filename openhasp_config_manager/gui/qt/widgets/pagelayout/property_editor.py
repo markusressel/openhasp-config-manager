@@ -84,7 +84,8 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)  # Crucial for internal layout to expand
         self.scroll_area.setFrameShape(QFrame.Shape.NoFrame)
-        self.scroll_area.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        # only when the dock is narrower than the fields need: everything stays reachable
+        self.scroll_area.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAsNeeded)
 
         self.content_container = QWidget()
         self.main_layout = UiComponents.create_column(
@@ -533,6 +534,13 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         else:
             editor.setCurrentIndex(choices.index(current))
         editor.setToolTip("The values this property takes")
+        # the meanings are long: they would make the panel too wide for its dock. The closed list shows what fits, the open one all
+        editor.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        editor.setMinimumContentsLength(_CHOICE_MIN_CHARACTERS)
+        texts = [editor.itemText(index) for index in range(editor.count())]
+        editor.view().setMinimumWidth(
+            max(editor.fontMetrics().horizontalAdvance(text) for text in texts) + UiDimensions.four
+        )
         editor.currentIndexChanged.connect(lambda index: apply(editor.itemData(index)))
         return editor
 
@@ -618,6 +626,9 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         with self._edit(f"Change {key} of {object_name(widget.obj_data)}", merge_key=typing):
             self._session.set_source_value(widget.obj_data, key, value)
 
+
+# how many characters of a value list the closed dropdown needs room for, e.g. "scroll — keep"
+_CHOICE_MIN_CHARACTERS = 12
 
 # what the field of a property starts with when it is switched to a template
 _EMPTY_TEMPLATE = "{{  }}"
