@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional, Sequence
 
 from openhasp_config_manager.gui.domain.connection import ConnectionStatus
 from openhasp_config_manager.gui.domain.draft.model import ComponentSource
+from openhasp_config_manager.gui.domain.draft.page_objects import get_navigable_page_indices
 from openhasp_config_manager.gui.domain.draft.session import PlateSession
 from openhasp_config_manager.gui.domain.problems import Problem, object_name
 from openhasp_config_manager.openhasp_client.model.device import Device
@@ -219,6 +220,50 @@ def describe_draft(session: PlateSession, config_dir: Path) -> Dict[str, Any]:
             }
         )
     return {"modified": session.is_dirty, "files": files}
+
+
+def describe_device(
+    session: PlateSession,
+    device: Device,
+    cmd: str,
+    page: int,
+    edit_mode: bool,
+    live_preview: bool,
+    selection: List[Dict[str, Any]],
+    target_component: Optional[str],
+    config_dir: Path,
+) -> Dict[str, Any]:
+    """
+    :param cmd: the startup script the device is loaded with
+    :param page: the page in the preview
+    :param selection: the selected objects
+    :param target_component: the key of the file new objects go into (in part mode: the path of the part), None without one
+    :return: the `device` part of the state (see README), without `preview`
+    """
+    screen = device.config.openhasp_config_manager.device.screen
+    return {
+        "name": device.name,
+        "folder": relative(device.path, config_dir),
+        "cmd": cmd,
+        "screen": {"width": screen.width, "height": screen.height},
+        "files": describe_files(session.components, session.working_objects, config_dir),
+        "page": page,
+        "pages": get_navigable_page_indices(session.working_objects),
+        "edit_mode": edit_mode,
+        "live_preview": live_preview,
+        "selection": [describe_object(session, obj, config_dir) for obj in selection],
+        "new_objects_file": None
+        if target_component is None
+        else relative(
+            Path(target_component)
+            if session.part_mode is not None
+            else next(c.path for c in session.components if c.key == target_component),
+            config_dir,
+        ),
+        "part_mode": describe_part_mode(session, config_dir),
+        "draft": describe_draft(session, config_dir),
+        "loaded": session.loaded_at.isoformat(timespec="milliseconds"),
+    }
 
 
 def describe_files(components: List[ComponentSource], working_objects: Dict[str, List[Dict]], config_dir: Path):
