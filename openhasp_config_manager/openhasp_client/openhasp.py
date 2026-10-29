@@ -179,7 +179,14 @@ class OpenHaspClient:
         :return: the current value of the property
         """
         command_keyword = f"{obj}.{prop}"
-        raw_state = await self.get_state(command=command_keyword, state=obj, timeout=timeout)
+        # the plate publishes every property of an object on the same topic: a late reply to an earlier request
+        # (e.g. one that timed out) must not be taken for this one
+        raw_state = await self.get_state(
+            command=command_keyword,
+            state=obj,
+            timeout=timeout,
+            accept=lambda data: isinstance(data, dict) and prop in data,
+        )
         return raw_state[prop] if isinstance(raw_state, dict) and prop in raw_state else raw_state
 
     async def get_command_state(self, command: str, prop: Optional[str] = None, timeout: float = 1.0) -> Optional[Any]:
@@ -194,13 +201,21 @@ class OpenHaspClient:
         raw_state = await self.get_state(command=command, timeout=timeout)
         return raw_state[prop] if isinstance(raw_state, dict) and prop in raw_state else raw_state
 
-    async def get_state(self, command: str, state: str = None, timeout: float = 1.0) -> Optional[Any]:
+    async def get_state(
+        self,
+        command: str,
+        state: str = None,
+        timeout: float = 1.0,
+        accept: Optional[Callable[[Any], bool]] = None,
+    ) -> Optional[Any]:
         """
         Get the value of an object property.
         Note that this function will subscribe to the corresponding MQTT topic and wait for the device to publish the current value.
         :param command: the command to get the state for, can be an object property command like "p1b2.text" or a general command like "backlight",
         :param state: (optional) the state keyword to get the value for, defaults to the value of the `command` parameter e.g. "backlight" for "backlight" command (because the state topic is the same as the command keyword), but can be set to a different value for commands where the state topic differs from the command keyword, e.g. "p1b2" for "p1b2.text" command (because the state topic is "p1b2" and not "p1b2.text")
         :param timeout: the timeout in seconds to wait for the device to respond
+        :param accept: (optional) whether a received payload (parsed like the result) is the answer; other payloads on the
+            state topic are ignored
         :return: the current value of the property
         """
         if state is None:
@@ -211,14 +226,16 @@ class OpenHaspClient:
         future = asyncio.get_event_loop().create_future()
 
         async def _callback(event_topic: str, event_payload: bytes):
-            if not future.done():
-                try:
-                    # OpenHASP state payloads are usually JSON: {"text": "12345", "val": 10, ...}
-                    data = orjson.loads(event_payload)
-                    future.set_result(data)
-                except Exception:
-                    # If it's not JSON, just return the raw payload
-                    future.set_result(event_payload.decode("utf-8"))
+            if future.done():
+                return
+            try:
+                # OpenHASP state payloads are usually JSON: {"text": "12345", "val": 10, ...}
+                data = orjson.loads(event_payload)
+            except Exception:
+                # If it's not JSON, just return the raw payload
+                data = event_payload.decode("utf-8")
+            if accept is None or accept(data):
+                future.set_result(data)
 
         await self.listen_event(
             path=listen_path,
@@ -234,6 +251,9 @@ class OpenHaspClient:
         except asyncio.TimeoutError:
             self.LOGGER.warning(f"Timeout: Device did not respond to {listen_path} within {timeout}s")
             return None
+        finally:
+            # one callback per request: without this, every request would leave its callback behind
+            await self.cancel_callback(callback=_callback)
 
     async def set_idle_state(self, state: str):
         """
