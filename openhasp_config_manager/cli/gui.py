@@ -9,6 +9,7 @@ from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QApplication
 
 from openhasp_config_manager.gui.qt.async_bridge import setup_global_async_loop, get_global_async_loop
+from openhasp_config_manager.gui.qt.garbage_collection import MainThreadGarbageCollector
 
 if TYPE_CHECKING:
     # imported in c_gui(), after the QApplication exists
@@ -17,6 +18,7 @@ if TYPE_CHECKING:
 
 def c_gui(config_dir: Path, output_dir: Path):
     app = QApplication(sys.argv)
+    MainThreadGarbageCollector(app)
 
     from openhasp_config_manager.gui.qt.window.main import create_application_settings
     from openhasp_config_manager.gui.qt.theme import apply_theme, load_theme_mode
