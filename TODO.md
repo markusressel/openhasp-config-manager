@@ -8,6 +8,10 @@ Open work and known issues. Done items are removed; the git history has them.
   templated `"hidden": "{{ ... | lower }}"` (`true`/`false`) logs "is not a number" and stays a string. Anchor the names
   (`^(...)$`, keeping patterns like `pad_.+`), and add a test.
 
+- [ ] **More property values to check** (`validation/property_values.py` knows names, ranges, parts and states): `action` takes `prev`,
+  `next`, `back`, `p<page>` or a JSON object of events and commands. Read how 0.7 runs a JSON action (`my_obj_set_action` and
+  the event handlers) before warning about anything, so that working actions aren't reported.
+
 ## 2. Editor
 
 - [ ] **Fact-check the preview against openHASP/LVGL.** The widgets in `gui/qt/widgets/pagelayout/openhasp_widgets/` are drawn
