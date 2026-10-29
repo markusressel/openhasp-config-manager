@@ -184,6 +184,21 @@ class TestLivePreview(TestBase):
         # THEN
         assert plate.calls == [("jsonl", {"page": 1, "id": 50, "x": 7}), ("set_page", 1)]
 
+    def test_objects_removed_from_a_page_that_is_not_shown_are_deleted_when_it_is(self, editor, plate):
+        # GIVEN
+        self._start(editor, plate)
+        self._go_to(editor, plate, 1)
+        self._go_to(editor, plate, 9)
+        plate.clear()
+
+        # WHEN
+        label = next(obj for obj in editor.session.working_objects[_key(editor, "editor.jsonl")] if obj.get("id") == 50)
+        editor.session.remove_object(label)
+        self._go_to(editor, plate, 1)
+
+        # THEN
+        assert plate.calls == [("delete_object_id", 1, 50), ("set_page", 1)]
+
     def test_a_page_the_editor_left_before_it_was_sent_is_not_sent(self, editor, plate, monkeypatch):
         # GIVEN: sending the first page takes a while
         from openhasp_config_manager.gui.qt.widgets.pagelayout import plate_link

@@ -110,3 +110,29 @@ class TestLivePlate(TestBase):
 
         plate.reset(1, [_button()])
         assert plate.update(1, [_button()]) is None
+
+    def test_a_removed_global_object_is_deleted_once_for_all_pages(self):
+        # GIVEN
+        plate = LivePlate()
+        plate.reset(1, [_button(page=0), _button(2)])
+        plate.reset(2, [_button(page=0), _button(2, page=2)])
+
+        # WHEN: it is removed while page 2 is shown
+        update = plate.update(2, [_button(2, page=2)])
+
+        # THEN
+        assert update == LiveUpdate(deletions=[(0, 1)])
+        assert plate.update(1, [_button(2)]) is None
+
+    def test_an_object_moved_to_another_page_is_deleted_from_its_old_page_when_that_is_shown(self):
+        # GIVEN
+        plate = LivePlate()
+        plate.reset(1, [_button(2)])
+        plate.reset(2, [])
+
+        # WHEN
+        update = plate.update(2, [_button(2, page=2)])
+
+        # THEN
+        assert update == LiveUpdate(objects=[_button(2, page=2)])
+        assert plate.update(1, []) == LiveUpdate(deletions=[(1, 2)])
