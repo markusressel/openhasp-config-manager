@@ -299,6 +299,12 @@ class TestTextAndShapes(TestBase):
         meter = item_of({"obj": "linemeter", "w": 86, "h": 86, "val": 50})
 
         assert isinstance(meter, HaspLineMeterItem)
+        assert render({"obj": "linemeter", "w": 86, "h": 86, "val": 50}) == render(
+            {"obj": "linemeter", "w": 86, "h": 86, "val": 50, "line_count": 18}
+        )
+        assert render({"obj": "linemeter", "w": 86, "h": 86, "val": 50}) != render(
+            {"obj": "linemeter", "w": 86, "h": 86, "val": 50, "line_count": 17}
+        )
         thin = render({"obj": "linemeter", "w": 86, "h": 86, "val": 100, "line_width10": 1})
         wide = render({"obj": "linemeter", "w": 86, "h": 86, "val": 100, "line_width10": 8})
         assert thin != wide
