@@ -168,3 +168,75 @@ class TestDeviceTabs(TestBase):
         # THEN
         wait_until(lambda: _label(window)["x"] == 10)
         assert first.undo_description is not None
+
+
+class TestDeviceLogs(TestBase):
+    LINE = "[   2.000][1/2  3][4/5  6] HASP: Hello"
+
+    @pytest.fixture(autouse=True)
+    def _no_telnet(self, monkeypatch):
+        """The streams don't connect: what a stream receives is given to it by the test."""
+        from openhasp_config_manager.gui.qt.log_stream import LogStreamController
+
+        monkeypatch.setattr(LogStreamController, "_restart", lambda self: None)
+
+    def _receive(self, window, line: str):
+        from openhasp_config_manager.openhasp_client.logs import parse_log_line
+
+        window.log_stream.entriesReceived.emit([parse_log_line(line)])
+
+    def test_the_log_of_a_device_survives_a_tab_switch(self, window):
+        # GIVEN
+        self._receive(window, self.LINE)
+        _open(window, SECOND_DEVICE)
+
+        # THEN
+        assert "Hello" not in window.log_view.text()
+
+        # WHEN
+        window.on_device_selected("test_device")
+
+        # THEN
+        assert "Hello" in window.log_view.text()
+        assert window.logs_dock.widget().currentWidget() is window.log_view
+
+    def test_closing_a_tab_drops_its_log(self, window):
+        # GIVEN
+        _open(window, SECOND_DEVICE)
+        self._receive(window, self.LINE)
+        tab = window.device_tabs.active
+        view = window.log_view
+
+        # WHEN
+        window.close_tab(tab)
+        _open(window, SECOND_DEVICE)
+
+        # THEN
+        assert window.log_view is not view
+        assert "Hello" not in window.log_view.text()
+
+    def test_every_open_device_streams_while_the_dock_is_open(self, window):
+        # GIVEN
+        window.show()
+        _open(window, SECOND_DEVICE)
+        streams = [log.stream for log in window.device_logs.logs]
+        assert len(streams) == 3  # the empty log without a tab, and one per tab
+
+        # WHEN
+        window.logs_dock.show()
+
+        # THEN
+        assert all(stream._active for stream in streams)
+
+        # WHEN: another dock of its group is raised (Qt only emits visibilityChanged then), the dock stays open
+        window.jsonl_dock.raise_()
+        window.logs_dock.visibilityChanged.emit(False)
+
+        # THEN
+        assert all(stream._active for stream in streams)
+
+        # WHEN
+        window.logs_dock.hide()
+
+        # THEN
+        assert not any(stream._active for stream in streams)

@@ -32,6 +32,7 @@ from openhasp_config_manager.gui.qt.components import ThemedIcons
 from openhasp_config_manager.gui.qt.config_watcher import ConfigWatcher
 from openhasp_config_manager.gui.qt.preview_image import png_bytes, render_plate
 from openhasp_config_manager.gui.qt.window.gui_state_publisher import GuiStatePublisher
+from openhasp_config_manager.gui.qt.window.device_logs import DeviceLogs
 from openhasp_config_manager.gui.qt.window.device_tabs import DeviceTab, DeviceTabs
 from openhasp_config_manager.gui.qt.window.draft_actions import DraftActions
 from openhasp_config_manager.gui.qt.window.file_actions import FileActions
@@ -42,6 +43,7 @@ from openhasp_config_manager.gui.qt.window.source_sync import SourceEditorSync
 from openhasp_config_manager.gui.qt.window.status_bar import StatusBarController
 from openhasp_config_manager.gui.qt.connection import ConnectionController
 from openhasp_config_manager.gui.qt.log_stream import LogStreamController
+from openhasp_config_manager.gui.qt.widgets.log_view import LogView
 from openhasp_config_manager.gui.qt.operations import OperationStatus, error_text
 from openhasp_config_manager.gui.qt.ui_session_store import UiSessionStore
 from openhasp_config_manager.gui.qt.theme import ThemeMode, apply_theme
@@ -50,7 +52,6 @@ from openhasp_config_manager.gui.qt.widgets.source.code_view import CodeView
 from openhasp_config_manager.gui.qt.widgets.source.rendered_view import FileRenderedView
 from openhasp_config_manager.gui.qt.widgets.device_list import DeviceListWidget
 from openhasp_config_manager.gui.qt.widgets.source.file_tree import FileTreeWidget
-from openhasp_config_manager.gui.qt.widgets.log_view import LogView
 from openhasp_config_manager.gui.qt.widgets.message_panel import MessagePanel, DiskConflictBanner, file_list_text
 from openhasp_config_manager.gui.qt.widgets.pagelayout import OpenHaspDevicePagesData
 from openhasp_config_manager.gui.qt.widgets.pagelayout.page_layout_editor import PageLayoutEditorWidget
@@ -218,20 +219,16 @@ class MainWindow(QMainWindow):
         self.page_jsonl_dock = self._add_dock("Page JSONL", "page_jsonl_dock", self.page_jsonl_stack)
         self.tabifyDockWidget(self.jsonl_dock, self.page_jsonl_dock)
 
-        # the log of the plate, next to the code. Hidden at first: it holds the only telnet connection the plate allows while shown.
-        self.log_view = LogView()
-        self.logs_dock = self._add_dock("Logs", "logs_dock", self.log_view)
+        # the logs of the plates of the tabs, next to the code. Closed at first: they hold the only telnet connection a plate
+        # allows while the dock is open.
+        self.log_colors = LogColors(self)
+        self.device_logs = DeviceLogs(on_enable_colors=self.log_colors.ask, parent=self)
+        self.logs_dock = self._add_dock("Logs", "logs_dock", self.device_logs.stack)
         self.tabifyDockWidget(self.jsonl_dock, self.logs_dock)
         self.jsonl_dock.raise_()
         self.logs_dock.hide()
-        self.log_stream = LogStreamController(self)
-        self.log_stream.deviceChanged.connect(self.log_view.clear)
-        self.log_stream.entriesReceived.connect(self.log_view.add_entries)
-        self.log_stream.stateChanged.connect(lambda state, error: self.log_view.set_link(state, error))
-        self.log_stream.colorsMissingChanged.connect(self.log_view.set_colors_missing)
-        self.log_colors = LogColors(self)
-        self.log_view.enableColorsRequested.connect(self.log_colors.ask)
-        self.logs_dock.visibilityChanged.connect(self.log_stream.set_active)
+        # open, also while another dock of its tab group is raised
+        self.logs_dock.toggleViewAction().toggled.connect(self.device_logs.set_open)
         self._size_docks()
 
         self.status_bar = StatusBarController(
@@ -249,6 +246,15 @@ class MainWindow(QMainWindow):
             )
         )
         self.status_bar.set_connection(self.connection.status)
+
+    @property
+    def log_view(self) -> LogView:
+        """The log of the device of the active tab (an empty one without a tab)."""
+        return self.device_logs.active.view
+
+    @property
+    def log_stream(self) -> LogStreamController:
+        return self.device_logs.active.stream
 
     @property
     def page_layout_editor_widget(self) -> PageLayoutEditorWidget:
@@ -346,7 +352,7 @@ class MainWindow(QMainWindow):
         self.file_tree_widget.refresh_theme()
         self.file_rendered.view.refresh_theme()
         self.source_editor.refresh_theme()
-        self.log_view.refresh_theme()
+        self.device_logs.refresh_theme()
         for editor in self.device_tabs.editors:
             editor.jsonl_preview.refresh_theme()
             editor.problems_panel.refresh_theme()
@@ -417,7 +423,7 @@ class MainWindow(QMainWindow):
                 event.ignore()
                 return
         self.connection.stop()
-        self.log_stream.stop()
+        self.device_logs.stop()
         self._watcher.stop()
         self._state_publisher.stop()
         self.code_view.save_state()
@@ -588,7 +594,7 @@ class MainWindow(QMainWindow):
         device = None if tab is None else tab.device
         if device is not None or not keep_connection:
             self.connection.set_device(device)
-            self.log_stream.set_device(device)
+        self.device_logs.show(tab)
         editor.device_controls.set_device(device)
         self.status_bar.set_device(None if tab is None else tab.name)
         if device is None:
@@ -635,6 +641,7 @@ class MainWindow(QMainWindow):
         tab.editor.plate.stop_live_preview()
         tab.editor.device_controls.set_device(None)
         tab.editor.clear()
+        self.device_logs.drop(tab)
         editor = self.device_tabs.close(tab)
         if editor is not None:
             self._delete_editor(editor)
@@ -855,6 +862,8 @@ class MainWindow(QMainWindow):
         self.load_error = None
         tab.session_key = key
         tab.pages_data = pages_data
+        # each open device keeps its log, also in the background
+        self.device_logs.log_of(tab).stream.set_device(loaded.device)
         if tab.part_alone is not None:
             # a part on its own without changes follows the files on disk too, if it is still a file of the device
             alone = tab.part_alone
