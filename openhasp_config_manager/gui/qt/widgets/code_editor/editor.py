@@ -18,10 +18,11 @@ from PyQt6.QtGui import (
 from PyQt6.QtWidgets import QMenu, QPlainTextEdit, QTextEdit, QWidget
 
 from openhasp_config_manager.gui.domain.problems import Severity
-from openhasp_config_manager.gui.domain.source.edit import INDENT, matching_bracket
+from openhasp_config_manager.gui.domain.source.edit import INDENT
 from openhasp_config_manager.gui.domain.source.issues import SourceIssue, find_source_issues
 from openhasp_config_manager.gui.domain.source.links import Link, link_at
-from openhasp_config_manager.gui.domain.source.objects import SourceObject, object_at_line, scan_objects
+from openhasp_config_manager.gui.domain.source.objects import SourceObject, scan_objects
+from openhasp_config_manager.gui.domain.source.structure import TextStructure
 from openhasp_config_manager.gui.domain.source.syntax import Language, Token, TokenKind, tokenize_line
 from openhasp_config_manager.gui.domain.variables.definitions import Definition, key_at
 from openhasp_config_manager.gui.domain.variables.references import part_at
@@ -121,6 +122,9 @@ class CodeEditor(QPlainTextEdit):
         self._picker = self._colors.picker
         self._objects: List[SourceObject] = []
         self._objects_revision = -1
+        # the brackets and objects for what runs on every keystroke: kept up to date line by line, see `structure`
+        self._structure = TextStructure(language)
+        self._structure_revision = -1
         self._object_index = -1
         # the reference under the mouse while Ctrl is pressed: (block number, link)
         self._hover_link: Optional[Tuple[int, Link]] = None
@@ -360,15 +364,18 @@ class CodeEditor(QPlainTextEdit):
         self._notify_object()
 
     def _bracket_selections(self) -> List[QTextEdit.ExtraSelection]:
-        text = self.toPlainText()
-        position = self.textCursor().position()
-        for candidate in (position, position - 1):
+        cursor = self.textCursor()
+        block = cursor.block()
+        text, column = block.text(), cursor.positionInBlock()
+        # the brackets after and before the cursor: both are in its line
+        for candidate in (column, column - 1):
             if 0 <= candidate < len(text) and text[candidate] in "{}[]":
-                partner = matching_bracket(text, candidate, self.language)
-                if partner is None:
+                found = self.structure().matching_bracket(block.blockNumber(), candidate)
+                if found is None:
                     return []
+                partner = self.document().findBlockByNumber(found[0]).position() + found[1]
                 result = []
-                for index in (candidate, partner):
+                for index in (block.position() + candidate, partner):
                     selection = QTextEdit.ExtraSelection()
                     selection.format.setBackground(self.palette().color(QPalette.ColorRole.Highlight).lighter(130))
                     selection.format.setForeground(self.palette().color(QPalette.ColorRole.HighlightedText))
@@ -489,16 +496,28 @@ class CodeEditor(QPlainTextEdit):
 
     # --- objects, folding ---
 
+    def structure(self) -> TextStructure:
+        """:return: the brackets and objects of the text as it is now"""
+        revision = self.document().revision()
+        if revision != self._structure_revision:
+            self._structure.update(self.toPlainText())
+            self._structure_revision = revision
+        return self._structure
+
     def objects(self) -> List[SourceObject]:
-        """:return: the objects of the text (.jsonl files only)"""
+        """:return: the objects of the text (.jsonl files only). Reads the whole text: for one line, use `object_at_line`."""
         revision = self.document().revision()
         if revision != self._objects_revision:
             self._objects = scan_objects(self.toPlainText()) if self.language == Language.JSONL else []
             self._objects_revision = revision
         return self._objects
 
+    def object_at_line(self, line: int) -> Optional[SourceObject]:
+        """:return: the object that contains a line (starting at 1), None for lines between the objects (.jsonl files only)"""
+        return self.structure().object_at_line(line)
+
     def object_at_cursor(self) -> Optional[SourceObject]:
-        return object_at_line(self.objects(), self.textCursor().blockNumber() + 1)
+        return self.object_at_line(self.textCursor().blockNumber() + 1)
 
     def _notify_object(self):
         if self._loading:

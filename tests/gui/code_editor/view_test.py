@@ -10,6 +10,7 @@ from PyQt6.QtTest import QTest  # noqa: E402
 from openhasp_config_manager.gui.domain.source.syntax import Language  # noqa: E402
 from openhasp_config_manager.gui.qt.widgets.code_editor.editor import CodeEditor  # noqa: E402
 from tests import TestBase  # noqa: E402
+from tests.gui.code_editor.helpers import _type  # noqa: E402
 
 
 MULTILINE = '{\n  "page": 1,\n  "id": 1,\n  "text": "a"\n}\n{"page": 1, "id": 2, "parentid": 1}\n'
@@ -94,6 +95,27 @@ class TestAppearance(TestBase):
         editor.go_to(1, 0)
         # the "not closed" marker, no brackets
         assert len(editor.extraSelections()) == 1
+
+    def test_matching_brackets_over_several_lines(self, editor):
+        # GIVEN
+        editor.set_text(MULTILINE)
+        editor.go_to(5, 0)
+
+        # WHEN
+        marked = [(s.cursor.blockNumber(), s.cursor.positionInBlock()) for s in editor.extraSelections() if s.cursor.hasSelection()]
+
+        # THEN the bracket after the cursor and its partner (the selection ends after the bracket)
+        assert marked == [(4, 1), (0, 1)]
+
+    def test_matching_brackets_follow_typing(self, editor):
+        editor.set_text('{"a": 1}\n{"b": 2}')
+        editor.go_to(2, 0)
+        selections = len(editor.extraSelections())
+        # an unbalanced `[` in the first object pairs with nothing: the brackets of the second object are still marked
+        editor.go_to(1, 5)
+        _type(editor, "[")
+        editor.go_to(2, 0)
+        assert len(editor.extraSelections()) == selections
 
 
 class TestFolding(TestBase):
@@ -184,6 +206,40 @@ class TestObjectAtCursor(TestBase):
         assert editor.object_at_cursor().index == 0
         editor.set_text("")
         assert editor.object_at_cursor() is None
+
+    def test_object_at_cursor_follows_typing(self, editor):
+        # GIVEN
+        editor.set_text(MULTILINE)
+        found = []
+        editor.cursorObjectChanged.connect(found.append)
+        editor.go_to(6, 0)
+
+        # WHEN a new object is opened before the second one, in its own line (typing would close it)
+        editor.textCursor().insertText("{\n")
+
+        # THEN the cursor is in the new object: it isn't closed, so it reaches over the second one to the last line
+        assert (editor.object_at_cursor().start_line, editor.object_at_cursor().end_line) == (6, 8)
+        assert editor.folding.ranges() == [(1, 5), (6, 8)]
+        # closed before the second one, on its line
+        editor.textCursor().insertText("}")
+        editor.go_to(6, 0)
+        assert (editor.object_at_cursor().start_line, editor.object_at_cursor().end_line) == (6, 7)
+        assert editor.folding.ranges() == [(1, 5)]
+        editor.go_to(7, 0)
+        assert editor.object_at_cursor().index == 1
+        assert editor.objects()[2].start_line == 7
+        editor.go_to(8, 0)
+        assert editor.object_at_cursor() is None
+        editor.go_to(2, 0)
+        assert editor.object_at_cursor().index == 0
+        assert found == [1, -1, 0]
+
+    def test_object_at_cursor_in_a_nested_object(self, editor):
+        editor.set_text('{"a": 1}\n{\n  "b": {\n    "c": [\n      1\n    ]\n  }\n}\n')
+        editor.go_to(5, 0)
+        found = editor.object_at_cursor()
+        assert (found.index, found.start_line, found.end_line) == (1, 2, 8)
+        assert found.get("b").value_end_line == 7
 
 
 class TestFormatAndRename(TestBase):

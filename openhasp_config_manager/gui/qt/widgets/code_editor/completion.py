@@ -23,7 +23,6 @@ from openhasp_config_manager.gui.domain.source.docs import (
     placeholder_help,
     property_help,
 )
-from openhasp_config_manager.gui.domain.source.objects import object_at_line
 from openhasp_config_manager.gui.qt.widgets.hover_card import CardContent, HoverCard
 
 
@@ -82,14 +81,14 @@ class EditorCompletion(QObject):
         editor = self._editor
         before, _ = editor.edits.text_around_cursor()
         line_number = editor.textCursor().blockNumber() + 1
-        found = object_at_line(editor.objects(), line_number)
+        found = editor.object_at_line(line_number)
         context = completion_context(before, editor.language, inside_object=found is not None)
         if context is None:
             self.popup.hide()
             return
         self._kind = context.kind
         self._context = context
-        self._object_type = object_type_at_line(editor.objects(), line_number)
+        self._object_type = object_type_at_line([] if found is None else [found], line_number)
         present = [prop.key for prop in found.properties] if found is not None else []
         directive = found is not None and found.is_directive
         properties = keys_for(self._object_type, context.prefix, present, directive)

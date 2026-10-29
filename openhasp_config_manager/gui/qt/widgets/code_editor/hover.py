@@ -47,7 +47,8 @@ class EditorHover(QObject):
         issues = [(marker.severity, marker.message) for marker in editor.markers_at(line) + editor.hints_at(line)]
         found = None
         if editor.language == Language.JSONL:
-            found = help_at(editor.objects(), cursor.block().text(), cursor.blockNumber() + 1, cursor.positionInBlock())
+            at_line = editor.object_at_line(line)
+            found = help_at([] if at_line is None else [at_line], cursor.block().text(), line, cursor.positionInBlock())
             if found is None:
                 found = editor.values.help_at(cursor.block().text(), cursor.positionInBlock())
         elif editor.language == Language.YAML:

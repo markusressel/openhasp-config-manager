@@ -4,8 +4,6 @@ from PyQt6.QtCore import QObject
 from PyQt6.QtGui import QTextCursor
 from PyQt6.QtWidgets import QPlainTextEdit
 
-from openhasp_config_manager.gui.domain.source.objects import foldable
-
 
 class EditorFolding(QObject):
     """Folds the objects of a .jsonl text editor: the lines between the brackets of an object are hidden."""
@@ -18,7 +16,7 @@ class EditorFolding(QObject):
 
     def ranges(self) -> List[Tuple[int, int]]:
         """:return: (first line, last line) of the objects that can be folded; the lines in between are hidden when folded"""
-        return foldable(self._editor.objects())
+        return self._editor.structure().foldable()
 
     def is_folded(self, line: int) -> bool:
         return line in self._folded

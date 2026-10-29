@@ -54,10 +54,14 @@ def find_source_issues(text: str, language: Language) -> List[SourceIssue]:
 def _jsonl_issues(text: str) -> List[SourceIssue]:
     starts = [match.end() for match in OBJECT_START.finditer(text)]
     issues = []
+    # the line of the start of the object before, counted on from there (counting from the start of the text for every object
+    # takes seconds in a long file)
+    first_line, counted = 1, 0
     for index, start in enumerate(starts):
         end = starts[index + 1] if index + 1 < len(starts) else len(text)
         part = text[start:end]
-        first_line = text.count("\n", 0, start) + 1
+        first_line += text.count("\n", counted, start)
+        counted = start
         if "}" not in part:
             issues.append(SourceIssue(first_line, 0, 1, Severity.ERROR, "The object is not closed"))
             continue
@@ -76,7 +80,7 @@ def _jsonl_issues(text: str) -> List[SourceIssue]:
             # at the key of the directive (comments are blanked out, so a `"!` in one doesn't count)
             key = cleaned.index('"!')
             position = start + key
-            line = text.count("\n", 0, position) + 1
+            line = first_line + text.count("\n", start, position)
             column = position - (text.rfind("\n", 0, position) + 1)
             length = cleaned.index('"', key + 1) + 1 - key
             issues.append(SourceIssue(line, column, length, Severity.ERROR, error))
