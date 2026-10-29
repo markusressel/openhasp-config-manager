@@ -22,6 +22,8 @@ class MqttClient:
         self._callbacks: Dict[str, List[Callable[[str, bytes], Awaitable[None]]]] = {}
         self._connection_listeners: List[Callable[[bool, Optional[Exception]], None]] = []
         self.__mqtt_client: Optional[Client] = None
+        # set while the connection started by `subscribe` is subscribed to the broker
+        self._subscribed = asyncio.Event()
 
     async def publish(self, topic: str, payload: str | Dict | List = None):
         """
@@ -51,6 +53,13 @@ class MqttClient:
 
         if self._mqtt_client_task is None:
             await self._start_mqtt_client_task()
+
+    async def wait_until_subscribed(self):
+        """
+        Wait until the connection started by `subscribe` receives messages. A request whose answer is awaited with
+        `subscribe` must only be sent after that, otherwise the answer can arrive before the subscription.
+        """
+        await self._subscribed.wait()
 
     async def cancel_callback(self, topic: str = None, callback: Callable = None):
         """
@@ -104,6 +113,7 @@ class MqttClient:
         if self._mqtt_client_task is not None:
             self._mqtt_client_task.cancel()
             self._mqtt_client_task = None
+            self._subscribed.clear()
 
     async def _mqtt_client_task_function(self):
         while True:
@@ -112,10 +122,12 @@ class MqttClient:
                     self.__mqtt_client = client
                     try:
                         await client.subscribe("hasp/#")
+                        self._subscribed.set()
                         self._notify_connection(True, None)
                         async for message in client.messages:
                             await self._handle_message(message)
                     finally:
+                        self._subscribed.clear()
                         self.__mqtt_client = None
             except asyncio.CancelledError:
                 break
