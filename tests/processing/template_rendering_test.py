@@ -1,5 +1,8 @@
+import gc
+import weakref
+
 import pytest
-from jinja2 import TemplateRuntimeError, TemplateSyntaxError, UndefinedError
+from jinja2 import TemplateError, TemplateRuntimeError, TemplateSyntaxError, UndefinedError
 from jinja2.exceptions import SecurityError
 
 from openhasp_config_manager.processing import template_rendering
@@ -975,3 +978,44 @@ class TestReferencedVariables(TestBase):
     def test_invalid_templates(self):
         with pytest.raises(TemplateRenderError, match="Invalid template"):
             referenced_variables("{{ 1 + }}")
+
+
+class _Held:
+    """Stands for something a caller holds while it renders, e.g. the QPainter of a paint event."""
+
+
+class TestErrorsReleaseTheCallers:
+    """A template error must not keep the frames of the code that rendered it (and their locals) alive until the next GC."""
+
+    @staticmethod
+    def _locals_of_caller_survive(render) -> bool:
+        def caller():
+            held = _Held()
+            try:
+                render()
+            except TemplateError:
+                pass
+            return weakref.ref(held)
+
+        gc.disable()
+        try:
+            ref = caller()
+            return ref() is not None
+        finally:
+            gc.enable()
+
+    def test_an_unknown_variable_that_is_kept_as_written(self):
+        assert render_template_or_keep("{{ p3b20.y + 5 }}", {}) == "{{ p3b20.y + 5 }}"
+        assert not self._locals_of_caller_survive(lambda: render_template_or_keep("{{ p3b20.y + 5 }}", {}))
+
+    def test_an_error_that_is_raised(self):
+        # GIVEN: an unknown filter, which is an error at compile time; an unknown variable in strict mode, at render time
+        assert not self._locals_of_caller_survive(lambda: render_template_or_keep("{{ 1 | nope }}", {}))
+        assert not self._locals_of_caller_survive(lambda: render_template_collecting_unknown("{{ 1 | nope }}", {}))
+        assert not self._locals_of_caller_survive(lambda: render_template("{{ a.b }}", {}, strict=True))
+
+    def test_syntax_errors_still_know_the_template(self):
+        with pytest.raises(TemplateSyntaxError) as raised:
+            render_template("{{ a +  }}", {})
+        assert raised.value.source == "{{ a +  }}"
+        assert raised.value.translated

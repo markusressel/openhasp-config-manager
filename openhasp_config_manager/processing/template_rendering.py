@@ -20,6 +20,7 @@ Templates in the config files are Jinja2 with some differences:
 import copy
 import logging
 import re
+import sys
 from contextlib import contextmanager
 from contextvars import ContextVar
 from functools import lru_cache
@@ -62,6 +63,22 @@ class _Environment(ImmutableSandboxedEnvironment):
         if isinstance(obj, dict) and attribute in obj:
             return obj[attribute]
         return super().getattr(obj, attribute)
+
+    def handle_exception(self, source: Optional[str] = None):
+        """
+        Raises the error of a template as it is. Jinja2 rewrites its traceback to point at the template source, with a fake frame
+        whose `f_back` is the stack at that time, while a frame of its own still names the error: a reference cycle that keeps
+        all frames up the stack, and their locals, until the garbage collector finds it. In a paint event that is its QPainter,
+        which is then still active when the widget is flushed ("QBackingStore::endPaint() called with active painter"). The
+        templates are single values, a line in the template source doesn't help.
+        """
+        error = sys.exc_info()[1]
+        if isinstance(error, TemplateSyntaxError) and not error.translated:
+            # what Jinja2 does for these, so that the message names the template
+            error.translated = True
+            error.source = source
+        del error
+        raise
 
 
 _LENIENT = _Environment(loader=BaseLoader(), undefined=_Undefined)
@@ -136,7 +153,11 @@ def render_template_collecting_unknown(content: str, template_vars: Dict[str, An
     """
     rendered, unknown, error = _render_collecting(content, template_vars)
     if error is not None:
-        raise error
+        try:
+            raise error
+        finally:
+            # see _render_collecting
+            del error
     return rendered, unknown
 
 
@@ -150,13 +171,22 @@ def render_template_or_keep(content: str, template_vars: Dict[str, Any]) -> str:
     rendered, _, error = _render_collecting(content, template_vars)
     if error is None:
         return rendered
-    if isinstance(error, UndefinedError):
-        return content
-    raise error
+    try:
+        if isinstance(error, UndefinedError):
+            return content
+        raise error
+    finally:
+        # see _render_collecting
+        del error
 
 
 def _render_collecting(content: str, template_vars: Dict[str, Any]) -> Tuple[str, Set[str], Optional[Exception]]:
-    """:return: the text (None if it failed), the unknown variables written into it so far, and why it failed"""
+    """
+    :return: the text (None if it failed), the unknown variables written into it so far, and why it failed. A caller must not
+        keep the error in a local after it is done with it (`del` it): the traceback of the error holds the frames of the
+        callers, so a frame that names it is a reference cycle, and the frames up the stack and their locals live until the
+        garbage collector finds it (see `_Environment.handle_exception`).
+    """
     unknown: Set[str] = set()
     token = _UNKNOWN.set(unknown)
     try:
