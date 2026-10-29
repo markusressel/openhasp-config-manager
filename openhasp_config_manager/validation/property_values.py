@@ -355,3 +355,24 @@ def value_choices(obj_type: Optional[str], key: str) -> Tuple[ValueChoice, ...]:
     match = _SUFFIX.match(key)
     name = match["name"] if match and match["name"] in _CHOICES[None] else key
     return _CHOICES[None].get(name, ())
+
+
+def matching_choice(choices: Tuple[ValueChoice, ...], value) -> Optional[ValueChoice]:
+    """
+    :return: the choice a value is, the way the plate reads it: a name ignoring case (`"Dots"`), a number also as text (`"1"`),
+        true/false also as on/off, yes/no or 1/0. None if it is none of them.
+    """
+    for choice in choices:
+        if isinstance(choice.value, bool):
+            if _bool_problems(value) == [] and _is_true(value) == choice.value:
+                return choice
+        elif isinstance(choice.value, int):
+            if not isinstance(value, bool) and str(value).strip().lstrip("-").isdigit() and int(value) == choice.value:
+                return choice
+        elif isinstance(value, str) and value.lower() == choice.value:
+            return choice
+    return None
+
+
+def _is_true(value) -> bool:
+    return str(value).lower() in _TRUE_NAMES
