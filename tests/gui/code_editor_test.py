@@ -245,6 +245,22 @@ class TestCompletion(TestBase):
         assert editor.completion.completer.popup().isVisible()
         assert not editor.completion.card.isVisible()
 
+    def test_placeholders_in_a_text(self, editor):
+        editor.resize(900, 400)
+        _type(editor, '{"obj": "label", "text": "%')
+        popup = editor.completion.completer.popup()
+        assert popup.isVisible() and editor.completion.completer.completionCount() == 6
+        _type(editor, "ho")
+        assert editor.completion.completer.completionCount() == 1
+        assert editor.completion.card.isVisible() and editor.completion.card._name.text() == "%hostname%"
+        QTest.keyClick(popup, Qt.Key.Key_Return)
+        assert editor.toPlainText() == '{"obj": "label", "text": "%hostname%"}'
+        assert editor.textCursor().positionInBlock() == len('{"obj": "label", "text": "%hostname%')
+
+    def test_no_placeholders_in_other_properties(self, editor):
+        _type(editor, '{"w": "%')
+        assert not editor.completion.completer.popup().isVisible()
+
     def test_nothing_to_complete(self, editor):
         _type(editor, "zzz")
         assert not editor.completion.completer.popup().isVisible()
@@ -571,6 +587,25 @@ class TestLinksAndDocs(TestBase):
             for selection in editor.extraSelections()
         }
         assert dimmed == {(2, 14): True, (14, 23): False}
+
+    def test_hover_card_explains_a_placeholder(self, editor):
+        editor.set_text('{"obj": "btn", "text": "%ip%"}')
+
+        content = editor.hover.card_content_at(self._position(editor, '{"obj": "btn", "text": "%i'))
+
+        assert content.help is not None and content.help.name == "%ip%"
+        assert "IP address" in content.help.summary
+        assert content.help.url == "https://www.openhasp.com/0.7.0/design/data-types/#variables"
+
+    def test_placeholder_has_its_own_color(self, editor):
+        from openhasp_config_manager.gui.domain.source.syntax import TokenKind
+        from openhasp_config_manager.gui.qt.widgets.code_editor.highlighter import syntax_color
+
+        editor.set_text('{"text": "%ip%"}')
+        formats = editor.document().firstBlock().layout().formats()
+        color_at = {f.start: f.format.foreground().color() for f in formats}
+        assert color_at[len('{"text": "')] == syntax_color(TokenKind.PLACEHOLDER)
+        assert syntax_color(TokenKind.PLACEHOLDER) not in (syntax_color(TokenKind.STRING), syntax_color(TokenKind.TEMPLATE))
 
     def test_hover_card_explains_the_default_properties_of_the_theme(self, qapp, settings):
         yaml_editor = CodeEditor(Language.YAML)

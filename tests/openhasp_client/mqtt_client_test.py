@@ -82,6 +82,9 @@ class TestMqttClient(TestBase):
 
         # THEN
         assert events == [(False, "refused"), (True, None)]
+        await asyncio.wait_for(mqtt_client.wait_until_subscribed(), timeout=1)
 
         mqtt_client.remove_connection_listener(listener)
         await mqtt_client.cancel_callback(callback=callback)
+        # the last callback closes the connection
+        assert not mqtt_client._subscribed.is_set()

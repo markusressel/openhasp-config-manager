@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Dict, List, Tuple
 
+from openhasp_config_manager.validation.property_values import value_problems
+
 
 class Severity(StrEnum):
     # something to know, not a problem (e.g. a variable that is not used)
@@ -74,6 +76,11 @@ def find_problems(objects: List[Dict], screen_width: int, screen_height: int) ->
         for key in _GEOMETRY_DEFAULTS:
             if key in obj and not _is_number(obj[key]):
                 result.append(Problem(Severity.ERROR, obj, f"{object_name(obj)}: {key} is not a number: {obj[key]}"))
+
+        for key in obj:
+            # the plate takes a value it doesn't know without an error, and does something else with it
+            for reason in value_problems(obj, key):
+                result.append(Problem(Severity.WARNING, obj, f"{object_name(obj)}: {key}: {reason}"))
 
         sides = _sides_outside(object_rect(obj), screen_width, screen_height)
         if sides:

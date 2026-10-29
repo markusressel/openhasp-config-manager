@@ -432,8 +432,9 @@ class TestPreviewRoller(TestBase):
 
         item = widget(view, 8)
         assert item.data["val"] == 2
-        # the rows start where they were, one row off, and animate to the new option
-        assert item._offset == pytest.approx(row)
+        # the rows start where they were, one row off, and animate to the new option (the animation runs in real time
+        # while the events are processed, so its start, not its current value)
+        assert item._anim.startValue() == pytest.approx(row)
         item.finish_animation()
         assert item._offset == 0
         assert draft["val"] == 1
@@ -712,7 +713,8 @@ class TestPreviewTabview(TestBase):
         lift(view, *center(item, item.button_rects()[2]))
 
         assert item._anim.duration() == 300
-        assert item.indicator_position == 0
+        # from the first tab (the animation runs in real time while the events are processed, so its start, not its current value)
+        assert item._anim.startValue() == 0
         item.finish_animation()
         assert item.indicator_position == 2
 

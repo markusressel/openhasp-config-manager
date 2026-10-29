@@ -4,6 +4,7 @@ import orjson as orjson
 from py_range_parse import Range
 
 from openhasp_config_manager.validation import Validator
+from openhasp_config_manager.validation.property_values import ALIGN_NAMES, ALIGN_NUMBERS
 
 
 class JsonlObjectValidator(Validator):
@@ -31,8 +32,8 @@ class JsonlObjectValidator(Validator):
 
         input_align = input.get("align", None)
         if input_align is not None:
-            valid_align_int_values = [0, 1, 2]
-            valid_align_str_values = ["left", "center", "right"]
+            valid_align_int_values = list(ALIGN_NUMBERS)
+            valid_align_str_values = list(ALIGN_NAMES)
             valid_align_values = valid_align_str_values + valid_align_int_values
 
             if input_align not in valid_align_values:

@@ -4,6 +4,7 @@ from openhasp_config_manager.gui.domain.source.completion import (
     complete,
     completion_context,
     keys_for,
+    placeholder_insertion,
     properties_for,
     property_insertion,
 )
@@ -175,3 +176,38 @@ class TestDirectives(TestBase):
         assert keys_for(None, "", ["!include"], directive=True) == ["for", "vars"]
         assert keys_for(None, "", ["!include", "vars"], directive=True) == ["for"]
         assert "!include" in keys_for(None) and "!include" not in keys_for(None, present=["page"])
+
+
+class TestPlaceholders(TestBase):
+    def test_percent_at_the_start_of_a_text(self):
+        assert completion_context('{"text": "%', Language.JSONL) == CompletionContext("placeholder", "%", 10)
+        assert completion_context('  "text" : "%ho', Language.JSONL) == CompletionContext("placeholder", "%ho", 12)
+        assert completion_context('{"obj": "label", "text": "%', Language.JSONL).kind == "placeholder"
+
+    def test_candidates(self):
+        assert complete(CompletionContext("placeholder", "%", 0)) == [
+            "%hostname%", "%ip%", "%mac%", "%model%", "%ssid%", "%version%",
+        ]  # fmt: skip
+        assert complete(CompletionContext("placeholder", "%m", 0)) == ["%mac%", "%model%"]
+        assert complete(CompletionContext("placeholder", "%HO", 0)) == ["%hostname%"]
+        assert complete(CompletionContext("placeholder", "%foo", 0)) == []
+
+    def test_no_placeholder_elsewhere(self):
+        # in the middle of a text (openHASP only replaces a whole text), in other properties, in keys, in templates
+        assert completion_context('{"text": "IP %', Language.JSONL) is None
+        assert completion_context('{"text": "100%', Language.JSONL) is None
+        assert completion_context('{"w": "%', Language.JSONL) is None
+        assert completion_context('{"%', Language.JSONL) == CompletionContext("property", "%", 2)
+        assert completion_context('{"text": "{{ "%', Language.JSONL).kind == "variable"
+        assert completion_context('"text": "%', Language.CMD) is None
+        assert completion_context('"text": "%', Language.JSON) is None
+
+    def test_insertion_replaces_what_is_typed(self):
+        def insert(line, column, word):
+            context = completion_context(line[:column], Language.JSONL)
+            insertion = placeholder_insertion(line, column, context, word)
+            return line[: insertion.start] + insertion.text + line[insertion.end :], insertion.cursor
+
+        assert insert('{"text": "%ho"}', 13, "%hostname%") == ('{"text": "%hostname%"}', 20)
+        assert insert('{"text": "%ho|stn%"}'.replace("|", ""), 13, "%hostname%") == ('{"text": "%hostname%"}', 20)
+        assert insert('{"text": "%"}', 11, "%ip%") == ('{"text": "%ip%"}', 14)

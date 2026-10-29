@@ -192,3 +192,51 @@ class TestDirectives(TestBase):
         assert _kinds('  "vars": {},')[0] == ('"vars"', TokenKind.KEY)
         assert _kinds('{"!x": 1}')[1] == ('"!x"', TokenKind.DIRECTIVE)
         assert tokenize_jsonl("}}", JsonlState(1, True))[1] == JsonlState(0, False)
+
+
+class TestPlaceholders(TestBase):
+    def test_placeholder_of_a_text_is_a_token(self):
+        assert _kinds('{"text": "%ip%"}') == [
+            ("{", TokenKind.SYMBOL),
+            ('"text"', TokenKind.KEY),
+            (":", TokenKind.SYMBOL),
+            ('"', TokenKind.STRING),
+            ("%ip%", TokenKind.PLACEHOLDER),
+            ('"', TokenKind.STRING),
+            ("}", TokenKind.SYMBOL),
+        ]
+
+    def test_every_known_placeholder_in_any_case(self):
+        for name in ("%hostname%", "%ssid%", "%version%", "%model%", "%mac%", "%IP%", "%HostName%"):
+            assert (name, TokenKind.PLACEHOLDER) in _kinds(f'  "text": "{name}",')
+
+    def test_only_a_whole_text_is_a_placeholder(self):
+        # openHASP doesn't replace a placeholder that is only a part of the text
+        assert _kinds('"text": "IP: %ip%"')[-1] == ('"IP: %ip%"', TokenKind.STRING)
+        assert _kinds('"text": " %ip%"')[-1] == ('" %ip%"', TokenKind.STRING)
+
+    def test_percent_in_ordinary_text_is_a_string(self):
+        assert _kinds('"text": "100%"')[-1] == ('"100%"', TokenKind.STRING)
+        assert _kinds('"text": "2:35 / 5:20 | 100%"')[-1] == ('"2:35 / 5:20 | 100%"', TokenKind.STRING)
+        assert _kinds('"w": "33%"')[-1] == ('"33%"', TokenKind.STRING)
+
+    def test_unknown_placeholder_is_a_string(self):
+        assert _kinds('"text": "%foo%"')[-1] == ('"%foo%"', TokenKind.STRING)
+
+    def test_only_in_the_text(self):
+        assert _kinds('"value_str": "%ip%"')[-1] == ('"%ip%"', TokenKind.STRING)
+        assert _kinds('"%ip%": 1')[0] == ('"%ip%"', TokenKind.KEY)
+        assert _kinds('"text": "%ip%" : 1')[2] == ('"%ip%"', TokenKind.KEY)
+
+    def test_placeholder_inside_a_template_is_part_of_the_template(self):
+        assert _kinds('"text": "{{ \'%ip%\' }}"')[2:] == [
+            ('"', TokenKind.STRING),
+            ("{{ '%ip%' }}", TokenKind.TEMPLATE),
+            ('"', TokenKind.STRING),
+        ]
+
+    def test_an_unfinished_string_is_no_placeholder(self):
+        assert _kinds('"text": "%ip%')[-1] == ('"%ip%', TokenKind.STRING)
+
+    def test_not_in_json_files(self):
+        assert _kinds('"text": "%ip%"', Language.JSON)[-1] == ('"%ip%"', TokenKind.STRING)

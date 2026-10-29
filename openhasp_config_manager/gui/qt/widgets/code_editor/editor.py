@@ -681,7 +681,7 @@ class CodeEditor(QPlainTextEdit):
             pass
         else:
             super().keyPressEvent(event)
-            if event.text() and (event.text().isalnum() or event.text() in '_."{'):
+            if event.text() and (event.text().isalnum() or event.text() in '_."{%'):
                 self.completion.show()
             elif popup.isVisible():
                 popup.hide()

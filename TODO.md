@@ -6,6 +6,10 @@ Open work and known issues. Done items are removed; the git history has them.
 
 None known.
 
+- [ ] **More property values to check** (`validation/property_values.py` knows names, ranges, parts and states): `action` takes `prev`,
+  `next`, `back`, `p<page>` or a JSON object of events and commands. Read how 0.7 runs a JSON action (`my_obj_set_action` and
+  the event handlers) before warning about anything, so that working actions aren't reported.
+
 ## 2. Editor
 
 - [ ] **Fact-check the preview against openHASP/LVGL.** The widgets in `gui/qt/widgets/pagelayout/openhasp_widgets/` are drawn
@@ -17,6 +21,10 @@ None known.
   Then try to remove `FONT_SCALE = 0.7` in `drawing.py`: it is probably a fudge factor for the difference between Qt's and LVGL's text
   rendering. Check how a font id maps to a font on the plate (family, pixel size) and use the real metrics.
 - [ ] Insert template variables inside longer texts (the suggestions replace the whole value today).
+- [ ] Placeholders (`"text": "%ip%"`, `gui/domain/source/placeholders.py`): `check` could warn about texts openHASP won't replace (an
+  unknown `%...%`, a placeholder inside a longer text like `"IP: %ip%"`, a placeholder in the `text` of a type other than `btn`,
+  `label` or `msgbox`), and the page preview could show an example value instead of `%ip%`. The editor only knows them in .jsonl
+  files, not in commands of .cmd files (`p1b2.text=%ip%`).
 - [ ] Preview of the new object types: objects inside a `tab` (`parentid`) and the open list of a `dropdown` are not drawn.
 - [ ] Files tree: "New .jsonl file here" on a folder (adds the `run L:/<flattened name>` line to the right .cmd and checks the 30
   character limit of file names on the plate), and "Move to file" for an object.
