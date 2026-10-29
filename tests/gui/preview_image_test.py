@@ -2,11 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from openhasp_config_manager.cli.common import _create_config_manager
-from openhasp_config_manager.gui.domain.draft.files import load_device
-from openhasp_config_manager.gui.domain.draft.session import PlateSession
 from tests import TestBase
-from tests.gui.helpers import create_editor_cfg_root
+from tests.helpers import copy_test_config, load_session, write_page
 
 JSONL = """{"page": 9, "id": 1, "obj": "obj", "x": 10, "y": 20, "w": 50, "h": 40, "bg_color": "#FF0000", "radius": 0, "border_width": 0}
 {"page": 0, "id": 2, "obj": "obj", "x": 100, "y": 280, "w": 20, "h": 20, "bg_color": "#0000FF", "radius": 0, "border_width": 0}
@@ -16,16 +13,9 @@ JSONL = """{"page": 9, "id": 1, "obj": "obj", "x": 10, "y": 20, "w": 50, "h": 40
 
 @pytest.fixture
 def cfg_root(tmp_path) -> Path:
-    root = create_editor_cfg_root(tmp_path)
-    (root / "devices" / "test_device" / "editor.jsonl").write_text(JSONL)
+    root = copy_test_config(tmp_path)
+    write_page(root, JSONL)
     return root
-
-
-def _session(cfg_root: Path) -> PlateSession:
-    loaded = load_device(_create_config_manager(cfg_root, cfg_root.parent / "output"), "test_device")
-    session = PlateSession(device=loaded.device)
-    session.load(loaded.components, loaded.renderer)
-    return session
 
 
 def _color(image, x: int, y: int) -> str:
@@ -41,7 +31,7 @@ class TestRenderPages(TestBase):
         from openhasp_config_manager.gui.qt.preview_image import render_pages
 
         # WHEN
-        session = _session(cfg_root)
+        session = load_session(cfg_root)
         images = render_pages(session, session.device)
 
         # THEN: the objects of the page and of page 0, on the black screen
@@ -58,7 +48,7 @@ class TestRenderPages(TestBase):
         from openhasp_config_manager.gui.qt.preview_image import render_pages
 
         # WHEN
-        session = _session(cfg_root)
+        session = load_session(cfg_root)
         images = render_pages(session, session.device, pages=[3], scale=2)
 
         # THEN

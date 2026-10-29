@@ -13,15 +13,6 @@ def cfg_root(tmp_path) -> Path:
     return create_editor_cfg_root(tmp_path)
 
 
-@pytest.fixture
-def window(create_window):
-    window = create_window()
-    wait_until(lambda: window.devices)
-    window.on_device_selected("test_device")
-    wait_until(lambda: window.session is not None and window.session.is_loaded)
-    return window
-
-
 class TestChangesOnDisk(TestBase):
     def test_a_draft_without_changes_follows_the_files(self, window, cfg_root):
         # GIVEN

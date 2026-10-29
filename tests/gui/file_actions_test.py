@@ -14,15 +14,6 @@ def cfg_root(tmp_path) -> Path:
 
 
 @pytest.fixture
-def window(create_window):
-    window = create_window()
-    wait_until(lambda: window.devices)
-    window.on_device_selected("test_device")
-    wait_until(lambda: window.session is not None and window.session.is_loaded)
-    return window
-
-
-@pytest.fixture
 def answers(monkeypatch):
     """Answers the dialogs: the name to type, and the button of the question that carries the plan out."""
     from PyQt6.QtWidgets import QInputDialog, QMessageBox

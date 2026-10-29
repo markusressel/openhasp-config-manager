@@ -1,10 +1,10 @@
 import json
-import shutil
 from pathlib import Path
 
 from openhasp_config_manager.manager import ConfigManager
 from openhasp_config_manager.processing.variables import VariableManager
 from tests import TestBase
+from tests.helpers import copy_test_config
 
 
 class TestConfigManager(TestBase):
@@ -70,11 +70,8 @@ class TestConfigManager(TestBase):
 
     def test_a_file_that_is_only_included_is_not_deployed_on_its_own(self, tmp_path):
         # GIVEN: a page includes a part that no .cmd file runs
-        cfg_root = tmp_path / "cfg"
-        shutil.copytree(self.cfg_root, cfg_root)
-        (cfg_root / "common" / "parts").mkdir()
-        (cfg_root / "common" / "parts" / "dot.jsonl").write_text(
-            '{"page": 9, "id": "{{ id }}", "obj": "obj", "x": "{{ id * 2 }}"}\n'
+        cfg_root = copy_test_config(
+            tmp_path, {"common/parts/dot.jsonl": '{"page": 9, "id": "{{ id }}", "obj": "obj", "x": "{{ id * 2 }}"}\n'}
         )
         (cfg_root / "devices" / "test_device" / "home" / "dots.jsonl").write_text(
             '{"!include": "common/parts/dot.jsonl", "for": {"id": [1, 2]}}\n'

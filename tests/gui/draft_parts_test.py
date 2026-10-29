@@ -1,9 +1,7 @@
-import shutil
 from pathlib import Path
 
 import pytest
 
-from openhasp_config_manager.cli.common import _create_config_manager
 from openhasp_config_manager.gui.domain.draft.files import SaveConflictError, load_device, load_part_alone, plan_save
 from openhasp_config_manager.gui.domain.draft.part_alone import placeholder_vars
 from openhasp_config_manager.gui.domain.draft.part_ids import new_part_object_ids
@@ -11,6 +9,7 @@ from openhasp_config_manager.gui.domain.draft.session import PlateSession, ReadO
 from openhasp_config_manager.gui.domain.problems import object_name
 from openhasp_config_manager.processing.jsonl.includes import IncludeLookupError
 from openhasp_config_manager.processing.template_rendering import TemplateRenderError
+from tests.helpers import copy_test_config, create_config_manager, load_session, write_page
 
 DEVICE = "devices/test_device"
 
@@ -34,12 +33,8 @@ DOT_JSONL = '{"page": "{{ page }}", "id": "{{ dot }}", "obj": "obj", "x": 2}\n'
 
 @pytest.fixture
 def cfg_root(tmp_path) -> Path:
-    root = tmp_path / "cfg"
-    shutil.copytree(Path(__file__).parent.parent / "_test_cfg_root", root)
-    (root / "common" / "parts").mkdir()
-    (root / "common" / "parts" / "tile.jsonl").write_text(TILE_JSONL)
-    (root / DEVICE / "page.jsonl").write_text(PAGE_JSONL)
-    (root / DEVICE / "boot.cmd").write_text("run L:/page.jsonl\n")
+    root = copy_test_config(tmp_path, {"common/parts/tile.jsonl": TILE_JSONL})
+    write_page(root, PAGE_JSONL, "page.jsonl")
     return root
 
 
@@ -48,16 +43,9 @@ def tile(cfg_root) -> Path:
     return cfg_root / "common" / "parts" / "tile.jsonl"
 
 
-def _load(cfg_root: Path) -> PlateSession:
-    loaded = load_device(_create_config_manager(cfg_root, cfg_root.parent / "output"), "test_device")
-    session = PlateSession(device=loaded.device)
-    session.load(loaded.components, loaded.renderer)
-    return session
-
-
 @pytest.fixture
 def session(cfg_root) -> PlateSession:
-    return _load(cfg_root)
+    return load_session(cfg_root)
 
 
 def _objects(session: PlateSession):
@@ -348,7 +336,7 @@ class TestPartMode:
         (cfg_root / DEVICE / "other.jsonl").write_text('{"page": 7, "id": 1, "obj": "obj"}\n')
         (cfg_root / DEVICE / "page.jsonl").write_text(f'{{"!include": "{DEVICE}/other.jsonl", "vars": {{"x": 1}}}}\n')
         (cfg_root / DEVICE / "boot.cmd").write_text("run L:/page.jsonl\nrun L:/other.jsonl\n")
-        session = _load(cfg_root)
+        session = load_session(cfg_root)
         [included] = session.working_objects[str(cfg_root / DEVICE / "page.jsonl")]
 
         # THEN
@@ -361,7 +349,7 @@ class TestNestedParts:
     def session(self, cfg_root) -> PlateSession:
         (cfg_root / "common" / "parts" / "tile.jsonl").write_text(TILE_JSONL + NESTED_JSONL.split("\n", 1)[1])
         (cfg_root / "common" / "parts" / "dot.jsonl").write_text(DOT_JSONL)
-        return _load(cfg_root)
+        return load_session(cfg_root)
 
     def test_the_objects_of_an_inner_part_are_selectable_but_not_editable(self, session, cfg_root):
         # GIVEN
@@ -429,7 +417,7 @@ class TestPartAlone:
         return path
 
     def _session(self, cfg_root: Path, part: Path) -> PlateSession:
-        config_manager = _create_config_manager(cfg_root, cfg_root.parent / "output")
+        config_manager = create_config_manager(cfg_root)
         loaded = load_device(config_manager, "test_device")
         component, renderer = load_part_alone(config_manager, loaded.device, part)
         session = PlateSession(device=loaded.device)
@@ -486,7 +474,7 @@ class TestPartAlone:
         # GIVEN
         other = cfg_root / "devices" / "other.jsonl"
         other.write_text("{}\n")
-        config_manager = _create_config_manager(cfg_root, cfg_root.parent / "output")
+        config_manager = create_config_manager(cfg_root)
         loaded = load_device(config_manager, "test_device")
 
         # THEN

@@ -1,12 +1,11 @@
-import shutil
 from pathlib import Path
 
 import pytest
 
-from openhasp_config_manager.cli.common import _create_config_manager
-from openhasp_config_manager.gui.domain.draft.files import load_device, plan_save
+from openhasp_config_manager.gui.domain.draft.files import plan_save
 from openhasp_config_manager.gui.domain.draft.session import InvalidDirectiveError, PlateSession, ReadOnlyObjectError
 from openhasp_config_manager.gui.domain.problems import object_name
+from tests.helpers import copy_test_config, load_session, write_page
 
 DEVICE = "devices/test_device"
 
@@ -29,24 +28,13 @@ TILE_JSONL = """// the caption and the value
 
 @pytest.fixture
 def cfg_root(tmp_path) -> Path:
-    root = tmp_path / "cfg"
-    shutil.copytree(Path(__file__).parent.parent / "_test_cfg_root", root)
-    (root / "common" / "parts").mkdir()
-    (root / "common" / "parts" / "tile.jsonl").write_text(TILE_JSONL)
+    root = copy_test_config(tmp_path, {"common/parts/tile.jsonl": TILE_JSONL})
     _write_page(root, PAGE_JSONL)
     return root
 
 
 def _write_page(root: Path, content: str):
-    (root / DEVICE / "page.jsonl").write_text(content)
-    (root / DEVICE / "boot.cmd").write_text("run L:/page.jsonl\n")
-
-
-def _load(cfg_root: Path) -> PlateSession:
-    loaded = load_device(_create_config_manager(cfg_root, cfg_root.parent / "output"), "test_device")
-    session = PlateSession(device=loaded.device)
-    session.load(loaded.components, loaded.renderer)
-    return session
+    write_page(root, content, "page.jsonl")
 
 
 def _objects(session: PlateSession):
@@ -57,7 +45,7 @@ def _objects(session: PlateSession):
 class TestIncludedObjects:
     def test_the_included_objects_are_in_place_of_the_directive(self, cfg_root):
         # WHEN
-        session = _load(cfg_root)
+        session = load_session(cfg_root)
 
         # THEN
         [component] = session.components
@@ -77,7 +65,7 @@ class TestIncludedObjects:
 
     def test_where_an_included_object_is_written(self, cfg_root):
         # GIVEN
-        session = _load(cfg_root)
+        session = load_session(cfg_root)
         objects = _objects(session)
 
         # THEN: its line is the one of the directive, its origin says where it is written
@@ -96,7 +84,7 @@ class TestIncludedObjects:
         assert session.read_only_reason(objects["p9b1"]) is None
 
     def test_the_cursor_in_a_directive_selects_nothing(self, cfg_root):
-        session = _load(cfg_root)
+        session = load_session(cfg_root)
         [component] = session.components
 
         assert session.object_of_source(component.key, 1) is None
@@ -104,7 +92,7 @@ class TestIncludedObjects:
 
     def test_included_objects_are_read_only(self, cfg_root):
         # GIVEN
-        session = _load(cfg_root)
+        session = load_session(cfg_root)
         tile = _objects(session)["p9b20"]
 
         # THEN
@@ -122,7 +110,7 @@ class TestIncludedObjects:
         assert session.is_dirty is False
 
     def test_templates_of_an_included_object_see_its_instance(self, cfg_root):
-        session = _load(cfg_root)
+        session = load_session(cfg_root)
         tile = _objects(session)["p9b30"]
 
         assert session.check_template(tile, "{{ id + anchor }}") is None
@@ -130,7 +118,7 @@ class TestIncludedObjects:
 
     def test_an_included_object_follows_the_object_it_refers_to(self, cfg_root):
         # GIVEN
-        session = _load(cfg_root)
+        session = load_session(cfg_root)
         objects = _objects(session)
 
         # WHEN
@@ -148,7 +136,7 @@ class TestIncludedObjects:
 
     def test_undo_and_redo_keep_the_included_objects(self, cfg_root):
         # GIVEN
-        session = _load(cfg_root)
+        session = load_session(cfg_root)
         [component] = session.components
 
         # WHEN
@@ -170,7 +158,7 @@ class TestIncludedObjects:
 class TestSave:
     def test_save_keeps_the_directive_and_writes_only_the_objects_of_the_file(self, cfg_root):
         # GIVEN
-        session = _load(cfg_root)
+        session = load_session(cfg_root)
         objects = _objects(session)
         [component] = session.components
 
@@ -195,7 +183,7 @@ class TestSave:
 
     def test_after_a_save_the_draft_goes_on_from_the_new_files(self, cfg_root):
         # GIVEN
-        session = _load(cfg_root)
+        session = load_session(cfg_root)
         objects = _objects(session)
         [component] = session.components
         session.remove_object(objects["p9b1"])
@@ -233,7 +221,7 @@ class TestSave:
     def test_a_directive_that_includes_nothing_is_kept(self, cfg_root):
         # GIVEN: the part doesn't exist
         _write_page(cfg_root, '{"!include": "common/parts/nope.jsonl"}\n{"page": 9, "id": 1, "obj": "obj"}\n')
-        session = _load(cfg_root)
+        session = load_session(cfg_root)
         [component] = session.components
 
         # WHEN
@@ -263,7 +251,7 @@ class TestDirectiveEdits:
     @pytest.fixture
     def session(self, cfg_root) -> PlateSession:
         _write_page(cfg_root, DIRECTIVE_PAGE_JSONL)
-        return _load(cfg_root)
+        return load_session(cfg_root)
 
     def test_a_var_edit_renders_the_instances_again_and_is_saved_into_the_directive(self, session):
         # GIVEN
@@ -425,7 +413,7 @@ class TestDirectiveEdits:
     def test_an_object_added_after_a_directive_that_includes_nothing(self, cfg_root):
         # GIVEN: the directive is at the start of the file, and the draft has its objects in another order
         _write_page(cfg_root, '{"!include": "common/parts/nope.jsonl"}\n{"page": 9, "id": 1, "obj": "obj"}\n')
-        session = _load(cfg_root)
+        session = load_session(cfg_root)
         [component] = session.components
 
         # WHEN: the draft writes the directive after the new object, the expansion finds its line (it raised an IndexError)

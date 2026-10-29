@@ -164,8 +164,14 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
   extra is. CI runs the core, `gui` and `ad` tests as separate jobs (`.github/workflows/pythonpackage.yml`); AppDaemon needs Python <3.14. `tests/haad/README.md`
   explains the haad test setup (golden masters, `FakePlate`).
 - The GUI can be checked headless with `QT_QPA_PLATFORM=offscreen` and `QWidget.grab()` to render screenshots.
+- Shared setup, don't write it again in a test module: `tests/helpers.py` (Qt-free) has `copy_test_config` (a copy of
+  `tests/_test_cfg_root` with extra files), `write_page` (a file of the test device that its `boot.cmd` runs),
+  `create_config_manager` and `load_session` (the draft of a device, loaded like the GUI does). `TestBase.cfg_root` is the
+  test config itself: read it, never write into it.
 - GUI tests: `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest tests/gui`. Fixtures in `tests/gui/conftest.py`: `qapp`,
-  `async_loop` (the background asyncio loop of the app) and `settings`.
+  `async_loop` (the background asyncio loop of the app), `settings`, `create_window` and `window` (a main window with the test
+  device loaded, for the `cfg_root` fixture of the module); helpers in `tests/gui/helpers.py` (`wait_until`, `gui_state`, ...).
+  Wait for conditions with `wait_until`, not with fixed `qwait`s.
 - Never touch the user's real GUI settings: tests that use `QSettings` (directly or through `MainWindow`, `UiSessionStore`, the Files
   tree, ...) need the `settings` fixture, and headless runs of the app outside of pytest need `XDG_CONFIG_HOME` set to a temporary
   directory.

@@ -1,11 +1,9 @@
 import json
-import shutil
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-from openhasp_config_manager.cli.common import _create_config_manager
 from openhasp_config_manager.gui.domain.connection import ConnectionStatus
 from openhasp_config_manager.gui.domain.draft.files import load_device
 from openhasp_config_manager.gui.domain.gui_state import (
@@ -24,6 +22,7 @@ from openhasp_config_manager.gui.domain.gui_state import (
 from openhasp_config_manager.gui.domain.draft.session import PlateSession
 from openhasp_config_manager.gui.domain.problems import Problem, Severity
 from tests import TestBase
+from tests.helpers import copy_test_config, create_config_manager, load_session, write_page
 
 JSONL = """// a comment
 
@@ -38,20 +37,14 @@ JSONL = """// a comment
 
 @pytest.fixture
 def cfg_root(tmp_path) -> Path:
-    root = tmp_path / "cfg"
-    shutil.copytree(Path(__file__).parent.parent / "_test_cfg_root", root)
-    device = root / "devices" / "test_device"
-    (device / "editor.jsonl").write_text(JSONL)
-    (device / "boot.cmd").write_text("run L:/editor.jsonl\n")
+    root = copy_test_config(tmp_path)
+    write_page(root, JSONL)
     return root.resolve()
 
 
 @pytest.fixture
 def session(cfg_root) -> PlateSession:
-    loaded = load_device(_create_config_manager(cfg_root, cfg_root.parent / "output"), "test_device")
-    session = PlateSession(device=loaded.device)
-    session.load(loaded.components, loaded.renderer)
-    return session
+    return load_session(cfg_root)
 
 
 class TestDescribe(TestBase):
@@ -79,7 +72,7 @@ class TestDescribe(TestBase):
         (cfg_root / "devices" / "test_device" / "editor.jsonl").write_text(
             '{"!include": "common/dot.jsonl", "vars": {"size": "{{ range(2) }}"}, "for": {"id": [4]}}\n'
         )
-        loaded = load_device(_create_config_manager(cfg_root, cfg_root.parent / "output"), "test_device")
+        loaded = load_device(create_config_manager(cfg_root), "test_device")
         session = PlateSession(device=loaded.device)
         session.load(loaded.components, loaded.renderer)
         [component] = session.components
@@ -111,7 +104,7 @@ class TestDescribe(TestBase):
         (cfg_root / "devices" / "test_device" / "editor.jsonl").write_text(
             '{"!include": "common/dot.jsonl", "for": {"id": [4, 5]}}\n'
         )
-        loaded = load_device(_create_config_manager(cfg_root, cfg_root.parent / "output"), "test_device")
+        loaded = load_device(create_config_manager(cfg_root), "test_device")
         session = PlateSession(device=loaded.device)
         session.load(loaded.components, loaded.renderer)
         assert describe_part_mode(session, cfg_root) is None

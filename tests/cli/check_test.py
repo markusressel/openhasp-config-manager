@@ -1,5 +1,4 @@
 import json
-import shutil
 from pathlib import Path
 
 import pytest
@@ -7,27 +6,17 @@ from click.testing import CliRunner
 
 from openhasp_config_manager.check import check_config
 from openhasp_config_manager.cli import cli
-from openhasp_config_manager.cli.common import _create_config_manager
 from openhasp_config_manager.gui.domain.problems import Severity
-
-DEVICE = "devices/test_device"
-
+from tests.helpers import DEVICE_DIR, copy_test_config, create_config_manager, write_page
 
 @pytest.fixture
 def cfg_root(tmp_path) -> Path:
-    root = tmp_path / "cfg"
-    shutil.copytree(Path(__file__).parent.parent / "_test_cfg_root", root)
-    return root
-
-
-def _write(cfg_root: Path, content: str, name: str = "editor.jsonl"):
-    (cfg_root / DEVICE / name).write_text(content)
-    (cfg_root / DEVICE / "boot.cmd").write_text(f"run L:/{name}\n")
+    return copy_test_config(tmp_path)
 
 
 def _check(cfg_root: Path, device=None, hints=False):
     """:param hints: whether to keep the hints (the test config has variables nothing uses)"""
-    devices, issues = check_config(_create_config_manager(cfg_root, cfg_root.parent / "output"), device)
+    devices, issues = check_config(create_config_manager(cfg_root), device)
     return devices, [issue for issue in issues if hints or issue.severity != Severity.HINT]
 
 
@@ -49,7 +38,7 @@ class TestCheck:
 
     def test_problems_of_the_pages_have_file_and_line(self, cfg_root):
         # GIVEN
-        _write(cfg_root, '{"page": 9, "id": 1, "obj": "label"}\n{"page": 9, "id": 2, "obj": "btn", "x": 470, "y": 0}\n')
+        write_page(cfg_root, '{"page": 9, "id": 1, "obj": "label"}\n{"page": 9, "id": 2, "obj": "btn", "x": 470, "y": 0}\n')
 
         # WHEN
         _, issues = _check(cfg_root)
@@ -58,11 +47,11 @@ class TestCheck:
         [issue] = issues
         assert issue.severity == Severity.WARNING
         assert issue.message == "p9b2 is outside of the screen: right by 70 px"
-        assert (issue.device, issue.file, issue.line, issue.object) == ("test_device", f"{DEVICE}/editor.jsonl", 2, "p9b2")
+        assert (issue.device, issue.file, issue.line, issue.object) == ("test_device", f"{DEVICE_DIR}/editor.jsonl", 2, "p9b2")
 
     def test_unknown_template_variables_are_warnings(self, cfg_root):
         # GIVEN
-        _write(cfg_root, '{"page": 9, "id": 1, "obj": "label", "text": "{{ no_such_variable }}"}\n')
+        write_page(cfg_root, '{"page": 9, "id": 1, "obj": "label", "text": "{{ no_such_variable }}"}\n')
 
         # WHEN
         _, issues = _check(cfg_root)
@@ -75,7 +64,7 @@ class TestCheck:
 
     def test_nested_templates_are_not_unknown_variables(self, cfg_root):
         # GIVEN
-        _write(
+        write_page(
             cfg_root,
             '{"page": 9, "id": 1, "obj": "label", "x": 5}\n'
             '{"page": 9, "id": 2, "obj": "label", "x": "{{ (p{{ 9 }}b1.x | int) + 5 }}"}\n',
@@ -89,7 +78,7 @@ class TestCheck:
 
     def test_what_a_deployment_fails_on_is_an_error_with_the_file(self, cfg_root):
         # GIVEN
-        _write(cfg_root, '{"page": 9, "id": 1, "obj": "label"}\n{"page": 9, "id": 1, "obj": "btn"}\n')
+        write_page(cfg_root, '{"page": 9, "id": 1, "obj": "label"}\n{"page": 9, "id": 1, "obj": "btn"}\n')
 
         # WHEN
         _, issues = _check(cfg_root)
@@ -102,17 +91,17 @@ class TestCheck:
 
     def test_a_file_that_can_not_be_parsed_is_an_error_and_the_rest_is_still_checked(self, cfg_root):
         # GIVEN
-        _write(cfg_root, '{"page": 9, "id": 1, "obj": "label", "x": 470}\n{"page": 9, "id": }\n')
+        write_page(cfg_root, '{"page": 9, "id": 1, "obj": "label", "x": 470}\n{"page": 9, "id": }\n')
 
         # WHEN
         _, issues = _check(cfg_root)
 
         # THEN
-        assert any(issue.severity == Severity.ERROR and issue.file == f"{DEVICE}/editor.jsonl" for issue in issues)
+        assert any(issue.severity == Severity.ERROR and issue.file == f"{DEVICE_DIR}/editor.jsonl" for issue in issues)
 
     def test_an_unclosed_object_is_an_error(self, cfg_root):
         # GIVEN
-        _write(cfg_root, '{"page": 9, "id": 1, "obj": "label"}\n{"page": 9, "id": 2,\n')
+        write_page(cfg_root, '{"page": 9, "id": 1, "obj": "label"}\n{"page": 9, "id": 2,\n')
 
         # WHEN
         _, issues = _check(cfg_root)
@@ -122,7 +111,7 @@ class TestCheck:
 
     def test_this_and_the_objects_of_the_page_are_no_unknown_variables(self, cfg_root):
         # GIVEN
-        _write(
+        write_page(
             cfg_root,
             '{"page": 9, "id": 1, "obj": "label", "w": "{{ this.h }}", "h": 9, "x": "{{ b2.x }}"}\n{"page": 9, "id": 2, "x": 1}\n',
         )
@@ -164,7 +153,7 @@ class TestIncludes:
         (cfg_root / "common" / "parts" / "row.jsonl").write_text(
             '{"page": 9, "id": "{{ id }}"}\n{"!include": "common/parts/nope.jsonl"}\n'
         )
-        _write(cfg_root, '{"page": 9, "id": 1}\n{"!include": "common/parts/row.jsonl", "for": {"id": [5]}}\n')
+        write_page(cfg_root, '{"page": 9, "id": 1}\n{"!include": "common/parts/row.jsonl", "for": {"id": [5]}}\n')
 
         # WHEN
         [issue] = self._processing_errors(cfg_root)
@@ -175,14 +164,14 @@ class TestIncludes:
         assert (issue.file, issue.line, issue.included_at) == (
             "common/parts/row.jsonl",
             2,
-            (f"{DEVICE}/editor.jsonl:2 (id=5)",),
+            (f"{DEVICE_DIR}/editor.jsonl:2 (id=5)",),
         )
         assert str(issue).startswith("common/parts/row.jsonl:2: error: Can't process the file: The file to include")
-        assert str(issue).endswith(f"(included at {DEVICE}/editor.jsonl:2 (id=5)) [test_device]")
+        assert str(issue).endswith(f"(included at {DEVICE_DIR}/editor.jsonl:2 (id=5)) [test_device]")
 
     def test_every_error_of_the_directives_is_reported(self, cfg_root):
         # GIVEN
-        _write(cfg_root, '{"!import": "a.jsonl"}\n{"!include": "a.json"}\n')
+        write_page(cfg_root, '{"!import": "a.jsonl"}\n{"!include": "a.json"}\n')
 
         # WHEN
         issues = self._processing_errors(cfg_root)
@@ -193,21 +182,21 @@ class TestIncludes:
     def test_an_object_of_a_part_that_cant_be_rendered_is_reported_in_the_part(self, cfg_root):
         # GIVEN
         (cfg_root / "common" / "dot.jsonl").write_text('// the dot\n{"page": 9, "id": 2, "x": "{{ \'a\' + 1 }}"}\n')
-        _write(cfg_root, '{"!include": "common/dot.jsonl"}\n')
+        write_page(cfg_root, '{"!include": "common/dot.jsonl"}\n')
 
         # WHEN
         [issue] = self._processing_errors(cfg_root)
 
         # THEN
         assert issue.message == 'Can\'t process the file: can only concatenate str (not "int") to str'
-        assert (issue.file, issue.line, issue.included_at) == ("common/dot.jsonl", 2, (f"{DEVICE}/editor.jsonl:1",))
+        assert (issue.file, issue.line, issue.included_at) == ("common/dot.jsonl", 2, (f"{DEVICE_DIR}/editor.jsonl:1",))
 
     def test_problems_of_included_objects_are_reported_in_the_part(self, cfg_root):
         # GIVEN: the second dot is outside of the screen, and its text uses a variable that doesn't exist
         (cfg_root / "common" / "dot.jsonl").write_text(
             '{"page": 9, "id": "{{ id }}", "obj": "label", "x": "{{ id * 300 }}", "w": 10, "text": "{{ nope }}"}\n'
         )
-        _write(cfg_root, '{"page": 9, "id": 9, "obj": "obj"}\n{"!include": "common/dot.jsonl", "for": {"id": [1, 2]}}\n')
+        write_page(cfg_root, '{"page": 9, "id": 9, "obj": "obj"}\n{"!include": "common/dot.jsonl", "for": {"id": [1, 2]}}\n')
 
         # WHEN
         _, issues = _check(cfg_root)
@@ -219,28 +208,28 @@ class TestIncludes:
                 "p9b2 is outside of the screen: right by 130 px",
                 "common/dot.jsonl",
                 1,
-                (f"{DEVICE}/editor.jsonl:2 (id=2)",),
+                (f"{DEVICE_DIR}/editor.jsonl:2 (id=2)",),
             ),
             (
                 Severity.WARNING,
                 "p9b1: text: Unknown variable: 'nope' is undefined",
                 "common/dot.jsonl",
                 1,
-                (f"{DEVICE}/editor.jsonl:2 (id=1)",),
+                (f"{DEVICE_DIR}/editor.jsonl:2 (id=1)",),
             ),
             (
                 Severity.WARNING,
                 "p9b2: text: Unknown variable: 'nope' is undefined",
                 "common/dot.jsonl",
                 1,
-                (f"{DEVICE}/editor.jsonl:2 (id=2)",),
+                (f"{DEVICE_DIR}/editor.jsonl:2 (id=2)",),
             ),
         ]
 
     def test_a_part_alone_is_not_checked(self, cfg_root):
         # GIVEN: the part needs the variables of an instance
         (cfg_root / "common" / "dot.jsonl").write_text('{"page": 9, "id": "{{ id }}", "x": "{{ id * 2 }}"}\n')
-        _write(cfg_root, '{"!include": "common/dot.jsonl", "vars": {"id": 3}}\n')
+        write_page(cfg_root, '{"!include": "common/dot.jsonl", "vars": {"id": 3}}\n')
 
         # THEN
         assert self._processing_errors(cfg_root) == []
@@ -248,8 +237,8 @@ class TestIncludes:
 
 class TestUnusedVariables:
     def _unused_file(self, cfg_root):
-        _write(cfg_root, '{"page": 9, "id": 1, "obj": "label", "text": "{{ used }}"}\n')
-        (cfg_root / DEVICE / "vars.yaml").write_text("used: 1\nunused: 2\n")
+        write_page(cfg_root, '{"page": 9, "id": 1, "obj": "label", "text": "{{ used }}"}\n')
+        (cfg_root / DEVICE_DIR / "vars.yaml").write_text("used: 1\nunused: 2\n")
 
     def test_variables_no_device_uses_are_hints_with_file_and_line(self, cfg_root):
         # GIVEN
@@ -262,7 +251,7 @@ class TestUnusedVariables:
         [issue] = [issue for issue in issues if issue.file.endswith("devices/test_device/vars.yaml") and issue.line == 2]
         assert issue.severity == Severity.HINT
         assert issue.message == "Not used: no file of any device uses unused"
-        assert (issue.file, issue.line, issue.device) == (f"{DEVICE}/vars.yaml", 2, None)
+        assert (issue.file, issue.line, issue.device) == (f"{DEVICE_DIR}/vars.yaml", 2, None)
 
     def test_they_are_not_reported_when_only_one_device_is_checked(self, cfg_root):
         # GIVEN
@@ -283,14 +272,14 @@ class TestUnusedVariables:
 
         # THEN
         assert result.exit_code == 0
-        assert f"{DEVICE}/vars.yaml:2: hint: Not used" in result.stdout
+        assert f"{DEVICE_DIR}/vars.yaml:2: hint: Not used" in result.stdout
         assert "Checked 1 device: 0 errors, 0 warnings, " in result.stdout and " hints" in result.stdout
 
 
 class TestCheckCommand:
     def test_json_output_is_clean_and_the_exit_code_tells_about_errors(self, cfg_root):
         # GIVEN
-        _write(cfg_root, '{"page": 9, "id": 1, "obj": "label"}\n{"page": 9, "id": 1, "obj": "btn"}\n')
+        write_page(cfg_root, '{"page": 9, "id": 1, "obj": "label"}\n{"page": 9, "id": 1, "obj": "btn"}\n')
 
         # WHEN
         result = CliRunner().invoke(cli, ["check", "-c", str(cfg_root), "--json"])
@@ -304,7 +293,7 @@ class TestCheckCommand:
 
     def test_warnings_do_not_fail(self, cfg_root):
         # GIVEN
-        _write(cfg_root, '{"page": 9, "id": 1, "obj": "label", "x": 470}\n')
+        write_page(cfg_root, '{"page": 9, "id": 1, "obj": "label", "x": 470}\n')
 
         # WHEN
         result = CliRunner().invoke(cli, ["check", "-c", str(cfg_root)])
@@ -312,6 +301,6 @@ class TestCheckCommand:
         # THEN
         assert result.exit_code == 0
         assert (
-            f"{DEVICE}/editor.jsonl:1: warning: p9b1 is outside of the screen: right by 70 px [test_device]" in result.stdout
+            f"{DEVICE_DIR}/editor.jsonl:1: warning: p9b1 is outside of the screen: right by 70 px [test_device]" in result.stdout
         )
         assert "Checked 1 device: 0 errors, 1 warning" in result.stdout

@@ -1,18 +1,17 @@
-import shutil
 from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
 
 from openhasp_config_manager.cli import cli
+from tests.helpers import copy_test_config
 
 
 @pytest.fixture
 def cfg_root(tmp_path) -> Path:
-    root = tmp_path / "cfg"
-    shutil.copytree(Path(__file__).parent.parent / "_test_cfg_root", root)
-    (root / "computed.vars.yaml").write_text('margin: 4\ncard:\n  w: "{{ device.screen.width - margin * 2 }}"\n')
-    return root
+    return copy_test_config(
+        tmp_path, {"computed.vars.yaml": 'margin: 4\ncard:\n  w: "{{ device.screen.width - margin * 2 }}"\n'}
+    )
 
 
 class TestVars:

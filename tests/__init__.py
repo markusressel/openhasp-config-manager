@@ -15,28 +15,10 @@ from openhasp_config_manager.openhasp_client.model.configuration.wifi_config imp
 from openhasp_config_manager.openhasp_client.model.openhasp_config_manager_config import OpenhaspConfigManagerConfig
 
 
-def _find_test_folder() -> Path:
-    p = Path("./")
-
-    if p.absolute().parts[-1] == "tests":
-        return p
-    else:
-        import glob
-
-        while str(p.absolute()) != "/":
-            files = glob.glob(str(Path(p)) + "/**/tests", recursive=True)
-            if len(files) > 0:
-                return Path(files[0]).absolute()
-            else:
-                p = p.parent.absolute()
-
-    raise AssertionError("test folder not found")
-
-
 @pytest.mark.usefixtures("tmp_path")
 class TestBase:
-    _test_folder = _find_test_folder()
-    cfg_root = Path(_test_folder, Path("_test_cfg_root"))
+    # the test config, read-only: tests that change it use a copy (`tests.helpers.copy_test_config`)
+    cfg_root = Path(__file__).parent / "_test_cfg_root"
 
     default_config = Config(
         openhasp_config_manager=OpenhaspConfigManagerConfig(

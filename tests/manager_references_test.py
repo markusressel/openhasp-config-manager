@@ -1,4 +1,3 @@
-import shutil
 from pathlib import Path
 
 import pytest
@@ -6,6 +5,7 @@ import pytest
 from openhasp_config_manager.manager import ConfigManager
 from openhasp_config_manager.processing.variables import VariableManager
 from tests import TestBase
+from tests.helpers import copy_test_config
 from tests.png import png
 
 PAGE = Path("devices", "test_device", "home", "page.jsonl")
@@ -14,9 +14,7 @@ PAGE = Path("devices", "test_device", "home", "page.jsonl")
 class ConfigCopyBase(TestBase):
     @pytest.fixture
     def cfg(self, tmp_path) -> Path:
-        cfg = Path(tmp_path, "cfg")
-        shutil.copytree(self.cfg_root, cfg)
-        return cfg
+        return copy_test_config(tmp_path)
 
     @staticmethod
     def _add_object(cfg: Path, **properties):

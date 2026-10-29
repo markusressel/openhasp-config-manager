@@ -1,12 +1,11 @@
-import shutil
 from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
 
 from openhasp_config_manager.cli import cli
+from tests.helpers import copy_test_config, write_page
 
-DEVICE = "devices/test_device"
 JSONL = """{"page": 9, "id": 1, "obj": "label", "text": "A", "x": 10}
 {"page": 3, "id": 1, "obj": "btn", "text": "B"}
 """
@@ -15,10 +14,8 @@ JSONL = """{"page": 9, "id": 1, "obj": "label", "text": "A", "x": 10}
 @pytest.fixture
 def cfg_root(tmp_path) -> Path:
     pytest.importorskip("PyQt6")
-    root = tmp_path / "cfg"
-    shutil.copytree(Path(__file__).parent.parent / "_test_cfg_root", root)
-    (root / DEVICE / "editor.jsonl").write_text(JSONL)
-    (root / DEVICE / "boot.cmd").write_text("run L:/editor.jsonl\n")
+    root = copy_test_config(tmp_path)
+    write_page(root, JSONL)
     return root
 
 
@@ -72,7 +69,7 @@ class TestPreview:
 
     def test_a_device_that_can_not_be_rendered_fails(self, cfg_root):
         # GIVEN
-        (cfg_root / DEVICE / "editor.jsonl").write_text('{"page": 9, "id": }')
+        write_page(cfg_root, '{"page": 9, "id": }')
 
         # WHEN
         result = _preview("-c", str(cfg_root))
