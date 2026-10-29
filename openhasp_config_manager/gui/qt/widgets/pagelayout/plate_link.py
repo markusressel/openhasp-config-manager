@@ -5,7 +5,7 @@ from typing import Callable, Dict, List, Optional
 from PyQt6 import QtCore
 from PyQt6.QtWidgets import QMessageBox, QWidget
 
-from openhasp_config_manager.gui.domain.live_preview import LivePage
+from openhasp_config_manager.gui.domain.live_preview import LivePlate, LiveUpdate
 from openhasp_config_manager.gui.qt.async_bridge import qBridge, run_async
 from openhasp_config_manager.gui.qt.components import UiComponents
 from openhasp_config_manager.gui.qt.operations import BusyState, OperationStatus, error_text, run_busy
@@ -26,6 +26,10 @@ class PlateLink(QtCore.QObject):
     """
     What the editor does on the plate of its device: *Live preview* (the draft on the plate while editing), *Clear page* and
     *Restore plate*, with their actions. Everything is sent in order: a page that is sent in full, then the changes after it.
+
+    Live preview remembers what it sent to each page (`LivePlate`): coming back to a page only sends what changed since,
+    and then shows it. What to send is decided when it is its turn to be sent (in the asyncio thread, under `_send_lock`),
+    so that a page the editor already left again is not sent at all.
     """
 
     # a page on the device may differ from what it should show: sending it failed, or it was cleared
@@ -65,8 +69,11 @@ class PlateLink(QtCore.QObject):
         self._current_page = current_page
         self._resync = resync
 
-        # what the plate shows of the current page, and the changes of the draft that wait to be sent
-        self._live_page = LivePage()
+        # what was sent to the pages of the plate. Only used under `_send_lock`; replaced to forget it
+        self._live_plate = LivePlate()
+        # the page that Live preview shows: a page the editor left before it was sent is not sent
+        self._live_index: Optional[int] = None
+        # the changes of the draft that wait to be sent
         self._live_throttle = LatestValueThrottle(
             lambda _: self._send_live_changes(), interval_ms=LIVE_PREVIEW_INTERVAL_MS, parent=self
         )
@@ -125,7 +132,14 @@ class PlateLink(QtCore.QObject):
         """With Live preview: the editor shows another page, show it on the plate with the objects of the draft."""
         # page 0 is no page of the plate: its objects are on all pages
         if self.live and index != 0:
-            self._start_live_page(index)
+            self._show_live_page(index)
+
+    def forget_sent(self):
+        """
+        The plate may no longer show what Live preview sent (e.g. it restarted): send the pages in full again when they are
+        shown next.
+        """
+        self._live_plate = LivePlate()
 
     def draft_changed(self):
         """With Live preview: send what changed in the draft, soon (changes in a row are sent together)."""
@@ -138,7 +152,8 @@ class PlateLink(QtCore.QObject):
         if self._device() is None:
             return
         if enabled:
-            self._start_live_page(self._current_page())
+            self.forget_sent()
+            self._show_live_page(self._current_page())
             return
         self._live_throttle.cancel()
         if self._stopping_silently:
@@ -158,49 +173,12 @@ class PlateLink(QtCore.QObject):
         if box.clickedButton() is restore:
             self.restore_plate()
 
-    def _start_live_page(self, index: int):
-        objects = self._page_objects(index)
-        self._live_page.reset(objects)
-        self._send_page(index, objects, show=True)
-
-    def _send_live_changes(self):
-        """Send what changed in the draft since the page was last sent."""
+    def _show_live_page(self, index: int):
+        """Show a page of the draft on the plate: send what it doesn't have of it yet (all of it, the first time)."""
         device = self._device()
-        if device is None or not self.live:
-            return
-        index = self._current_page()
-        objects = self._page_objects(index)
-        update = self._live_page.update(objects)
-        if update is None:
-            return
-        if update.resend_page:
-            self._send_page(index, objects, show=False)
-            return
-
-        client = OpenHaspClient(device)
-        description = f"Sending the changes of page {index} to {device.name}"
-
-        async def __async_work():
-            async with self._send_lock:
-                for page, obj_id in update.deletions:
-                    await client.delete_object_id(page, obj_id)
-                for obj in update.objects:
-                    await client.jsonl(obj)
-
-        # not run_busy: disabling the editor would interrupt dragging
-        run_async(
-            __async_work(),
-            on_error=lambda ex: self._on_send_failed(index, description, ex, retry=lambda: self._resync(index)),
-        )
-
-    def _send_page(self, index: int, objects: List[Dict], show: bool):
-        """
-        Clear the page on the plate and send the given objects (including the global ones of page 0).
-        :param show: switch the plate to the page afterwards
-        """
-        device = self._device()
+        self._live_index = index
         # the editor changes the objects in place, while they are being sent
-        objects = copy.deepcopy(objects)
+        objects = copy.deepcopy(self._page_objects(index))
         client = OpenHaspClient(device)
         status = self._status
         description = f"Sending page {index} to {device.name}"
@@ -208,23 +186,85 @@ class PlateLink(QtCore.QObject):
 
         async def __async_work():
             async with self._send_lock:
-                await client.clear_page(index)
-                for sent, obj in enumerate(objects, start=1):
-                    await client.jsonl(obj)
-                    status.report_progress(sent, len(objects))
-                    await asyncio.sleep(SEND_DELAY_SECONDS)
-                if show:
-                    await client.set_page(index)
+                if self._live_index != index:
+                    # the editor went on to another page meanwhile
+                    return False
+                await self._send_live_update(client, index, objects, status)
+                await client.set_page(index)
+                return True
 
         run_busy(
             __async_work(),
             busy=self._busy,
             status=status,
             description=description,
-            success_message=f"{device.name} shows page {index} of the draft ({len(objects)} objects)",
-            on_success=lambda _: self.pageDeployed.emit(index),
+            success_message=f"{device.name} shows page {index} of the draft",
+            on_success=lambda shown: self.pageDeployed.emit(index) if shown else None,
             on_error=lambda ex: self._on_send_failed(index, description, ex, retry=lambda: self._resync(index)),
         )
+
+    def _send_live_changes(self):
+        """Send what changed in the draft since the page was last sent."""
+        device = self._device()
+        if device is None or not self.live:
+            return
+        index = self._current_page()
+        objects = copy.deepcopy(self._page_objects(index))
+        client = OpenHaspClient(device)
+        description = f"Sending the changes of page {index} to {device.name}"
+
+        async def __async_work():
+            async with self._send_lock:
+                if self._live_index != index:
+                    # sent when the page is shown again
+                    return
+                await self._send_live_update(client, index, objects, status=None)
+
+        # not run_busy: disabling the editor would interrupt dragging
+        run_async(
+            __async_work(),
+            on_error=lambda ex: self._on_send_failed(index, description, ex, retry=lambda: self._resync(index)),
+        )
+
+    async def _send_live_update(
+        self, client: OpenHaspClient, index: int, objects: List[Dict], status: Optional[OperationStatus]
+    ):
+        """
+        Send what the plate doesn't have of the objects of a page yet. Runs under `_send_lock`.
+        :param objects: the objects of the page, including the global ones of page 0
+        :param status: reports the progress of a page that is sent in full
+        """
+        live_plate = self._live_plate
+        try:
+            update = live_plate.update(index, objects)
+            if update is None:
+                return
+            if update.resend_page:
+                await self._send_page(client, index, objects, status)
+                live_plate.reset(index, objects)
+                return
+            await self._send_changes(client, update)
+        except BaseException:
+            # it is not known what arrived
+            self.forget_sent()
+            raise
+
+    @staticmethod
+    async def _send_changes(client: OpenHaspClient, update: LiveUpdate):
+        for page, obj_id in update.deletions:
+            await client.delete_object_id(page, obj_id)
+        for obj in update.objects:
+            await client.jsonl(obj)
+
+    @staticmethod
+    async def _send_page(client: OpenHaspClient, index: int, objects: List[Dict], status: Optional[OperationStatus]):
+        """Clear the page on the plate and send the given objects (including the global ones of page 0)."""
+        await client.clear_page(index)
+        for sent, obj in enumerate(objects, start=1):
+            await client.jsonl(obj)
+            if status is not None:
+                status.report_progress(sent, len(objects))
+            await asyncio.sleep(SEND_DELAY_SECONDS)
 
     # --- Clear page, Restore plate ---
 
@@ -282,6 +322,7 @@ class PlateLink(QtCore.QObject):
         async def __async_work():
             async with self._send_lock:
                 await client.restore_from_files()
+                self.forget_sent()
 
         run_busy(
             __async_work(),
