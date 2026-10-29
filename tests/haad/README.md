@@ -1,7 +1,7 @@
 # Tests of the haad integration
 
 `openhasp_config_manager/haad` is used by haad projects (e.g. `haad-home`) and needs haad, which needs Python 3.14. These tests run in
-haad's uv environment (`../haad`, checked out next to this repository), with 100 % line and branch coverage:
+haad's uv environment (`../haad`, checked out next to this repository), with at least 90 % line and branch coverage:
 
 ```shell
 make test-haad
