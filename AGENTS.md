@@ -84,8 +84,13 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
   touched, the draft wins. Edit mode and *Reset* clear it, switching pages keeps it. Behavior ported from the firmware and LVGL
   (which object runs `action`, groups, slider/arc math, dropdown list layout, roller snapping, dragging and throwing, tabview swipes)
   lives in Qt-free `gui/domain/touch_*.py`, `dropdown_list.py`, `roller_scroll.py`, `drag_scroll.py`, `tab_swipe.py`, `bar_values.py` and `lvgl_colors.py`;
-  pressed colors can't be measured and are computed there. LVGL does this per read of the touch (every 20 ms), in whole pixels: the
-  items read the finger with a timer, and tests call the read themselves (`ScrollDriver.tick`, `HaspTabviewItem.read_swipe`).
+  pressed colors can't be measured and are computed there. Port from the sources the plates run (openHASP 0.7.0-rc13, LVGL v7.11),
+  not from newer LVGL docs, and say in the docstring which function a port follows. The firmware sets the properties of an object in
+  the order of the file, so key order can matter (e.g. a slider `type` after `start_value` resets it). LVGL does this per read of the
+  touch (every 20 ms), in whole pixels: the items read the finger with a timer, and tests call the read themselves
+  (`ScrollDriver.tick`, `HaspTabviewItem.read_swipe`) and end animations with `finish_animation()` instead of waiting.
+  An `action` that sets a property of an object (`p1b2.val=50`, `touch_actions.object_command`) changes it in the preview; every
+  other command is only reported (`commandRequested`).
 - **Templates are never replaced implicitly.** Objects whose `x`/`y` is a template or a percentage can't be dragged or nudged; the
   editor explains why, and "Use pixels for x/y" replaces them only when the user asks. Keep this for new edit operations.
 - **Files**: new objects go into the target file chosen in the Files tree (`gui/domain/file_tree.py` follows the folder structure of
@@ -146,5 +151,7 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
   printing values); run anything that writes on a copy in a temporary directory.
 - **Lock files**: this is a Poetry project; don't commit a `uv.lock` (`uv run` creates one).
 - **Real plates**: commands that deploy, clear pages or reboot affect physical devices. Do not run them against real plates unless
-  the user asks for it.
+  the user asks for it. When the user allows measurements on a plate, never send `clearfont`, and restore the plate afterwards
+  (*Restore plate* or a reboot). The `config.json` of a plate holds the WiFi and MQTT passwords: read only the keys you need
+  (e.g. with `jq`), never the whole file.
 - Keep `TODO.md` current: remove items when you complete them (the git history keeps them), add bugs you find but don't fix.
