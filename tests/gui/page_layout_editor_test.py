@@ -210,10 +210,12 @@ class TestLivePreview(TestBase):
         editor._go_to_page(1)
         editor._go_to_page(9)
 
-        # THEN: page 9 was sent once, and is shown again
-        wait_until(lambda: plate.calls.count(("set_page", 9)) == 2)
+        # THEN: page 9 was sent once, and is shown. The first send of it may have been skipped too, if it only started while
+        # the editor was on page 1
+        wait_until(lambda: not editor.busy.busy)
         assert ("clear_page", 1) not in plate.calls
         assert plate.calls.count(("clear_page", 9)) == 1
+        assert plate.calls[-1] == ("set_page", 9)
 
     def test_forgotten_pages_are_sent_in_full_again(self, editor, plate):
         # GIVEN
@@ -919,6 +921,22 @@ class TestWidgetPicker(TestBase):
         assert len(WIDGET_TYPES) > 20
         assert editor.widget_picker.minimumSizeHint().height() < 300
         assert editor.minimumSizeHint().height() < 600
+
+    def test_the_buttons_fit_next_to_the_scrollbar(self, qapp):
+        from PyQt6.QtWidgets import QScrollArea
+
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.widget_picker import OpenHASPWidgetPicker
+
+        picker = OpenHASPWidgetPicker()
+        picker.resize(picker.width(), 300)
+        picker.show()
+        qapp.processEvents()
+
+        # THEN the list scrolls, and its buttons are not cut off by the scrollbar
+        scroll_area = picker.findChild(QScrollArea)
+        assert scroll_area.verticalScrollBar().isVisible()
+        assert scroll_area.viewport().width() >= scroll_area.widget().sizeHint().width()
+        picker.close()
 
 
 class TestNavigationButtons(TestBase):

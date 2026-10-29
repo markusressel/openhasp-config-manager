@@ -1,5 +1,5 @@
 from PyQt6 import QtCore
-from PyQt6.QtWidgets import QFrame, QScrollArea, QWidget
+from PyQt6.QtWidgets import QFrame, QScrollArea, QStyle, QWidget
 
 from openhasp_config_manager.gui.dimensions import UiDimensions
 from openhasp_config_manager.gui.domain.draft.page_objects import OpenHASPWidgetType, WIDGET_TYPES
@@ -35,7 +35,10 @@ class OpenHASPWidgetPicker(QWidget):
         scroll_area.setFrameShape(QFrame.Shape.NoFrame)
         scroll_area.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         layout.addWidget(scroll_area, 1)
-        self.setFixedWidth(UiDimensions.eight * 3)
+        # as wide as the buttons, and the scrollbar next to them (it shows when the list is taller than the preview)
+        margins = layout.contentsMargins()
+        scrollbar = scroll_area.style().pixelMetric(QStyle.PixelMetric.PM_ScrollBarExtent)
+        self.setFixedWidth(buttons.sizeHint().width() + scrollbar + margins.left() + margins.right())
 
     def _create_widget_picker_button(self, widget_type: OpenHASPWidgetType) -> QWidget:
         info = WIDGET_TYPES[widget_type]
