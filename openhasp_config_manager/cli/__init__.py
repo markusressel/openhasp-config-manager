@@ -2,7 +2,7 @@ import asyncio
 import os
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 import click
 
@@ -172,6 +172,51 @@ def check(config_dir: Path, device: str, as_json: bool):
     Exits with 1 if there are errors.
     """
     if not c_check(config_dir, device, as_json):
+        raise SystemExit(1)
+
+
+@cli.command(name="preview")
+@click.option(
+    *get_option_names(PARAM_CFG_DIR),
+    required=False,
+    default=DEFAULT_CONFIG_PATH,
+    type=click.Path(exists=True, path_type=Path),
+    help=get_option_help(PARAM_CFG_DIR),
+)
+@click.option(*get_option_names(PARAM_DEVICE), required=False, default=None, help=get_option_help(PARAM_DEVICE))
+@click.option(
+    "--page",
+    "-p",
+    "pages",
+    type=int,
+    multiple=True,
+    help="A page to render (can be given more than once). Default: all pages with objects.",
+)
+@click.option(
+    *get_option_names(PARAM_OUTPUT_DIR),
+    required=False,
+    default=None,
+    type=click.Path(path_type=Path),
+    help="Where to write the images to. Default: .openhasp-config-manager/preview in the config directory.",
+)
+@click.option("--scale", type=click.FloatRange(min=0.25, max=4), default=1, help="The size of the images (1: the plate's pixels).")
+def preview(config_dir: Path, device: Optional[str], pages: Tuple[int, ...], output_dir: Optional[Path], scale: float):
+    """
+    Renders pages like the preview of the GUI shows them, from the files on disk, without sending anything.
+
+    Writes <output dir>/<device>/page_<n>.png and prints the path of each image, e.g. for an LLM to look at its changes.
+    Exits with 1 if a device can't be rendered.
+    """
+    try:
+        import PyQt6  # noqa: F401
+    except ImportError as e:
+        raise click.ClickException(
+            "The preview needs the optional dependencies: pip install 'openhasp-config-manager[gui]' (PyQt6 is missing)"
+        ) from e
+
+    from openhasp_config_manager.cli.preview import c_preview
+
+    if not c_preview(config_dir, device, pages, output_dir, scale):
         raise SystemExit(1)
 
 

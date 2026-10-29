@@ -420,13 +420,7 @@ class PageLayoutEditorWidget(QWidget):
         self.highlight_component(None)
         self.property_editor.set_session(session)
 
-        screen = device_pages_data.device.config.openhasp_config_manager.device.screen
-        self.page_preview_widget.set_screen_size(screen.width, screen.height)
-        device = device_pages_data.device
-        self.page_preview_widget.set_image_files({image.name: image.path for image in device.images})
-        self.page_preview_widget.set_font_files(
-            {font.name: font.path for font in [*device.fonts, *device.images] if font.name.endswith((".ttf", ".bin"))}
-        )
+        self.page_preview_widget.set_device(device_pages_data.device)
 
         pages = get_navigable_page_indices(self.working_objects)
         if page is None or (pages and page not in pages):

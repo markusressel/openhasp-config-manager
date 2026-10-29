@@ -278,3 +278,32 @@ class TestGuiStateFile(TestBase):
 
         # WHEN / THEN
         GuiStateFile(tmp_path).write({"running": True})
+        assert GuiStateFile(tmp_path).write_preview(b"png") is None
+
+    def test_the_preview_is_written_when_it_changed_and_removed_without_a_page(self, tmp_path, monkeypatch):
+        # GIVEN
+        file = GuiStateFile(tmp_path)
+        times = iter(["t1", "t2"])
+        monkeypatch.setattr("openhasp_config_manager.gui.domain.gui_state.now", lambda: next(times))
+
+        # WHEN
+        first = file.write_preview(b"one")
+        same = file.write_preview(b"one")
+
+        # THEN
+        assert first == same == {"file": ".openhasp-config-manager/preview.png", "updated": "t1"}
+        assert file.preview_path.read_bytes() == b"one"
+        assert (tmp_path / STATE_DIR_NAME / ".gitignore").exists()
+
+        # WHEN
+        changed = file.write_preview(b"two")
+
+        # THEN
+        assert changed["updated"] == "t2"
+        assert file.preview_path.read_bytes() == b"two"
+
+        # WHEN
+        assert file.write_preview(None) is None
+
+        # THEN
+        assert not file.preview_path.exists()

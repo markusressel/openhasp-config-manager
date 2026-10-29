@@ -56,15 +56,17 @@ openhasp-config-manager gui -c "./openhasp-configs"
 The config files are plain text, so an LLM (or any tool) can edit them while the GUI is open. For context the files don't
 have, the GUI keeps `.openhasp-config-manager/gui-state.json` in the config directory up to date: the device and page that are
 open, the selected objects (with file and line), the unsaved changes, the warnings and errors the GUI shows, files it can't load
-and the connection to the plate. The folder is ignored by git and has a `README.md` that describes the format. Without the GUI,
-`openhasp-config-manager check -c <config dir>` prints the same problems (and what a deployment would fail on) for all devices,
+and the connection to the plate, and `preview.png` shows the page as the GUI does. The folder is ignored by git and has a
+`README.md` that describes the format. Without the GUI, `openhasp-config-manager preview -c <config dir>` renders all pages from
+the files on disk into PNG files, and `openhasp-config-manager check -c <config dir>` prints the same problems (and what a deployment would fail on) for all devices,
 as text or `--json`, and exits with 1 on errors. Variables no device uses are listed as `hint`s (they don't fail the check).
 
 Tell your LLM about it, e.g. in the `AGENTS.md` or `CLAUDE.md` of your config repository:
 
 ```markdown
 While the openhasp-config-manager GUI runs, `.openhasp-config-manager/gui-state.json` tells what the user has open and which
-problems the GUI shows (see the README in that folder). Edit only the config files.
+problems the GUI shows, and `preview.png` next to it what the open page looks like (see the README in that folder). Edit only
+the config files.
 ```
 
 # CLI
@@ -85,6 +87,7 @@ Commands:
   help        Show this message and exit.
   listen      Sends a state update request to a device.
   logs        Prints the logs of a device.
+  preview     Renders pages like the preview of the GUI shows them, from...
   screenshot  Requests a screenshot from the given device and stores it...
   shell       Connects to the telnet server of a device.
   state       Sends a state update request to a device.

@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, Optional
 
 from PyQt6 import QtCore
 
@@ -13,22 +13,26 @@ WRITE_INTERVAL_MS = 300
 
 class GuiStatePublisher(QtCore.QObject):
     """
-    Writes the state of the GUI to the state file (see `GuiStateFile`) after it changed, at most every `interval_ms`.
+    Writes the state of the GUI to the state file (see `GuiStateFile`) after it changed, at most every `interval_ms`, and the
+    image of the preview next to it.
     """
 
     def __init__(
         self,
         file: GuiStateFile,
         collect: Callable[[bool], Dict[str, Any]],
+        preview: Optional[Callable[[], bytes]] = None,
         interval_ms: int = WRITE_INTERVAL_MS,
         parent=None,
     ):
         """
         :param collect: the current state, for the given `running`
+        :param preview: the PNG image of the plate as the preview shows it, asked only while a device is shown (None: no image)
         """
         super().__init__(parent)
         self._file = file
         self._collect = collect
+        self._preview = preview
         self._stopped = False
         self._timer = QtCore.QTimer(self)
         self._timer.setSingleShot(True)
@@ -53,4 +57,15 @@ class GuiStatePublisher(QtCore.QObject):
             # the state is for other tools: never take the app down for it
             LOGGER.exception("Can't collect the GUI state")
             return
+        device: Optional[Dict[str, Any]] = state.get("device")
+        png = None
+        if running and device is not None and self._preview is not None:
+            try:
+                png = self._preview()
+            except Exception:
+                LOGGER.exception("Can't render the preview for the GUI state")
+        preview = self._file.write_preview(png)
+        if device is not None:
+            # written before the state: the image is the one the state describes
+            device["preview"] = preview
         self._file.write(state)

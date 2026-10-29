@@ -52,6 +52,7 @@ def collect_gui_state(window, running: bool = True) -> Dict[str, Any]:
             ),
             "part_mode": describe_part_mode(session, root),
             "draft": describe_draft(session, root),
+            "loaded": session.loaded_at.isoformat(timespec="milliseconds"),
         }
         problems = describe_problems(session, editor.problems, root, window.devices)
     return {
@@ -63,6 +64,7 @@ def collect_gui_state(window, running: bool = True) -> Dict[str, Any]:
         "updated": now(),
         "config_dir": str(root),
         "check_command": f"openhasp-config-manager check -c {shlex.quote(str(root))} --json",
+        "preview_command": f"openhasp-config-manager preview -c {shlex.quote(str(root))}",
         "devices": [device.name for device in window.devices],
         "device": device,
         "editor": describe_editor(window.code_view.mode.value, _editor_tabs(window), window.source_editor.current_file, root),
