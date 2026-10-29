@@ -4,25 +4,22 @@ Open work and known issues. Done items are removed; the git history has them.
 
 ## 1. Bugs
 
-- [ ] Touching an object in the preview runs some actions differently than the plate (`gui/domain/touch_actions.py`): it runs
-  `p13` as page 13 (the plate runs `p13`/`p14`/`p15` as page prev/back/next), and it accepts `P3` and the event `lost`, which the plate
-  ignores. `check` already follows the plate (`action_problems` in `validation/property_values.py`).
-- [ ] Typing in a large file is slow: about 1 s per keystroke in a file of 25,000 lines. `CodeEditor.update_selections`
-  (`_bracket_selections`, `matching_bracket`) and `object_at_cursor` (`scan_objects`) tokenize the whole document on every keystroke.
-- [ ] A rare segfault in the `gui` CI job, in `tests/gui/log_view_test.py::test_streams_while_active_and_stops_when_hidden` (once, a
-  rerun passed; it doesn't happen locally when the module runs alone). The main thread was processing Qt events in `wait_until`, so
-  probably something an earlier GUI test left behind. Run `pytest tests/gui` many times to find the test that leaves it.
+- [ ] Large files in the code editor (measured with 25,000 lines; typing itself is fast, `gui/domain/source/structure.py`):
+  - the issue check (`update_issues`, 300 ms after typing stops) blocks the UI for about 4 s: it tokenizes the whole text three
+    times. Make it incremental like `TextStructure`, or run it off the UI thread.
+  - opening the file (`set_text`) takes about 20 s, most of it in highlighting and the issue check.
 
 ## 2. Editor
 
 - [ ] Compare the preview with the plate: the defaults in `gui/domain/default_theme.py` were measured on a plate, not read from
   openHASP's theme source. Check them against the theme code of openHASP 0.7 (and its LVGL version) per object, part and state, and
   compare a page with a screenshot of it from a plate (`openhasp-config-manager screenshot`).
-- [ ] Placeholders (`"text": "%ip%"`, `gui/domain/source/placeholders.py`): `check` could warn about texts openHASP won't replace (an
-  unknown `%...%`, a placeholder inside a longer text like `"IP: %ip%"`, a placeholder in the `text` of a type other than `btn`,
-  `label` or `msgbox`), and the page preview could show an example value instead of `%ip%`. The editor only knows them in .jsonl
-  files, not in commands of .cmd files (`p1b2.text=%ip%`).
-- [ ] Objects inside a `tab` (`parentid`) are not drawn in the preview.
+- [ ] Placeholders in commands of .cmd files (`p1b2.text=%ip%`): `check` (`placeholder_problems` in
+  `gui/domain/source/placeholders.py`) and the editor only know them in .jsonl files.
+- [ ] Children of an `obj` container (`parentid` of an object that isn't a tab) are drawn at plate coordinates instead of relative
+  to their parent, and not clipped to it. Objects on a tab are (`PagePreviewWidget._nest_items`); extend it to the other parents.
+- [ ] An object on a tab that isn't shown (`val` of the tabview) is invisible, so selecting it (e.g. from the text editor) shows no
+  outline in the preview. Switch to its tab, or outline where it would be.
 - [ ] "Move to file" for an object.
 - [ ] Files tree: drag and drop to move files and folders (the context menu has "Move to…"), and moving fonts (`.ttf`): the pages
   name fonts without `L:/`, so their references are not changed and moving a folder with a font is refused.
@@ -35,8 +32,6 @@ Open work and known issues. Done items are removed; the git history has them.
 
 Included objects are shown and read-only, except in part mode (see `docs/include-directive.md`). Next:
 
-- [ ] Add and remove names of `vars` and `for` in the "Instance" group of the Properties panel (only their values can be changed;
-  `PlateSession.set_directive_value` takes any mapping already).
 - [ ] A part on its own (no page includes it) that refers to objects of its page (`b4.w` of a card) shows those templates
   unresolved: offer to show it on a page of the device, with the objects of that page in its references.
 - [ ] Change the `vars` and `for` of an `!include` inside of a part in part mode (the "Instance" group is hidden there; only the

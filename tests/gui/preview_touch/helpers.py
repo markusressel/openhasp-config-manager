@@ -1,10 +1,5 @@
 """Helpers of the tests of touching objects in the preview."""
 
-"""Touching the preview in Interact mode: the finger is driven through the input device, like the mouse does."""
-
-
-
-
 
 def preview(*objects: dict, mode=None):
     from openhasp_config_manager.gui.qt.widgets.pagelayout.page_preview_layout import PagePreviewWidget, PreviewMode
