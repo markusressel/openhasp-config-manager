@@ -95,9 +95,24 @@ Found in a review of the text editor and preview work, not done yet:
 
 - [ ] `check.py` (CLI, no Qt) imports the editor's domain from `gui/domain/` (`draft/session`, `draft/files`, `problems`,
   `gui_state.relative`). It works because `gui/domain` is Qt-free, but the layering is upside down: move the Qt-free model of the
-  pages (draft, problems, page objects) out of `gui/`, e.g. to `openhasp_config_manager/pages/`.
+  pages (draft, problems, page objects) out of `gui/`, into `openhasp_config_manager/model/` (the Qt-free model that
+  code-defined pages use, `docs/config-model-api.md`).
 - [ ] The geometry of some preview items is computed in their Qt classes (`HaspArcItem.angles`, `HaspGaugeItem.labels`,
   `HaspLineMeterItem.active_lines`, `drawing.fraction`): move it to `gui/domain` like `line_points.py` and `button_matrix.py`, so it is
   tested without Qt.
 - [ ] `collect_gui_state` (`gui/qt/window/gui_state_collector.py`) builds the `device` part of the state file by hand: a `describe_device` in `gui_state.py`
   would make it testable without a window, like the other parts.
+
+## 8. The config model (`docs/config-model-api.md`)
+
+The first slice (`ConfigModel.load()`, `variables()`, `expand_part()`, `render_part()`, the `Part` leaf) is done. Next, as pages need it:
+
+- [ ] `Part(..., bind={id: Bound(...)})` for bound properties of a part's objects.
+- [ ] A `Part` in a `Repeat` (`ids=<count>`, `vars` as a callable of the first id; decision 1 of the note).
+- [ ] `files()`, `entries()`, `part()` and `render_file()`, and the GUI and `check` on them.
+- [ ] A part that moves (a node before it collapses): render it again with the new `area` and send the moved objects, instead of
+  raising.
+- [ ] A plate start analyzes the config twice (`ConfigModel.load()` and the `DeploymentController`): share it if a large config makes
+  starts slow.
+- [ ] haad-home's tests build a plate controller by hand (`tests/controllers/openhasp/conftest.py`): export a testing helper (like
+  `FakePlate` in `tests/haad`) that declares and renders pages without a connection.

@@ -1,3 +1,5 @@
+import pytest
+
 from openhasp_config_manager.haad.objects.label import LabelObjectController
 from openhasp_config_manager.haad.page import PageController
 from tests.haad.fakes import FakePlate
@@ -190,3 +192,56 @@ async def test_label_property_setters(page: PageController, plate: FakePlate):
         "p1b10.border_width=3",
         "p1b10.border_width=0",
     ]
+
+
+async def test_bind_text_like_add_label(simulator, page: PageController, plate: FakePlate):
+    # GIVEN: a label without binding (e.g. an object of a Part), bound afterwards
+    await simulator.ha.trigger_state_change("sensor.time", "12:00")
+    label = await page.add_label(obj_id=10)
+    await label.bind_text(entity="sensor.time")
+
+    await label.init()
+
+    # THEN: exactly like add_label(entity=...)
+    assert plate.commands == ["p1b10.text=12:00", "p1b10.text=12:00"]
+    assert list(page.state_updater._registered_objects) == ["label:p1b10:sensor.time"]
+
+
+async def test_bind_text_with_get_state_text_and_trigger(simulator, page: PageController, plate: FakePlate):
+    async def get_state():
+        return 3
+
+    label = await page.add_label(obj_id=10)
+    await label.bind_text(get_state=get_state, text=lambda x: f"{x} alerts", trigger="sensor.alerts")
+    await label.init()
+    await label.bind()
+    assert plate.commands == ["p1b10.text=3 alerts"]
+
+    plate.clear()
+    await simulator.ha.trigger_state_change("sensor.alerts", "x")
+    await plate.settle()
+    assert plate.commands == ["p1b10.text=3 alerts"]
+
+
+async def test_bind_text_with_entities_and_attribute(simulator, page: PageController, plate: FakePlate):
+    await simulator.ha.trigger_state_change("climate.bath", "heat", attributes={"current_temperature": 21.5})
+    label = await page.add_label(obj_id=10)
+    await label.bind_text(entity=["climate.bath"], attribute="current_temperature")
+
+    await label.init()
+
+    assert plate.commands == ["p1b10.text=21.5", "p1b10.text=21.5"]
+
+
+async def test_bind_text_errors(page: PageController):
+    label = await page.add_label(obj_id=10)
+    with pytest.raises(ValueError, match="Binding the text of p1b10 needs an entity or get_state"):
+        await label.bind_text()
+
+    bound = await page.add_label(obj_id=11, entity="sensor.time")
+    with pytest.raises(ValueError, match="The text of p1b11 is bound already"):
+        await bound.bind_text(entity="sensor.other")
+
+    await label.init()
+    with pytest.raises(RuntimeError, match="p1b10 is initialized already: bind its text in register_objects()"):
+        await label.bind_text(entity="sensor.time")

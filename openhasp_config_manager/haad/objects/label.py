@@ -1,4 +1,4 @@
-from typing import Callable, Awaitable, Any, List, TYPE_CHECKING
+from typing import Callable, Awaitable, Any, List, Sequence, TYPE_CHECKING
 
 from haad.controller import HaadController
 from openhasp_config_manager.haad import STATE_UNKNOWN, STATE_UNAVAILABLE
@@ -7,8 +7,10 @@ from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 
 from haad import HaadStateEvent
 from haad.triggers import EntityTrigger
+from haad.triggers.resolver import TriggerInput
 
 if TYPE_CHECKING:
+    from openhasp_config_manager.haad.page import EntityRef
     from openhasp_config_manager.haad.page.state_updater import StateUpdater
 else:
     StateUpdater = Any
@@ -56,8 +58,47 @@ class LabelObjectController(ObjectController):
         self._converter = converter
         if self._converter is None:
             self._converter = lambda x: str(x) if x is not None else "-"
+        self._initialized = False
+
+    async def bind_text(
+        self,
+        entity: "EntityRef | Sequence[EntityRef]" = None,
+        attribute: str = None,
+        get_state: Callable[[], Awaitable[Any]] = None,
+        text: Callable[[Any], str] = None,
+        trigger: TriggerInput = None,
+    ):
+        """
+        Binds the text of a label that was declared without a binding, e.g. an object of a `Part`
+        (`part.obj(10, LabelObjectController)`), like the arguments of PageController.add_label() do. Call it before the
+        objects of the page are initialized, i.e. in register_objects().
+        :param entity: the entity (or entities) to bind to, as HAEntity or entity id
+        :param attribute: (optional) the attribute to bind to
+        :param get_state: (optional) a function to get the current state, instead of the entity's
+        :param text: (optional) a function that takes the state and returns the text; default: the label's (the state as text)
+        :param trigger: (optional) refreshes the text (from get_state) whenever it fires
+        :raises RuntimeError: if the label is initialized already
+        :raises ValueError: if the label is bound already, or neither `entity` nor `get_state` is given
+        """
+        from openhasp_config_manager.haad.page import entity_ids
+
+        if self._initialized:
+            raise RuntimeError(f"{self.object_id} is initialized already: bind its text in register_objects()")
+        if self._entity_ids is not None or self._get_state is not None:
+            raise ValueError(f"The text of {self.object_id} is bound already")
+        if entity is None and get_state is None:
+            raise ValueError(f"Binding the text of {self.object_id} needs an entity or get_state")
+        ids = entity_ids(entity)
+        self._entity_ids = ids if isinstance(ids, list) else [ids] if ids is not None else None
+        self._attribute = attribute
+        self._get_state = get_state
+        if text is not None:
+            self._converter = text
+        if trigger is not None:
+            self.trigger = trigger
 
     async def init(self):
+        self._initialized = True
         self.controller.logger.debug(f"Initializing label object {self.object_id} for entity {self._entity_ids}")
 
         if self._entity_ids is not None or self._get_state is not None:

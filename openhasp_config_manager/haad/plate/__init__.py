@@ -16,6 +16,7 @@ from openhasp_config_manager.haad.plate.scheduler import FocusConfig, PageSchedu
 from openhasp_config_manager.haad.plate.screen import ScreenController
 from openhasp_config_manager.openhasp_client.model.configuration.gui_config import GuiConfig
 from openhasp_config_manager.openhasp_client.model.device import Device
+from openhasp_config_manager.model import ConfigModel
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 
 
@@ -98,14 +99,18 @@ class PlateController:
         output_dir: Path = Path("/conf/openhasp-configs.output"),
         device: Optional[Device] = None,
         layout_dump_dir: Optional[Path] = None,
+        config_model: Optional[ConfigModel] = None,
     ):
         """
         :param config_dir: the openhasp-configs directory the plate's device is read from; None for a plate without one
         :param output_dir: the output directory of the deployment
         :param device: the plate's device, when there is no config_dir (see device_factory.build_device())
         :param layout_dump_dir: where the rendered owned pages are written to (see layout/dump.py); None: nowhere
+        :param config_model: the config directory as the plate's device sees it, for the parts of code-defined pages
+            (layout.components.Part); None: the pages can't have parts
         """
         self._layout_dump_dir = layout_dump_dir
+        self.config_model = config_model
         self.controller = controller
         self.state_updater = state_updater
         self._name = name
@@ -197,7 +202,7 @@ class PlateController:
 
         for page in self.pages.values():
             self.controller.logger.info(f"Initializing page {page.index} for plate {self._name}")
-            await self._declare_objects(page)
+            await self.declare_objects(page)
             self.render_layout(page)
             await self.push_layout(page)
             self.controller.logger.info(f"Initializing objects for page {page.index} for plate {self._name}")
@@ -206,8 +211,11 @@ class PlateController:
         await self.set_navigation()
         await self.scheduler.start()
 
-    async def _declare_objects(self, page: PageController):
-        """build_layout() and its mount, then register_objects()."""
+    async def declare_objects(self, page: PageController):
+        """
+        build_layout() and its mount, then register_objects(): the objects of a page, before init() renders and pushes it.
+        The objects of an owned page send nothing yet (e.g. for a test that renders a page with render_layout()).
+        """
         layout = await page.build_layout()
         if layout is not None:
             await layout.expand()

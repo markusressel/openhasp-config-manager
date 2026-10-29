@@ -1,12 +1,16 @@
 import textwrap
 from pathlib import Path
 
+import pytest
+
 from openhasp_config_manager.openhasp_client.model.component import JsonlComponent
 from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.processing.device_processor import DeviceProcessor
+from openhasp_config_manager.processing.jsonl.includes import IncludeExpansionError
 from openhasp_config_manager.processing.jsonl.jsonl import ObjectDimensionsProcessor
 from openhasp_config_manager.processing.variables import VariableManager
 from tests import TestBase
+from tests.processing.jsonl.includes_test import IncludeTestBase
 
 
 class TestDeviceProcessor(TestBase):
@@ -335,3 +339,47 @@ class TestObjectReferences(TestBase):
 
         # THEN
         assert processor.normalize(device, content) == '{"page": 1, "id": 5, "y": 34}'
+
+
+class TestSources(IncludeTestBase):
+    """Objects that are in no file of the device, e.g. a page defined in code (see `openhasp_config_manager.model`)."""
+
+    FILES = {
+        "common/parts/tile.jsonl": '{"page": "{{ page }}", "id": "{{ id }}", "obj": "label", "x": "{{ b4.x + 1 }}", "text": "{{ caption }}"}',
+        # a file of the device with an object 4 on page 1
+        "devices/plate/page.jsonl": '{"page": 1, "id": 4, "obj": "obj", "x": 10}',
+    }
+    SOURCES = [
+        {"page": 1, "id": 4, "obj": "obj", "x": 50},
+        {"!include": "common/parts/tile.jsonl", "vars": {"page": 1, "id": 20, "caption": "A"}},
+    ]
+
+    def test_render_sources_like_a_file(self, tmp_path):
+        self.setup_config(tmp_path, self.FILES)
+        file = tmp_path / "common" / "virtual.jsonl"
+
+        rendered = self.processor.render_sources(file, self.SOURCES, replaced_page=1)
+
+        assert [jsonl for _, jsonl in rendered] == [
+            {"page": 1, "id": 4, "obj": "obj", "x": 50},
+            # b4 is the object of the sources, which replace page 1 of the files
+            {"page": 1, "id": 20, "obj": "label", "x": 51, "text": "A"},
+        ]
+        included = rendered[1][0]
+        assert (included.origin.includes[0].file, included.origin.includes[0].line) == (file, 2)
+
+    def test_without_replaced_page_the_objects_of_the_files_come_first(self, tmp_path):
+        self.setup_config(tmp_path, self.FILES)
+
+        rendered = self.processor.render_sources(tmp_path / "common" / "virtual.jsonl", self.SOURCES)
+
+        assert rendered[1][1]["x"] == 11
+
+    def test_errors(self, tmp_path):
+        self.setup_config(tmp_path, self.FILES)
+        file = tmp_path / "common" / "virtual.jsonl"
+        sources = [{"!include": "common/parts/nope.jsonl"}]
+
+        assert [error.line for error in self.processor.expand_sources(file, sources).errors] == [1]
+        with pytest.raises(IncludeExpansionError, match="common/virtual.jsonl:1: The file to include doesn't exist"):
+            self.processor.render_sources(file, sources)

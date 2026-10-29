@@ -16,8 +16,8 @@ class ObjectController:
     Base class for controllers for objects on the OpenHASP plate.
     This should be subclassed for each type of object to implement specific functionality for that object type.
 
-    An object is either *external* (its layout is on the plate's flash, deployed from JSONL) or *owned* (it has a `rect`:
-    haad pushes it to the plate).
+    An object is either *external* (its layout is on the plate's flash, deployed from JSONL) or *owned* (it has a `rect`,
+    or it is an object of a `Part`: haad pushes it to the plate).
     """
 
     # the openHASP object type ("obj" in JSONL)
@@ -51,6 +51,8 @@ class ObjectController:
         self.rect: Optional[Rect] = None
         self.props: Mapping[str, Any] = {}
         self.parent: Optional["ObjectController"] = None
+        # the `Part` (layout node) this object is an object of: the part renders it, not its rect and props
+        self.part = None
         # the layout node this object was mounted from, if any: a bound `hidden` collapses it
         self.layout_node = None
         self.trigger: Optional[TriggerInput] = None
@@ -71,8 +73,11 @@ class ObjectController:
 
     @property
     def owned(self) -> bool:
-        """Whether haad owns this object, i.e. pushes it to the plate (it has a rect), instead of the plate's flash."""
-        return self.rect is not None
+        """
+        Whether haad owns this object, i.e. pushes it to the plate (it has a rect, or is an object of a part), instead of
+        the plate's flash.
+        """
+        return self.rect is not None or self.part is not None
 
     @property
     def deferred(self) -> bool:

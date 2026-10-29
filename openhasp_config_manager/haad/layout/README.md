@@ -310,6 +310,42 @@ Repeat(self._alerts, self._card, trigger=[humidity, co2, EVERY_10_SECONDS], key=
 - The initial items are built before the first layout pass, so they are part of the first push.
 - Lists can be nested (a `Repeat` inside the item of another). Give the items a fixed `size=`, or they share the list's space.
 
+#### 4.4.2 Parts of the config directory
+
+A code-defined page can show a part of the plate's `config_dir` (a `.jsonl` file for `!include`s, see "Including objects" in the
+[README](../../../README.md)), so it looks exactly like the JSONL pages that include it:
+
+```python
+with Page(padding=Padding(bottom=style.navbar_height)):
+    with Stack(size=style.header_height):
+        Part("common/parts/header/bar.jsonl")
+        self.header = Part("common/parts/header/header.jsonl", vars={"header": {"title": self.title}})
+        ...
+
+
+async def register_objects(self):
+    time_id = self.plate.config_model.variables()["id"]["time"]
+    await self.header.obj(time_id, LabelObjectController).bind_text(entity=TIME_ENTITY)
+```
+
+- **Rendering**: `Part(path, vars=...)` renders like a deployment renders `{"!include": path, "vars": vars}` in a file of `common/`
+  on the page (`ConfigModel.render_part`, see "Using the config from code" in the README): with the variables of the plate's device,
+  the page as `page_index`, and the theme of the config (`theme.obj.*`). The page's `Theme` (4.5) is not applied to them again.
+  The plate needs a `config_dir`, and its screen must be the one of the device in it.
+- **Placement**: the part gets its rectangle in the layout as `area` (`area.x`, `area.y`, `area.w`, `area.h`) and places its
+  objects itself, from `area` or, like the parts of the JSONL pages, from `common.*` and other objects. A part that ignores
+  `area` (the header above, which uses `common.header.*`) still takes its space in its container: put it in a `Stack`, or give it
+  `at=Rect(0, 0, 0, 0)`.
+- **References**: `b4.x` in the part is an object of the page as it is rendered (or one of the part's own objects, like `this`).
+- **Ids**: the part's ids come from its variables (`id.time` in `header.jsonl`), so they are known before the page allocates its
+  other ids, and the page skips them. An explicit `obj_id` that is one of them raises.
+- **Objects**: `part.obj(id)` is the object controller of one of its objects, from `register_objects()` on; `cls` checks its type
+  (`LabelObjectController` for a `label`). The objects have no bindings: bind them with their methods, e.g.
+  `LabelObjectController.bind_text(entity=...)` (like `Label(entity=...)`).
+- **Limits**: a part is rendered for the rectangle it has when the page is mounted. It can't move later (a node before it whose
+  `hidden` collapses it raises), and it can't be in a `Repeat`, a `Panel` (its objects are placed on the page) or a
+  `Page(external=True)`.
+
 ### 4.5 Style: `Theme` and props
 
 ```python
@@ -321,7 +357,9 @@ class Theme:
     obj: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
 ```
 
-`haad-home` defines its theme once, as a Python constant that replaces `openhasp-configs/theme.yaml`:
+`haad-home` first defined its theme as a Python constant next to `openhasp-configs/theme.yaml` (below). It now reads it from
+`theme.yaml` through `ConfigModel.variables()` (`MarkusStyle.of(model)` in `controllers/openhasp/theme.py`), so the code-defined
+and the JSONL pages share one theme:
 
 ```python
 MARKUS_THEME = Theme(
@@ -888,6 +926,12 @@ In `haad-home/controllers/openhasp/`:
 - [ ] 13. Migrate one page (e.g. `markus.py`) on `wt32sc01plus_2`, then the rest. Not started: it changes a deployed plate and needs
         its JSONL removed from flash (QUESTIONS.md 30). Instead, the first code-defined page is a new one: `page/alerts.py`
         (`AlertsPage`, demo alerts) as page 4 of `wt32sc01plus_2`.
+
+The config model (`docs/config-model-api.md`, first slice):
+
+- [x] 14. `openhasp_config_manager/model/`: `ConfigModel.load(config_dir, device)`, `.device`, `.variables(path)`,
+        `.expand_part(...)`, `.render_part(...)`; haad-home's `theme.py` reads the variables of the plate's device through it.
+- [x] 15. `Part` (4.4.2); the header of haad-home's code pages comes from `common/parts/header/`.
 
 ## 8. Testing
 
