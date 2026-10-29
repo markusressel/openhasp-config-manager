@@ -1,6 +1,6 @@
 # Design: tabs in the preview, and one draft for all devices
 
-Status: proposal, not implemented.
+Status: accepted, not implemented yet (see "Phases").
 
 ## Motivation
 
@@ -154,9 +154,11 @@ Each phase is one PR with tests. Phases on different files run in parallel.
 6. **Part tabs** and the one-line part bar (Part 4). After 3 and 4. "A part on its own" moves into them.
 7. **The state file and restoring tabs** (Part 6). After 5 and 6.
 
-## Open questions
+## Decisions
 
-- Is Save writing all changed files right, or should it be the files of the active tab (with Save All next to it)?
-- How many devices with Live preview at once are practical (one MQTT client per device, rendering per edit)?
-- Should a part tab without "Show the page" still render the page for its object references (`b4.w` of a card)? Proposal: yes,
-  it renders as on the page and only hides the other objects, so the values are those of the page.
+- **Save writes all changed files** of the `ConfigDraft`, like IntelliJ's Save All (with the list first if some aren't shown by the
+  active tab).
+- **Live preview runs on up to 10 devices at once.** Turning it on for an 11th one says so and names the others; nothing is turned
+  off by itself.
+- **A part tab renders the whole page** of its instance, also without "Show the page", and only hides the other objects: the object
+  references (`b4.w` of a card) have the values of the page.
