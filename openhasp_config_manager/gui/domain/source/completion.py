@@ -66,7 +66,9 @@ DIRECTIVE_KEYS = ["for", "vars"]
 @dataclass(frozen=True)
 class CompletionContext:
     # what is being typed
-    kind: str  # "property", "value", "variable", "placeholder" or "include" (the path of an `!include`)
+    # "property", "value", "variable", "placeholder", "include" (the path of an `!include`) or "template" (a word outside of a
+    # template in a template field, see `template_field_context`)
+    kind: str
     # the part of the word before the cursor
     prefix: str
     # where the word starts in the line
@@ -100,12 +102,8 @@ def completion_context(
         return None
     if language == Language.JSONL and (match := _INCLUDE_PATH.search(line)):
         return CompletionContext("include", match.group(1), match.start(1))
-    open_template = _open_template(line)
-    if open_template is not None:
-        word_start = len(line)
-        while word_start > open_template and (line[word_start - 1].isalnum() or line[word_start - 1] in "_."):
-            word_start -= 1
-        return CompletionContext("variable", line[word_start:], word_start)
+    if (variable := variable_context(line)) is not None:
+        return variable
     if language == Language.JSONL:
         if (start := _placeholder_start(line)) is not None:
             return CompletionContext("placeholder", line[start:], start)
@@ -118,6 +116,49 @@ def completion_context(
         if inside_object and (start := _bare_key_start(line)) is not None:
             return CompletionContext("property", line[start:], start, quoted=False)
     return None
+
+
+def variable_context(line_before_cursor: str) -> Optional[CompletionContext]:
+    """:return: the variable that is typed inside of a template that is open at the cursor (`{{ theme.na`), None if there is none"""
+    line = line_before_cursor
+    open_template = _open_template(line)
+    if open_template is None:
+        return None
+    word_start = len(line)
+    while word_start > open_template and (line[word_start - 1].isalnum() or line[word_start - 1] in "_."):
+        word_start -= 1
+    return CompletionContext("variable", line[word_start:], word_start)
+
+
+# the letters of a variable name, with the dots between its parts
+_VARIABLE_WORD = re.compile(r"[A-Za-z0-9_.]*")
+
+
+def template_field_context(text_before_cursor: str) -> CompletionContext:
+    """
+    What a template field (a text that can have templates in it, e.g. a value in the properties) completes: the variable inside of
+    a template at the cursor, else the word before the cursor (kind "template"), which becomes a template of its own.
+    """
+    variable = variable_context(text_before_cursor)
+    if variable is not None:
+        return variable
+    start = len(text_before_cursor) - len(re.search(r"[A-Za-z0-9_.]*$", text_before_cursor)[0])
+    return CompletionContext("template", text_before_cursor[start:], start)
+
+
+def variable_insertion(line: str, column: int, context: CompletionContext, word: str) -> Insertion:
+    """
+    What to write when a variable is chosen from the list: it replaces what is typed of the name, also after the cursor, and the
+    rest of the text stays. The cursor goes behind the name, the braces that close the template are added if they are missing. A
+    word outside of a template (kind "template", see `template_field_context`) becomes a template: `{{ word }}`.
+    """
+    end = column + len(_VARIABLE_WORD.match(line, column)[0])
+    if context.kind == "template":
+        text = f"{{{{ {word} }}}}"
+        return Insertion(context.start, end, text, context.start + len(text))
+    closing, opening = line.find("}}", end), line.find("{{", end)
+    closed = closing >= 0 and (opening < 0 or closing < opening)
+    return Insertion(context.start, end, word if closed else f"{word} }}}}", context.start + len(word))
 
 
 def _open_template(line: str) -> Optional[int]:

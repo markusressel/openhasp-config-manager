@@ -13,9 +13,9 @@ class TemplateSuggestion:
     positions: Tuple[int, ...]
 
 
-def template_query(text: str) -> str:
-    """:return: what to search for in what was typed into a template field: without the braces and whitespace"""
-    return text.replace("{{", "").replace("}}", "").strip()
+def template_variable(template: str) -> str:
+    """:return: the variable of a suggestion (`common.pages.markus.index` of `{{ common.pages.markus.index }}`)"""
+    return template[template.find("{{") + 2 : template.rfind("}}")].strip()
 
 
 def filter_template_suggestions(
@@ -28,7 +28,7 @@ def filter_template_suggestions(
     query must appear in order, but not necessarily next to each other ("cpmi" matches "common.pages.markus.index"),
     ignoring case. Matches at the start of words and consecutive characters rank higher.
 
-    :param query: the text to search for (see template_query)
+    :param query: the text to search for, e.g. the variable that is typed (see `completion.template_field_context`)
     :param suggestions: (template, value), e.g. ("{{ common.pages.markus.index }}", 1)
     :return: the matching suggestions, best first
     """

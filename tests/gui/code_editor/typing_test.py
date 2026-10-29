@@ -200,6 +200,20 @@ class TestCompletion(TestBase):
         _type(editor, "the")
         assert editor.completion.completer.completionCount() == 2
 
+    def test_a_chosen_variable_replaces_the_name_at_the_cursor_and_keeps_the_text(self, editor):
+        # GIVEN
+        editor.completion.set_variables(lambda: ["theme.name", "other"])
+        editor.set_text('{"text": "Hi {{ th }} you"}')
+        editor.go_to(1, 18)
+
+        # WHEN
+        QTest.keyClick(editor, Qt.Key.Key_Space, Qt.KeyboardModifier.ControlModifier)
+        QTest.keyClick(editor.completion.completer.popup(), Qt.Key.Key_Return)
+
+        # THEN
+        assert editor.toPlainText() == '{"text": "Hi {{ theme.name }} you"}'
+        assert editor.textCursor().positionInBlock() == len('{"text": "Hi {{ theme.name')
+
     def test_only_the_properties_of_the_type_of_the_object(self, editor):
         editor.set_text('{"obj": "slider", "page": 1,\n "')
         editor.go_to(2, 2)
