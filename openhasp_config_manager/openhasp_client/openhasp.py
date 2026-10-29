@@ -4,7 +4,6 @@ from typing import AsyncIterator, Dict, List, Any, Callable, Tuple, Optional, Aw
 
 import orjson
 
-from openhasp_config_manager.console import info
 from openhasp_config_manager.openhasp_client.image_processor import OpenHaspImageProcessor
 from openhasp_config_manager.openhasp_client.logs import LogItem, follow_logs
 from openhasp_config_manager.openhasp_client.model.configuration.gui_config import GuiConfig
@@ -610,7 +609,7 @@ class OpenHaspClient:
         :param name: the target name of the file on the device
         :param content: the file content
         """
-        info(f"Uploading '{name}'...")
+        self.LOGGER.info(f"Uploading '{name}'...")
         await self._webservice_client.upload_file(name, content)
 
     async def take_screenshot(self) -> bytes:

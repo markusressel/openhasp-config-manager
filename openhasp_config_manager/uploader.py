@@ -123,6 +123,7 @@ class ConfigUploader:
                 )
                 print_diff_to_console(diff_output)
             try:
+                info(f"Uploading '{file.name}'...")
                 await self._api_client.upload_file(file.name, content.encode("utf-8"))
                 checksum_file = self._get_checksum_file(file)
                 checksum_file.parent.mkdir(parents=True, exist_ok=True)
@@ -161,6 +162,7 @@ class ConfigUploader:
             if print_diff:
                 info(f"Binary file '{file.name}' has changed ({device_file_content_checksum} -> {new_checksum})")
             try:
+                info(f"Uploading '{file.name}'...")
                 await self._api_client.upload_file(file.name, content)
                 checksum_file = self._get_checksum_file(file)
                 checksum_file.parent.mkdir(parents=True, exist_ok=True)
