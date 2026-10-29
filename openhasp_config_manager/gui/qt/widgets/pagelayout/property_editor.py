@@ -30,11 +30,14 @@ from openhasp_config_manager.gui.domain.properties import (
 )
 from openhasp_config_manager.gui.domain.file_tree import relative_config_path
 from openhasp_config_manager.gui.domain.draft.session import PlateSession
-from openhasp_config_manager.gui.domain.problems import object_name
+from openhasp_config_manager.gui.domain.problems import Severity, object_name
+from openhasp_config_manager.gui.domain.source.docs import property_help
 from openhasp_config_manager.gui.qt.components import UiComponents, ThemedIcons
 from openhasp_config_manager.gui.qt.layouts import clear_layout, frozen
 from openhasp_config_manager.gui.qt.widgets.pagelayout.icon_picker import IconPickerDialog
 from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.editable_widget import EditableWidget
+from openhasp_config_manager.gui.qt.widgets.hover_card import CardContent
+from openhasp_config_manager.gui.qt.widgets.pagelayout.property_hover import PropertyLabelHover
 from openhasp_config_manager.gui.qt.widgets.pagelayout.template_completer import TemplateCompleter
 
 # marks a property that an object does not have
@@ -94,6 +97,10 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         self.scroll_area.setWidget(self.content_container)
         self.outer_layout.addWidget(self.scroll_area)
 
+        # what a property is, when the mouse rests on its name
+        self.hover = PropertyLabelHover(self)
+        self.scroll_area.verticalScrollBar().valueChanged.connect(lambda _value: self.hover.hide())
+
         self._create_content()
         self._shows_content = True
 
@@ -150,6 +157,8 @@ class OpenHASPWidgetPropertyEditor(QWidget):
             self._shows_content = True
 
     def _create_content(self):
+        # the labels it is about are made again
+        self.hover.reset()
         if not self._editable_widgets:
             if self._edit_mode:
                 hint = "Select an object on the plate to edit its properties."
@@ -261,9 +270,14 @@ class OpenHASPWidgetPropertyEditor(QWidget):
 
         label_layout.addWidget(mini_reset)
         label = UiComponents.create_label(f"{key}:")
+        issues = []
         if key not in source:
             label.setProperty("role", "hint")
-            label.setToolTip("Not in the file: a default of the theme or computed. Changing it writes it to the file.")
+            issues.append(
+                (Severity.HINT, "Not in the file: a default of the theme or computed. Changing it writes it to the file.")
+            )
+        obj_type = obj_data.get("obj")
+        self.hover.watch(label, lambda: CardContent(issues, property_help(key, obj_type)))
         label_layout.addWidget(label)
         return label_container
 
@@ -403,8 +417,9 @@ class OpenHASPWidgetPropertyEditor(QWidget):
 
     def _set_template_mode(self, widget: EditableWidget, key: str, enabled: bool):
         if enabled:
-            # the source changes once a valid template was entered
-            self._pending_templates[key] = ""
+            # the source changes once a valid template was entered. It starts with the braces, the cursor between them: a template
+            # needs them anyway, and text before or after them or more of them can still be typed (`{{ x }}px`, `p{{ a }}b{{ b }}`)
+            self._pending_templates[key] = _EMPTY_TEMPLATE
         else:
             self._pending_templates.pop(key, None)
             if self._session.is_template(widget.obj_data, key):
@@ -451,7 +466,11 @@ class OpenHASPWidgetPropertyEditor(QWidget):
 
         show_value()
         error_label.hide()
-        if editor.text() and not is_template:
+        if editor.text() == _EMPTY_TEMPLATE and not is_template:
+            # just switched to a template: nothing to check yet, type the expression right away
+            editor.setCursorPosition(len("{{ "))
+            QtCore.QTimer.singleShot(0, editor.setFocus)
+        elif editor.text() and not is_template:
             apply(editor.text())
         editor.textChanged.connect(apply)
         return container
@@ -577,6 +596,10 @@ class OpenHASPWidgetPropertyEditor(QWidget):
         typing = ("property", self._session.object_uid(widget.obj_data), key)
         with self._edit(f"Change {key} of {object_name(widget.obj_data)}", merge_key=typing):
             self._session.set_source_value(widget.obj_data, key, value)
+
+
+# what the field of a property starts with when it is switched to a template
+_EMPTY_TEMPLATE = "{{  }}"
 
 
 def _plain_layout[L: QHBoxLayout | QVBoxLayout](layout: L) -> L:
