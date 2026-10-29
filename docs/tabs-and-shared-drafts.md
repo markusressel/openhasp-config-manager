@@ -1,6 +1,6 @@
 # Design: tabs in the preview, and one draft for all devices
 
-Status: accepted, phases 1 to 6 implemented (see "Phases").
+Status: implemented (all phases, see "Phases").
 
 ## Motivation
 
@@ -241,3 +241,26 @@ Each phase is one PR with tests. Phases on different files run in parallel.
   The preview is never narrower than its widest floating bar, also after a bar got wider (an event filter follows their
   layouts): before, a stale minimum and a wider font (a fallback font on CI) pushed the editor under the Properties dock.
   The test of the small window runs with the default font and one 1.5 times as large.
+
+### Phase 7: the state file and restoring tabs
+
+- **`tabs` and `active_tab` next to the keys of before.** Each tab has its kind (`device`, `part`), device, part (relative to
+  the config directory), instance (its description, as `part_mode`), `alone`, page, connection state, Live preview and
+  `unsaved`. `device`, `problems` and `connection` stay those of the active tab, so the readers of schema 1 keep working; the
+  schema version is not bumped, since nothing was removed.
+- **One image per open device, at `preview/<device>/current.png`**, not `preview/<device>.png`: the `preview` command writes
+  `preview/<device>/page_<n>.png` from the files on disk, and the two stay apart in one folder per device (the command only
+  removes its `page_*.png`). A device has one image also with several tabs: the page of its tab that was active last (the one
+  Live preview sends, `PlateLink.view`), referenced from each of its tabs. The image of a background device is rendered again
+  only after its editor reported a change (`GuiStatePublisher.request(device)`), the active one with every write as before.
+  The image goes with the last tab of the device, all of them when the GUI quits, and those of an earlier run on start.
+- **`preview.png` stays**, as the image of the active tab (the same bytes as its device's `current.png`), for readers and
+  instructions written for it (the LLM section of the README).
+- **Restoring tabs.** `UiSession.open_tabs` keeps the device, part and instance description of each tab, `active_tab` the
+  index; `selected_device` stays the active tab's device (a session without `open_tabs` of an older version opens it). The
+  device tabs open in their order; a part tab opens once its device is loaded, after the other tabs of its device, in the
+  instance with the same description, or the first one (or on its own, if no page includes the part anymore). A part tab
+  whose device tab was closed brings that one back too: a part tab needs the device loaded, which is done for a device tab.
+  Tabs of devices or part files that are gone are skipped (logged). The page and the zoom of a tab are not restored, and
+  Live preview is never turned on again. While part tabs wait for their device, the tabs are not remembered, so quitting
+  before the devices are loaded keeps the tabs of the last session.

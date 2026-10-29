@@ -7,7 +7,7 @@ from typing import List
 import pytest
 
 from tests import TestBase
-from tests.gui.helpers import wait_until
+from tests.gui.helpers import gui_state, wait_until
 from tests.helpers import DEVICE_DIR, TEST_CFG_ROOT, TEST_DEVICE, copy_test_config
 
 OTHER_DEVICE = "other_device"
@@ -220,7 +220,9 @@ class TestPartTabs(TestBase):
         assert pages.editor.session is window.sessions[pages.session_key]
         assert window.session is tab.focus.session is not pages.editor.session
 
-    def test_a_revert_goes_on_in_the_instance_and_a_part_that_is_not_included_anymore_closes_its_tab(self, window, tile, cfg_root):
+    def test_a_revert_goes_on_in_the_instance_and_a_part_that_is_not_included_anymore_closes_its_tab(
+        self, window, tile, cfg_root
+    ):
         # GIVEN
         session = window.session
         window.edit_part(tile, session.part_instances(tile)[1], session)
@@ -327,8 +329,7 @@ class TestSaveAll(TestBase):
 
         # THEN
         assert questions.texts == [
-            "These files have changes too, which this tab doesn't show:\n\n"
-            f"{DEVICE_DIR}/other.jsonl\n\nSave them anyway?"
+            f"These files have changes too, which this tab doesn't show:\n\n{DEVICE_DIR}/other.jsonl\n\nSave them anyway?"
         ]
         assert other_file.read_text() == OTHER_JSONL and pages.dirty
 
@@ -380,3 +381,155 @@ class TestSaveAll(TestBase):
         assert len(questions.texts) == 1 and "card.jsonl" in questions.texts[0]
         assert '"x": 15' in card.read_text()
         assert (cfg_root / DEVICE_DIR / "other.jsonl").read_text() == OTHER_JSONL and pages.dirty
+
+
+PREVIEWS = ".openhasp-config-manager/preview"
+
+
+class TestTabsInTheStateFile(TestBase):
+    def test_the_state_lists_the_tabs_with_an_image_of_each_device(self, window, tile, cfg_root):
+        # GIVEN: a change in the tab of the pages, a part tab on the second instance, and the active tab of another device
+        session = window.session
+        session.set_source_value(_object(session, 5), "x", 11)
+        second = session.part_instances(tile)[1]
+        window.edit_part(tile, second, session)
+        _open(window, OTHER_DEVICE)
+
+        # THEN
+        wait_until(lambda: [tab["preview"] is not None for tab in gui_state(cfg_root).get("tabs", [])] == [True] * 3)
+        state = gui_state(cfg_root)
+        connection = window.connection.status.link.value
+        image = {"file": f"{PREVIEWS}/{TEST_DEVICE}/current.png", "updated": state["tabs"][0]["preview"]["updated"]}
+        assert state["tabs"][:2] == [
+            {
+                "kind": "device",
+                "device": TEST_DEVICE,
+                "part": None,
+                "instance": None,
+                "alone": False,
+                "page": 1,
+                "connection": connection,
+                "live_preview": False,
+                "unsaved": True,
+                "preview": image,
+            },
+            {
+                "kind": "part",
+                "device": TEST_DEVICE,
+                "part": "common/parts/tile.jsonl",
+                "instance": session.describe_instance(second),
+                "alone": False,
+                "page": 1,
+                "connection": connection,
+                "live_preview": False,
+                "unsaved": False,
+                "preview": image,
+            },
+        ]
+        assert state["tabs"][2]["preview"]["file"] == f"{PREVIEWS}/{OTHER_DEVICE}/current.png"
+
+        # THEN: the keys of before are about the active tab, and its image is `preview.png` too
+        assert state["active_tab"] == 2
+        assert state["device"]["name"] == OTHER_DEVICE
+        assert state["device"]["preview"]["file"] == ".openhasp-config-manager/preview.png"
+        assert (cfg_root / state["device"]["preview"]["file"]).read_bytes() == (
+            cfg_root / state["tabs"][2]["preview"]["file"]
+        ).read_bytes()
+
+        # WHEN: the last tab of the other device is closed
+        window.close_tab(window.device_tabs.active)
+
+        # THEN: its image is removed
+        wait_until(lambda: gui_state(cfg_root)["active_tab"] == 1)
+        assert not (cfg_root / PREVIEWS / OTHER_DEVICE).exists()
+        assert (cfg_root / PREVIEWS / TEST_DEVICE / "current.png").exists()
+        assert gui_state(cfg_root)["device"]["part_mode"]["part"] == "common/parts/tile.jsonl"
+
+    def test_images_of_an_earlier_run_are_removed_on_start(self, create_window, cfg_root):
+        # GIVEN: the image of a device of an earlier run, and one of the `preview` command
+        folder = cfg_root / PREVIEWS / OTHER_DEVICE
+        folder.mkdir(parents=True)
+        (folder / "current.png").write_bytes(b"old")
+        (folder / "page_1.png").write_bytes(b"old")
+
+        # WHEN
+        window = create_window()
+        wait_until(lambda: window.devices)
+
+        # THEN
+        assert [path.name for path in folder.iterdir()] == ["page_1.png"]
+
+
+class TestTabsOfTheLastSession(TestBase):
+    def test_the_tabs_and_the_active_one_are_opened_again_without_live_preview(self, create_window, tile, plates):
+        from openhasp_config_manager.gui.qt.window.device_tabs import PartTab
+
+        # GIVEN: the pages and a part tab on the second instance of the test device, the other device, and Live preview on
+        first = create_window()
+        wait_until(lambda: first.devices)
+        _open(first, TEST_DEVICE)
+        session = first.session
+        second = session.part_instances(tile)[1]
+        first.edit_part(tile, second, session)
+        description = session.describe_instance(second)
+        _open(first, OTHER_DEVICE)
+        first.device_tabs.activate(first.device_tabs.find_part(TEST_DEVICE, tile))
+        first.connections.link(TEST_DEVICE).action_live_preview.setChecked(True)
+        assert first.connections.link(TEST_DEVICE).live
+
+        # WHEN: the app starts again
+        window = create_window()
+
+        # THEN
+        wait_until(lambda: len(window.device_tabs.tabs) == 3)
+        assert [tab.title for tab in window.device_tabs.tabs] == [TEST_DEVICE, "tile.jsonl · test_device", OTHER_DEVICE]
+        active = window.device_tabs.active
+        assert isinstance(active, PartTab) and active.focus.describe() == description
+        assert window.page_layout_editor_widget.part_mode == active.focus.instance
+        assert not any(window.connections.link(name).live for name in window.connections.names)
+
+    def test_tabs_of_a_device_or_part_that_is_gone_are_skipped(self, create_window, settings, cfg_root, tile):
+        from openhasp_config_manager.gui.domain.ui_session import TabSession
+        from openhasp_config_manager.gui.qt.ui_session_store import UiSessionStore
+        from openhasp_config_manager.gui.qt.window.device_tabs import PartTab
+
+        # GIVEN: the tabs of the last session, and the device and a part of two of them are gone
+        store = UiSessionStore(cfg_root, settings)
+        store.session.open_tabs = [
+            TabSession("gone_device"),
+            TabSession(TEST_DEVICE, "common/parts/gone.jsonl", "page.jsonl:2"),
+            TabSession(OTHER_DEVICE),
+            # an instance that isn't there anymore: the first one
+            TabSession(TEST_DEVICE, "common/parts/tile.jsonl", "nope"),
+            # a part that no page includes: on its own
+            TabSession(TEST_DEVICE, f"{DEVICE_DIR}/card.jsonl"),
+        ]
+        store.session.active_tab = 1
+        store.save()
+
+        # WHEN
+        window = create_window()
+
+        # THEN
+        wait_until(lambda: len(window.device_tabs.tabs) == 4)
+        tabs = window.device_tabs.tabs
+        assert [tab.title for tab in tabs] == [
+            OTHER_DEVICE,
+            TEST_DEVICE,
+            "tile.jsonl · test_device",
+            "card.jsonl · test_device",
+        ]
+        tile_tab, card_tab = tabs[2:]
+        assert (
+            isinstance(tile_tab, PartTab)
+            and tile_tab.focus.instance == window.sessions[tabs[1].session_key].part_instances(tile)[0]
+        )
+        assert isinstance(card_tab, PartTab) and card_tab.alone
+
+        # THEN: what is open now is remembered
+        assert [(tab.device, tab.part) for tab in window.ui_session.session.open_tabs] == [
+            (OTHER_DEVICE, None),
+            (TEST_DEVICE, None),
+            (TEST_DEVICE, "common/parts/tile.jsonl"),
+            (TEST_DEVICE, f"{DEVICE_DIR}/card.jsonl"),
+        ]

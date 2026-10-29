@@ -16,6 +16,17 @@ class DeviceSession:
 
 
 @dataclass
+class TabSession:
+    """A tab of the preview that is opened again on the next start (see `MainWindow._restore_tabs`)."""
+
+    device: str = ""
+    # the part of a part tab, relative to the config directory; None for the tab of the pages of the device
+    part: Optional[str] = None
+    # where the instance of a part tab is included (see `PlateSession.describe_instance`), None for the first one
+    instance: Optional[str] = None
+
+
+@dataclass
 class UiSession:
     """
     The state of the editor that is restored on the next start, for one config directory.
@@ -24,7 +35,11 @@ class UiSession:
     was stored, or that don't fit the field anymore, get the default, so nothing needs to be migrated.
     """
 
+    # the device of the active tab
     selected_device: Optional[str] = None
+    # the tabs of the preview, in their order, and the index of the active one
+    open_tabs: List[TabSession] = field(default_factory=list)
+    active_tab: Optional[int] = None
     # the files open in the text editor and the one shown, relative to the config directory
     open_files: List[str] = field(default_factory=list)
     current_file: Optional[str] = None

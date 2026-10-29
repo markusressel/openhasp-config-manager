@@ -54,9 +54,11 @@ openhasp-config-manager gui -c "./openhasp-configs"
 ## Working with an LLM next to the GUI
 
 The config files are plain text, so an LLM (or any tool) can edit them while the GUI is open. For context the files don't
-have, the GUI keeps `.openhasp-config-manager/gui-state.json` in the config directory up to date: the device and page that are
-open, the selected objects (with file and line), the unsaved changes, the warnings and errors the GUI shows, files it can't load
-and the connection to the plate, and `preview.png` shows the page as the GUI does. The folder is ignored by git and has a
+have, the GUI keeps `.openhasp-config-manager/gui-state.json` in the config directory up to date: the open tabs (devices and
+parts, each with its page, connection, Live preview and unsaved changes) and, for the active one, the device and page, the
+selected objects (with file and line), the unsaved changes, the warnings and errors the GUI shows, files it can't load and the
+connection to the plate. `preview.png` shows the page of the active tab as the GUI does, and
+`preview/<device>/current.png` the page of each open device. The folder is ignored by git and has a
 `README.md` that describes the format. Without the GUI, `openhasp-config-manager preview -c <config dir>` renders all pages from
 the files on disk into PNG files, and `openhasp-config-manager check -c <config dir>` prints the same problems (and what a deployment would fail on) for all devices,
 as text or `--json`, and exits with 1 on errors. Variables no device uses are listed as `hint`s (they don't fail the check).
@@ -65,8 +67,8 @@ Tell your LLM about it, e.g. in the `AGENTS.md` or `CLAUDE.md` of your config re
 
 ```markdown
 While the openhasp-config-manager GUI runs, `.openhasp-config-manager/gui-state.json` tells what the user has open and which
-problems the GUI shows, and `preview.png` next to it what the open page looks like (see the README in that folder). Edit only
-the config files.
+problems the GUI shows, `preview.png` next to it what the page of the active tab looks like and `preview/<device>/current.png`
+that of each open device (see the README in that folder). Edit only the config files.
 ```
 
 # CLI

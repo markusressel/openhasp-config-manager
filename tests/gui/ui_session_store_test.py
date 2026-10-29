@@ -1,5 +1,6 @@
 import pytest
 
+from openhasp_config_manager.gui.domain.ui_session import TabSession
 from tests import TestBase
 
 
@@ -16,6 +17,8 @@ class TestUiSessionStore(TestBase):
         store = store_for(tmp_path / "a")
         store.session.selected_device = "plate"
         store.session.device("plate").target_file = "devices/plate/page.jsonl"
+        store.session.open_tabs = [TabSession("plate"), TabSession("plate", "common/dot.jsonl", "page.jsonl:2")]
+        store.session.active_tab = 1
 
         # WHEN
         store.save()
