@@ -1,7 +1,7 @@
 import re
 import shutil
 from pathlib import Path
-from typing import Dict, List, Set, Optional
+from typing import Any, Dict, List, Set, Optional
 
 import orjson
 
@@ -628,12 +628,28 @@ class ConfigManager:
         return self._file_patterns(device, INCLUDE_FILES_VARIABLE)
 
     def _file_patterns(self, device: Device, variable: str) -> List[str]:
-        patterns = self._variable_manager.get_vars(device.path).get(variable, [])
+        patterns = self.variables_of_path(device.path).get(variable, [])
         if isinstance(patterns, str):
             patterns = [patterns]
         if not isinstance(patterns, list) or not all(isinstance(pattern, str) for pattern in patterns):
             raise ValueError(f"'{variable}' must be a list of file name patterns, found: {patterns}")
         return patterns
+
+    def variables_of_path(self, path: Path) -> Dict[str, Any]:
+        """
+        :param path: a file or folder of the config directory
+        :return: the variables of the YAML files for the path, computed (see `VariableManager.get_vars`): with `device` if the path is
+            in the folder of a device
+        :raises TemplateRenderError: if a variable can't be computed
+        """
+        devices = Path(self.cfg_root, DEVICES_FOLDER_NAME).resolve()
+        resolved = Path(path).resolve()
+        context = None
+        if resolved.is_relative_to(devices) and resolved != devices:
+            config = self._read_config(Path(devices, resolved.relative_to(devices).parts[0]))
+            if config is not None:
+                context = {"device": config.openhasp_config_manager.device}
+        return self._variable_manager.get_vars(Path(path), context)
 
     def _binary_image_names(self, device: Device, components: List[Component]) -> Set[str]:
         """

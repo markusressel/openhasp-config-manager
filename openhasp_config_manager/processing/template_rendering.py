@@ -12,20 +12,25 @@ Templates in the config files are Jinja2 with some differences:
 - **Keys of dicts win over their methods.** `{{ cfg.values }}` is the variable `values` of `cfg`, not `dict.values`.
 - **Templates are sandboxed.** They can't change what they are given or reach into Python internals, because configs may
   come from places the user doesn't control.
+- **Values that are not sent as text have types.** The values of variables (`render_variables`) and of the `vars`/`for` of an
+  `!include` are evaluated with `evaluate_template`: a single template is the value of its expression, other text with
+  templates is text (a number if it is one). These are strict: an unknown name is an error.
 """
 
 import copy
 import logging
 import re
+from contextlib import contextmanager
 from contextvars import ContextVar
 from functools import lru_cache
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, Iterator, List, Optional, Set, Tuple
 
 import jinja2
-from jinja2 import BaseLoader, Template, TemplateError, TemplateSyntaxError, UndefinedError
+from jinja2 import BaseLoader, Template, TemplateError, TemplateSyntaxError, UndefinedError, meta, nodes
 from jinja2.sandbox import ImmutableSandboxedEnvironment
 
 from openhasp_config_manager.console import warn
+from openhasp_config_manager.util import merge_dict_shared
 
 LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(logging.DEBUG)
@@ -239,6 +244,34 @@ def _end_of_expression(text: str, start: int) -> int:
 
 
 _OBJECT_NAME = re.compile(r"\bp\d+b\d+\b")
+# an object of the page of the object a template is in (`b4`), openHASP's `pXbY` without the page
+_PAGE_OBJECT_NAME = re.compile(r"\bb(\d+)\b")
+# the parts of the name of an object
+_OBJECT_PARTS = re.compile(r"p(\d+)b(\d+)")
+# the name of the object itself in its templates
+THIS = "this"
+
+
+def object_variables(name: str, template_vars: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    The names a template of an object has for objects, besides `pXbY`: `this` is the object itself, and `bY` is object `Y` on the
+    page of the object. They refer to the objects in the variables, as far as they are rendered.
+    :param name: the object the template is in, e.g. `p3b45`
+    :param template_vars: the variables with the objects by their names (`p3b4`)
+    :return: these names with their objects, to add to the variables of the template (nothing for a name that is not `pXbY`)
+    """
+    match = _OBJECT_PARTS.fullmatch(name)
+    if match is None:
+        return {}
+    page = match[1]
+    result = {
+        f"b{parts[2]}": value
+        for key, value in template_vars.items()
+        if (parts := _OBJECT_PARTS.fullmatch(str(key))) is not None and parts[1] == page
+    }
+    if name in template_vars:
+        result[THIS] = template_vars[name]
+    return result
 
 
 def has_nested_templates(content: str) -> bool:
@@ -246,46 +279,82 @@ def has_nested_templates(content: str) -> bool:
     return _find_nested_template(content) is not None
 
 
-def referenced_objects(content: str, template_vars: Dict[str, Any]) -> Optional[Set[str]]:
+def referenced_objects(content: str, template_vars: Dict[str, Any], page: Any = None) -> Optional[Set[str]]:
     """
     :param template_vars: the variables for the templates inside of templates, which are rendered first (see `render_template`)
+    :param page: the page of the object the text is in, for the objects named without their page (`b2` is `p<page>b2`)
     :return: the objects (`p1b2`) that the templates in a text name, also when a template builds the name
         (`{{ p{{ page }}b2.x }}` names `p3b2` if `page` is 3). None if that can't be told because a nested template is not valid.
     """
     if "{{" not in content and "{%" not in content:
         return set()
     try:
-        return set(_OBJECT_NAME.findall(render_nested_templates(content, template_vars)))
+        rendered = render_nested_templates(content, template_vars)
     except TemplateError:
         return None
+    names = set(_OBJECT_NAME.findall(rendered))
+    if page is not None:
+        names |= {f"p{page}b{object_id}" for object_id in _PAGE_OBJECT_NAME.findall(rendered)}
+    return names
 
 
 # what could not be rendered: where it is, and why
 Unresolved = Tuple[str, str]
+# changes a value that was rendered, by its keys in the dict (e.g. ["p1b2", "x"]): see `render_dict_recursive`
+Converter = Callable[[List[str], Any], Any]
+# more variables for the templates of an entry of the dict: (its key, the variables) -> the names and their values
+EntryVariables = Callable[[str, Dict[str, Any]], Dict[str, Any]]
 
 
 def render_dict_recursive(
     input: Dict,
     template_vars: Dict,
     result_key_path: List[str] = None,
+    convert: Optional[Converter] = None,
+    entry_vars: Optional[EntryVariables] = None,
 ) -> Dict[str, Any]:
     """
     Resolve the templates in the keys and values of a dict (and of the dicts and lists in it), which may refer to each
     other and to the `template_vars`. Entries that refer to something that is not defined yet are tried again after the
     others. Entries that never resolve are left out of the result, and reported.
     :param input: the dict which (possibly) contains templates
-    :param template_vars: the variables the templates can use. Not changed.
+    :param template_vars: the variables the templates can use. Not changed. Where they contain the entries of `input` (e.g. the
+        objects that refer to each other), a template counts as not defined until it is resolved, so nothing uses its text.
     :param result_key_path: the keys of the dict within the variables, for the dicts inside of `input`
+    :param convert: changes every value that is not a dict when it is resolved, before other templates use it (called with its
+        keys and the value, returns the value to use), e.g. to turn the numbers of object properties into numbers
+    :param entry_vars: variables only for the templates of an entry of `input` (not of the dicts inside of it), e.g. `this` for
+        an object (see `object_variables`). Called with the key of the entry and the variables, every time the entry is
+        rendered; a dict entry is in the variables at its key while it is rendered, so they can refer to what is resolved of it.
     :return: the dict with its templates rendered
     :raises TemplateRenderError: if a template is not valid
     """
-    result, unresolved = _render_dict(input, copy.deepcopy(template_vars), result_key_path or [])
+    variables = copy.deepcopy(template_vars)
+    path = result_key_path or []
+    _mark_pending(variables, input, path)
+    result, unresolved = _render_dict(input, variables, path, convert, entry_vars)
     if unresolved:
         warn("Can't render these templates: " + "; ".join(f"{name} ({reason})" for name, reason in unresolved))
     return result
 
 
-def _render_dict(input: Dict, template_vars: Dict, path: List[str]) -> Tuple[Dict[str, Any], List[Unresolved]]:
+def _mark_pending(variables: Dict, input: Dict, path: List[str]):
+    """Replace the templates of `input` that are in the variables with unknown variables, until they are resolved."""
+    for leaf_path, _text in _template_leaves(input, tuple(path)):
+        target: Any = variables
+        for key in leaf_path[:-1]:
+            target = target.get(key) if isinstance(target, dict) else None
+        if isinstance(target, dict) and leaf_path[-1] in target:
+            target[leaf_path[-1]] = _Undefined(name=".".join(map(str, leaf_path)))
+
+
+def _render_dict(
+    input: Dict,
+    template_vars: Dict,
+    path: List[str],
+    convert: Optional[Converter],
+    entry_vars: Optional[EntryVariables] = None,
+) -> Tuple[Dict[str, Any], List[Unresolved]]:
     # `template_vars` is changed: every resolved entry is added to it at its place, for the templates that follow
     result = {}
 
@@ -303,17 +372,25 @@ def _render_dict(input: Dict, template_vars: Dict, path: List[str]) -> Tuple[Dic
                     unresolved.append((name, f"the key {key_unresolved}"))
                     continue
 
-            rendered_value, value_unresolved = _render_value(value, template_vars, path + [rendered_key], name)
+            if entry_vars is None:
+                rendered_value, value_unresolved = _render_value(value, template_vars, path + [rendered_key], name, convert)
+            else:
+                if isinstance(value, dict):
+                    _container(template_vars, path).setdefault(rendered_key, {})
+                with _overlaid(template_vars, entry_vars(rendered_key, template_vars)):
+                    rendered_value, value_unresolved = _render_value(
+                        value, template_vars, path + [rendered_key], name, convert
+                    )
             if value_unresolved:
                 unresolved += value_unresolved
                 if isinstance(value, dict):
                     partial[rendered_key] = rendered_value
                 continue
+            if convert is not None and not isinstance(rendered_value, dict):
+                rendered_value = convert(path + [rendered_key], rendered_value)
 
             # later templates can use it
-            target = template_vars
-            for path_key in path:
-                target = target.setdefault(path_key, {})
+            target = _container(template_vars, path)
             target.pop(key, None)
             target[rendered_key] = rendered_value
             result[rendered_key] = rendered_value
@@ -326,9 +403,37 @@ def _render_dict(input: Dict, template_vars: Dict, path: List[str]) -> Tuple[Dic
         last_unresolved_names = unresolved_names
 
 
-def _render_value(value: Any, template_vars: Dict, path: List[str], name: str) -> Tuple[Any, List[Unresolved]]:
+def _container(template_vars: Dict, path: List[str]) -> Dict:
+    """:return: the dict of the variables at the path, created if it is not there"""
+    target = template_vars
+    for path_key in path:
+        target = target.setdefault(path_key, {})
+    return target
+
+
+_MISSING = object()
+
+
+@contextmanager
+def _overlaid(template_vars: Dict, extra: Dict[str, Any]) -> Iterator[None]:
+    """The variables have the extra names in this block (they win), and are as before afterwards."""
+    saved = {key: template_vars.get(key, _MISSING) for key in extra}
+    template_vars.update(extra)
+    try:
+        yield
+    finally:
+        for key, value in saved.items():
+            if value is _MISSING:
+                del template_vars[key]
+            else:
+                template_vars[key] = value
+
+
+def _render_value(
+    value: Any, template_vars: Dict, path: List[str], name: str, convert: Optional[Converter]
+) -> Tuple[Any, List[Unresolved]]:
     if isinstance(value, dict):
-        return _render_dict(value, template_vars, path)
+        return _render_dict(value, template_vars, path, convert)
     if isinstance(value, str):
         rendered, reason = _render_text(value, template_vars, name)
         return rendered, [(name, reason)] if reason else []
@@ -360,3 +465,223 @@ def _render_text(text: str, template_vars: Dict, name: str) -> Tuple[str, Option
         # e.g. `{{ {{ a }} }}` is only valid when `a` is defined
         return rendered if error is None else text, "uses unknown " + ", ".join(sorted(unknown))
     return rendered, None
+
+
+# --- values with types: the variables of the YAML files, the `vars` and `for` of an `!include` ---
+
+_INTEGER = re.compile(r"-?\d+")
+_FLOAT = re.compile(r"-?\d+\.\d+")
+# stands for a template inside of a template while the names a template uses are collected
+_NESTED = "__nested_template__"
+
+# where a variable is: its keys (and the indices of lists), `common.margin` is ("common", "margin")
+VariablePath = Tuple[Any, ...]
+
+
+@lru_cache(maxsize=_CACHE_SIZE)
+def _compile_expression(expression: str) -> Callable[..., Any]:
+    return _STRICT.compile_expression(expression, undefined_to_none=False)
+
+
+def is_single_template(text: str) -> bool:
+    """:return: whether a text is one `{{ ... }}` and nothing else (spaces around it are fine)"""
+    stripped = text.strip()
+    return stripped.startswith("{{") and stripped.endswith("}}") and template_spans(stripped) == [(0, len(stripped))]
+
+
+def evaluate_template(text: str, template_vars: Dict[str, Any]) -> Any:
+    """
+    The value of a text that is not sent to the plate as text, like a variable: a single template (`{{ common.margin * 2 }}`)
+    is the value of its expression (a number, a list, a mapping, ...). Any other text is rendered (see `render_template`) and
+    is a number if it is one (`"1{{ x }}"`). Unknown variables are errors.
+    :raises jinja2.TemplateSyntaxError: for an invalid template
+    :raises jinja2.UndefinedError: for an unknown variable
+    """
+    if not is_single_template(text):
+        return _number(render_template(text, template_vars, strict=True))
+    expression = render_nested_templates(text.strip(), template_vars, strict=True)[2:-2]
+    value = _compile_expression(expression)(template_vars)
+    if isinstance(value, jinja2.Undefined):
+        # e.g. a key the mapping doesn't have: raises the UndefinedError
+        str(value)
+    return value
+
+
+def _number(text: str) -> Any:
+    if _INTEGER.fullmatch(text):
+        return int(text)
+    if _FLOAT.fullmatch(text):
+        return float(text)
+    return text
+
+
+def render_variables(variables: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """
+    Compute the variables of the YAML files whose values are templates (see `evaluate_template`), from each other: in the order
+    they depend on each other, found from the names their templates use. Templates in keys are not rendered.
+    :param variables: the variables, e.g. the merged variables of a path (they are not changed)
+    :param context: more variables the templates can use, e.g. `device`. They win over `variables` (like a merge of both would)
+        and are not rendered; variables they replace are not computed and stay as they are.
+    :return: a copy of `variables` with the computed values
+    :raises TemplateRenderError: for an invalid template, an unknown name, a cycle, or a template that can't be computed
+    """
+    context = context or {}
+    result = copy.deepcopy(variables)
+    leaves = {path: text for path, text in _template_leaves(result, ()) if not _overridden(context, path)}
+    scope = merge_dict_shared(result, context)
+    for path in leaves:
+        # a template that uses a variable which is computed later fails (e.g. a name that a template inside of it builds)
+        _set_at(scope, path, jinja2.StrictUndefined(hint=f"'{_dotted(path)}' is not computed yet"))
+    for path in _dependency_order(leaves, scope):
+        try:
+            value = evaluate_template(leaves[path], scope)
+        except Exception as ex:
+            message = ex.message if isinstance(ex, TemplateError) else str(ex)
+            raise TemplateRenderError(f"Can't compute the variable '{_dotted(path)}': {message}: {leaves[path]}") from ex
+        _set_at(result, path, value)
+        _set_at(scope, path, value)
+    return result
+
+
+def _template_leaves(value: Any, path: VariablePath) -> List[Tuple[VariablePath, str]]:
+    if isinstance(value, dict):
+        return [leaf for key, child in value.items() for leaf in _template_leaves(child, path + (key,))]
+    if isinstance(value, list):
+        return [leaf for index, child in enumerate(value) for leaf in _template_leaves(child, path + (index,))]
+    if isinstance(value, str) and ("{{" in value or "{%" in value):
+        return [(path, value)]
+    return []
+
+
+def _overridden(context: Dict[str, Any], path: VariablePath) -> bool:
+    """:return: whether merging the context over the variables replaces the variable at the path"""
+    current: Any = context
+    for key in path:
+        if not isinstance(current, dict):
+            # a value of the context (e.g. a list) replaces everything below it
+            return True
+        if key not in current:
+            return False
+        current = current[key]
+    return True
+
+
+def _set_at(target: Any, path: VariablePath, value: Any):
+    for key in path[:-1]:
+        target = target[key]
+    target[path[-1]] = value
+
+
+def _dotted(path: VariablePath) -> str:
+    return ".".join(str(key) for key in path)
+
+
+def _dependency_order(leaves: Dict[VariablePath, str], scope: Dict[str, Any]) -> List[VariablePath]:
+    """
+    :return: the paths of the templates, each after the templates it uses
+    :raises TemplateRenderError: for an unknown name or a cycle
+    """
+    dependencies = {path: _dependencies(path, text, leaves, scope) for path, text in leaves.items()}
+    order: List[VariablePath] = []
+    done: Set[VariablePath] = set()
+    visiting: List[VariablePath] = []
+
+    def visit(path: VariablePath):
+        if path in done:
+            return
+        if path in visiting:
+            cycle = visiting[visiting.index(path) :] + [path]
+            raise TemplateRenderError("The variables depend on each other in a cycle: " + " -> ".join(map(_dotted, cycle)))
+        visiting.append(path)
+        for dependency in dependencies[path]:
+            visit(dependency)
+        visiting.pop()
+        done.add(path)
+        order.append(path)
+
+    for path in leaves:
+        visit(path)
+    return order
+
+
+def _dependencies(path: VariablePath, text: str, leaves: Dict[VariablePath, str], scope: Dict[str, Any]) -> List[VariablePath]:
+    """:return: the templates the template at `path` uses: those at a name it uses, below it, or around it"""
+    result = []
+    for used in referenced_variables(text):
+        unknown = _unknown_part(scope, used)
+        if unknown is not None:
+            raise TemplateRenderError(f"Unknown variable '{_dotted(unknown)}' in the variable '{_dotted(path)}': {text}")
+        result += [leaf for leaf in leaves if leaf[: len(used)] == used or used[: len(leaf)] == leaf]
+    return result
+
+
+def _unknown_part(scope: Dict[str, Any], used: VariablePath) -> Optional[VariablePath]:
+    """:return: the beginning of a name that is not a variable (`a.nope` of `a.nope.x`), None if the mappings have it"""
+    current: Any = scope
+    for index, key in enumerate(used):
+        if not isinstance(current, dict):
+            # e.g. `device`, a list or a value that is computed later: the rendering tells
+            return None
+        if key not in current:
+            return used[: index + 1]
+        current = current[key]
+    return None
+
+
+def referenced_variables(text: str) -> List[VariablePath]:
+    """
+    :return: the variables the templates of a text use, as far as they are written out: `{{ common.margin * 2 }}` uses
+        ("common", "margin"), `{{ a[i] }}` uses ("a",) and ("i",). Names that a template inside of a template builds are not known.
+        Names the templates define themselves (`{% for %}`, `{% set %}`) are left out.
+    :raises TemplateRenderError: for an invalid template
+    """
+    parts = []
+    outer = text
+    for _ in range(text.count("{{")):
+        nested = _find_nested_template(outer)
+        if nested is None:
+            break
+        start, end = nested
+        parts.append(outer[start:end])
+        outer = outer[:start] + _NESTED + outer[end:]
+    parts.append(outer)
+
+    result: List[VariablePath] = []
+    for part in parts:
+        try:
+            ast = _STRICT.parse(part)
+            # the functions of Jinja2 (`range`, ...) are not in it
+            free = meta.find_undeclared_variables(ast)
+        except TemplateSyntaxError as ex:
+            raise TemplateRenderError(f"Invalid template: {ex.message}: {text}") from ex
+        _collect_paths(ast, free, result)
+    return [path for path in result if _NESTED not in str(path[0])]
+
+
+def _collect_paths(node: nodes.Node, free: Set[str], result: List[VariablePath]):
+    if isinstance(node, nodes.Call) and isinstance(node.node, nodes.Getattr):
+        # a method (`a.keys()`) uses what it is called on
+        _collect_paths(node.node.node, free, result)
+        for child in node.iter_child_nodes():
+            if child is not node.node:
+                _collect_paths(child, free, result)
+        return
+    path = _reference_path(node)
+    if path is not None and path[0] in free:
+        result.append(path)
+        return
+    for child in node.iter_child_nodes():
+        _collect_paths(child, free, result)
+
+
+def _reference_path(node: nodes.Node) -> Optional[VariablePath]:
+    """:return: the path of a name with its attributes and constant keys (`a.b["c"]`), None for anything else"""
+    if isinstance(node, nodes.Name):
+        return (node.name,)
+    if isinstance(node, nodes.Getattr):
+        base = _reference_path(node.node)
+        return None if base is None else base + (node.attr,)
+    if isinstance(node, nodes.Getitem) and isinstance(node.arg, nodes.Const):
+        base = _reference_path(node.node)
+        return None if base is None else base + (node.arg.value,)
+    return None

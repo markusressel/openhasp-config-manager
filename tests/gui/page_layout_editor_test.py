@@ -56,7 +56,13 @@ def plate(monkeypatch) -> _Plate:
 
 
 @pytest.fixture
-def editor(qapp, async_loop, plate, tmp_path, monkeypatch):
+def editor_files():
+    """:return: the files the test writes into the config directory: path -> content (classes override it)"""
+    return {"devices/test_device/editor.jsonl": EDITOR_JSONL}
+
+
+@pytest.fixture
+def editor(qapp, async_loop, plate, tmp_path, monkeypatch, editor_files):
     from openhasp_config_manager.gui.qt.operations import OperationStatus
     from openhasp_config_manager.gui.qt.widgets.pagelayout import OpenHaspDevicePagesData, plate_link
     from openhasp_config_manager.gui.qt.widgets.pagelayout.page_layout_editor import PageLayoutEditorWidget
@@ -66,7 +72,9 @@ def editor(qapp, async_loop, plate, tmp_path, monkeypatch):
     root = tmp_path / "cfg"
     shutil.copytree(Path(__file__).parent.parent / "_test_cfg_root", root)
     device_dir = root / "devices" / "test_device"
-    (device_dir / "editor.jsonl").write_text(EDITOR_JSONL)
+    for name, content in editor_files.items():
+        (root / name).parent.mkdir(parents=True, exist_ok=True)
+        (root / name).write_text(content)
     (device_dir / "boot.cmd").write_text("run L:/home_page.jsonl\nrun L:/editor.jsonl\n")
     loaded = load_device(_create_config_manager(root, tmp_path / "output"), "test_device")
     session = PlateSession(device=loaded.device)
@@ -540,6 +548,100 @@ class TestLockedPosition(TestBase):
         # THEN
         assert unlocked is False
         assert offered() is True
+
+
+class TestIncludedObjects(TestBase):
+    @pytest.fixture
+    def editor_files(self):
+        return {
+            "common/parts/dot.jsonl": '{"page": 9, "id": "{{ id }}", "obj": "label", "x": "{{ id * 10 }}", "text": "{{ id }}"}\n',
+            "devices/test_device/editor.jsonl": EDITOR_JSONL
+            + '{"!include": "common/parts/dot.jsonl", "for": {"id": [20, 21]}}\n',
+        }
+
+    def _select(self, editor, obj_id: int):
+        editor.set_edit_mode(True)
+        obj = _object(editor, obj_id)
+        editor.page_preview_widget.select_object(obj)
+        return obj
+
+    def test_included_objects_are_shown_but_cant_be_dragged(self, editor):
+        # GIVEN
+        editor.set_edit_mode(True)
+        editor.page_preview_widget.refresh_movable()
+
+        # THEN
+        items = {item.obj_data.get("id"): item for item in editor.page_preview_widget.editable_items()}
+        assert items[20].obj_data["x"] == 200 and items[21].obj_data["text"] == "21"
+        assert items[20].movable is False
+        assert items[1].movable is True
+
+    def test_the_live_preview_sends_the_included_objects_too(self, editor, plate):
+        # WHEN
+        editor.plate.action_live_preview.setChecked(True)
+        wait_until(lambda: plate.calls and plate.calls[-1] == ("set_page", 9))
+
+        # THEN
+        assert {(9, 1), (9, 20), (9, 21)} <= set(_sent_objects(plate))
+
+    def test_the_actions_leave_included_objects_alone_and_explain_why(self, editor, monkeypatch):
+        from PyQt6.QtWidgets import QApplication, QMessageBox
+
+        # GIVEN
+        editor.resize(900, 700)
+        editor.show()
+        failures = []
+        editor.status.failed.connect(lambda *args: failures.append(args))
+        monkeypatch.setattr(QMessageBox, "question", lambda *args: QMessageBox.StandardButton.Yes)
+        QApplication.clipboard().setText("nothing")
+        obj = self._select(editor, 20)
+
+        # WHEN
+        editor.object_actions.nudge_selected(1, 0)
+        editor.object_actions.use_pixel_positions()
+        editor.object_actions.duplicate_selected()
+        editor.object_actions.copy_selected()
+        editor.object_actions.remove_selected()
+
+        # THEN
+        assert [failure[0] for failure in failures] == [
+            "Moving p9b20",
+            "Using pixels for p9b20",
+            "Duplicating p9b20",
+            "Copying p9b20",
+            "Removing p9b20",
+        ]
+        assert failures[0][1] == "an !include puts it into the file: change it in the part, or the vars of the !include"
+        assert editor.page_preview_widget._message.text().startswith(
+            "p9b20 can't be changed here:\nIt is included from common/parts/dot.jsonl:1"
+        )
+        assert QApplication.clipboard().text() == "nothing"
+        assert any(other is obj for other in editor.page_objects)
+        assert editor.session.is_dirty is False
+        assert editor.session.undo_description is None
+
+    def test_the_properties_are_read_only_and_lead_to_the_part_and_the_directive(self, editor, tmp_path):
+        from PyQt6.QtWidgets import QLabel, QLineEdit, QPushButton
+
+        # GIVEN
+        editor.property_editor.set_session(editor.session)
+        requested = []
+        editor.openSourceRequested.connect(lambda path, line: requested.append((path, line)))
+
+        # WHEN
+        self._select(editor, 21)
+        buttons = {button.text(): button for button in editor.property_editor.findChildren(QPushButton)}
+        buttons["Open the part"].click()
+        buttons["Go to the !include"].click()
+
+        # THEN
+        root = tmp_path / "cfg"
+        assert requested == [(root / "common/parts/dot.jsonl", 1), (root / "devices/test_device/editor.jsonl", 4)]
+        assert "Remove Object" not in buttons and "Duplicate Object" not in buttons
+        assert editor.property_editor.findChildren(QLineEdit) == []
+        texts = [label.text() for label in editor.property_editor.findChildren(QLabel)]
+        assert "common/parts/dot.jsonl:1  ·  included" in texts
+        assert "210" in texts
 
 
 class TestUndo(TestBase):

@@ -90,6 +90,8 @@ class CodeEditor(QPlainTextEdit):
     renameRequested = QtCore.pyqtSignal()
     # Ctrl+click on a reference to another file: its name on the plate (`pages.jsonl` for `L:/pages.jsonl`)
     linkRequested = QtCore.pyqtSignal(str)
+    # Ctrl+click on the path of an `!include`: the path, relative to the config directory
+    includeRequested = QtCore.pyqtSignal(str)
     # Ctrl+click on a part of a variable in a template whose definition is known: the variable up to that part
     definitionRequested = QtCore.pyqtSignal(str)
     # Ctrl+click on the key of a variable in a YAML file: the variable, and where the mouse is (global)
@@ -587,6 +589,8 @@ class CodeEditor(QPlainTextEdit):
             link = found[1]
             if link.kind == "usages":
                 self.usagesRequested.emit(link.target, event.globalPosition().toPoint())
+            elif link.kind == "include":
+                self.includeRequested.emit(link.target)
             else:
                 (self.definitionRequested if link.kind == "variable" else self.linkRequested).emit(link.target)
             event.accept()

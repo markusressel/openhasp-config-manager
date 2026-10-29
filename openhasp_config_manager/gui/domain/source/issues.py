@@ -14,6 +14,7 @@ import yaml
 from openhasp_config_manager.gui.domain.problems import Severity
 from openhasp_config_manager.gui.domain.source.objects import pages_of, scan_objects
 from openhasp_config_manager.gui.domain.source.syntax import Language, TokenKind, tokenize_line
+from openhasp_config_manager.processing.jsonl.includes import directive_error
 from openhasp_config_manager.processing.preprocessor.jsonl_preprocessor import OBJECT_START
 from openhasp_config_manager.processing.template_rendering import template_syntax_error
 
@@ -62,12 +63,23 @@ def _jsonl_issues(text: str) -> List[SourceIssue]:
             continue
         # everything after the last closing bracket is ignored, like a deployment does
         part = part[: part.rindex("}") + 1]
+        cleaned = _without_comments_and_trailing_commas(part)
         try:
-            json.loads(_without_comments_and_trailing_commas(part))
+            parsed = json.loads(cleaned)
         except json.JSONDecodeError as ex:
             issues.append(
                 SourceIssue(first_line + ex.lineno - 1, max(ex.colno - 1, 0), 1, Severity.ERROR, f"Invalid JSON: {ex.msg}")
             )
+            continue
+        error = directive_error(parsed) if isinstance(parsed, dict) else None
+        if error is not None:
+            # at the key of the directive (comments are blanked out, so a `"!` in one doesn't count)
+            key = cleaned.index('"!')
+            position = start + key
+            line = text.count("\n", 0, position) + 1
+            column = position - (text.rfind("\n", 0, position) + 1)
+            length = cleaned.index('"', key + 1) + 1 - key
+            issues.append(SourceIssue(line, column, length, Severity.ERROR, error))
     return issues
 
 

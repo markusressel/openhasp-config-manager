@@ -1,6 +1,7 @@
 import json
+import re
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Set, Tuple
 
 import orjson
 
@@ -14,14 +15,30 @@ from openhasp_config_manager.openhasp_client.model.component import (
 from openhasp_config_manager.openhasp_client.model.configuration.config import Config
 from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.processing.jsonl import JsonlObjectProcessor
+from openhasp_config_manager.processing.jsonl.includes import (
+    Expansion,
+    ExpandedObject,
+    IncludeExpansionError,
+    IncludeLookupError,
+    IncludedObjectError,
+    PartFile,
+    directive_paths,
+    expand_includes,
+)
+from openhasp_config_manager.processing.jsonl.jsonl import ObjectDimensionsProcessor
 from openhasp_config_manager.processing.preprocessor.jsonl_preprocessor import JsonlPreProcessor
 from openhasp_config_manager.processing.template_rendering import (
+    object_variables,
     render_dict_recursive,
     render_template,
     render_template_or_keep,
+    render_variables,
 )
 from openhasp_config_manager.processing.variables import VariableManager
 from openhasp_config_manager.util import add_missing_keys, merge_dict_into, merge_dict_recursive, merge_dict_shared
+
+# the name of an object in the variables, `p1b2`
+_OBJECT_NAME = re.compile(r"p\d+b\d+")
 
 
 class DeviceProcessor:
@@ -44,6 +61,14 @@ class DeviceProcessor:
         self._jsonl_preprocessor = JsonlPreProcessor()
         self._jsonl_object_processors = jsonl_object_processors
         self._variable_manager = variable_manager
+        # path -> its computed variables, see `path_variables`
+        self._path_variables: Dict[str, Dict[str, Any]] = {}
+        self._dimensions = ObjectDimensionsProcessor()
+        # path -> the objects of the file on disk after its directives are replaced, see `expand_jsonl_objects`
+        self._expansions: Dict[str, Expansion] = {}
+        # path -> the file as a part, see `part`
+        self._parts: Dict[str, PartFile] = {}
+        self._part_paths: Optional[Set[Path]] = None
 
     def add_component(self, component: Component):
         if isinstance(component, JsonlComponent):
@@ -56,6 +81,7 @@ class DeviceProcessor:
 
     def _add_jsonl(self, component: JsonlComponent):
         self._jsonl_components.append(component)
+        self._part_paths = None
 
     def normalize(self, device: Device, component: Component) -> str | bytes:
         if isinstance(component, JsonlComponent):
@@ -89,6 +115,61 @@ class DeviceProcessor:
         except ValueError as ex:
             raise ValueError(f"Invalid JSONL in {component.path}: {ex}") from ex
 
+    @property
+    def config_dir(self) -> Path:
+        return self._variable_manager.cfg_root
+
+    def expand_jsonl_objects(self, component: JsonlComponent, sources: Optional[List[Dict[str, Any]]] = None) -> Expansion:
+        """
+        Replace the directives (`!include`) of a jsonl component with the objects they include (see `expand_includes`).
+        :param component: the component, which must have been added to this processor
+        :param sources: its source objects, to use instead of those in its file (see parse_jsonl_objects)
+        :return: the objects of the component in their order, and the errors of its directives
+        """
+        key = str(component.path)
+        if sources is not None:
+            return self._expand(component, sources)
+        if key not in self._expansions:
+            self._expansions[key] = self._expand(component, self.parse_jsonl_objects(component))
+        return self._expansions[key]
+
+    def _expand(self, component: JsonlComponent, sources: List[Dict[str, Any]]) -> Expansion:
+        return expand_includes(component.path, component.content, sources, self.path_variables(component.path), self)
+
+    def part(self, path: str) -> PartFile:
+        """
+        :param path: the path of an `!include`, relative to the config directory
+        :return: the file, if it is a jsonl file of this device
+        :raises IncludeLookupError: if it is not
+        """
+        file = Path(self.config_dir, path)
+        key = str(file.resolve())
+        if key not in self._parts:
+            component = next((c for c in self._jsonl_components if str(Path(c.path).resolve()) == key), None)
+            if component is None:
+                if not file.is_file():
+                    raise IncludeLookupError(f"The file to include doesn't exist: {path}")
+                raise IncludeLookupError(
+                    f"{path} is not a file of the device {self._device.name}: only the files in common/ and in the folder of "
+                    f"the device can be included"
+                )
+            self._parts[key] = PartFile(component.path, component.content, self.parse_jsonl_objects(component))
+        return self._parts[key]
+
+    def defaults(self, path: Path) -> Dict[str, Any]:
+        """:return: the variables of the YAML files of the folders of a part, not computed (see `instance_scope`)"""
+        return self._variable_manager.get_raw_vars(path)
+
+    def part_paths(self) -> Set[Path]:
+        """:return: the files that a jsonl component of the device includes (resolved), even if a directive has an error"""
+        if self._part_paths is None:
+            self._part_paths = {
+                Path(self.config_dir, path).resolve()
+                for component in self._jsonl_components
+                for path in directive_paths(self.parse_jsonl_objects(component))
+            }
+        return self._part_paths
+
     def jsonl_template_variables(
         self, component: JsonlComponent, draft_objects: Optional[Dict[Path, List[Dict[str, Any]]]] = None
     ) -> Dict[str, Any]:
@@ -101,7 +182,11 @@ class DeviceProcessor:
         return self._compute_jsonl_template_variables(self._device, component, draft_objects)
 
     def render_jsonl_object(
-        self, source_object: Dict[str, Any], template_vars: Dict[str, Any], keep_unresolved: bool = False
+        self,
+        source_object: Dict[str, Any],
+        template_vars: Dict[str, Any],
+        keep_unresolved: bool = False,
+        scope: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Renders one source object like a deployment does: its templates, then the object processors
@@ -110,13 +195,24 @@ class DeviceProcessor:
         :param template_vars: the variables of its component (see jsonl_template_variables)
         :param keep_unresolved: keep a value as written if it uses a variable that doesn't exist, instead of failing (for the
             editor, which shows objects with mistakes; a deployment fails)
+        :param scope: the variables of the instance of a part, for an included object (see `ExpandedObject.scope`)
         :return: the rendered object
         """
+        if scope:
+            template_vars = {**template_vars, **scope}
         render = render_template_or_keep if keep_unresolved else render_template
+
+        def rendered(key: str) -> Any:
+            value = source_object.get(key, "0")
+            return render(value, template_vars) if isinstance(value, str) else value
+
+        # `this` and `bY` (see `object_variables`): the page and the id say which object it is
+        name = f"p{rendered('page')}b{rendered('id')}"
+        object_vars = {**template_vars, **object_variables(name, template_vars)}
         normalized_object = {}
         for key, value in source_object.items():
             if isinstance(value, str):
-                normalized_object[key] = render(value, template_vars)
+                normalized_object[key] = render(value, object_vars)
             else:
                 normalized_object[key] = value
 
@@ -126,10 +222,22 @@ class DeviceProcessor:
         return processed
 
     def _normalize_jsonl(self, config: Config, component: JsonlComponent, template_vars: Dict[str, any]) -> str:
-        return "\n".join(
-            json.dumps(self.render_jsonl_object(source_object, template_vars), indent=None)
-            for source_object in self.parse_jsonl_objects(component)
-        )
+        """
+        :raises IncludeExpansionError: if a directive has an error
+        :raises IncludedObjectError: if an object of a part can't be rendered
+        """
+        expansion = self.expand_jsonl_objects(component)
+        if expansion.errors:
+            raise IncludeExpansionError(expansion.errors, self.config_dir)
+        return "\n".join(json.dumps(self._render_expanded(obj, template_vars), indent=None) for obj in expansion.objects)
+
+    def _render_expanded(self, obj: ExpandedObject, template_vars: Dict[str, Any]) -> Dict[str, Any]:
+        if not obj.origin.is_included:
+            return self.render_jsonl_object(obj.source, template_vars)
+        try:
+            return self.render_jsonl_object(obj.source, template_vars, scope=obj.scope)
+        except Exception as ex:
+            raise IncludedObjectError(obj.origin, self.config_dir, str(ex)) from ex
 
     def _normalize_cmd(self, _device_config, component: CmdComponent, template_vars: Dict[str, any]) -> str:
         return render_template(component.content, template_vars)
@@ -148,21 +256,30 @@ class DeviceProcessor:
         # object specific variables for all components that the processor currently knows about
         sorted_components = list(sorted(self._jsonl_components, key=lambda x: x == component))
         assert sorted_components[-1] == component
+        part_paths = self.part_paths()
         for c in sorted_components:
-            component_template_vars = self._variable_manager.get_vars(c.path)
-            component_template_vars["device"] = self._device.config.openhasp_config_manager.device
-            if "/common/" in str(c.path):
-                # for common components, also include device specific, top-level variables
-                device_vars = self._variable_manager.get_vars(device.path)
-                component_template_vars = merge_dict_recursive(component_template_vars, device_vars)
+            # the objects of a part are in the variables through the files that include it (and its own when it is rendered)
+            if c != component and Path(c.path).resolve() in part_paths:
+                continue
+            component_template_vars = self.path_variables(c.path)
 
             if draft_objects is not None and c.path in draft_objects:
-                c_result = self._object_map(draft_objects[c.path])
+                expansion = self.expand_jsonl_objects(c, draft_objects[c.path])
             else:
-                c_result = self._object_map(self.parse_jsonl_objects(c))
+                expansion = self.expand_jsonl_objects(c)
+            c_result, scopes = self._object_map(expansion.objects)
             # `result` becomes what the variables of this component start with: everything before it, and its own variables
             merge_dict_into(result, component_template_vars)
-            rendered_template_vars = render_dict_recursive(input=c_result, template_vars=merge_dict_shared(result, c_result))
+
+            def entry_vars(name: str, template_vars: Dict[str, Any], scopes=scopes) -> Dict[str, Any]:
+                return {**scopes.get(name, {}), **object_variables(name, template_vars)}
+
+            rendered_template_vars = render_dict_recursive(
+                input=c_result,
+                template_vars=merge_dict_shared(result, c_result),
+                convert=self._object_value,
+                entry_vars=entry_vars,
+            )
             # what the objects add, without overriding anything
             add_missing_keys(result, rendered_template_vars)
 
@@ -170,11 +287,43 @@ class DeviceProcessor:
             raise AssertionError("Unexpected None value")
         return result
 
-    def _object_map(self, source_objects: List[Dict[str, Any]]) -> Dict[str, dict]:
+    def _object_value(self, keys: List[str], value: Any) -> Any:
+        """The properties of the objects in the variables (`p1b2.w`) are numbers and pixels, as they are sent to the plate."""
+        if len(keys) == 2 and _OBJECT_NAME.fullmatch(keys[0]):
+            return self._dimensions.normalize_value(keys[1], value, self._device.config)
+        return value
+
+    def path_variables(self, path: Path) -> Dict[str, Any]:
         """
-        :return: "p<page>b<id>" -> the source object
+        :param path: a file or folder of the config directory
+        :return: the variables of the YAML files for that path on this device, computed (see `render_variables`), and `device`.
+            A file of the common folder also gets the variables of the device folder. Shared: don't change it.
+        :raises TemplateRenderError: if a variable can't be computed
         """
-        return {self._compute_object_key(source_object): source_object for source_object in source_objects}
+        key = str(path)
+        if key not in self._path_variables:
+            variables = self._variable_manager.get_raw_vars(path)
+            if "/common/" in key:
+                # for common components, also include device specific, top-level variables
+                variables = merge_dict_recursive(variables, self._variable_manager.get_raw_vars(self._device.path))
+            device = self._device.config.openhasp_config_manager.device
+            self._path_variables[key] = {**render_variables(variables, {"device": device}), "device": device}
+        return self._path_variables[key]
+
+    def _object_map(self, objects: List[ExpandedObject]) -> Tuple[Dict[str, dict], Dict[str, Dict[str, Any]]]:
+        """
+        :return: "p<page>b<id>" -> the source object, and the name of an included object -> the variables of its instance
+        """
+        sources: Dict[str, dict] = {}
+        scopes: Dict[str, Dict[str, Any]] = {}
+        for obj in objects:
+            name = obj.name or self._compute_object_key(obj.source)
+            sources[name] = obj.source
+            if obj.origin.is_included:
+                scopes[name] = obj.scope
+            else:
+                scopes.pop(name, None)
+        return sources, scopes
 
     @staticmethod
     def _compute_object_key(jsonl_object: Dict) -> str:

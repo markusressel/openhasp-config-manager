@@ -13,6 +13,7 @@ a logic-aware config engine with a robust API client and deployment automation.
   * **Jinja2 Templating:** Power your UI with logic, math, and cross-object variables (e.g., `{{ p1b1.y + 10 }}`).
   * **Comments:** Use `//` to document your layout logic directly inside your `.jsonl` files.
   * **YAML Variables:** Define global and local variables to reuse values across your entire setup.
+  * **Parts:** Write repeating objects once and include them anywhere with `!include`, with variables and loops.
 * 🎨 **Global Theme Engine:** Define styles (colors, fonts, radii) once and apply them to all objects instantly.
 
 🚢 Smart Deployment & Validation
@@ -328,6 +329,20 @@ You can use the full functionality of Jinja2 like f.ex. math operations, functio
   }
 ```
 
+The numeric properties of other objects (`page`, `id`, `x`, `y`, `w`, `h`, `min`, `max`, `radius`, `border_width`,
+`pad_*`, `margin_*`, ...) are numbers, with percentages already turned into pixels, so you can calculate with them directly:
+`"{{ p1b1.x + p1b1.w + 4 }}"`. Other properties are text, as they are written.
+
+Two shorter names help with objects of the same page:
+
+* `this` is the object itself: `"w": "{{ this.h }}"` makes it square, `"text": "Page {{ this.page }}"`.
+* `bY` is the object with the id `Y` on the page of the object, like `pXbY` without the page:
+  `"x": "{{ b4.x + common.card.padding }}"` instead of `"x": "{{ p{{ common.pages.printer.index }}b4.x + common.card.padding }}"`.
+
+Like `pXbY`, they work for objects later in the file, for the object itself and for objects of other files of the device.
+They can't be used in `page` and `id` (these say which object it is), and inside of object templates they hide variables
+with the same names.
+
 #### 📦 Variables & Scoping
 
 Besides accessing other objects, you can also define custom variables yourself, which can then
@@ -335,6 +350,8 @@ be referenced inside of templates. Variables are defined using `*.yaml` files. I
 decided to use a subfolder structure to organize your configuration files you can use these folders
 to also set the scope of variables. More specific variable definitions (longer path) will override
 less specific ones.
+Variables can be computed from other variables (see [Computed values](#computed-values)), and an `!include` can pass
+variables of its own to the objects it includes (see [Including objects](#including-objects)).
 
 ##### Global
 
@@ -404,11 +421,37 @@ page_title: "My Device"
 }
 ```
 
+##### Computed values
+
+The values of variables can be templates themselves, computed from other variables and from `device` (the
+`openhasp_config_manager.device` section of the device's `config.json`, e.g. `device.screen.width`):
+
+`openhasp-configs/global.vars.yaml`
+
+```yaml
+common:
+  margin: 4
+  card:
+    x: "{{ common.margin }}"
+    w: "{{ device.screen.width - common.margin * 2 }}"
+    padding: 6
+    inner_w: "{{ common.card.w - common.card.padding * 2 }}"
+```
+
+* A value is computed with the variables of the path it is used in, so a device that overrides `common.margin` gets its
+  own `common.card.w`. For files in `common`, that includes the variables of the device folder.
+* The order of the definitions doesn't matter. Variables that depend on each other in a cycle, or names that don't exist,
+  are errors (`check` and a deployment report them).
+* A value that is a single template (`"{{ ... }}"`) is the value of the expression: a number, a list, ... Other text with
+  templates stays text, unless it is a number.
+* Objects (`p1b2`) can't be used in variables: variables are computed before the objects. Use them in the objects instead.
+* If a value should keep its braces, write it as `"{% raw %}{{ text }}{% endraw %}"`.
+
 #### Printing variables
 
 If you are not sure what variables are accessible in a given path, you can use the `vars`
 command, which will give you a copy&paste ready output of all variables for a
-given directory:
+given directory (with computed values; for a path in a device folder with the `device` of that device):
 
 ```shell
 > openhasp-config-manager vars -c openhasp-configs -p devices/touch_down_1/home
@@ -438,6 +481,129 @@ theme:
 
 in a global variable file named `theme.yaml` located at the root of your configurations directory
 `openhasp-configs/theme.yaml`.
+
+#### Including objects
+
+Objects that repeat (a caption with its value, the dots of a page indicator, a row of buttons) can be written once in a
+`.jsonl` file of their own, a "part", and included where they are needed with an `!include` object:
+
+```json lines
+{
+  "!include": "common/parts/tile/tile.jsonl",
+  "vars": {"page": 3, "id": 10, "x": 10, "y": 50, "caption": "Elapsed"}
+}
+```
+
+* `!include` is the path of the part, relative to the config directory, written as it is (no templates). Like every file of a
+  device, it must be in `common/` or in the folder of the device.
+* The objects of the part replace the `!include` object, in their order.
+* `vars` (optional) are variables for the part. Their values may be templates, computed from the variables of the including
+  file.
+* `for` (optional) includes the part once for every value of a loop variable: a list, or a single template like
+  `"{{ range(1, 6) }}"`. With several loop variables, the part is included for every combination, the first one changing
+  slowest.
+* A part is a normal JSONL file: its parameters are the variables used in its templates. It can include other parts.
+* An object is either an openHASP object or an `!include`, never both. The plate never sees an `!include`.
+
+The part computes the ids of its objects from its variables (`"id": "{{ id + 1 }}"`). Included objects have their names
+before the templates of the objects are rendered, so they can be referred to like all others (`p3b11.y`, `b11.y`), and they
+can refer to the objects of the including file and to each other.
+
+##### Example: tiles
+
+`openhasp-configs/common/parts/tile/tile.jsonl`
+
+```json lines
+// a caption with a value below it. Parameters: page, id (the value gets id + 1), x, y, caption
+{"page": "{{ page }}", "id": "{{ id }}", "obj": "label", "x": "{{ x }}", "y": "{{ y }}", "w": "{{ tile.w }}", "text": "{{ caption }}"}
+{"page": "{{ page }}", "id": "{{ id + 1 }}", "obj": "label", "x": "{{ x }}", "y": "{{ tile.value_y }}", "w": "{{ tile.w }}", "text": "-"}
+```
+
+`openhasp-configs/common/parts/tile/tile.yaml`
+
+```yaml
+tile:
+  w: 140
+  value_y: "{{ y + 22 }}"
+```
+
+`openhasp-configs/devices/my_device/printer.jsonl`
+
+```json lines
+{"page": 3, "id": 1, "obj": "label", "x": 10, "y": 10, "text": "Printer"}
+{
+  // two tiles next to each other: ids 10 and 11, 12 and 13
+  "!include": "common/parts/tile/tile.jsonl",
+  "vars": {"page": 3, "id": "{{ 10 + column * 2 }}", "x": "{{ 10 + column * 150 }}", "y": 50,
+           "caption": "{{ ['Elapsed', 'Remaining'][column] }}"},
+  "for": {"column": [0, 1]}
+}
+{"page": 3, "id": 20, "obj": "bar", "x": 10, "y": "{{ b11.y + 40 }}", "w": 290, "h": 10}
+```
+
+##### Example: a page indicator
+
+Five dots at the bottom of each of the pages 1 to 5, the dot of the page highlighted:
+
+`openhasp-configs/common/parts/page_indicator/dot.jsonl`
+
+```json lines
+{
+  "page": "{{ page }}",
+  "id": "{{ 200 + dot }}",
+  "obj": "obj",
+  "x": "{{ dots.x + dot * dots.step }}",
+  "y": "{{ device.screen.height - dots.size - 4 }}",
+  "w": "{{ dots.size }}",
+  "h": "{{ dots.size }}",
+  "radius": "{{ dots.size // 2 }}",
+  "bg_color": "{{ dots.active_color if dot == page - 1 else dots.color }}",
+  "click": 0
+}
+```
+
+`openhasp-configs/common/parts/page_indicator/dot.yaml`
+
+```yaml
+dots:
+  count: 5
+  size: 8
+  step: 16
+  color: "#555555"
+  active_color: "#FFFFFF"
+  x: "{{ (device.screen.width - dots.count * dots.step) // 2 }}"
+```
+
+`openhasp-configs/common/page_indicator.jsonl`
+
+```json lines
+{"!include": "common/parts/page_indicator/dot.jsonl", "for": {"page": "{{ range(1, 6) }}", "dot": "{{ range(5) }}"}}
+```
+
+##### Variables of a part
+
+A part sees, later ones winning:
+
+1. the variables of its own folders (`common/parts/tile/tile.yaml` above): its defaults,
+2. the variables of the including file (for a part included by a part: those of that part's instance),
+3. `vars`,
+4. the loop variables of `for`.
+
+A default whose value is a template is computed with all of them (`tile.value_y` uses the `y` of the instance). A device or a
+page can override a default, so give the defaults of a part names of their own (like `tile.*`) if they shouldn't be
+overridden by accident. The values of `vars` can use the loop variables (`"id": "{{ 10 + column * 2 }}"`), but not objects:
+pass the id of an object instead, and refer to it in the part (`"{{ b{{ anchor }}.y }}"`).
+
+##### Deploying, checking and editing parts
+
+* A part that no `.cmd` file runs is not uploaded: the plate gets its objects in the files that include it. Its objects count
+  for `pXbY` only through the files that include them.
+* `check` and a deployment report the errors of an `!include` (a missing file, a loop of includes, unknown variables, two
+  objects with the same page and id, ...) at its line, and errors of included objects at their line in the part, with the
+  `!include`s that led there.
+* In the GUI, included objects are shown on the pages like all others, but can't be changed there: change them in the part,
+  or the `vars` of the `!include`. The properties of an included object link to both. The text editor highlights
+  `!include`, opens the part with Ctrl+click on its path, completes the path and explains `vars` and `for` on hover.
 
 ## Images and fonts
 

@@ -1,6 +1,13 @@
 from pathlib import Path
 
-from openhasp_config_manager.gui.domain.source.links import find_links, link_at, link_targets, plate_names, resolve_link
+from openhasp_config_manager.gui.domain.source.links import (
+    find_links,
+    include_targets,
+    link_at,
+    link_targets,
+    plate_names,
+    resolve_link,
+)
 from openhasp_config_manager.gui.domain.source.syntax import Language
 from tests import TestBase
 
@@ -42,3 +49,18 @@ class TestLinks(TestBase):
             "common/a.jsonl",
             "devices/p/boot.cmd",
         ]
+
+
+class TestIncludeLinks(TestBase):
+    def test_the_path_of_an_include_is_a_link(self):
+        line = '{"!include": "common/parts/tile.jsonl", "vars": {"x": "common/other.jsonl"}}'
+        [link] = find_links(line, Language.JSONL)
+        assert (link.start, link.end, link.target, link.kind) == (14, 37, "common/parts/tile.jsonl", "include")
+        assert link_at(line, 20, Language.JSONL).kind == "include"
+        assert link_at(line, 3, Language.JSONL) is None
+
+    def test_the_files_an_include_can_name(self, tmp_path):
+        (tmp_path / "common" / "parts").mkdir(parents=True)
+        for name in ["common/parts/tile.jsonl", "common/boot.cmd", "a.jsonl", ".hidden.jsonl"]:
+            (tmp_path / name).write_text("")
+        assert include_targets(tmp_path) == ["a.jsonl", "common/parts/tile.jsonl"]

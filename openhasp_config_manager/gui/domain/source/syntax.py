@@ -8,7 +8,7 @@ import re
 from dataclasses import dataclass
 from enum import Enum, StrEnum
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from openhasp_config_manager.gui.domain.source.placeholders import PLACEHOLDER_PROPERTY, placeholder_of
 from openhasp_config_manager.processing.template_rendering import template_spans
@@ -38,6 +38,12 @@ class TokenKind(StrEnum):
     PLACEHOLDER = "placeholder"
     COMMAND = "command"
     ARGUMENT = "argument"
+    # the key of a directive (`"!include"`), and the keys `vars` and `for` of a directive object
+    DIRECTIVE = "directive"
+
+
+# the keys a directive object has besides the directive (see `processing/jsonl/includes.py`)
+_DIRECTIVE_KEYS = ('"vars"', '"for"')
 
 
 @dataclass(frozen=True)
@@ -69,16 +75,53 @@ def language_of(path: Path) -> Language:
     return _LANGUAGES.get(path.suffix.lower(), Language.TEXT)
 
 
+@dataclass(frozen=True)
+class JsonlState:
+    """Where a line of a .jsonl text starts: in how many brackets, and whether the object is a directive (see `tokenize_jsonl`)."""
+
+    depth: int = 0
+    directive: bool = False
+
+
 def tokenize_line(line: str, language: Language) -> List[Token]:
-    """:return: the highlighted parts of a line, in order. Text between them has no kind."""
-    if language in (Language.JSONL, Language.JSON):
+    """
+    :return: the highlighted parts of a line, in order. Text between them has no kind. A line of a .jsonl file is read as if it
+        were the first of its object (see `tokenize_jsonl` for the lines of a whole text).
+    """
+    if language == Language.JSONL:
+        return tokenize_jsonl(line, JsonlState())[0]
+    if language == Language.JSON:
         # a placeholder is only replaced in the objects of a page, not in a JSON file like `config.json`
-        return _tokenize_jsonl(line, placeholders=language == Language.JSONL)
+        return _tokenize_jsonl(line, placeholders=False)
     if language == Language.CMD:
         return _tokenize_cmd(line)
     if language == Language.YAML:
         return _tokenize_yaml(line)
     return []
+
+
+def tokenize_jsonl(line: str, state: JsonlState) -> Tuple[List[Token], JsonlState]:
+    """
+    :param state: where the line starts, what `tokenize_jsonl` returned for the line before (`JsonlState()` for the first)
+    :return: the highlighted parts of a line of a .jsonl text, and where the next line starts. The key of a directive is a
+        `DIRECTIVE` (`"!include"`), and so are `"vars"` and `"for"` after it in a directive object.
+    """
+    tokens = []
+    depth, directive = state.depth, state.directive
+    for token in _tokenize_jsonl(line, placeholders=True):
+        text = token.text(line)
+        if token.kind == TokenKind.SYMBOL and text in "{[":
+            depth += 1
+        elif token.kind == TokenKind.SYMBOL and text in "}]":
+            depth = max(depth - 1, 0)
+            directive = directive and depth > 0
+        elif token.kind == TokenKind.KEY and text.startswith('"!'):
+            token = Token(token.start, token.end, TokenKind.DIRECTIVE)
+            directive = directive or depth == 1
+        elif token.kind == TokenKind.KEY and directive and depth == 1 and text in _DIRECTIVE_KEYS:
+            token = Token(token.start, token.end, TokenKind.DIRECTIVE)
+        tokens.append(token)
+    return tokens, JsonlState(depth, directive)
 
 
 def find_templates(text: str, offset: int = 0) -> List[Token]:

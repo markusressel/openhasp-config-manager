@@ -12,6 +12,7 @@ from openhasp_config_manager.gui.domain.draft.model import ComponentSource
 from openhasp_config_manager.gui.domain.draft.session import PlateSession
 from openhasp_config_manager.gui.domain.problems import Problem, object_name
 from openhasp_config_manager.openhasp_client.model.device import Device
+from openhasp_config_manager.processing.jsonl.includes import ObjectOrigin
 
 LOGGER = logging.getLogger(__name__)
 
@@ -52,7 +53,7 @@ Read the file before and after you edit, and trust it only while it is current:
   - `page`, `pages`: the page in the preview, and all pages that have objects.
   - `edit_mode`: whether the user edits objects. `live_preview`: whether the draft is sent to the plate while editing.
   - `selection`: the selected objects: `name` (`p<page>b<id>`), `id`, `page`, `type`, `file`, `line` (`null` if only in the draft),
-    and where it is drawn: `rendered` and `source` (see `problems`).
+    and where it is drawn: `rendered` and `source` (see `problems`), and `include` for an included object (see `problems`).
   - `new_objects_file`: the file new objects of the user go into.
   - `draft`: `modified` is `true` if the user has unsaved changes in the GUI. They are not in the files yet, and a file the user
     changed on disk meanwhile can't be saved over. `files` lists, per file, the `changed`, `added` and `deleted` objects.
@@ -66,6 +67,10 @@ Read the file before and after you edit, and trust it only while it is current:
   - `source`: the same properties as written in the file, with their templates, e.g. `"w": "33%"` or `"x": "{{ ... }}"`. Shows
     which are templates (don't replace one by a number just to fix a position that depends on the screen size).
   - `devices`: the devices that load the file. More than one if the file is shared: a change there affects all of them.
+  - `include`: only for an object that an `!include` directive puts into the file. `file` and `line` of the object are then the
+    ones of the directive, `source` is the object as written in the part. `include` has the `file` and `line` of the object in
+    the part (the file to change), and `chain`: the directives that lead to it, outermost first, each with its `file`, `line`,
+    `vars` and `loop` (the values of its `for` variables for this instance). The object is read-only in the GUI.
 - `load_error`: why the device could not be loaded (e.g. invalid JSON in a file), or `null`. The GUI keeps showing the last good
   state until the files can be loaded again.
 - `files_changed_on_disk`: files that changed while the draft has unsaved changes (the GUI asks the user what to do), else `[]`.
@@ -105,7 +110,24 @@ def describe_object(session: PlateSession, obj: Dict[str, Any], config_dir: Path
         "line": session.line_of(obj),
         "rendered": {key: obj[key] for key in _GEOMETRY_KEYS if key in obj},
         "source": {key: source[key] for key in _GEOMETRY_KEYS if key in source},
+        **_describe_origin(session.origin_of(obj), config_dir),
     }
+
+
+def _describe_origin(origin: Optional[ObjectOrigin], config_dir: Path) -> Dict[str, Any]:
+    """:return: `include` with where an included object is written, nothing for the other objects"""
+    if origin is None:
+        return {}
+    chain = [
+        {"file": relative(step.file, config_dir), "line": step.line, "vars": _json(step.vars), "loop": _json(step.loop)}
+        for step in origin.includes
+    ]
+    return {"include": {"file": relative(origin.file, config_dir), "line": origin.line, "chain": chain}}
+
+
+def _json(value: Any) -> Any:
+    """:return: the value with what JSON can't hold as text (the values of templates can be anything)"""
+    return json.loads(json.dumps(value, default=str))
 
 
 def describe_problems(
@@ -125,6 +147,7 @@ def describe_problems(
                 "line": location["line"],
                 "rendered": location["rendered"],
                 "source": location["source"],
+                **({"include": location["include"]} if "include" in location else {}),
                 "devices": sorted(device.name for device in devices if any(c.path == path for c in device.jsonl)),
             }
         )
