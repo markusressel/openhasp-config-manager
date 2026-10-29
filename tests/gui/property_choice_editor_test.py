@@ -36,6 +36,14 @@ def test_a_value_written_another_way_is_found(qapp):
     assert _editor("on", obj_type="line", key="line_rounded")[0].currentData() is True
 
 
+def test_the_long_meanings_dont_widen_the_panel_but_show_in_the_open_list(qapp):
+    combo, _applied = _editor("dots")
+    longest = max(combo.fontMetrics().horizontalAdvance(combo.itemText(i)) for i in range(combo.count()))
+
+    assert combo.minimumSizeHint().width() < longest / 2
+    assert combo.view().minimumWidth() >= longest
+
+
 def test_a_value_the_plate_doesnt_take_stays_and_is_marked(qapp):
     combo, applied = _editor("dot")
 
