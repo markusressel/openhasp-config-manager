@@ -393,6 +393,63 @@ class TestPartMode:
             PartFocus(session, session.instance_of(included))
 
 
+class TestPartTab:
+    """A part tab undoes, and marks as unsaved, the part and the file that includes its instance (`PartFocus.undo_scope`)."""
+
+    @pytest.fixture
+    def cfg_root(self, cfg_root) -> Path:
+        # another file of the device, which the part tab doesn't show
+        (cfg_root / DEVICE / "other.jsonl").write_text('{"page": 2, "id": 5, "obj": "obj", "x": 1}\n')
+        (cfg_root / DEVICE / "boot.cmd").write_text("run L:/page.jsonl\nrun L:/other.jsonl\n")
+        return cfg_root
+
+    def test_undo_and_unsaved_changes_of_the_part_and_its_file(self, session, tile, cfg_root):
+        # GIVEN: an edit of the other file, then one of the part
+        session.set_source_value(_objects(session)["p2b5"], "x", 2)
+        focus = _edit_the_part(session)
+        assert focus.undo_scope == {str(tile), str(cfg_root / DEVICE / "page.jsonl")}
+        assert not focus.is_dirty and focus.next_undo is None
+        focus.set_source_value(_objects(session)["p9b20"], "y", 11)
+
+        # THEN
+        assert focus.is_dirty and focus.next_undo.description == "Change y of p9b20"
+
+        # WHEN
+        focus.undo()
+
+        # THEN: only the part changed back; the draft of the device undoes the edit of the other file next
+        assert _objects(session)["p9b20"]["y"] == 10 and _objects(session)["p2b5"]["x"] == 2
+        assert not focus.is_dirty and focus.next_undo is None
+        assert session.next_undo.description == "Change x of p2b5"
+
+        # WHEN
+        focus.redo()
+
+        # THEN
+        assert _objects(session)["p9b20"]["y"] == 11
+
+    def test_a_reload_goes_on_in_the_instance_at_the_same_place(self, session, tile, cfg_root):
+        # GIVEN
+        focus = PartFocus(session, session.part_instances(tile)[1])
+        page = cfg_root / DEVICE / "page.jsonl"
+
+        # WHEN: the file that includes it changed on disk, the instances stay where they are
+        page.write_text(PAGE_JSONL.replace('"y": 10', '"y": 12'))
+        loaded = load_device(create_config_manager(cfg_root), "test_device")
+        session.load(loaded.components, loaded.renderer)
+
+        # THEN
+        assert session.describe_instance(focus.instance) == f"{DEVICE}/page.jsonl:2 (id=30)"
+
+        # WHEN: it doesn't include the part anymore
+        page.write_text(PAGE_JSONL.splitlines()[0] + "\n")
+        loaded = load_device(create_config_manager(cfg_root), "test_device")
+        session.load(loaded.components, loaded.renderer)
+
+        # THEN
+        assert focus.instance is None and not focus.is_active
+
+
 class TestNestedParts:
     @pytest.fixture
     def session(self, cfg_root) -> PlateSession:

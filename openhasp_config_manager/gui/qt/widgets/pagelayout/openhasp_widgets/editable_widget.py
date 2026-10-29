@@ -128,6 +128,8 @@ class EditableWidget(QGraphicsObject):
         """
         self._object_data = obj_data
         self._dimmed = False
+        # False while the preview shows only some other objects (see `PagePreviewWidget.set_focus`)
+        self._shown = True
         self.parent_widget = parent_widget
         # what touching the objects changed, shared by the objects of the preview (a lone object has its own)
         self.runtime: RuntimeState = parent_widget.runtime if parent_widget is not None else RuntimeState()
@@ -162,12 +164,17 @@ class EditableWidget(QGraphicsObject):
         self._dimmed = dimmed
         self._update_hidden()
 
+    def set_shown(self, shown: bool):
+        """Show the object, or leave it out of the preview (e.g. while only the objects of a part are shown)."""
+        self._shown = shown
+        self._update_hidden()
+
     def _update_hidden(self):
         # hidden objects stay selectable and editable, but are dimmed
         opacity = HIDDEN_OPACITY if is_hidden(self.obj_data) else 1.0
         self.setOpacity(opacity * (DIMMED_OPACITY if self._dimmed else 1.0))
         # an object that was closed by touching it (a message box) is gone, not dimmed
-        self.setVisible(not self.runtime.is_closed(self.key))
+        self.setVisible(self._shown and not self.runtime.is_closed(self.key))
 
     def _on_data_changed(self):
         """

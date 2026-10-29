@@ -1,6 +1,6 @@
 # Design: tabs in the preview, and one draft for all devices
 
-Status: accepted, not implemented yet (see "Phases").
+Status: accepted, phases 1 to 6 implemented (see "Phases").
 
 ## Motivation
 
@@ -209,3 +209,27 @@ Each phase is one PR with tests. Phases on different files run in parallel.
   Live preview. `PlateLink` follows the draft of its device itself (`set_session`), so edits from other tabs reach it.
 - **Phase 5: the page the plate shows** is what the plate reports on its `state/page` topic. It sends that only when the page
   changes, so the Plates panel shows "–" until the plate switched pages once after connecting.
+
+### Phase 6: part tabs
+
+- **One tab per part and device.** "Edit the part" focuses the part tab of that part and device if there is one (and moves it to
+  the instance asked for), else opens one next to the active tab. Its title is `part.jsonl · device`, with `•` while the part or
+  a file that includes the instance has unsaved changes. A part on its own is a part tab too (`PartTab.alone`), with its own
+  draft; the device tab no longer has a state of its own for it.
+- **The undo scope of a part tab** is the part and the files of the `!include` chain of its instance
+  (`PartFocus.undo_scope`): undo there doesn't step through edits of other files of the device, which the device tab undoes.
+  The scope follows the instance when another one is chosen. Save still writes the whole draft (Part 4).
+- **One `PlateLink` per device, not per editor** (supersedes "`PlateLink` stays in the editor of the device tab" of phase 5).
+  `PlateConnections` keeps it with the connection, and every tab of the device shows its actions (Live preview, Clear page,
+  Restore plate). Live preview sends the page of the tab of the device that was active last (`PlateLink.set_view`); closing
+  that tab hands it to another tab of the device. Busy state and error banner are those of that tab's editor. Alternative: a
+  Live preview per tab, which would send two pages to one plate.
+- **The focus is found again by its description** after a reload or a revert (`PlateSession.load` goes on with the focuses of
+  the draft), or on the first instance if that one is gone; a part tab closes, with a message in the status bar, when the
+  device doesn't include the part anymore.
+- **Only the instance is shown**: the other objects of the page are hidden (`EditableWidget.set_shown`, which `set_dimmed`
+  doesn't undo), and the view is zoomed to fit the instance (up to 4x, with a margin), centered between the bars, without
+  scrollbars. "Show the page" goes back to the dimmed page and the zoom of the page.
+- **A small window stays usable**: a part tab hides the device controls over the preview (they belong to the device tab), the
+  widget picker shrinks to its icons when the editor is narrow (in device tabs too), and the buttons of the part bar lose their
+  titles before the bar would wrap. The window's minimum size is 960x600.

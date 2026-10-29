@@ -64,11 +64,11 @@ Read the file before and after you edit, and trust it only while it is current:
   - `selection`: the selected objects: `name` (`p<page>b<id>`), `id`, `page`, `type`, `file`, `line` (`null` if only in the draft),
     and where it is drawn: `rendered` and `source` (see `problems`), and `include` for an included object (see `problems`).
   - `new_objects_file`: the file new objects of the user go into.
-  - `part_mode`: `null`, or the part the user edits in part mode: `part` (the file), `instance` (the `!include` whose objects
-    are shown and changed, `null` once they are all removed) and `shared` (in `common/`). A change to the objects of the
-    instance changes the part, so every instance (and every device that includes a shared part) follows. `alone` is
-    `true` if no page of the device includes the part: the GUI then shows the part on its own (instead of the pages, with
-    `vars` the user enters, which are not saved), `files` is empty, and the `file` of an object is the
+  - `part_mode`: `null`, or the part the user edits in the active tab, a part tab: `part` (the file), `instance` (the
+    `!include` whose objects are shown and changed, `null` once they are all removed) and `shared` (in `common/`). A change to
+    the objects of the instance changes the part, so every instance (and every device that includes a shared part) follows.
+    `alone` is `true` if no page of the device includes the part: the tab then shows the part on its own (with `vars` the
+    user enters, which are not saved), `files` is empty, and the `file` of an object is the
     `!include` that shows the part (`<part> (alone).jsonl`, a file that doesn't exist).
   - `draft`: `modified` is `true` if the user has unsaved changes in the GUI. They are not in the files yet, and a file the user
     changed on disk meanwhile can't be saved over. `files` lists, per file, the `changed`, `added` and `deleted` objects.
@@ -78,7 +78,8 @@ Read the file before and after you edit, and trust it only while it is current:
     preview.
   - `preview`: the image of the plate as the GUI shows it, or `null`: `file` (a PNG in the native resolution of the plate,
     `.openhasp-config-manager/preview.png`) and `updated` (when the image changed the last time). It shows the open `page`
-    with the unsaved changes, the selected objects with a frame and, in part mode, the other objects dimmed. It is written
+    with the unsaved changes, the selected objects with a frame and, in part mode, only the objects of the instance (the
+    other objects dimmed if the user turned on "Show the page"). It is written
     before the state, so it is the image of the state you read. Other pages and devices, from the files on disk:
     `openhasp-config-manager preview -c <config dir> [-d <device>] [-p <page>]` (see `preview_command`).
 - `editor`: the text editor of the GUI, where files are edited as text. `mode` (`source`, `split`, `rendered`: which of the text editor and the

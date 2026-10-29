@@ -8,7 +8,7 @@ from dataclasses import replace
 from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING, List, Dict, Optional, Any, Set, Tuple, Hashable, Iterator, Callable, NamedTuple, Iterable
+from typing import TYPE_CHECKING, List, Dict, Optional, Any, Set, Tuple, Hashable, Iterator, Callable, NamedTuple, Iterable, FrozenSet
 
 from jinja2 import TemplateError
 
@@ -167,15 +167,16 @@ class PlateSession:
         """
         Initializes the draft from the components as they are on disk. A file (or part) that the `ConfigDraft` has already is
         taken from there if it has changes or didn't change on disk; otherwise it is loaded again, and the other devices that
-        show it render it again. If they can't be rendered, this raises and the draft stays as it was.
+        show it render it again. If they can't be rendered, this raises and the draft stays as it was. Part mode (of each
+        `PartFocus`) goes on in the instance that is included at the same place, if there is one (see `reset_to_disk`).
         """
+        described = self._described_part_focuses() if self._loaded else [(focus, None) for focus in self._part_focuses]
         rendered, files, parts = self._render_from_disk(components, renderer, False)
         self._renderer = renderer
         self._keys = list(files)
         self._install(rendered, files, parts)
         self._loaded = True
-        for focus in self._part_focuses:
-            focus.instance = None
+        self._continue_part_focuses(described)
 
     def reset_to_disk(self):
         """
@@ -930,12 +931,20 @@ class PlateSession:
     @property
     def next_undo(self) -> Optional[HistoryStep]:
         """What `undo` undoes (the newest step that changed a file the device shows), None if nothing; also if it is refused."""
-        return self._config.next_undo(self)
+        return self.step_to_undo()
 
     @property
     def next_redo(self) -> Optional[HistoryStep]:
         """What `redo` redoes, None if nothing; also if it is refused."""
-        return self._config.next_redo(self)
+        return self.step_to_redo()
+
+    def step_to_undo(self, scope: Optional[FrozenSet[str]] = None) -> Optional[HistoryStep]:
+        """:return: what `undo` with the scope undoes, None if nothing; also if it is refused"""
+        return self._config.next_undo(self, scope)
+
+    def step_to_redo(self, scope: Optional[FrozenSet[str]] = None) -> Optional[HistoryStep]:
+        """:return: what `redo` with the scope redoes, None if nothing; also if it is refused"""
+        return self._config.next_redo(self, scope)
 
     def display_paths(self, keys: Iterable[str]) -> List[str]:
         """:return: the paths of files and parts (by their keys, e.g. of a `HistoryStep`), relative to the config directory"""
@@ -950,23 +959,25 @@ class PlateSession:
         """:return: what tells the object apart for the whole session, e.g. for a merge key of `edit`"""
         return self._entry(obj).uid
 
-    def undo(self) -> Optional[DraftChange]:
+    def undo(self, scope: Optional[FrozenSet[str]] = None) -> Optional[DraftChange]:
         """
         Undo the newest edit of a file the device shows, also one made through another device (a shared file), like in
         IntelliJ: edits of files of other devices only are not undone. An edit of several files is undone in all of them.
+        :param scope: the keys of the files and parts to undo in, some of those the device shows (a part tab: the part and the
+            files that include its instance, see `PartFocus.undo_scope`); all of them by default
         :return: what was undone (the listeners get it too), None if there was nothing to undo
-        :raise UndoRefusedError: if the edit changed several files and some of them changed since (in files the device
-            doesn't show): it can only be undone as a whole
+        :raise UndoRefusedError: if the edit changed several files and some of them changed since (in files outside of the
+            scope): it can only be undone as a whole
         """
         try:
-            return self._config.undo(self)
+            return self._config.undo(self, scope)
         except BlockedStepError as ex:
             raise self._refused("undo", ex) from None
 
-    def redo(self) -> Optional[DraftChange]:
+    def redo(self, scope: Optional[FrozenSet[str]] = None) -> Optional[DraftChange]:
         """:return: what was redone, None if there was nothing to redo (see `undo`)"""
         try:
-            return self._config.redo(self)
+            return self._config.redo(self, scope)
         except BlockedStepError as ex:
             raise self._refused("redo", ex) from None
 

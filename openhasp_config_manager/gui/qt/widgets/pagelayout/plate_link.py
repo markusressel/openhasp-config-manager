@@ -1,20 +1,23 @@
 import asyncio
 import copy
-from typing import Callable, Dict, List, Optional
+from typing import TYPE_CHECKING, Callable, Dict, List, Optional
 
 from PyQt6 import QtCore
 from PyQt6.QtWidgets import QMessageBox, QWidget
 
 from openhasp_config_manager.gui.domain.draft.model import DraftChange
+from openhasp_config_manager.gui.domain.draft.page_objects import get_page_objects
 from openhasp_config_manager.gui.domain.draft.session import PlateSession
 from openhasp_config_manager.gui.domain.live_preview import LivePlate, LiveUpdate
 from openhasp_config_manager.gui.qt.async_bridge import qBridge, run_async
 from openhasp_config_manager.gui.qt.components import UiComponents
-from openhasp_config_manager.gui.qt.operations import BusyState, OperationStatus, error_text, run_busy
+from openhasp_config_manager.gui.qt.operations import OperationStatus, error_text, run_busy
 from openhasp_config_manager.gui.qt.throttle import LatestValueThrottle
-from openhasp_config_manager.gui.qt.widgets.message_panel import ErrorBanner
 from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
+
+if TYPE_CHECKING:
+    from openhasp_config_manager.gui.qt.widgets.pagelayout.page_layout_editor import PageLayoutEditorWidget
 
 # delay between two objects when sending a whole page, to avoid overwhelming the device
 SEND_DELAY_SECONDS = 0.1
@@ -26,11 +29,13 @@ RESTORE_PLATE_HINT = "Values sent by haad or Home Assistant appear again with th
 
 class PlateLink(QtCore.QObject):
     """
-    What the editor does on the plate of its device: *Live preview* (the draft on the plate while editing), *Clear page* and
+    What the editors of a device do on its plate: *Live preview* (the draft on the plate while editing), *Clear page* and
     *Restore plate*, with their actions. Everything is sent in order: a page that is sent in full, then the changes after it.
 
-    Live preview keeps running while the tab of the editor is in the background: it follows the draft of the device
-    (`set_session`), which also reports the edits made through another device of a file both show (a shared part).
+    A plate shows one page, so a device has one link, shared by its tabs (`MainWindow`, see `PlateConnections`): it sends the
+    page of one of their editors, its view (`set_view`): the tab of the device that was active last. Live preview keeps
+    running while the tabs of the device are in the background: it follows the draft of its view, which also reports the
+    edits made through another tab or device of a file both show (a shared part).
 
     Live preview remembers what it sent to each page (`LivePlate`): coming back to a page only sends what changed since,
     and then shows it. What to send is decided when it is its turn to be sent (in the asyncio thread, under `_send_lock`),
@@ -46,33 +51,15 @@ class PlateLink(QtCore.QObject):
     # Live preview was turned on or off
     liveChanged = QtCore.pyqtSignal(bool)
 
-    def __init__(
-        self,
-        parent: QWidget,
-        status: OperationStatus,
-        busy: BusyState,
-        error_banner: ErrorBanner,
-        device: Callable[[], Optional[Device]],
-        page_objects: Callable[[int], List[Dict]],
-        current_page: Callable[[], int],
-        resync: Callable[[int], None],
-    ):
+    def __init__(self, parent: QWidget, status: OperationStatus, view: Optional["PageLayoutEditorWidget"] = None):
         """
-        :param parent: the editor, also the parent of the questions asked
-        :param device: the device of the editor, None without one
-        :param page_objects: the objects of the draft shown on a page (also those of page 0)
-        :param current_page: the page the editor shows
-        :param resync: brings a page of the plate back to what it should show (see `PageLayoutEditorWidget.resync_page`)
+        :param parent: the parent of the questions asked while there is no view
+        :param view: the editor whose page is sent (see `set_view`)
         """
         super().__init__(parent)
         self._parent = parent
         self._status = status
-        self._busy = busy
-        self._error_banner = error_banner
-        self._device = device
-        self._page_objects = page_objects
-        self._current_page = current_page
-        self._resync = resync
+        self._view: Optional["PageLayoutEditorWidget"] = None
 
         # what was sent to the pages of the plate. Only used under `_send_lock`; replaced to forget it
         self._live_plate = LivePlate()
@@ -115,17 +102,61 @@ class PlateLink(QtCore.QObject):
             tooltip="Show what the files on the plate define, like after a restart.\n" + RESTORE_PLATE_HINT,
         )
 
+        self.set_view(view)
+
     @property
     def live(self) -> bool:
         """Whether Live preview is on."""
         return self.action_live_preview.isChecked()
 
-    def update_actions(self, has_data: bool):
-        busy = self._busy.busy
+    @property
+    def view(self) -> Optional["PageLayoutEditorWidget"]:
+        """The editor whose page is sent, None without one."""
+        return self._view
+
+    def set_view(self, view: Optional["PageLayoutEditorWidget"]):
+        """
+        Send the page of another editor of the device (e.g. its tab became the active one), None for none. With Live preview
+        the plate shows its page right away.
+        """
+        if view is self._view:
+            return
+        self._view = view
+        self.view_changed(view)
+        if self.live and self._device() is not None:
+            self.show_page(view.current_index, view)
+
+    def view_changed(self, view: "PageLayoutEditorWidget"):
+        """An editor shows another draft, or none: the link follows it, if it is its view."""
+        if view is not self._view:
+            return
+        self.set_session(None if view is None else view.session)
+        self.update_actions()
+
+    def update_actions(self):
+        view = self._view
+        has_data = view is not None and view.session is not None
+        busy = has_data and view.busy.busy
         self.action_live_preview.setEnabled(has_data)
         # while Live preview is on, the page on the plate follows the draft
         self.action_clear.setEnabled(has_data and not busy and not self.live)
         self.action_restore_plate.setEnabled(has_data and not busy)
+
+    def _device(self) -> Optional[Device]:
+        """The device of the view, None without one."""
+        view = self._view
+        return None if view is None or view.session is None else view.device_pages_data.device
+
+    def _page_objects(self, index: int) -> List[Dict]:
+        """The objects of the draft of the view shown on a page (also those of page 0)."""
+        return get_page_objects(self._view.working_objects, index=index, include_global=True)
+
+    def _current_page(self) -> int:
+        return self._view.current_index
+
+    @property
+    def _dialog_parent(self) -> QWidget:
+        return self._parent if self._view is None else self._view
 
     # --- Live preview ---
 
@@ -154,10 +185,10 @@ class PlateLink(QtCore.QObject):
         finally:
             self._stopping_silently = False
 
-    def show_page(self, index: int):
-        """With Live preview: the editor shows another page, show it on the plate with the objects of the draft."""
+    def show_page(self, index: int, view: "PageLayoutEditorWidget"):
+        """With Live preview: an editor shows another page, show it on the plate with the objects of the draft if it is the view."""
         # page 0 is no page of the plate: its objects are on all pages
-        if self.live and index != 0:
+        if self.live and index != 0 and view is self._view:
             self._show_live_page(index)
 
     def forget_sent(self):
@@ -179,7 +210,7 @@ class PlateLink(QtCore.QObject):
             self.action_live_preview.blockSignals(True)
             self.action_live_preview.setChecked(False)
             self.action_live_preview.blockSignals(False)
-            QMessageBox.information(self._parent, "Live preview", refusal)
+            QMessageBox.information(self._dialog_parent, "Live preview", refusal)
             return
         self.liveChanged.emit(enabled)
         if self._device() is None:
@@ -197,7 +228,7 @@ class PlateLink(QtCore.QObject):
             "Live preview off",
             f"{self._device().name} still shows the draft of the editor.\n\n"
             f"Restore the plate, to show what its files define, like after a restart? {RESTORE_PLATE_HINT}",
-            parent=self._parent,
+            parent=self._dialog_parent,
         )
         restore = box.addButton("Restore plate", QMessageBox.ButtonRole.AcceptRole)
         box.addButton("Keep the draft", QMessageBox.ButtonRole.RejectRole)
@@ -215,7 +246,8 @@ class PlateLink(QtCore.QObject):
         client = OpenHaspClient(device)
         status = self._status
         description = f"Sending page {index} to {device.name}"
-        self._error_banner.hide()
+        view = self._view
+        view.error_banner.hide()
 
         async def __async_work():
             async with self._send_lock:
@@ -228,12 +260,12 @@ class PlateLink(QtCore.QObject):
 
         run_busy(
             __async_work(),
-            busy=self._busy,
+            busy=view.busy,
             status=status,
             description=description,
             success_message=f"{device.name} shows page {index} of the draft",
             on_success=lambda shown: self.pageDeployed.emit(index) if shown else None,
-            on_error=lambda ex: self._on_send_failed(index, description, ex, retry=lambda: self._resync(index)),
+            on_error=lambda ex: self._on_send_failed(view, index, description, ex, retry=lambda: view.resync_page(index)),
         )
 
     def _send_live_changes(self):
@@ -245,6 +277,7 @@ class PlateLink(QtCore.QObject):
         objects = copy.deepcopy(self._page_objects(index))
         client = OpenHaspClient(device)
         description = f"Sending the changes of page {index} to {device.name}"
+        view = self._view
 
         async def __async_work():
             async with self._send_lock:
@@ -256,7 +289,7 @@ class PlateLink(QtCore.QObject):
         # not run_busy: disabling the editor would interrupt dragging
         run_async(
             __async_work(),
-            on_error=lambda ex: self._on_send_failed(index, description, ex, retry=lambda: self._resync(index)),
+            on_error=lambda ex: self._on_send_failed(view, index, description, ex, retry=lambda: view.resync_page(index)),
         )
 
     async def _send_live_update(
@@ -305,7 +338,7 @@ class PlateLink(QtCore.QObject):
     def _on_clear_page_clicked(self):
         index = self._current_page()
         answer = QMessageBox.question(
-            self._parent,
+            self._dialog_parent,
             "Clear page",
             f"Clear page {index} on {self._device().name}?\n\nThis removes all objects of the page from the plate, "
             f"until Restore plate or Live preview fills it again. The draft in the editor is not changed.",
@@ -319,22 +352,23 @@ class PlateLink(QtCore.QObject):
         device = self._device()
         client = OpenHaspClient(device)
         description = f"Clearing page {index} on {device.name}"
-        self._error_banner.hide()
+        view = self._view
+        view.error_banner.hide()
         run_busy(
             client.clear_page(index),
-            busy=self._busy,
+            busy=view.busy,
             status=self._status,
             description=description,
             success_message=f"Cleared page {index} on {device.name}",
             # the page on the plate is empty now, its files are not
             on_success=lambda _: self.pageOutOfSync.emit(index),
-            on_error=lambda ex: self._on_send_failed(index, description, ex, retry=lambda: self._clear_page(index)),
+            on_error=lambda ex: self._on_send_failed(view, index, description, ex, retry=lambda: self._clear_page(index)),
         )
 
     @qBridge()
     def _on_restore_plate_clicked(self):
         answer = QMessageBox.question(
-            self._parent,
+            self._dialog_parent,
             "Restore plate",
             f"Restore {self._device().name}?\n\nAll pages are cleared and built again from the files on the plate, "
             f"like after a restart. {RESTORE_PLATE_HINT}",
@@ -350,7 +384,8 @@ class PlateLink(QtCore.QObject):
         device = self._device()
         client = OpenHaspClient(device)
         description = f"Restoring {device.name} from its files"
-        self._error_banner.hide()
+        view = self._view
+        view.error_banner.hide()
 
         async def __async_work():
             async with self._send_lock:
@@ -359,16 +394,17 @@ class PlateLink(QtCore.QObject):
 
         run_busy(
             __async_work(),
-            busy=self._busy,
+            busy=view.busy,
             status=self._status,
             description=description,
             success_message=f"{device.name} shows its files again",
             on_success=lambda _: self.plateRestored.emit(),
-            on_error=lambda ex: self._error_banner.show_error(
-                f"{description} failed: {error_text(ex)}", retry=self.restore_plate
-            ),
+            on_error=lambda ex: view.error_banner.show_error(f"{description} failed: {error_text(ex)}", retry=self.restore_plate),
         )
 
-    def _on_send_failed(self, index: int, description: str, ex: Exception, retry: Callable[[], None]):
+    def _on_send_failed(
+        self, view: "PageLayoutEditorWidget", index: int, description: str, ex: Exception, retry: Callable[[], None]
+    ):
+        """:param view: the editor whose page was sent: it shows the error"""
         self.pageOutOfSync.emit(index)
-        self._error_banner.show_error(f"{description} failed: {error_text(ex)}", retry=retry)
+        view.error_banner.show_error(f"{description} failed: {error_text(ex)}", retry=retry)

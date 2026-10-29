@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, List, Optional, Callable, Awaitable
+from typing import TYPE_CHECKING, Dict, List, Optional, Callable, Awaitable
 
 from PyQt6 import QtCore
 
@@ -8,6 +8,9 @@ from openhasp_config_manager.gui.qt.operations import error_text
 from openhasp_config_manager.gui.qt.async_bridge import run_async
 from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
+
+if TYPE_CHECKING:
+    from openhasp_config_manager.gui.qt.widgets.pagelayout.plate_link import PlateLink
 
 LOGGER = logging.getLogger(__name__)
 
@@ -127,15 +130,19 @@ class ConnectionController(QtCore.QObject):
 class PlateConnections(QtCore.QObject):
     """
     One connection per open device, shared by all tabs of the device: it is opened with the first of them and closed with the
-    last one. Without a device the connection follows nothing (`ConnectionController.set_device`).
+    last one. Without a device the connection follows nothing (`ConnectionController.set_device`). Each device also has one
+    `PlateLink` (Live preview, Clear page, Restore plate), shared by its tabs as well: the plate shows one page.
     """
 
     # (device name, ConnectionStatus): the connection of an open device changed
     changed = QtCore.pyqtSignal(str, object)
 
-    def __init__(self, parent: Optional[QtCore.QObject] = None):
+    def __init__(self, create_link: Callable[[str], "PlateLink"], parent: Optional[QtCore.QObject] = None):
+        """:param create_link: makes the `PlateLink` of a device (by its name)"""
         super().__init__(parent)
+        self._create_link = create_link
         self._connections: Dict[str, ConnectionController] = {}
+        self._links: Dict[str, "PlateLink"] = {}
         # the tabs (or whatever else uses a connection) per device
         self._users: Dict[str, List[object]] = {}
 
@@ -145,6 +152,7 @@ class PlateConnections(QtCore.QObject):
         if connection is None:
             connection = self._connections[name] = ConnectionController(self)
             connection.changed.connect(lambda status: self.changed.emit(name, status))
+            self._links[name] = self._create_link(name)
         users = self._users.setdefault(name, [])
         if not any(known is user for known in users):
             users.append(user)
@@ -159,10 +167,18 @@ class PlateConnections(QtCore.QObject):
         connection = self._connections.pop(name)
         connection.stop()
         connection.deleteLater()
+        link = self._links.pop(name)
+        link.stop_live_preview()
+        link.set_view(None)
+        link.deleteLater()
 
     def get(self, name: str) -> ConnectionController:
         """:return: the connection of an open device"""
         return self._connections[name]
+
+    def link(self, name: str) -> "PlateLink":
+        """:return: what the tabs of an open device do on its plate"""
+        return self._links[name]
 
     @property
     def names(self) -> List[str]:

@@ -17,8 +17,8 @@ class DeviceLog:
 
 class DeviceLogs(QtCore.QObject):
     """
-    A log per open device tab, kept while the tab is open, so switching tabs shows the earlier entries of a device again. `stack`
-    (the Logs dock) shows the log of the active tab. Every log streams while the dock is open, also those of the tabs in the
+    A log per open device (by its name), kept while a tab of it is open, so switching tabs shows the earlier entries of a device
+    again. `stack` (the Logs dock) shows the log of the device of the active tab. Every log streams while the dock is open, also those of the tabs in the
     background, and none while it is closed: the plate allows one telnet connection, so there is none while nobody looks.
     Without a tab an empty log without a device is shown.
     """
@@ -45,19 +45,19 @@ class DeviceLogs(QtCore.QObject):
         return DeviceLog(view, stream)
 
     def log_of(self, key: object) -> DeviceLog:
-        """:return: the log of a tab, created the first time"""
+        """:return: the log of a device, created the first time"""
         log = self._logs.get(key)
         if log is None:
             log = self._logs[key] = self._create()
         return log
 
     def show(self, key: Optional[object]):
-        """Show the log of a tab, or the empty one (None)."""
+        """Show the log of a device, or the empty one (None)."""
         self.active = self._default if key is None else self.log_of(key)
         self.stack.setCurrentWidget(self.active.view)
 
     def drop(self, key: object):
-        """The tab was closed: its log goes away with its entries."""
+        """The last tab of the device was closed: its log goes away with its entries."""
         log = self._logs.pop(key, None)
         if log is None:
             return

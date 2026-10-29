@@ -194,18 +194,20 @@ of the directive in the open file):
   and instances can be added or removed. The `!include`s inside of parts are listed read-only, with a button to go to them.
   A directive in the common folder is marked "shared".
 - **Part mode** (editing a part itself): "Edit the part" in the Properties panel of an included object, or in the context
-  menu of a part in the Files tree or in the text editor, shows one instance of the part (`PartFocus`): its objects can be
-  changed like plain objects (moved, nudged, edited, added, duplicated, removed), the objects around it are dimmed and
-  can't be selected. A change is written into the part in the draft, and every instance follows (also those on other
-  pages). A bar above the preview names the part and the instance, chooses another instance, and ends part mode ("Done");
-  the changes stay in the draft until it is saved, which writes the part file. For a part in the common folder, the bar
-  says how many files of which devices include it. New and pasted objects go into the part, with a `page` and an `id`
+  menu of a part in the Files tree or in the text editor, opens a part tab (or focuses the one of that part and device)
+  with one instance of the part (`PartFocus`, owned by the tab): only its objects are shown, zoomed to fit them, and they
+  can be changed like plain objects (moved, nudged, edited, added, duplicated, removed). "Show the page" brings back the
+  objects around it, dimmed and not selectable. A change is written into the part in the draft, and every instance follows
+  (also those on other pages). The bar of the tab is one line: the part's name (its path in the tooltip), the list of its
+  instances, "Show the page", and "Done", which closes the tab; the changes stay in the draft until it is saved, which
+  writes the part file. For a part in the common folder, an info icon says how many files of which devices include it.
+  Undo in a part tab steps through the changes of the part and of the files that include the instance. New and pasted objects go into the part, with a `page` and an `id`
   template like those of its other objects (`{{ base + n }}`).
-- **A part on its own**: a part that no page of the device includes (e.g. a new one) is shown on its own instead of the
-  pages (`load_part_alone`): as the objects of one `!include` that is in no file, rendered for the device. Its `vars`
+- **A part on its own**: a part that no page of the device includes (e.g. a new one) is shown on its own in a part tab
+  (`load_part_alone`): as the objects of one `!include` that is in no file, rendered for the device. Its `vars`
   start with a placeholder (`1`) for each variable the part uses that its folders don't define (`placeholder_vars`), and
   are changed in the "Instance" group of the Properties panel; they are not saved. Part mode works as above, Save writes
-  only the part, and "Done" goes back to the pages of the device (asking to save the part first if it has changes).
+  only the part, and "Done" closes the tab (asking to save the part first if it has changes).
   Every `.jsonl` file of the device that is not one of its page files can be edited as a part.
 - **Text editor**: directive keys (`"!include"`, and `"vars"`/`"for"` of a directive) have their own token kind
   (`TokenKind.DIRECTIVE`); Ctrl+click on the path opens the part; hover explains `!include`, `vars` and `for`; the path is
@@ -320,8 +322,9 @@ These were not settled beforehand. Each names the alternative that was not taken
   Alternative: refuse it, which made a part the only place without paste.
 - **Part mode is not in the undo history**: undo changes the objects, not the mode. Undoing the addition of a part's only
   objects ends nothing; the bar then names no instance. Alternative: undo steps for entering and leaving part mode.
-- **Part mode survives a reload** (a save, a change on disk) if the instance is still included, found by its description
-  (file, line and loop values of its directives); otherwise it ends.
+- **Part mode survives a reload** (a save, a change on disk, a revert) if the instance is still included, found by its
+  description (file, line and loop values of its directives), else the first instance; a part tab closes when the device
+  doesn't include the part anymore.
 - **A part that is also a page file of the device** (run by the `.cmd`) can't be edited in part mode: its objects are
   plain objects of that file too, and one edit would have to go to both.
 - **The defaults of a part are cached** in the `DeviceProcessor` (they only change with the files): including the parts
@@ -330,9 +333,9 @@ These were not settled beforehand. Each names the alternative that was not taken
 
 ### A part on its own
 
-- **A draft of its own**: the window keeps a second `PlateSession` for the part (`MainWindow.part_alone`), with one
+- **A draft of its own**: the part tab keeps a second `PlateSession` for the part (`PartTab.focus.session`), with one
   component that is in no file (`ComponentSource.is_scratch`): an `!include` of the part next to it, so it has the
-  variables of the part's folders. The draft of the pages of the device is not touched, and comes back with "Done".
+  variables of the part's folders. The draft of the pages of the device is not touched, and stays in the tab of the device.
   Alternative: the `!include` as a hidden component of the draft of the device, which would mix the part into the pages
   (their object references, problems, Save and the Live preview).
 - **It is rendered alone**: its object references (`pXbY`, `bY`) see only its own objects, not those of the pages
@@ -345,7 +348,7 @@ These were not settled beforehand. Each names the alternative that was not taken
   the `vars` of an `!include` of another device, which may need variables of that device and that file.
 - **The vars are in the "Instance" group** of the Properties panel, like the vars of an `!include` of a page, and are never
   saved: changing them makes no change of a file. Alternative: fields in the bar above the preview.
-- **"Done" asks to save** a part with changes (Save, Discard, Cancel), and so does selecting another device: the draft of
+- **"Done" asks to save** a part with changes (Save, Discard, Cancel), and so does closing its tab otherwise: the draft of
   a part on its own goes away with it. It follows changes on disk like the draft of the pages, and is loaded again if the
   device is.
 - **A page file of the device is refused**: its objects are edited on the page.
