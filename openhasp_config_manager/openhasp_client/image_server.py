@@ -83,16 +83,19 @@ class ImageServer:
         response = web.StreamResponse()
         response.content_type = "application/octet-stream"
         response.content_length = os.path.getsize(path)
-        await response.prepare(request)
-
-        with open(path, "rb") as f:
-            while True:
-                chunk = f.read(8192)
-                if not chunk:
-                    break
-                await response.write(chunk)
-
-        await response.write_eof()
+        try:
+            await response.prepare(request)
+            with open(path, "rb") as f:
+                while True:
+                    chunk = f.read(8192)
+                    if not chunk:
+                        break
+                    await response.write(chunk)
+            await response.write_eof()
+        except ConnectionError as ex:
+            # the plate stopped fetching it, e.g. since it restarted: the image stays for another try until it is cleaned up
+            self.LOGGER.warning(f"{request.remote} stopped fetching image {image_id}: {ex}")
+            return response
 
         if future and not future.done():
             future.set_result(True)
