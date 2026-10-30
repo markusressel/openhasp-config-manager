@@ -1,12 +1,17 @@
 import asyncio
+from pathlib import Path
 from typing import List, Optional
 
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QMessageBox
 
-from openhasp_config_manager.deployment import deploy_device
+from openhasp_config_manager.check import Issue, check_device_files
+from openhasp_config_manager.deployment import OutputGenerationError, deploy_device
 from openhasp_config_manager.gui.domain.draft.files import FileChange, SaveConflictError, plan_save, write_save
 from openhasp_config_manager.gui.domain.draft.session import PlateSession
+from openhasp_config_manager.gui.qt.async_bridge import run_async
 from openhasp_config_manager.gui.qt.operations import error_text, run_busy
+from openhasp_config_manager.gui.qt.widgets.deploy_problems import DeployProblemsDialog
 from openhasp_config_manager.manager import ConfigManager
 from openhasp_config_manager.processing.variables import VariableManager
 
@@ -138,13 +143,37 @@ class DraftActions:
             else:
                 self._window.status.succeeded.emit(f"{name} is already up to date")
 
+        def __on_error(ex: Exception):
+            if isinstance(ex, OutputGenerationError):
+                self._explain_deploy_failure(config_manager, name)
+
         run_busy(
             __deploy(),
             busy=self._window.page_layout_editor_widget.busy,
             status=self._window.status,
             description=f"Deploying the saved files of {name}",
             on_success=__on_success,
+            on_error=__on_error,
         )
+
+    def _explain_deploy_failure(self, config_manager: ConfigManager, name: str):
+        """Shows every error the files of the device have (a deployment stops at the first), with how to fix them."""
+
+        def __show(issues: List[Issue]):
+            if not issues:
+                return
+            dialog = DeployProblemsDialog(name, Path(config_manager.cfg_root).resolve(), issues, parent=self._window)
+            dialog.openRequested.connect(self._open_location)
+            dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+            dialog.show()
+
+        run_async(asyncio.to_thread(check_device_files, config_manager, name), on_success=__show)
+
+    def _open_location(self, path: Path, line: Optional[int]):
+        if line is None:
+            self._window.source_sync.open_file(path)
+        else:
+            self._window.source_sync.open_source(path, line)
 
     def revert(self):
         session = self._window.session

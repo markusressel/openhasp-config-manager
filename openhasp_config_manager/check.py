@@ -9,10 +9,12 @@ from openhasp_config_manager.gui.domain.gui_state import relative
 from openhasp_config_manager.gui.domain.file_tree import used_files
 from openhasp_config_manager.gui.domain.draft.page_objects import get_page_objects
 from openhasp_config_manager.gui.domain.draft.session import PlateSession
+from openhasp_config_manager.gui.domain.file_errors import explain_file_error
 from openhasp_config_manager.gui.domain.problems import Severity, find_problems, object_name
 from openhasp_config_manager.gui.domain.variables.unused import find_unused_variables
 from openhasp_config_manager.gui.domain.variables.usages import DeviceFiles, VariableUsages
 from openhasp_config_manager.manager import ConfigManager
+from openhasp_config_manager.processing.errors import error_source
 from openhasp_config_manager.openhasp_client.model.device import Device
 from openhasp_config_manager.processing.jsonl.includes import (
     IncludeExpansionError,
@@ -34,6 +36,8 @@ class Issue:
     # for a problem in a file that an `!include` includes: the directives that lead to it ("file:line", with the loop values of
     # the instance), outermost first
     included_at: Optional[Tuple[str, ...]] = None
+    # how to fix it
+    hints: Tuple[str, ...] = ()
 
     def to_dict(self) -> Dict[str, Any]:
         return {**asdict(self), "severity": self.severity.value}
@@ -44,7 +48,7 @@ class Issue:
         parts = [f"{location}:" if location else None, f"{self.severity.value}:", message]
         if self.device:
             parts.append(f"[{self.device}]")
-        return " ".join(part for part in parts if part)
+        return "\n".join([" ".join(part for part in parts if part), *(f"  hint: {hint}" for hint in self.hints)])
 
 
 def check_config(config_manager: ConfigManager, device_name: Optional[str] = None) -> Tuple[List[str], List[Issue]]:
@@ -62,6 +66,8 @@ def check_config(config_manager: ConfigManager, device_name: Optional[str] = Non
             devices = sorted(config_manager.analyze(), key=lambda device: device.name)
         except Exception as ex:
             return [], [Issue(Severity.ERROR, f"Can't analyze the config directory: {ex}")]
+        # the others too: the variables they have help explaining errors
+        all_devices = devices
         if device_name is not None:
             devices = [device for device in devices if device.name == device_name]
             if not devices:
@@ -69,7 +75,7 @@ def check_config(config_manager: ConfigManager, device_name: Optional[str] = Non
 
         issues: List[Issue] = []
         for device in devices:
-            issues += _check_device(config_manager, config_dir, devices, device)
+            issues += _check_device(config_manager, config_dir, all_devices, device)
         if device_name is None:
             issues += _check_unused_variables(config_dir, devices)
     return [device.name for device in devices], sorted(issues, key=lambda issue: issue.severity != Severity.ERROR)
@@ -91,26 +97,46 @@ def _check_unused_variables(config_dir: Path, devices: List[Device]) -> List[Iss
     ]
 
 
+def check_device_files(config_manager: ConfigManager, device_name: str) -> List[Issue]:
+    """
+    What a deployment of a device fails on, all of it (a deployment stops at the first error), with how to fix it.
+    :raises ValueError: if the config directory has no such device
+    """
+    config_dir = Path(config_manager.cfg_root).resolve()
+    with contextlib.redirect_stdout(sys.stderr):
+        devices = config_manager.analyze()
+        device = next((device for device in devices if device.name == device_name), None)
+        if device is None:
+            raise ValueError(f"{device_name} is not in the config directory anymore")
+        return _check_files(config_manager, config_dir, devices, device)
+
+
 def _check_device(config_manager: ConfigManager, config_dir: Path, devices: List[Device], device: Device) -> List[Issue]:
-    issues = _check_files(config_manager, config_dir, device)
+    issues = _check_files(config_manager, config_dir, devices, device)
     if any(component.name == BOOT_CMD for component in device.cmd):
         try:
             issues += _check_pages(config_manager, config_dir, devices, device)
         except Exception as ex:
-            issues.append(Issue(Severity.ERROR, f"Can't load the pages: {ex}", device=device.name))
+            # the errors of the files already tell why
+            if not any(issue.severity == Severity.ERROR for issue in issues):
+                issues.append(Issue(Severity.ERROR, f"Can't load the pages: {ex}", device=device.name))
     return issues
 
 
-def _check_files(config_manager: ConfigManager, config_dir: Path, device: Device) -> List[Issue]:
+def _check_files(config_manager: ConfigManager, config_dir: Path, devices: List[Device], device: Device) -> List[Issue]:
     """The checks of a deployment, for every file: processing and validation."""
     try:
         processor = config_manager.create_device_processor(device)
         validator = config_manager.create_device_validator(device)
         components = config_manager.find_relevant_components(device)
     except Exception as ex:
-        return [Issue(Severity.ERROR, f"Can't read the device: {ex}", device=device.name)]
+        # e.g. a variable of the device folder that can't be computed (any file of the folder finds it)
+        error = explain_file_error(ex, Path(device.path, BOOT_CMD), device, devices, config_dir, "Can't read the device")
+        file = relative(error.path, config_dir) if error.line is not None else None
+        return [Issue(Severity.ERROR, error.message, device=device.name, file=file, line=error.line, hints=error.hints)]
 
     issues = []
+    explained: Dict[Tuple[str, Optional[int], str], Tuple[List[str], List[str]]] = {}
     for component in components:
         file = relative(component.path, config_dir)
         try:
@@ -126,13 +152,24 @@ def _check_files(config_manager: ConfigManager, config_dir: Path, device: Device
             issues.append(_included_issue(message, device, config_dir, origin.file, origin.line, origin.includes))
             continue
         except Exception as ex:
-            issues.append(Issue(Severity.ERROR, f"Can't process the file: {ex}", device=device.name, file=file))
+            # an error of another file that the processing reads is one of that file
+            source = Path(error_source(ex) or component.path).resolve()
+            error = explain_file_error(ex, source, device, devices, config_dir)
+            # one issue for each error, also if several files run into it: (file, line, message) -> the files, the hints
+            needed_by, hints = explained.setdefault((relative(error.path, config_dir), error.line, error.message), ([], []))
+            if error.path != source and relative(source, config_dir) not in needed_by:
+                needed_by.append(relative(source, config_dir))
+            hints += [hint for hint in error.hints if hint not in hints]
             continue
         try:
             validator.validate(component, output)
         except Exception as ex:
             issues.append(Issue(Severity.ERROR, f"Validation failed: {ex}", device=device.name, file=file))
-    return issues
+    for (file, line, message), (needed_by, hints) in explained.items():
+        message += f" (needed by {', '.join(sorted(needed_by))})" if needed_by else ""
+        issues.append(Issue(Severity.ERROR, message, device=device.name, file=file, line=line, hints=tuple(hints)))
+    # the errors of the directives of a file that others read too
+    return list(dict.fromkeys(issues))
 
 
 def _included_issue(
