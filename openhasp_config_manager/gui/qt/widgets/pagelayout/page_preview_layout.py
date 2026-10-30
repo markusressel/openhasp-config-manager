@@ -815,4 +815,5 @@ class PagePreviewWidget(QGraphicsView):
                 replacement = f'<span style="font-family:{mdi_font_family};">{icon_char}</span>'
                 processed_text = processed_text.replace(unicode_char, replacement)
 
-        return f"<span>{processed_text}</span>"
+        # like on the plate, spaces are not collapsed: e.g. "a   |   b" keeps its gaps
+        return f'<span style="white-space:pre-wrap;">{processed_text}</span>'

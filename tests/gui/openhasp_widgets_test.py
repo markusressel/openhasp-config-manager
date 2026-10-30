@@ -47,6 +47,22 @@ class TestOpenHaspWidgets(TestBase):
         # the plate replaces only a text that is the placeholder and nothing else
         assert button.text_item.toPlainText() == "IP: %ip%"
 
+    def test_label_text_keeps_its_spaces_in_the_preview(self):
+        # GIVEN
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.label import HaspLabelItem
+        from openhasp_config_manager.gui.qt.widgets.pagelayout.page_preview_layout import PagePreviewWidget
+
+        preview = PagePreviewWidget()
+        text = "24h 13m   |   ETA 13:45"
+
+        # WHEN
+        label = HaspLabelItem(
+            obj_data={"obj": "label", "x": 0, "y": 0, "w": 400, "h": 40, "text": text}, parent_widget=preview
+        )
+
+        # THEN like on the plate, the spaces are not collapsed
+        assert label.text_item.toPlainText() == text
+
     def test_label_text_starts_at_the_top_whatever_the_height(self):
         # GIVEN
         from openhasp_config_manager.gui.qt.widgets.pagelayout.openhasp_widgets.label import HaspLabelItem
