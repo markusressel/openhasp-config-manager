@@ -63,8 +63,8 @@ async def test_push_image_serves_the_image_to_the_plate(page: PageController, pl
     assert len(plate.commands) == 2
     for command in plate.commands:
         assert re.fullmatch(r"p1b45\.src=http://127\.0\.0\.1:\d+/[0-9a-f-]{36}", command), plate.commands
-    # RGB565 with a 4 byte header; the 50x50 image is fit into 20x10, keeping its aspect ratio
-    assert [len(data) for data in plate.downloaded_images] == [4 + 10 * 10 * 2, 4 + 50 * 50 * 2]
+    # RGB565 with a 4 byte header; the 50x50 image covers 20x10: the plate would repeat a smaller one
+    assert [len(data) for data in plate.downloaded_images] == [4 + 20 * 10 * 2, 4 + 50 * 50 * 2]
 
 
 async def test_push_image_uses_the_size_of_the_object_by_default(
@@ -77,9 +77,9 @@ async def test_push_image_uses_the_size_of_the_object_by_default(
     await img.push_image(image=str(IMAGE))
     await plate.settle()
 
-    # the plate is asked once; the 50x50 image is fit into the 20x10 of the object
+    # the plate is asked once; the 50x50 image covers the 20x10 of the object
     assert [read for read in _plate_source if read[1] in ("w", "h")] == [("p1b45", "w"), ("p1b45", "h")]
-    assert [len(data) for data in plate.downloaded_images] == [4 + 10 * 10 * 2] * 2
+    assert [len(data) for data in plate.downloaded_images] == [4 + 20 * 10 * 2] * 2
 
 
 async def test_reads_of_an_object_do_not_overlap(page: PageController, plate: FakePlate, monkeypatch):
@@ -103,7 +103,7 @@ async def test_reads_of_an_object_do_not_overlap(page: PageController, plate: Fa
     await plate.settle()
 
     assert most_running == 1
-    assert [len(data) for data in plate.downloaded_images] == [4 + 10 * 10 * 2] * 2
+    assert [len(data) for data in plate.downloaded_images] == [4 + 20 * 10 * 2] * 2
 
 
 async def test_push_image_takes_the_missing_size_from_the_object(page: PageController, plate: FakePlate, monkeypatch):
@@ -113,7 +113,8 @@ async def test_push_image_takes_the_missing_size_from_the_object(page: PageContr
     await img.push_image(image=str(IMAGE), height=4)
     await plate.settle()
 
-    assert [len(data) for data in plate.downloaded_images] == [4 + 4 * 4 * 2]
+    # the width of the object, 20
+    assert [len(data) for data in plate.downloaded_images] == [4 + 20 * 4 * 2]
 
 
 async def test_push_image_logs_an_error_if_the_plate_does_not_know_the_size(

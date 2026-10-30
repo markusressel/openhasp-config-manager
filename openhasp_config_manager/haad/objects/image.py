@@ -3,6 +3,7 @@ import logging
 from collections import defaultdict
 
 from openhasp_config_manager.haad.objects import ObjectController
+from openhasp_config_manager.openhasp_client.image_processor import ImageFit
 from openhasp_config_manager.openhasp_client.image_server import ImageServer
 
 import os
@@ -69,13 +70,17 @@ class ImageObjectController(ObjectController):
         """
         self.LOGGER.debug(f"Initializing image object {self.object_id}")
 
-    async def push_image(self, image: str, width: Optional[int] = None, height: Optional[int] = None):
+    async def push_image(
+        self, image: str, width: Optional[int] = None, height: Optional[int] = None, fit: ImageFit = ImageFit.COVER
+    ):
         """
-        Pushes an image to this image object. The image is resized to the given size, keeping its aspect ratio.
+        Pushes an image to this image object. The image gets exactly the given size (the plate repeats a smaller one):
+        `fit` decides how, if the aspect ratios differ.
 
         :param image: the image to set, can be a URL or anything that can be opened by PIL.Image.open, f.ex. a file path
         :param width: the width of the image in pixels, the `w` of the object on the plate (its JSONL object) if not given
         :param height: the height of the image in pixels, the `h` of the object on the plate if not given
+        :param fit: by default the image covers the object, its edges cut off
         """
         try:
             if width is None or height is None:
@@ -103,6 +108,7 @@ class ImageObjectController(ObjectController):
                     size=(width, height),
                     image_server=_global_image_server,
                     timeout=5,
+                    fit=fit,
                 )
         except Exception as e:
             self.LOGGER.error(f"Error pushing image: {e}")

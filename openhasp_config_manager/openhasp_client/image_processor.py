@@ -1,19 +1,42 @@
+from enum import StrEnum
 from typing import Tuple
 
-from PIL import Image
+from PIL import Image, ImageOps
 from temppathlib import NamedTemporaryFile
 
 from openhasp_config_manager.processing.image_conversion import image_to_binary
 
 
+class ImageFit(StrEnum):
+    """
+    How an image is made the size of its object, if their aspect ratios differ. The image always gets exactly that size:
+    the plate repeats (tiles) an image that is smaller than its object.
+    """
+
+    # scaled to cover the object, the middle is kept and the overhanging edges are cut off
+    COVER = "cover"
+    # scaled to fit into the object as a whole, with black bars at the sides that are left
+    CONTAIN = "contain"
+    # stretched to the size of the object, distorting it
+    FILL = "fill"
+
+
 class OpenHaspImageProcessor:
-    async def image_to_rgb565(self, in_image, out_image, size: Tuple[int | None, int | None], fitscreen: bool):
+    async def image_to_rgb565(
+        self,
+        in_image,
+        out_image,
+        size: Tuple[int | None, int | None],
+        fitscreen: bool = False,
+        fit: ImageFit = ImageFit.COVER,
+    ):
         """
         Transforms an image to rgb565 format according to LVGL requirements.
         :param in_image: the image to transform
         :param out_image: the output file
-        :param size: the size of the output image
-        :param fitscreen: if True, the image will be resized to fit the screen
+        :param size: the size of the output image (width, height); the size of the image for a side that is None
+        :param fitscreen: if True, the image is stretched to `size` (like `ImageFit.FILL`)
+        :param fit: how the image is made `size`, if the aspect ratios differ
         """
         if in_image.startswith("http"):
             tmp_file_container = await self._fetch_image_from_url(in_image)
@@ -27,32 +50,23 @@ class OpenHaspImageProcessor:
         try:
 
             def _process_image():
-                im = Image.open(tmp_file_container.file)
+                with Image.open(tmp_file_container.file) as opened:
+                    im = opened.convert("RGB")
                 original_width, original_height = im.size
                 width, height = size
-
-                if not fitscreen:
-                    valid_w: list[int] = []
-                    for x in (width, original_width):
-                        if x is not None and x > 0:
-                            valid_w.append(x)
-                    w = min(valid_w) if valid_w else original_width
-
-                    valid_h: list[int] = []
-                    for x in (height, original_height):
-                        if x is not None and x > 0:
-                            valid_h.append(x)
-                    h = min(valid_h) if valid_h else original_height
-
-                    im.thumbnail((int(h), int(w)), Image.Resampling.LANCZOS)
+                target = (
+                    int(width) if width else original_width,
+                    int(height) if height else original_height,
+                )
+                method = ImageFit.FILL if fitscreen else fit
+                if method == ImageFit.COVER:
+                    im = ImageOps.fit(im, target, Image.Resampling.LANCZOS)
+                elif method == ImageFit.CONTAIN:
+                    im = ImageOps.pad(im, target, Image.Resampling.LANCZOS, color=(0, 0, 0))
                 else:
-                    h_val = height if height is not None else original_height
-                    w_val = width if width is not None else original_width
-                    im = im.resize((int(h_val), int(w_val)), Image.Resampling.LANCZOS)
-                with im.convert("RGB") as img:
-                    out_image.write(image_to_binary(img, alpha=False))
+                    im = im.resize(target, Image.Resampling.LANCZOS)
+                out_image.write(image_to_binary(im, alpha=False))
                 out_image.flush()
-
                 im.close()
 
             import asyncio
