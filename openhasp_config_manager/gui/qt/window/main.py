@@ -953,6 +953,9 @@ class MainWindow(QMainWindow):
             dirty or (session is not None and not session.is_part_alone and bool(self.config_draft.dirty_paths))
         )
         self.action_revert.setEnabled(dirty)
+        can_deploy = self.device is not None and not self.page_layout_editor_widget.busy.busy
+        self.action_deploy.setEnabled(can_deploy)
+        self.action_deploy_purge.setEnabled(can_deploy)
 
     def shown_keys(self, session: PlateSession) -> Set[str]:
         """
@@ -963,7 +966,6 @@ class MainWindow(QMainWindow):
         if isinstance(tab, PartTab) and not tab.alone and tab.focus.session is session:
             return set(tab.focus.undo_scope)
         return set(session.file_keys) | set(session.part_keys)
-        self.action_deploy.setEnabled(self.device is not None and not self.page_layout_editor_widget.busy.busy)
 
     def reload_draft(self):
         """Drop the draft of the active tab (or of the part on its own) and load it from disk, on the same page."""

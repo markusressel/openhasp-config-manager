@@ -31,6 +31,14 @@ def create_menus(window):
         tooltip="Upload the saved files to the plate, like the deploy command of the CLI. "
         "The plate rebuilds its pages, or restarts if its settings or fonts changed.\nUnsaved changes of the draft are not deployed.",
     )
+    window.action_deploy_purge = create(
+        window,
+        "Deploy and remove other files…",
+        "delete-sweep",
+        lambda: window.draft_actions.deploy(purge=True),
+        tooltip="Deploy, and delete the files on the plate that the deploy doesn't upload, like the deploy command of the "
+        "CLI with --purge.\nThey are listed before anything is deleted.",
+    )
     # next to the files they act on
     window.file_tree_widget.set_actions(
         [(window.action_save, "content-save"), (window.action_revert, "restore"), (window.action_deploy, "upload")]
@@ -39,6 +47,9 @@ def create_menus(window):
     file_menu = window.menuBar().addMenu("&File")
     file_menu.addAction(window.action_save)
     file_menu.addAction(window.action_revert)
+    file_menu.addSeparator()
+    file_menu.addAction(window.action_deploy)
+    file_menu.addAction(window.action_deploy_purge)
     file_menu.addSeparator()
     file_menu.addAction(create(window, "Reload devices", "refresh", window.load_plates, shortcut="Ctrl+R"))
     file_menu.addSeparator()
