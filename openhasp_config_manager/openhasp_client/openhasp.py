@@ -4,7 +4,7 @@ from typing import AsyncIterator, Dict, List, Any, Callable, Tuple, Optional, Aw
 
 import orjson
 
-from openhasp_config_manager.openhasp_client.image_processor import OpenHaspImageProcessor
+from openhasp_config_manager.openhasp_client.image_processor import ImageFit, OpenHaspImageProcessor
 from openhasp_config_manager.openhasp_client.logs import LogItem, follow_logs
 from openhasp_config_manager.openhasp_client.model.configuration.gui_config import GuiConfig
 from openhasp_config_manager.openhasp_client.model.configuration.hasp_config import HaspConfig
@@ -73,6 +73,7 @@ class OpenHaspClient:
         size: Tuple[int | None, int | None] = (None, None),
         fitscreen: bool = False,
         image_server=None,
+        fit: ImageFit = ImageFit.COVER,
     ):
         """
         Sets the image of an object.
@@ -89,6 +90,7 @@ class OpenHaspClient:
         :param size: the size of the image
         :param fitscreen: if True, the image will be resized to fit the screen
         :param image_server: optional persistent ImageServer instance to use instead of creating a temporary one
+        :param fit: how the image is made `size`, if the aspect ratios differ
         """
         if image_server is None and access_host is None:
             raise ValueError("Either image_server or access_host must be provided")
@@ -109,6 +111,7 @@ class OpenHaspClient:
                     out_image=f,
                     size=size,
                     fitscreen=fitscreen,
+                    fit=fit,
                 )
 
             if image_server is not None:
