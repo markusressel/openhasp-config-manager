@@ -43,6 +43,25 @@ _UNKNOWN: ContextVar[Optional[Set[str]]] = ContextVar("unknown_template_variable
 class TemplateRenderError(ValueError):
     """A template of a dict can never be rendered, e.g. because it is not valid."""
 
+    def __init__(self, message: str, variable: Optional[str] = None):
+        """:param variable: the variable of the YAML files whose template fails (dotted), if it is one"""
+        super().__init__(message)
+        self.variable = variable
+
+
+class UnknownVariableError(TemplateRenderError):
+    """A template of a variable uses a name that is no variable."""
+
+    def __init__(self, variable: str, unknown: str, template: str):
+        """
+        :param variable: the variable whose template uses it, e.g. `page_index`
+        :param unknown: the start of the used name that is not defined, e.g. `common.pages.wohnzimmer` of
+            `common.pages.wohnzimmer.index`
+        """
+        super().__init__(f"Unknown variable '{unknown}' in the variable '{variable}': {template}", variable)
+        self.unknown = unknown
+        self.template = template
+
 
 class _Undefined(jinja2.Undefined):
     """An unknown variable renders as it is written, and is remembered."""
@@ -576,7 +595,9 @@ def render_variables(
             value = evaluate_template(leaves[path], scope)
         except Exception as ex:
             message = ex.message if isinstance(ex, TemplateError) else str(ex)
-            raise TemplateRenderError(f"Can't compute the variable '{_dotted(path)}': {message}: {leaves[path]}") from ex
+            raise TemplateRenderError(
+                f"Can't compute the variable '{_dotted(path)}': {message}: {leaves[path]}", _dotted(path)
+            ) from ex
         _set_at(result, path, value)
         _set_at(scope, path, value)
     for path in not_computed:
@@ -649,7 +670,9 @@ def _dependency_order(dependencies: Dict[VariablePath, List[VariablePath]]) -> L
             return
         if path in visiting:
             cycle = visiting[visiting.index(path) :] + [path]
-            raise TemplateRenderError("The variables depend on each other in a cycle: " + " -> ".join(map(_dotted, cycle)))
+            raise TemplateRenderError(
+                "The variables depend on each other in a cycle: " + " -> ".join(map(_dotted, cycle)), _dotted(path)
+            )
         visiting.append(path)
         for dependency in dependencies[path]:
             visit(dependency)
@@ -670,7 +693,7 @@ def _dependencies(
     for used in names:
         unknown = _unknown_part(scope, used)
         if unknown is not None:
-            raise TemplateRenderError(f"Unknown variable '{_dotted(unknown)}' in the variable '{_dotted(path)}': {text}")
+            raise UnknownVariableError(_dotted(path), _dotted(unknown), text)
         result += [leaf for leaf in leaves if leaf[: len(used)] == used or used[: len(leaf)] == leaf]
     return result
 

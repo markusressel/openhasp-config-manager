@@ -14,6 +14,7 @@ from openhasp_config_manager.openhasp_client.model.component import (
 )
 from openhasp_config_manager.openhasp_client.model.configuration.config import Config
 from openhasp_config_manager.openhasp_client.model.device import Device
+from openhasp_config_manager.processing.errors import mark_error_source
 from openhasp_config_manager.processing.jsonl import JsonlObjectProcessor
 from openhasp_config_manager.processing.jsonl.includes import (
     Expansion,
@@ -127,7 +128,9 @@ class DeviceProcessor:
                 for ob in self._jsonl_preprocessor.split_jsonl_objects(component.content)
             ]
         except ValueError as ex:
-            raise ValueError(f"Invalid JSONL in {component.path}: {ex}") from ex
+            error = ValueError(f"Invalid JSONL in {component.path}: {ex}")
+            mark_error_source(error, Path(component.path))
+            raise error from ex
 
     @property
     def config_dir(self) -> Path:
@@ -347,39 +350,46 @@ class DeviceProcessor:
             part_paths = part_paths | {
                 Path(self.config_dir, path).resolve() for path in directive_paths(draft_objects[component.path])
             }
-        for c in sorted_components:
-            # the objects of a part are in the variables through the files that include it (and its own when it is rendered)
-            if c != component and Path(c.path).resolve() in part_paths:
-                continue
-            if c != component and self._run_paths is not None and Path(c.path).resolve() not in self._run_paths:
-                continue
-            component_template_vars = self.path_variables(c.path)
+        c = None
+        try:
+            for c in sorted_components:
+                # the objects of a part are in the variables through the files that include it (and its own when it is rendered)
+                if c != component and Path(c.path).resolve() in part_paths:
+                    continue
+                if c != component and self._run_paths is not None and Path(c.path).resolve() not in self._run_paths:
+                    continue
+                component_template_vars = self.path_variables(c.path)
 
-            if draft_objects is not None and c.path in draft_objects:
-                expansion = self.expand_jsonl_objects(c, draft_objects[c.path])
-            else:
-                expansion = self.expand_jsonl_objects(c)
-            c_result, scopes = self._object_map(expansion.objects)
-            # `result` becomes what the variables of this component start with: everything before it, and its own variables
-            merge_dict_into(result, component_template_vars)
+                if draft_objects is not None and c.path in draft_objects:
+                    expansion = self.expand_jsonl_objects(c, draft_objects[c.path])
+                else:
+                    expansion = self.expand_jsonl_objects(c)
+                c_result, scopes = self._object_map(expansion.objects)
+                # `result` becomes what the variables of this component start with: everything before it, and its own variables
+                merge_dict_into(result, component_template_vars)
 
-            def entry_vars(name: str, template_vars: Dict[str, Any], scopes=scopes) -> Dict[str, Any]:
-                return {**scopes.get(name, {}), **object_variables(name, template_vars)}
+                def entry_vars(name: str, template_vars: Dict[str, Any], scopes=scopes) -> Dict[str, Any]:
+                    return {**scopes.get(name, {}), **object_variables(name, template_vars)}
 
-            rendered_template_vars = render_dict_recursive(
-                input=c_result,
-                template_vars=merge_dict_shared(result, c_result),
-                convert=self._object_value,
-                entry_vars=entry_vars,
-            )
-            if replaced_page is not None and c != component:
-                rendered_template_vars = {
-                    name: value
-                    for name, value in rendered_template_vars.items()
-                    if not (_OBJECT_NAME.fullmatch(name) and name.startswith(f"p{replaced_page}b"))
-                }
-            # what the objects add, without overriding anything
-            add_missing_keys(result, rendered_template_vars)
+                rendered_template_vars = render_dict_recursive(
+                    input=c_result,
+                    template_vars=merge_dict_shared(result, c_result),
+                    convert=self._object_value,
+                    entry_vars=entry_vars,
+                )
+                if replaced_page is not None and c != component:
+                    rendered_template_vars = {
+                        name: value
+                        for name, value in rendered_template_vars.items()
+                        if not (_OBJECT_NAME.fullmatch(name) and name.startswith(f"p{replaced_page}b"))
+                    }
+                # what the objects add, without overriding anything
+                add_missing_keys(result, rendered_template_vars)
+        except Exception as ex:
+            if c is not None and c != component:
+                # the error is in another file: processing that file reports it too
+                mark_error_source(ex, Path(c.path))
+            raise
 
         if result is None:
             raise AssertionError("Unexpected None value")

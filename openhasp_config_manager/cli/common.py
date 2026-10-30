@@ -12,7 +12,10 @@ async def _generate(config_manager: ConfigManager, device: Device):
     try:
         config_manager.process(device)
     except Exception as ex:
-        raise Exception(f"Error generating output for {device.name}: {ex.__class__.__name__} {ex}")
+        raise Exception(
+            f"Error generating output for {device.name}: {ex.__class__.__name__} {ex}\n"
+            f"Run `openhasp-config-manager check -d {device.name}` to see all errors and how to fix them."
+        )
 
 
 async def _upload(device: Device, output_dir: Path, purge: bool, show_diff: bool):

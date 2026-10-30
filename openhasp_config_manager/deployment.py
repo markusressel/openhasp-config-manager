@@ -7,6 +7,10 @@ from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 from openhasp_config_manager.uploader import ConfigUploader
 
 
+class OutputGenerationError(Exception):
+    """The files of a device can't be processed into its output: nothing was uploaded."""
+
+
 async def deploy_device(
     config_manager: ConfigManager, device: Device, purge: bool = False, show_diff: bool = False, restart: bool = False
 ) -> bool:
@@ -24,7 +28,10 @@ async def deploy_device(
     try:
         await asyncio.to_thread(config_manager.process, device)
     except Exception as ex:
-        raise Exception(f"Error generating output for {device.name}: {ex.__class__.__name__} {ex}") from ex
+        raise OutputGenerationError(
+            f"Error generating output for {device.name}: {ex.__class__.__name__} {ex}\n"
+            f"Run `openhasp-config-manager check -d {device.name}` to see all errors and how to fix them."
+        ) from ex
 
     client = OpenHaspClient(device)
     uploader = ConfigUploader(config_manager.output_root, client)
