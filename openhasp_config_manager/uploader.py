@@ -68,7 +68,7 @@ class ConfigUploader:
         result = UploadResult()
 
         if purge:
-            result.deleted, result.in_use = await self.delete_files(device, await self._obsolete_files(device))
+            result.deleted, result.in_use = await self.delete_files(device, await self.obsolete_files(device))
 
         result.files = await self._upload_files(device, print_diff)
         await self._update_config(device, result)
@@ -184,10 +184,10 @@ class ConfigUploader:
 
     async def cleanup_device_files(self, device: Device) -> List[str]:
         """:return: the names of the files that were deleted from the device, see `cleanup_device`"""
-        deleted, _in_use = await self.delete_files(device, await self._obsolete_files(device))
+        deleted, _in_use = await self.delete_files(device, await self.obsolete_files(device))
         return deleted
 
-    async def _obsolete_files(self, device: Device) -> List[str]:
+    async def obsolete_files(self, device: Device) -> List[str]:
         """:return: the files which are on the device, but not present in the generated output"""
         file_names = ["config.json"]
         for file in device.output_dir.iterdir():

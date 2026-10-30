@@ -1,4 +1,5 @@
 import asyncio
+from typing import List
 
 from openhasp_config_manager.console import info, warn
 from openhasp_config_manager.manager import ConfigManager
@@ -24,14 +25,7 @@ async def deploy_device(
     :param restart: restart the plate after any change
     :return: whether anything changed
     """
-    info(f"Generating output for '{device.name}'...")
-    try:
-        await asyncio.to_thread(config_manager.process, device)
-    except Exception as ex:
-        raise OutputGenerationError(
-            f"Error generating output for {device.name}: {ex.__class__.__name__} {ex}\n"
-            f"Run `openhasp-config-manager check -d {device.name}` to see all errors and how to fix them."
-        ) from ex
+    await _generate_output(config_manager, device)
 
     client = OpenHaspClient(device)
     uploader = ConfigUploader(config_manager.output_root, client)
@@ -50,6 +44,26 @@ async def deploy_device(
     else:
         info(f"Applied the settings of {device.name} to the running device")
     return result.changed
+
+
+async def obsolete_files(config_manager: ConfigManager, device: Device) -> List[str]:
+    """
+    :return: the files on the plate that a deployment with `purge` deletes: those that are not part of the generated output
+        (generated for this, like a deployment does)
+    """
+    await _generate_output(config_manager, device)
+    return await ConfigUploader(config_manager.output_root, OpenHaspClient(device)).obsolete_files(device)
+
+
+async def _generate_output(config_manager: ConfigManager, device: Device):
+    info(f"Generating output for '{device.name}'...")
+    try:
+        await asyncio.to_thread(config_manager.process, device)
+    except Exception as ex:
+        raise OutputGenerationError(
+            f"Error generating output for {device.name}: {ex.__class__.__name__} {ex}\n"
+            f"Run `openhasp-config-manager check -d {device.name}` to see all errors and how to fix them."
+        ) from ex
 
 
 async def _delete_after_restart(client: OpenHaspClient, uploader: ConfigUploader, device: Device, names: list):

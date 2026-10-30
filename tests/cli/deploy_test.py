@@ -1,6 +1,7 @@
 import pytest
 
 from openhasp_config_manager.cli.common import _create_config_manager, _deploy
+from openhasp_config_manager.deployment import obsolete_files
 from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 from openhasp_config_manager.uploader import ConfigUploader, UploadResult
 from tests import TestBase
@@ -50,3 +51,21 @@ class TestDeploy(TestBase):
     async def test_nothing_without_changes(self, tmp_path, monkeypatch):
         assert await self._deploy(tmp_path, monkeypatch, UploadResult()) == []
         assert await self._deploy(tmp_path, monkeypatch, UploadResult(), restart=True) == []
+
+
+class TestObsoleteFiles(TestBase):
+    async def test_are_the_files_on_the_plate_that_are_not_in_the_generated_output(self, tmp_path, monkeypatch):
+        # GIVEN
+        config_manager = _create_config_manager(self.cfg_root, tmp_path)
+        device = config_manager.analyze()[0]
+
+        async def get_files(client):
+            return ["config.json", "old_page.jsonl", "home_page.jsonl", "old_font.ttf"]
+
+        monkeypatch.setattr(OpenHaspClient, "get_files", get_files)
+
+        # WHEN
+        files = await obsolete_files(config_manager, device)
+
+        # THEN: config.json and the generated files stay
+        assert files == ["old_page.jsonl", "old_font.ttf"]
