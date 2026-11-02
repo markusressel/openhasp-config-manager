@@ -1,8 +1,6 @@
 import logging
 from datetime import timedelta
 
-import pytest
-
 from openhasp_config_manager.haad.controller import OpenHaspController
 from openhasp_config_manager.haad.page import PageController
 from openhasp_config_manager.haad.plate import PlateConfig
@@ -79,8 +77,8 @@ async def test_setup_errors_are_logged_without_retry(simulator, plate: FakePlate
     assert plate.traffic == []
 
     # the first sync was never scheduled
-    with pytest.raises(AttributeError, match="_plate_sync_timer_task"):
-        await controller.terminate()
+    assert controller._plate_sync_timer_task is None
+    await controller.terminate()
 
 
 async def test_lwt_online_syncs_after_one_second(simulator, start_plate, plate: FakePlate, caplog):
@@ -132,12 +130,13 @@ async def test_terminate(simulator, start_plate, plate: FakePlate):
 
 
 async def test_terminate_before_setup(simulator, load_plate, plate: FakePlate):
-    """`_plate_sync_timer_task` only exists after the setup."""
+    """A plate that never came online can be terminated, e.g. on a restart while it is offline."""
     controller = load_plate(pages=[page_at(1, EmptyPage)])
     await simulator.start(controller)
 
-    with pytest.raises(AttributeError, match="_plate_sync_timer_task"):
-        await controller.terminate()
+    await controller.terminate()
+
+    assert controller._plate_sync_timer_task is None
 
 
 async def test_controller_api(start_plate):
@@ -153,7 +152,7 @@ async def test_controller_api(start_plate):
 
 
 async def test_teardown_without_scheduled_tasks(start_plate):
-    """Unreachable today: both handles are always set when teardown_plate_setup() runs after a setup."""
+    """Teardown skips the handles that are not set."""
     controller = await start_plate(pages=[page_at(1)])
     controller._plate_setup_scheduled_task = None
     controller._plate_sync_timer_task = None

@@ -23,6 +23,7 @@ class OpenHaspController(HaadController):
     def __init__(self, context: HaadContext):
         super().__init__(context)
         self._lwt_task = None
+        self._plate_sync_timer_task = None
         self.config_model: Optional[ConfigModel] = None
 
     @property
