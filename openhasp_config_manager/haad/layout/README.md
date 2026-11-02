@@ -871,8 +871,7 @@ plates depend on its exact behaviour. The API may change (§3, 4.4: `entity=`, `
 - [x] **100 % line and branch coverage** of `openhasp_config_manager/haad/` (the gate is `--cov-fail-under=90` now).
 
 The tests pin *current* behaviour, oddities included. Examples found while writing this design: `PlateController.setup_auto_brightness()`
-checks `screen_controller._screen_brightness_task` but stores the new task on the plate, so the old listener is never cancelled;
-`OpenHaspController.teardown_plate_setup()` reads `_plate_sync_timer_task`, which only exists after the first `schedule_sync()`. Fixing such
+checks `screen_controller._screen_brightness_task` but stores the new task on the plate, so the old listener is never cancelled. Fixing such
 a thing is its own change that updates its test on purpose, never a side effect of this feature.
 
 ### Breaking changes
