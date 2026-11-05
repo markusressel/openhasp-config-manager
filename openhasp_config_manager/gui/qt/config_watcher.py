@@ -7,8 +7,11 @@ from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
 from openhasp_config_manager.gui.domain.config_changes import is_relevant_change
+from openhasp_config_manager.gui.qt.watchdog_patch import apply_watchdog_patch
 
 LOGGER = logging.getLogger(__name__)
+
+apply_watchdog_patch()
 
 # the changes of a burst (an LLM or a script writing several files, an editor saving through a temporary file) are
 # reported together, this long after the last of them
