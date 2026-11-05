@@ -4,6 +4,7 @@ Open work and known issues. Done items are removed; the git history has them.
 
 ## 1. Bugs
 
+- [ ] Remove `gui/qt/watchdog_patch.py` and require `watchdog>=7.1.0` once 7.1.0 is on PyPI (tagged upstream, not published yet).
 - [ ] Large files in the code editor (measured with 25,000 lines; typing itself is fast, `gui/domain/source/structure.py`):
   - the issue check (`update_issues`, 300 ms after typing stops) blocks the UI for about 4 s: it tokenizes the whole text three
     times. Make it incremental like `TextStructure`, or run it off the UI thread.

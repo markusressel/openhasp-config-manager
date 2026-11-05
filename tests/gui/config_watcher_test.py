@@ -1,3 +1,6 @@
+import os
+import sys
+
 import pytest
 
 from tests import TestBase
@@ -53,6 +56,32 @@ class TestConfigWatcher(TestBase):
         # THEN
         wait_until(lambda: watcher.reported)
         assert {path.name for path in watcher.reported[0]} == {"x.jsonl"}
+
+    @pytest.mark.skipif(not sys.platform.startswith("linux"), reason="inotify")
+    def test_a_folder_that_appears_while_a_new_folder_gets_its_watches_does_not_stop_the_watcher(self, watcher, monkeypatch):
+        # GIVEN
+        from watchdog.observers.inotify import InotifyWatchGroup
+
+        tree = watcher._root / "devices" / "b"
+        add_all_callbacks = InotifyWatchGroup._add_all_callbacks
+
+        def add_all_callbacks_then_copy_more(group, path):
+            add_all_callbacks(group, path)
+            if path == os.fsencode(tree):
+                (tree / "late").mkdir()
+                (tree / "late" / "x.jsonl").write_text("{}")
+
+        monkeypatch.setattr(InotifyWatchGroup, "_add_all_callbacks", add_all_callbacks_then_copy_more)
+
+        # WHEN
+        tree.mkdir()
+
+        # THEN
+        wait_until(lambda: any(path.name == "x.jsonl" for paths in watcher.reported for path in paths))
+
+        # AND
+        (watcher._root / "devices" / "a" / "after.jsonl").write_text("{}")
+        wait_until(lambda: any(path.name == "after.jsonl" for paths in watcher.reported for path in paths))
 
     def test_temporary_files_and_the_output_are_not_reported(self, watcher):
         # GIVEN
