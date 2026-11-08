@@ -84,7 +84,7 @@ class ImageObjectController(ObjectController):
         """
         try:
             if width is None or height is None:
-                object_width, object_height = await self._read_size()
+                object_width, object_height = await self.get_size()
                 width = object_width if width is None else width
                 height = object_height if height is None else height
 
@@ -113,8 +113,11 @@ class ImageObjectController(ObjectController):
         except Exception as e:
             self.LOGGER.error(f"Error pushing image: {e}")
 
-    async def _read_size(self) -> Tuple[int, int]:
-        """:return: the `w` and `h` of the object on the plate, which is asked once. :raises ValueError: if it doesn't know them"""
+    async def get_size(self) -> Tuple[int, int]:
+        """
+        :return: the `w` and `h` of the object on the plate, which is asked once, e.g. to render an image in its size
+        :raises ValueError: if it doesn't know them
+        """
         async with self._read_lock:
             if self._size is None:
                 size = [await self.client.get_object_property(self.object_id, prop) for prop in ("w", "h")]

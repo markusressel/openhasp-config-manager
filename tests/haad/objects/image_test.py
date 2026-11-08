@@ -106,6 +106,14 @@ async def test_reads_of_an_object_do_not_overlap(page: PageController, plate: Fa
     assert [len(data) for data in plate.downloaded_images] == [4 + 20 * 10 * 2] * 2
 
 
+async def test_the_size_of_the_object_is_asked_once(page: PageController, _plate_source):
+    img = await page.add_image(obj_id=45)
+
+    assert await img.get_size() == (20, 10)
+    assert await img.get_size() == (20, 10)
+    assert _plate_source == [("p1b45", "w"), ("p1b45", "h")]
+
+
 async def test_push_image_takes_the_missing_size_from_the_object(page: PageController, plate: FakePlate, monkeypatch):
     monkeypatch.setattr(image, "OPENHASP_IMAGE_HOST", "127.0.0.1")
     img = await page.add_image(obj_id=45)
