@@ -74,6 +74,7 @@ def create_menus(window):
         window.plates_dock,
     ]:
         view_menu.addAction(dock.toggleViewAction())
+    view_menu.addAction(window.rails.action_show_rails)
     view_menu.addSeparator()
     view_menu.addAction(
         create(

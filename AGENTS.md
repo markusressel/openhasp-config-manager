@@ -178,6 +178,14 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
   tabs once their device is loaded, found by the description of their instance); tabs of devices or parts that are gone are
   skipped, and Live preview is never turned on again. App-wide
   preferences (window geometry, theme, view toggles) are plain `QSettings` keys.
+- **Views (docks) and tool window rails**: every panel is a `QDockWidget` made with `MainWindow._add_dock`, nested around the
+  preview dock. `ToolWindowRails` (`gui/qt/window/tool_window_rails.py`, placement logic Qt-free in `gui/domain/tool_window_rails.py`)
+  puts a button for each dock on the rail at the edge where the dock is, next to the preview (left, right, top or bottom), and moves
+  it when the dock is dragged elsewhere. A new dock gets its button by itself (the rails find every dock of the window; one that can't
+  be closed, like the preview, gets none); pass `icon=` (mdi6) and `side=` (its rail while it was never seen, e.g. hidden at the start)
+  to `_add_dock`, and add its `toggleViewAction()` to the View menu (`menus.py`). The buttons keep no state of their own: checked is the
+  dock's `toggleViewAction`, so showing or hiding a dock any way shows on its button. The sides of hidden docks are remembered in
+  the `window/rail_placements` setting, *View > Tool window bars* hides the rails (`window/show_rails`).
 - **Preview controls** float inside the preview (`PagePreviewWidget.add_overlay`); `fit_to_view` keeps their rows free, so the plate is
   never covered. Messages about an object go next to it (`show_message`), errors also to the status bar (`OperationStatus.failed`).
 - **Logs**: `openhasp_client/logs.py` (Qt-free) parses the telnet output into `LogEntry`s (`segments()` are the parts a CLI or GUI styles)
