@@ -44,6 +44,11 @@ With *Edit* off, the preview is an *Interact mode*: touching the objects looks a
 navigation, groups and commands like `p1b2.val 1`). What you touch is only shown and never changes the files; *Reset* (or turning on *Edit*) puts the objects
 back as the files say.
 
+The *Live device* panel (*View* menu) shows what the plate of the current tab displays, from a screenshot of it. A screenshot
+keeps the plate busy for a moment, so it is taken now and then (every 30 s by default, or only after changes), shortly after a
+deploy, *Restore plate*, *Live preview* or a page change, and on *Refresh*. Only while the panel can be seen and the plate is
+online; after a failed one it waits longer and longer.
+
 The GUI has additional dependencies (PyQt6) and is optional:
 
 ```shell
@@ -242,7 +247,9 @@ which can also be set through the web ui on the plate itself are currently suppo
 to enable all of its features. To fix that we need to add a custom section to the file.
 
 1. Download your config.json via the openHASP web browser, see [official docs](https://www.openhasp.com/latest/faq/?h=web#is-there-a-file-browser-built-in).
-2. Append the `openhasp_config_manager` block, adjusting the values as needed.
+2. Append the `openhasp_config_manager` block, adjusting the values as needed. Optionally, `device.max_file_name_length`
+   sets the longest file name the plate accepts (255 by default, see
+   [Output file name length](#output-file-name-length-must-not-exceed-255-characters)).
 
 ```json
 {
@@ -793,7 +800,20 @@ openHASP 0.7 on an ESP32 stores the files in LittleFS, which allows names of up 
 length must not exceed 255 characters" error, and the GUI refuses to rename or move a file to such a name.
 
 Older firmware that stored the files in SPIFFS allowed only 30 characters, and the ESP8266 core limits LittleFS names to
-31 characters. The manager doesn't check these limits: keep the names short yourself if your plate needs it.
+31 characters. For such a plate, set its limit in the `openhasp_config_manager` section of its `config.json`, then the
+deploy and the GUI check that one (the GUI uses the smallest limit of all devices for the files of `common`):
+
+```json
+{
+  "openhasp_config_manager": {
+    "device": {
+      "ip": "192.168.5.134",
+      "screen": { "width": 320, "height": 480 },
+      "max_file_name_length": 31
+    }
+  }
+}
+```
 
 # Contributing
 

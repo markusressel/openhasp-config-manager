@@ -137,7 +137,7 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
   (`common/page/md/content.jsonl` is `L:/common_page_md_content.jsonl`), so a rename or move also changes the `L:/<name>` references of
   the devices that see the file and the `!include` paths. Refused: what the config needs (`common`, `devices`, device folders, their
   `config.json` and startup scripts; `boot.cmd` can't be deleted), anything that leaves a `.cmd` running a missing file (the device
-  couldn't be loaded), a name a device already has on the plate, a run file longer than `PLATE_FILE_NAME_MAX` (255) characters, and files with unsaved changes.
+  couldn't be loaded), a name a device already has on the plate, a run file longer than the limit of the device (`max_file_name_length` in its `config.json`, 255 by default; the smallest of all devices for `common`), and files with unsaved changes.
 - **Changes on disk** (an LLM or editor edits the config directory while the GUI runs): `ConfigWatcher` (`gui/qt/config_watcher.py`,
   watchdog, debounced) reports changed paths to `MainWindow._on_config_changed`. A draft without changes reloads quietly (same page and
   zoom; a failing reload keeps what is shown and reports it in the status bar). A draft with changes is never replaced: a banner offers
@@ -188,6 +188,16 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
   the `window/rail_placements` setting, *View > Tool window bars* hides the rails (`window/show_rails`).
 - **Preview controls** float inside the preview (`PagePreviewWidget.add_overlay`); `fit_to_view` keeps their rows free, so the plate is
   never covered. Messages about an object go next to it (`show_message`), errors also to the status bar (`OperationStatus.failed`).
+- **Live device** dock (`live_device_dock`, created in `MainWindow.create_basic_layout`, hidden at first): screenshots of the
+  plate of the active tab (`OpenHaspClient.take_screenshot`). When to take one is decided by `ScreenshotScheduler`
+  (`gui/domain/live_screen.py`, Qt-free, driven by the time it is given): every interval (default 30 s, app-wide QSettings key
+  `live_device/interval`, 0 = only after changes), after a `ScreenChange` (deploy and *Restore plate* through
+  `ConnectionController.plate_restored`, a page sent or reported by the plate, the page buttons, *Live preview* sends:
+  debounced, at most `MAX_CHANGE_WAIT` late), and on *Refresh*; never two at once (requests meanwhile become one follow-up),
+  backoff after failures, nothing while the dock can't be seen (`visibilityChanged`) or the plate is offline.
+  `LiveScreens` (`gui/qt/window/live_screens.py`) keeps a scheduler and the last image per open device and only wires the
+  timer, `run_async` and the view (`gui/qt/widgets/live_screen_view.py`). Report new things that change the screen with
+  `ConnectionController.screen_changed`.
 - **Logs**: `openhasp_client/logs.py` (Qt-free) parses the telnet output into `LogEntry`s (`segments()` are the parts a CLI or GUI styles)
   and `follow_logs` reconnects with a growing delay; the `logs` command and the Logs dock (`gui/qt/log_stream.py`, `widgets/log_view.py`)
   both use it. Each open device tab keeps its own log (`DeviceLogs`, `gui/qt/window/device_logs.py`) until the tab closes; the dock

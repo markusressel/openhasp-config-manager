@@ -72,6 +72,7 @@ def create_menus(window):
         window.page_jsonl_dock,
         window.logs_dock,
         window.plates_dock,
+        window.live_device_dock,
     ]:
         view_menu.addAction(dock.toggleViewAction())
     view_menu.addAction(window.rails.action_show_rails)

@@ -23,6 +23,7 @@ from openhasp_config_manager.gui.domain.draft.files import (
 from openhasp_config_manager.gui.domain.config_changes import OwnWrites
 from openhasp_config_manager.gui.domain.connection import ConnectionStatus, LinkState
 from openhasp_config_manager.gui.domain.live_preview import live_preview_refusal
+from openhasp_config_manager.gui.domain.live_screen import ScreenChange
 from openhasp_config_manager.gui.domain.gui_state import (
     GuiStateFile,
     now,
@@ -40,6 +41,7 @@ from openhasp_config_manager.gui.qt.config_watcher import ConfigWatcher
 from openhasp_config_manager.gui.qt.preview_image import png_bytes, render_plate
 from openhasp_config_manager.gui.qt.window.gui_state_publisher import GuiStatePublisher
 from openhasp_config_manager.gui.qt.window.device_logs import DeviceLogs
+from openhasp_config_manager.gui.qt.window.live_screens import LiveScreens
 from openhasp_config_manager.gui.qt.window.device_tabs import DeviceTab, DeviceTabs, PartTab
 from openhasp_config_manager.gui.qt.window.draft_actions import DraftActions
 from openhasp_config_manager.gui.qt.window.file_actions import FileActions
@@ -262,6 +264,15 @@ class MainWindow(QMainWindow):
             "Plates", "plates_dock", self.plates_panel, icon="tablet-dashboard", side=Side.BOTTOM
         )
         self.tabifyDockWidget(self.jsonl_dock, self.plates_dock)
+
+        # what the plate of the active tab shows, from screenshots now and then. Closed at first: a screenshot keeps the plate
+        # busy, they are only taken while the dock can be seen.
+        self.live_screens = LiveScreens(parent=self)
+        self.live_device_dock = self._add_dock("Live device", "live_device_dock", self.live_screens.view)
+        self.tabifyDockWidget(self.jsonl_dock, self.live_device_dock)
+        self.live_device_dock.hide()
+        # not while it is behind another dock of its tab group
+        self.live_device_dock.visibilityChanged.connect(self.live_screens.set_visible)
         self.jsonl_dock.raise_()
         self._size_docks()
         # a button per dock at the edges of the window, on the side of the preview the dock is on
@@ -274,6 +285,7 @@ class MainWindow(QMainWindow):
         # one connection and one PlateLink per open device, also while its tabs are in the background
         self.connections = PlateConnections(self._create_link, self)
         self.connections.changed.connect(self._on_connection_changed)
+        self.connections.screenChanged.connect(self.live_screens.screen_changed)
         # what the status bar shows without a tab
         self._no_connection = ConnectionController(self)
         self.status_bar.set_connection(self._no_connection.status)
@@ -318,6 +330,9 @@ class MainWindow(QMainWindow):
         editor.editPartRequested.connect(active(lambda part, instance: self.edit_part(part, instance, editor.session)))
         editor.partDone.connect(active(lambda: self.close_tab(self.device_tabs.active)))
         editor.action_edit_mode.toggled.connect(active(self._on_edit_mode_toggled))
+        editor.device_controls.pageCommandSent.connect(
+            lambda: self._with_connection(editor, lambda connection: connection.screen_changed(ScreenChange.COMMAND))
+        )
         for busy in [editor.busy, editor.device_controls.busy]:
             busy.changed.connect(lambda _: self._update_sending(editor))
             busy.changed.connect(active(lambda _: self._update_draft_actions()))
@@ -333,6 +348,7 @@ class MainWindow(QMainWindow):
         link.pageDeployed.connect(lambda page: self.connections.get(name).page_deployed(page))
         link.plateRestored.connect(lambda: self.connections.get(name).plate_restored())
         link.liveChanged.connect(lambda _: self._on_live_changed(name))
+        link.changesSent.connect(lambda: self.connections.get(name).screen_changed(ScreenChange.LIVE_PREVIEW))
         link.set_live_guard(lambda: self._live_preview_refusal(name))
         return link
 
@@ -451,6 +467,7 @@ class MainWindow(QMainWindow):
             self.page_jsonl_dock,
             self.logs_dock,
             self.plates_dock,
+            self.live_device_dock,
         ]:
             dock.setFloating(False)
         self.restoreState(self._default_dock_state, DOCK_STATE_VERSION)
@@ -680,6 +697,7 @@ class MainWindow(QMainWindow):
         self.status_bar.set_connection(self.connection.status)
         self._update_plates()
         self.device_logs.show(None if tab is None else tab.name)
+        self.live_screens.show(None if tab is None else tab.name)
         editor.device_controls.set_device(device)
         self.status_bar.set_device(None if tab is None else tab.name)
         if device is None:
@@ -737,6 +755,7 @@ class MainWindow(QMainWindow):
         tab.editor.set_plate(None)
         if not others:
             self.device_logs.drop(tab.name)
+            self.live_screens.drop(tab.name)
             self._skip_parts_to_restore(tab.name, "its tab was closed")
         editor = self.device_tabs.close(tab)
         if editor is not None:
@@ -773,6 +792,7 @@ class MainWindow(QMainWindow):
             self.connections.link(name).forget_sent()
         if self._selected_name == name:
             self.status_bar.set_connection(status)
+        self.live_screens.set_connection(name, status)
         self._state_publisher.request()
         self._update_plates()
 
@@ -1032,6 +1052,7 @@ class MainWindow(QMainWindow):
         # each open device keeps its log and its connection, also in the background
         self.device_logs.log_of(loaded.device.name).stream.set_device(loaded.device)
         self.connections.get(loaded.device.name).set_device(loaded.device)
+        self.live_screens.set_device(loaded.device.name, loaded.device)
         page_after_reload = self._page_after_reload.pop(key, None)
         for shown in self.device_tabs.of_device(loaded.device.name):
             editor = shown.editor

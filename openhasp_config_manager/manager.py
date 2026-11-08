@@ -18,7 +18,7 @@ from openhasp_config_manager.openhasp_client.model.component import (
 )
 from openhasp_config_manager.openhasp_client.model.configuration.config import Config
 from openhasp_config_manager.openhasp_client.model.configuration.debug_config import DebugConfig
-from openhasp_config_manager.openhasp_client.model.configuration.device_config import DeviceConfig
+from openhasp_config_manager.openhasp_client.model.configuration.device_config import DeviceConfig, max_file_name_length
 from openhasp_config_manager.openhasp_client.model.configuration.gui_config import GuiConfig
 from openhasp_config_manager.openhasp_client.model.configuration.hasp_config import HaspConfig
 from openhasp_config_manager.openhasp_client.model.configuration.http_config import HttpConfig
@@ -337,6 +337,7 @@ class ConfigManager:
                     width=data["device"]["screen"][screen_width_key],
                     height=data["device"]["screen"][screen_height_key],
                 ),
+                max_file_name_length=max_file_name_length(data),
             )
         )
 
