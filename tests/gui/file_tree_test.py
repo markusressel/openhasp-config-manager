@@ -133,7 +133,7 @@ class TestDefaultTargetComponent(TestBase):
 
 @pytest.mark.usefixtures("settings")
 class TestFileTreeWidget(TestBase):
-    def _widget(self, tmp_path):
+    def _widget(self, tmp_path, variables=("title",)):
         from openhasp_config_manager.gui.qt.widgets.source.file_tree import FileTreeWidget
 
         for path in [
@@ -163,7 +163,7 @@ class TestFileTreeWidget(TestBase):
                 tmp_path / "common/parts/card.jsonl": "boot.cmd",
                 tmp_path / "common/parts/label.jsonl": "boot.cmd",
             },
-            used_variables={device / "vars.yaml": ["title"]},
+            used_variables={device / "vars.yaml": list(variables)},
             # content includes the card, which includes the label; nothing the plate runs includes old
             includers={
                 tmp_path / "common/parts/card.jsonl": [device / "0_home/content.jsonl"],
@@ -187,6 +187,27 @@ class TestFileTreeWidget(TestBase):
         common, device = (widget.tree.topLevelItem(i) for i in range(2))
         assert common.text(1) == "shared"
         assert common.child(0).child(0).text(1) == "offline.cmd"
+
+    def test_a_long_second_column_does_not_shorten_the_names(self, tmp_path):
+        # GIVEN: a variable file that uses many variables, a long second column
+        from tests.gui.helpers import wait_until
+
+        widget = self._widget(tmp_path, variables=[f"a_rather_long_variable_name_{i}" for i in range(10)])
+        widget.resize(400, 600)
+        widget.show()
+        tree = widget.tree
+        header = tree.header()
+        assert tree.sizeHintForColumn(0) + 80 < tree.viewport().width()
+
+        # THEN: the names are shown in full, the second column gets the rest and nothing scrolls sideways
+        wait_until(lambda: header.sectionSize(0) + header.sectionSize(1) <= tree.viewport().width())
+        assert header.sectionSize(0) >= tree.sizeHintForColumn(0)
+        assert header.sectionSize(1) > 0
+
+        # WHEN the view gets too narrow for the names: they are shortened, the second column keeps a third
+        widget.resize(150, 600)
+        wait_until(lambda: header.sectionSize(1) == tree.viewport().width() // 3)
+        assert header.sectionSize(0) + header.sectionSize(1) <= tree.viewport().width()
 
     def _child(self, item, *names):
         for name in names:
