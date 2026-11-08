@@ -102,6 +102,7 @@ QPushButton[variant="flat"] {{ background: transparent; border: none; padding: 0
 QPushButton[variant="picker"] {{ text-align: left; padding: {d.one}px; }}
 QToolBar {{ spacing: {d.half}px; padding: {d.half}px; }}
 QToolBar QToolButton {{ padding: {d.half}px; }}
+QToolBar[role="rail"] {{ padding: 1px; spacing: 0px; border: none; }}
 QLineEdit, QSpinBox, QComboBox {{ padding: {d.half}px; }}
 QGroupBox {{ font-weight: bold; margin-top: {d.two}px; padding: {d.one}px {d.half}px {d.half}px {d.half}px; }}
 QGroupBox::title {{ subcontrol-origin: margin; left: {d.one}px; }}
