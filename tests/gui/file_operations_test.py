@@ -133,6 +133,18 @@ class TestRename:
         plan = plan_move(files, root / "common/parts/dot.jsonl", root / "common/parts" / folder / page)
         assert plan.notes == ["Changes the !include paths in: common/page/home.jsonl."]
 
+    def test_the_limit_of_the_device_applies_and_the_smallest_one_to_common_files(self, root):
+        _write(root, {"devices/b/config.json": '{"openhasp_config_manager": {"device": {"max_file_name_length": 31}}}'})
+        files = ConfigFiles(root)
+        assert files.max_name_length(root / "devices/a/own.jsonl") == PLATE_FILE_NAME_MAX
+        assert files.max_name_length(root / "devices/b/own.jsonl") == 31
+        assert files.max_name_length(root / "common/page/home.jsonl") == 31
+
+        # 32 characters: fine for device a, too long for a common file that device b runs
+        plan_move(files, root / "devices/a/own.jsonl", root / "devices/a/a_page_name_of_thirty_two_.jsonl")
+        with pytest.raises(FileOperationError, match="32 characters, and a deploy refuses names longer than 31"):
+            plan_move(files, root / "common/page/home.jsonl", root / "common/page/home_page_abcd.jsonl")
+
     def test_moving_a_variable_file_says_where_its_variables_apply(self, root):
         plan = plan_move(ConfigFiles(root), root / "theme.yaml", root / "common/theme.yaml")
 

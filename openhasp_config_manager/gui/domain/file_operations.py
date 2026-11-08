@@ -15,8 +15,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Dict, Iterable, List, Optional, Set, Tuple
 
-from openhasp_config_manager.const import COMMON_FOLDER_NAME, DEVICES_FOLDER_NAME, PLATE_FILE_NAME_MAX, SYSTEM_SCRIPTS
+from openhasp_config_manager.const import COMMON_FOLDER_NAME, DEVICES_FOLDER_NAME, SYSTEM_SCRIPTS
 from openhasp_config_manager.manager import CONFIG_FILE_NAME
+from openhasp_config_manager.openhasp_client.model.configuration.device_config import max_file_name_length
 
 # the files the plate gets: their names on the plate come from their paths
 _PLATE_SUFFIXES = {".jsonl", ".cmd", ".png", ".bin", ".ttf"}
@@ -158,6 +159,14 @@ class ConfigFiles:
         folders = [device] if device is not None else [self.common, *self.device_dirs()]
         return [file for folder in folders for file in _files(folder, _TEXT_SUFFIXES)]
 
+    def max_name_length(self, path: Path) -> int:
+        """
+        :return: the longest plate name a file can have: the limit of its device (`max_file_name_length` in its config.json), the
+            smallest limit of all devices for a common file
+        """
+        device = self.device_of(path)
+        return min(_device_limit(folder) for folder in ([device] if device is not None else self.device_dirs()) or [None])
+
     def jsonl_files(self) -> List[Path]:
         return [file for folder in [self.common, *self.device_dirs()] for file in _files(folder, {".jsonl"})]
 
@@ -166,6 +175,13 @@ class ConfigFiles:
         if files is None:
             files = [*_files(self.common, _PLATE_SUFFIXES), *_files(device, _PLATE_SUFFIXES)]
         return {name for name in (self.plate_name(file) for file in files) if name is not None}
+
+
+def _device_limit(device: Optional[Path]) -> int:
+    """:return: the longest plate name of a device, from its config.json (the default without one)"""
+    config = None if device is None else device / CONFIG_FILE_NAME
+    section = json.loads(config.read_text()).get("openhasp_config_manager", {}) if config is not None and config.is_file() else {}
+    return max_file_name_length(section)
 
 
 def _files(folder: Path, suffixes: Set[str]) -> List[Path]:
@@ -366,24 +382,25 @@ def _shown(files: ConfigFiles, path: Path) -> str:
 
 def _check_lengths(files: ConfigFiles, plan: FilePlan, names: Dict[Path, str], note: bool = False):
     """
-    A deploy refuses names longer than `PLATE_FILE_NAME_MAX` for the files the plate gets: refuse a long name that a file refers
-    to (`L:/<name>`, after the plan's edits). A part that is only included is not uploaded, so its name can be long.
+    A deploy refuses names longer than the limit of the device (`ConfigFiles.max_name_length`) for the files the plate gets:
+    refuse a long name that a file refers to (`L:/<name>`, after the plan's edits). A part that is only included is not uploaded, so its name can be long.
     :param names: the new path of a file -> its new plate name
     :param note: say so for a long name of a new .jsonl file, which nothing runs yet
     """
     for path, name in names.items():
-        if len(name) <= PLATE_FILE_NAME_MAX:
+        limit = files.max_name_length(path)
+        if len(name) <= limit:
             continue
         pattern = re.compile(r"L:/" + re.escape(name) + r"(?![\w.\-])")
         if any(pattern.search(plan.edits.get(file, file.read_text())) for file in files.files_seeing(path)):
             raise FileOperationError(
                 f"On the plate, it would be {name}: {len(name)} characters, and a deploy refuses names longer than "
-                f"{PLATE_FILE_NAME_MAX} (folders and file names are joined with _). Choose a shorter name."
+                f"{limit} (folders and file names are joined with _). Choose a shorter name."
             )
         if not note or path.suffix != ".jsonl":
             continue
         plan.notes.append(
-            f"On the plate, it would be {name}, which is longer than {PLATE_FILE_NAME_MAX} characters: fine for a part, but a "
+            f"On the plate, it would be {name}, which is longer than {limit} characters: fine for a part, but a "
             "deploy refuses it if a .cmd file runs it."
         )
 
