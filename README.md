@@ -197,7 +197,7 @@ openhasp-config-manager when executing.
       only be uploaded to that particular device.
     * You can create arbitrary nested folder structures for organizing the files.
       There is a limit to the file name length though,
-      see [FAQ](#output-file-name-length-must-not-exceed-30-characters)
+      see [FAQ](#output-file-name-length-must-not-exceed-255-characters)
     * You must provide a `config.json` file, see [config.json](#config.json)
       for more info.
 
@@ -614,7 +614,7 @@ pass the id of an object instead, and refer to it in the part (`"{{ b{{ anchor }
 
 Put `.png` and `.bin` images, and `.ttf` and `.bin` fonts, anywhere in the `common` folder or a device folder. Like all files they are
 uploaded with a flattened name (`devices/plate1/icons/home.png` becomes `icons_home.png`, see
-[the file name length](#output-file-name-length-must-not-exceed-30-characters)), and that is the name you refer to.
+[the file name length](#output-file-name-length-must-not-exceed-255-characters)), and that is the name you refer to.
 Only the files that are used are copied to a device:
 
 * **Images** are found by the `L:/` path in your `.jsonl` and `.cmd` files, e.g. `"src": "L:/icons_home.png"`. The text is
@@ -773,7 +773,7 @@ If that doesn't work, open a terminal and run the following command with the dev
 bash -c "screen -q -L -Logfile device.log /dev/ttyUSB0 115200 &> /dev/null; tail -F device.log; killall screen"
 ```
 
-## Output file name length must not exceed 30 characters
+## Output file name length must not exceed 255 characters
 
 openHASP doesn't support subfolders. To keep your local project organized, the manager flattens your structure 
 during upload (e.g., `folder/page.jsonl` becomes `folder_page.jsonl`). So f.ex. the file in the following structure:
@@ -788,8 +788,12 @@ openhasp-configs
 
 would be uploaded to the `touch_down_1` device with the name `0_home_0_header.jsonl`.
 
-To avoid the "Output file name length must not exceed 30 characters" error, make sure that the
-flattened file name (including the device folder prefix) does not exceed 30 characters.
+openHASP 0.7 on an ESP32 stores the files in LittleFS, which allows names of up to 255 characters (measured on
+0.7.0-rc13 on an ESP32-S3: 255 work, 256 are refused). A deploy refuses longer flattened names with the "Output file name
+length must not exceed 255 characters" error, and the GUI refuses to rename or move a file to such a name.
+
+Older firmware that stored the files in SPIFFS allowed only 30 characters, and the ESP8266 core limits LittleFS names to
+31 characters. The manager doesn't check these limits: keep the names short yourself if your plate needs it.
 
 # Contributing
 

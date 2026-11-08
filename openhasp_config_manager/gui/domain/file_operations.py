@@ -15,11 +15,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Dict, Iterable, List, Optional, Set, Tuple
 
-from openhasp_config_manager.const import COMMON_FOLDER_NAME, DEVICES_FOLDER_NAME, SYSTEM_SCRIPTS
+from openhasp_config_manager.const import COMMON_FOLDER_NAME, DEVICES_FOLDER_NAME, PLATE_FILE_NAME_MAX, SYSTEM_SCRIPTS
 from openhasp_config_manager.manager import CONFIG_FILE_NAME
-
-# the longest name of a file on the plate, see `DeviceValidator`
-PLATE_NAME_MAX = 30
 
 # the files the plate gets: their names on the plate come from their paths
 _PLATE_SUFFIXES = {".jsonl", ".cmd", ".png", ".bin", ".ttf"}
@@ -369,24 +366,24 @@ def _shown(files: ConfigFiles, path: Path) -> str:
 
 def _check_lengths(files: ConfigFiles, plan: FilePlan, names: Dict[Path, str], note: bool = False):
     """
-    A deploy refuses names longer than `PLATE_NAME_MAX` for the files the plate gets: refuse a long name that a file refers
+    A deploy refuses names longer than `PLATE_FILE_NAME_MAX` for the files the plate gets: refuse a long name that a file refers
     to (`L:/<name>`, after the plan's edits). A part that is only included is not uploaded, so its name can be long.
     :param names: the new path of a file -> its new plate name
     :param note: say so for a long name of a new .jsonl file, which nothing runs yet
     """
     for path, name in names.items():
-        if len(name) <= PLATE_NAME_MAX:
+        if len(name) <= PLATE_FILE_NAME_MAX:
             continue
         pattern = re.compile(r"L:/" + re.escape(name) + r"(?![\w.\-])")
         if any(pattern.search(plan.edits.get(file, file.read_text())) for file in files.files_seeing(path)):
             raise FileOperationError(
                 f"On the plate, it would be {name}: {len(name)} characters, and a deploy refuses names longer than "
-                f"{PLATE_NAME_MAX} (folders and file names are joined with _). Choose a shorter name."
+                f"{PLATE_FILE_NAME_MAX} (folders and file names are joined with _). Choose a shorter name."
             )
         if not note or path.suffix != ".jsonl":
             continue
         plan.notes.append(
-            f"On the plate, it would be {name}, which is longer than {PLATE_NAME_MAX} characters: fine for a part, but a "
+            f"On the plate, it would be {name}, which is longer than {PLATE_FILE_NAME_MAX} characters: fine for a part, but a "
             "deploy refuses it if a .cmd file runs it."
         )
 
