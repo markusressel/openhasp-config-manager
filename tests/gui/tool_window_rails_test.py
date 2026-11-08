@@ -88,11 +88,11 @@ class TestToolWindowRails(TestBase):
         assert rails.button(window.preview_dock) is None
         assert rails.side_of(window.devices_dock) == Side.LEFT
         assert rails.side_of(window.properties_dock) == Side.RIGHT
-        # the logs were never seen: after the others, which are in the order of their tabs
+        # the logs and the live device were never seen: after the others, which are in the order of their tabs
         wait_until(
             lambda: (
                 [button.dock.objectName() for button in rails.buttons(Side.BOTTOM)]
-                == ["jsonl_dock", "page_jsonl_dock", "plates_dock", "logs_dock"]
+                == ["jsonl_dock", "page_jsonl_dock", "plates_dock", "logs_dock", "live_device_dock"]
             )
         )
         plates = rails.button(window.plates_dock)

@@ -268,7 +268,9 @@ class MainWindow(QMainWindow):
         # what the plate of the active tab shows, from screenshots now and then. Closed at first: a screenshot keeps the plate
         # busy, they are only taken while the dock can be seen.
         self.live_screens = LiveScreens(parent=self)
-        self.live_device_dock = self._add_dock("Live device", "live_device_dock", self.live_screens.view)
+        self.live_device_dock = self._add_dock(
+            "Live device", "live_device_dock", self.live_screens.view, icon="monitor-screenshot", side=Side.BOTTOM
+        )
         self.tabifyDockWidget(self.jsonl_dock, self.live_device_dock)
         self.live_device_dock.hide()
         # not while it is behind another dock of its tab group
