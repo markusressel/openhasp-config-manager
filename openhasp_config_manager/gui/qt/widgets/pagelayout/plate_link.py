@@ -48,6 +48,8 @@ class PlateLink(QtCore.QObject):
     pageDeployed = QtCore.pyqtSignal(int)
     # the plate shows its files again
     plateRestored = QtCore.pyqtSignal()
+    # Live preview sent changes of the draft (not a whole page: see `pageDeployed`)
+    changesSent = QtCore.pyqtSignal()
     # Live preview was turned on or off
     liveChanged = QtCore.pyqtSignal(bool)
 
@@ -279,16 +281,18 @@ class PlateLink(QtCore.QObject):
         description = f"Sending the changes of page {index} to {device.name}"
         view = self._view
 
-        async def __async_work():
+        async def __async_work() -> bool:
             async with self._send_lock:
                 if self._live_index != index:
                     # sent when the page is shown again
-                    return
+                    return False
                 await self._send_live_update(client, index, objects, status=None)
+                return True
 
         # not run_busy: disabling the editor would interrupt dragging
         run_async(
             __async_work(),
+            on_success=lambda sent: self.changesSent.emit() if sent else None,
             on_error=lambda ex: self._on_send_failed(view, index, description, ex, retry=lambda: view.resync_page(index)),
         )
 

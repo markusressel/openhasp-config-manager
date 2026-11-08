@@ -22,6 +22,8 @@ class DeviceControlsWidget(QWidget):
 
     # the brightness (1..100) and whether the screen is on, to show it in the preview
     screenChanged = pyqtSignal(int, bool)
+    # the plate was told to show another page
+    pageCommandSent = pyqtSignal()
 
     def __init__(self, status: OperationStatus, parent=None):
         super().__init__(parent)
@@ -96,8 +98,13 @@ class DeviceControlsWidget(QWidget):
         separator.setFrameShadow(QFrame.Shadow.Sunken)
         return separator
 
-    def _run(self, coro: Awaitable, description: str):
-        run_busy(coro, busy=self.busy, status=self.status, description=f"{description} ({self.device.name})")
+    def _run(self, coro: Awaitable, description: str, on_success=None):
+        run_busy(
+            coro, busy=self.busy, status=self.status, description=f"{description} ({self.device.name})", on_success=on_success
+        )
+
+    def _run_page_command(self, coro: Awaitable, description: str):
+        self._run(coro, description, on_success=lambda _: self.pageCommandSent.emit())
 
     @qBridge(int)
     def __on_brightness_changed(self, value: int):
@@ -138,12 +145,12 @@ class DeviceControlsWidget(QWidget):
 
     @qBridge()
     def on_prev_page_clicked(self):
-        self._run(self.client.previous_page(), "Switching to the previous page")
+        self._run_page_command(self.client.previous_page(), "Switching to the previous page")
 
     @qBridge()
     def on_home_page_clicked(self):
-        self._run(self.client.set_page(1), "Switching to the home page")
+        self._run_page_command(self.client.set_page(1), "Switching to the home page")
 
     @qBridge()
     def on_next_page_clicked(self):
-        self._run(self.client.next_page(), "Switching to the next page")
+        self._run_page_command(self.client.next_page(), "Switching to the next page")
