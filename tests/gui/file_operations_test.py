@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from openhasp_config_manager.const import PLATE_FILE_NAME_MAX
 from openhasp_config_manager.gui.domain.file_operations import (
     ConfigFiles,
     FileOperationError,
@@ -119,9 +120,17 @@ class TestRename:
     def test_a_too_long_name_is_refused_for_a_file_the_plate_runs_but_not_for_a_part(self, root):
         files = ConfigFiles(root)
 
-        with pytest.raises(FileOperationError, match="it would be a_very_long_name_for_a_page.jsonl: 33 characters"):
-            plan_move(files, root / "devices/a/own.jsonl", root / "devices/a/a_very_long_name_for_a_page.jsonl")
-        plan = plan_move(files, root / "common/parts/dot.jsonl", root / "common/parts/a_very_long_name_of_a_part.jsonl")
+        # longer than the limit only as a flattened path: a single file name can't be that long on disk
+        folder = "f" * 200
+        page = "p" * (PLATE_FILE_NAME_MAX - len(folder) - len("_.jsonl") + 1) + ".jsonl"
+        name = f"{folder}_{page}"
+        assert len(name) == PLATE_FILE_NAME_MAX + 1
+
+        with pytest.raises(FileOperationError, match=f"it would be {name}: {PLATE_FILE_NAME_MAX + 1} characters"):
+            plan_move(files, root / "devices/a/own.jsonl", root / "devices/a" / folder / page)
+        # as long as the limit is fine
+        plan_move(files, root / "devices/a/own.jsonl", root / "devices/a" / folder / page[1:])
+        plan = plan_move(files, root / "common/parts/dot.jsonl", root / "common/parts" / folder / page)
         assert plan.notes == ["Changes the !include paths in: common/page/home.jsonl."]
 
     def test_moving_a_variable_file_says_where_its_variables_apply(self, root):
