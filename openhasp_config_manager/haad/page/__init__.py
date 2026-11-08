@@ -131,7 +131,7 @@ class PageController:
     ) -> "Claim":
         """
         Claims the plate while `active()` is true, evaluated now and whenever `trigger` fires: the plate shows this page
-        (see PageScheduler for how claims are arbitrated) and, with `keep_awake`, stays on. Call it in register_objects().
+        (see PageScheduler for how claims are arbitrated) and, with `keep_awake`, stays on while it shows this page. Call it in register_objects().
 
         :param priority: default: Priority.NORMAL
         :param wake: wakes the screen when the claim shows this page

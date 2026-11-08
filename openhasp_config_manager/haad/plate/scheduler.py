@@ -4,7 +4,7 @@ arbitrates between the active ones by priority (like Android's audio focus or al
 digital signage playlist that a touch interrupts).
 
 - A claim is active while its condition holds (`Claim.active`, re-evaluated whenever its trigger fires).
-- The plate stays on while any active claim has `keep_awake`.
+- The plate stays on while it shows the page of an active claim with `keep_awake`.
 - Only the claims of the highest active priority count: when one of them becomes active, its page is shown. With
   several of them active, the plate rotates through their pages, `FocusConfig.dwell` each. Claims of a lower priority
   show their page once the higher ones are gone.
@@ -64,7 +64,7 @@ class Claim:
     # whether the claim is active, evaluated when `trigger` fires
     active: Callable[[], Awaitable[bool]]
     priority: Priority = Priority.NORMAL
-    # keeps the screen on (no idle dimming) while active
+    # keeps the screen on (at PlateConfig.screen_brightness_keep_awake) while active and its page is shown
     keep_awake: bool = False
     # wakes the screen when the claim shows its page
     wake: bool = False
@@ -172,7 +172,6 @@ class PageScheduler:
                 await self._on_claim_changed(claim)
 
     async def _on_claim_changed(self, claim: Claim):
-        await self._apply_awake()
         top = self._top_claims()
         if claim.activated is not None:
             takes_the_page = claim in top and (self.mode is not Mode.PINNED or claim.priority is Priority.CRITICAL)
@@ -183,13 +182,16 @@ class PageScheduler:
                 await self._show(claim.page.index)
         elif self.mode is not Mode.PINNED:
             await self._show_top()
+        await self._apply_awake()
         await self._update_rotation()
 
     async def _on_event(self, topic: str, payload: bytes):
         if _PAGE_EVENT_TOPIC.search(topic):
             page = int(payload.decode("utf-8"))
-            expected, self._expected_page = self._expected_page, None
-            self._current_page = page
+            async with self._lock:
+                expected, self._expected_page = self._expected_page, None
+                self._current_page = page
+                await self._apply_awake()
             if page == expected:
                 return
         elif _IDLE_EVENT_TOPIC.search(topic):
@@ -238,8 +240,8 @@ class PageScheduler:
         return list(dict.fromkeys(c.page.index for c in self._top_claims()))
 
     async def _resync(self):
-        await self._apply_awake()
         await self._show_top()
+        await self._apply_awake()
         await self._update_rotation()
 
     async def _show_top(self):
@@ -256,9 +258,10 @@ class PageScheduler:
             self._expected_page = index
             self._current_page = index
             await self._plate.change_page(index)
+            await self._apply_awake()
 
     async def _apply_awake(self):
-        awake = any(c.keep_awake for c in self.active_claims)
+        awake = any(c.keep_awake and c.page.index == self._current_page for c in self.active_claims)
         if awake != self._awake:
             self._awake = awake
             await self._plate.set_keep_awake(awake)
