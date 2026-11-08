@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from openhasp_config_manager.manager import ConfigManager
 from openhasp_config_manager.processing.variables import VariableManager
 from tests import TestBase
@@ -93,3 +95,55 @@ class TestConfigManager(TestBase):
             {"page": 9, "id": 1, "obj": "obj", "x": 2},
             {"page": 9, "id": 2, "obj": "obj", "x": 4},
         ]
+
+
+def _set_file_name_limit(cfg_root: Path, value):
+    config_file = cfg_root / "devices" / "test_device" / "config.json"
+    config = json.loads(config_file.read_text())
+    config["openhasp_config_manager"]["device"]["max_file_name_length"] = value
+    config_file.write_text(json.dumps(config))
+
+
+def _manager(cfg_root: Path, output: Path) -> ConfigManager:
+    variable_manager = VariableManager(cfg_root)
+    variable_manager.read()
+    return ConfigManager(cfg_root, output, variable_manager)
+
+
+class TestFileNameLimit(TestBase):
+    def test_the_limit_is_255_unless_the_device_sets_one(self, tmp_path):
+        cfg_root = copy_test_config(tmp_path)
+        (device,) = _manager(cfg_root, tmp_path / "output").analyze()
+        assert device.config.openhasp_config_manager.device.max_file_name_length == 255
+
+        _set_file_name_limit(cfg_root, 31)
+        (device,) = _manager(cfg_root, tmp_path / "output").analyze()
+        assert device.config.openhasp_config_manager.device.max_file_name_length == 31
+
+    @pytest.mark.parametrize("value", [0, -1, "31", 31.5, True])
+    def test_a_limit_that_is_not_a_positive_whole_number_is_refused(self, tmp_path, value):
+        cfg_root = copy_test_config(tmp_path)
+        _set_file_name_limit(cfg_root, value)
+
+        with pytest.raises(Exception, match="max_file_name_length must be a positive whole number"):
+            _manager(cfg_root, tmp_path / "output").analyze()
+
+    def test_a_deploy_refuses_names_longer_than_the_limit_of_the_device(self, tmp_path):
+        # GIVEN: a page of 32 characters on the plate, which fits the default but not a limit of 31
+        cfg_root = copy_test_config(
+            tmp_path, {"devices/test_device/home/thirty_two_characters.jsonl": '{"page": 1, "id": 9}\n'}
+        )
+        home_cmd = cfg_root / "devices" / "test_device" / "home.cmd"
+        home_cmd.write_text(home_cmd.read_text().rstrip("\n") + "\nrun L:/home_thirty_two_characters.jsonl\n")
+        assert len("home_thirty_two_characters.jsonl") == 32
+        for device in _manager(cfg_root, tmp_path / "output").analyze():
+            _manager(cfg_root, tmp_path / "output").process(device)
+
+        # WHEN
+        _set_file_name_limit(cfg_root, 31)
+        manager = _manager(cfg_root, tmp_path / "output2")
+
+        # THEN
+        with pytest.raises(Exception, match="must not exceed 31 characters, but was 32: home_thirty_two_characters.jsonl"):
+            for device in manager.analyze():
+                manager.process(device)

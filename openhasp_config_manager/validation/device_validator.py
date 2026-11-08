@@ -1,4 +1,3 @@
-from openhasp_config_manager.const import PLATE_FILE_NAME_MAX
 from openhasp_config_manager.openhasp_client.model.component import Component
 from openhasp_config_manager.openhasp_client.model.configuration.config import Config
 from openhasp_config_manager.validation.cmd import CmdFileValidator
@@ -25,8 +24,8 @@ class DeviceValidator:
             self._jsonl_object_validator.validate(data)
         if component.type == "cmd":
             self._cmd_file_validator.validate(data)
-        if len(component.name) > PLATE_FILE_NAME_MAX:
+        limit = self._config.openhasp_config_manager.device.max_file_name_length
+        if len(component.name) > limit:
             raise AssertionError(
-                f"Output file name length must not exceed {PLATE_FILE_NAME_MAX} characters, but was {len(component.name)}: "
-                f"{component.name}"
+                f"Output file name length must not exceed {limit} characters, but was {len(component.name)}: {component.name}"
             )
