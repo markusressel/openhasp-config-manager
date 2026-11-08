@@ -141,10 +141,14 @@ class FileTreeWidget(QWidget):
             "Select a file to highlight its objects, double-click it to edit it as text."
         )
         self._tree.setUniformRowHeights(True)
+        # the names fill the width, the second column gets what they leave (see `_fit_columns`)
         header = self._tree.header()
         header.setStretchLastSection(False)
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
+        self._tree.viewport().installEventFilter(self)
+        self._tree.itemExpanded.connect(lambda _item: self._fit_columns())
+        self._tree.itemCollapsed.connect(lambda _item: self._fit_columns())
         self._tree.itemSelectionChanged.connect(self._on_selection_changed)
         # also for the selected row: reveal() selects without highlighting
         self._tree.itemClicked.connect(lambda _item, _column: self._on_selection_changed())
@@ -279,6 +283,7 @@ class FileTreeWidget(QWidget):
             item.setFont(0, font)
             item.setIcon(0, target_icon if key == target else ThemedIcons.icon(_ICONS[FileKind.JSONL]))
             item.setToolTip(0, self._tooltip(item, key, component_pages, page))
+        self._fit_columns()
 
     def reveal(self, key: Optional[str]):
         """Select the file of an object, without highlighting it (e.g. when the object is selected in the preview)."""
@@ -425,6 +430,23 @@ class FileTreeWidget(QWidget):
             item = stack.pop()
             item.setHidden(not self.show_all and not item.data(0, _RELEVANT_ROLE))
             stack.extend(item.child(i) for i in range(item.childCount()))
+        self._fit_columns()
+
+    def eventFilter(self, watched: QtCore.QObject, event: QtCore.QEvent) -> bool:
+        if watched is self._tree.viewport() and event.type() == QtCore.QEvent.Type.Resize:
+            self._fit_columns()
+        return super().eventFilter(watched, event)
+
+    def _fit_columns(self):
+        """
+        Give the names the room they need and the second column the rest, so a long second column (e.g. the variables
+        of a file) can't squeeze the names. Both fit into the view: when it is too narrow for both, the second column
+        keeps at least a third and the names are shortened.
+        """
+        available = self._tree.viewport().width()
+        names = self._tree.sizeHintForColumn(0)
+        second = self._tree.sizeHintForColumn(1)
+        self._tree.header().resizeSection(1, max(0, min(second, max(available - names, available // 3))))
 
     def _tooltip(self, item: QTreeWidgetItem, key: str, pages: Iterable[int], page: int) -> str:
         lines = [item.data(0, _PATH_ROLE)]
