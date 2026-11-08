@@ -44,6 +44,11 @@ With *Edit* off, the preview is an *Interact mode*: touching the objects looks a
 navigation, groups and commands like `p1b2.val 1`). What you touch is only shown and never changes the files; *Reset* (or turning on *Edit*) puts the objects
 back as the files say.
 
+The *Live device* panel (*View* menu) shows what the plate of the current tab displays, from a screenshot of it. A screenshot
+keeps the plate busy for a moment, so it is taken now and then (every 30 s by default, or only after changes), shortly after a
+deploy, *Restore plate*, *Live preview* or a page change, and on *Refresh*. Only while the panel can be seen and the plate is
+online; after a failed one it waits longer and longer.
+
 The GUI has additional dependencies (PyQt6) and is optional:
 
 ```shell

@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Dict, List, Optional, Callable, Awaitable
 from PyQt6 import QtCore
 
 from openhasp_config_manager.gui.domain.connection import ConnectionStatus
+from openhasp_config_manager.gui.domain.live_screen import ScreenChange
 from openhasp_config_manager.gui.qt.operations import error_text
 from openhasp_config_manager.gui.qt.async_bridge import run_async
 from openhasp_config_manager.openhasp_client.model.device import Device
@@ -23,6 +24,8 @@ class ConnectionController(QtCore.QObject):
     """
 
     changed = QtCore.pyqtSignal(object)  # ConnectionStatus
+    # the screen of the plate changed (ScreenChange): what was sent to it, or the page it reported
+    screenChanged = QtCore.pyqtSignal(object)
 
     # emitted from the asyncio thread, Qt queues them to the main thread; the int is the generation of the device
     _brokerChanged = QtCore.pyqtSignal(int, bool, object)
@@ -99,14 +102,20 @@ class ConnectionController(QtCore.QObject):
     def set_sending(self, sending: bool):
         self._set(self.status.with_sending(sending))
 
+    def screen_changed(self, change: ScreenChange):
+        """Something changed what the plate shows (a command, Live preview, ...), e.g. for the Live device view."""
+        self.screenChanged.emit(change)
+
     def page_out_of_sync(self, page: int):
         self._set(self.status.with_send_failed(page))
 
     def page_deployed(self, page: int):
         self._set(self.status.with_page_deployed(page))
+        self.screen_changed(ScreenChange.PAGE_SENT)
 
     def plate_restored(self):
         self._set(self.status.with_plate_restored())
+        self.screen_changed(ScreenChange.RESTORED)
 
     def _on_broker_changed(self, generation: int, connected: bool, error: Optional[str]):
         if generation == self._generation:
@@ -120,6 +129,7 @@ class ConnectionController(QtCore.QObject):
     def _on_page_received(self, generation: int, payload: str):
         if generation == self._generation:
             self._set(self.status.with_page(payload))
+            self.screen_changed(ScreenChange.COMMAND)
 
     def _set(self, status: ConnectionStatus):
         if status != self.status:
@@ -136,6 +146,8 @@ class PlateConnections(QtCore.QObject):
 
     # (device name, ConnectionStatus): the connection of an open device changed
     changed = QtCore.pyqtSignal(str, object)
+    # (device name, ScreenChange): the screen of the plate of an open device changed
+    screenChanged = QtCore.pyqtSignal(str, object)
 
     def __init__(self, create_link: Callable[[str], "PlateLink"], parent: Optional[QtCore.QObject] = None):
         """:param create_link: makes the `PlateLink` of a device (by its name)"""
@@ -152,6 +164,7 @@ class PlateConnections(QtCore.QObject):
         if connection is None:
             connection = self._connections[name] = ConnectionController(self)
             connection.changed.connect(lambda status: self.changed.emit(name, status))
+            connection.screenChanged.connect(lambda change: self.screenChanged.emit(name, change))
             self._links[name] = self._create_link(name)
         users = self._users.setdefault(name, [])
         if not any(known is user for known in users):
