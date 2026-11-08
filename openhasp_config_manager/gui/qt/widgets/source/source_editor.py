@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import QInputDialog, QMessageBox, QStackedLayout, QTabWidge
 from openhasp_config_manager.gui.dimensions import UiDimensions
 from openhasp_config_manager.gui.domain.source.buffers import DiskChange, SourceBuffer, SourceBuffers, read_text
 from openhasp_config_manager.gui.domain.source.issues import SourceIssue
-from openhasp_config_manager.gui.domain.source.links import include_targets, link_targets, resolve_link
+from openhasp_config_manager.gui.domain.source.links import include_targets, link_targets, resolve_link, run_targets
 from openhasp_config_manager.gui.domain.source.syntax import language_of
 from openhasp_config_manager.gui.domain.variables.unused import UnusedVariables
 from openhasp_config_manager.gui.domain.navigation_history import Location, NavigationHistory
@@ -72,6 +72,7 @@ class SourceEditorWidget(QWidget):
         self._preview_tab: Optional[Path] = None
         self._usages_popup: Optional[UsagesPopup] = None
         self._variables: Callable[[Path], List[str]] = lambda path: []
+        self._object_types: Callable[[Path], Dict[str, str]] = lambda path: {}
         self._definitions: Callable[[Path, str], Optional[Definition]] = lambda path, name: None
         self._usages: Callable[[Path, str], List[Usage]] = lambda path, name: []
         self._variable_value: Callable[[Path, str], Any] = _no_value
@@ -148,6 +149,10 @@ class SourceEditorWidget(QWidget):
     def set_variables(self, provider: Callable[[Path], List[str]]):
         """The template variables a file can use, for the completion."""
         self._variables = provider
+
+    def set_object_types(self, provider: Callable[[Path], Dict[str, str]]):
+        """The types of the objects by name (`p1b2` -> `btn`) a .cmd file can change, for the completion."""
+        self._object_types = provider
 
     def set_definition_finder(self, finder: Callable[[Path, str], Optional[Definition]]):
         """Where a variable used in a file is defined, for Ctrl+click on the variables of templates."""
@@ -258,6 +263,8 @@ class SourceEditorWidget(QWidget):
         editor.set_text(buffer.text)
         editor.completion.set_variables(lambda path=buffer.path: self._variables(path))
         editor.completion.set_include_paths(lambda: include_targets(self._config_dir.resolve()))
+        editor.completion.set_object_types(lambda path=buffer.path: self._object_types(path))
+        editor.completion.set_run_targets(lambda path=buffer.path: run_targets(self._config_dir.resolve(), path))
         editor.set_definition_finder(lambda name, path=buffer.path: self._definitions(path, name))
         editor.set_app_markers(self._markers.get(buffer.path, []))
         editor.values.set_source(

@@ -5,7 +5,9 @@ from PyQt6 import QtCore
 
 from openhasp_config_manager.gui.domain.gui_state import relative
 from openhasp_config_manager.gui.domain.draft.session import PlateSession
+from openhasp_config_manager.gui.domain.file_operations import ConfigFiles
 from openhasp_config_manager.gui.domain.problems import Severity
+from openhasp_config_manager.gui.domain.source.cmd_completion import object_types
 from openhasp_config_manager.gui.domain.source.issues import SourceIssue
 from openhasp_config_manager.gui.domain.variables.definitions import Definition, VariableDefinitions
 from openhasp_config_manager.gui.domain.variables.usages import Usage, VariableUsages
@@ -53,6 +55,7 @@ class SourceEditorSync(QtCore.QObject):
         source_editor.stateChanged.connect(self._remember_open_files)
         source_editor.stateChanged.connect(self.update_file_view)
         source_editor.set_variables(self.variables_of_file)
+        source_editor.set_object_types(self.object_types_of_file)
         source_editor.set_definition_finder(self.find_definition)
         source_editor.set_usages_finder(self.find_usages)
         source_editor.set_value_source(self.variable_value, self.render_text)
@@ -95,6 +98,16 @@ class SourceEditorSync(QtCore.QObject):
         session = self._loaded_session()
         component = None if session is None else session.component_at(path)
         return [] if component is None else session.variable_names(component.key)
+
+    def object_types_of_file(self, path: Path) -> Dict[str, str]:
+        """
+        :return: the types of the objects of the loaded device by name (`p1b2` -> `btn`), for the completion in a .cmd file of the
+            device or of the common folder; empty for a file of another device
+        """
+        session = self._loaded_session()
+        if session is None or ConfigFiles(self._config_dir).device_of(path) not in (None, session.device.path.resolve()):
+            return {}
+        return object_types(session.working_objects.values())
 
     def variable_value(self, path: Path, name: str) -> Any:
         """

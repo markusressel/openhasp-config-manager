@@ -349,6 +349,43 @@ class TestDirectives(TestBase):
         QTest.keyClick(editor.completion.completer.popup(), Qt.Key.Key_Return)
         assert editor.toPlainText().startswith('{"!include": "common/parts/tile.jsonl"')
 
+    def test_a_run_of_a_cmd_file_completes_the_command_and_the_file(self, qapp, settings):
+        # GIVEN
+        editor = CodeEditor(Language.CMD)
+        editor.resize(900, 400)
+        editor.show()
+        editor.completion.set_run_targets(lambda: ["pages.jsonl", "boot.cmd"])
+
+        # WHEN: the command is chosen
+        _type(editor, "ru")
+        assert editor.completion.completer.model().stringList() == ["run"]
+        assert editor.completion.card._kind.text() == "Command"
+        QTest.keyClick(editor.completion.completer.popup(), Qt.Key.Key_Return)
+
+        # THEN: the files show right away
+        wait_until(lambda: editor.completion.completer.popup().isVisible())
+        assert editor.completion.completer.model().stringList() == ["L:/boot.cmd", "L:/pages.jsonl"]
+        QTest.keyClick(editor.completion.completer.popup(), Qt.Key.Key_Down)
+        QTest.keyClick(editor.completion.completer.popup(), Qt.Key.Key_Return)
+        assert editor.toPlainText() == "run L:/pages.jsonl"
+        editor.close()
+
+    def test_an_object_of_a_cmd_file_gets_the_properties_of_its_type(self, qapp, settings):
+        # GIVEN
+        editor = CodeEditor(Language.CMD)
+        editor.resize(900, 400)
+        editor.show()
+        editor.completion.set_object_types(lambda: {"p1b2": "dropdown"})
+
+        # WHEN
+        _type(editor, "p1b2.op")
+
+        # THEN
+        assert "open" in editor.completion.completer.model().stringList()
+        editor.completion.completer.highlighted[str].emit("open")
+        assert editor.completion.card._kind.text() == "Method of a `dropdown`"
+        editor.close()
+
     def test_a_directive_offers_its_keys_with_their_explanation(self, editor):
         # GIVEN
         editor.resize(900, 400)

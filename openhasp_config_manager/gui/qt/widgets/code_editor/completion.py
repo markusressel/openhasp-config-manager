@@ -1,9 +1,18 @@
-from typing import Callable, List, Optional
+from typing import Callable, Dict, List, Optional
 
 from PyQt6.QtCore import QEvent, QObject, QStringListModel, Qt, QTimer
 from PyQt6.QtGui import QTextCursor
 from PyQt6.QtWidgets import QCompleter, QPlainTextEdit, QWidget
 
+from openhasp_config_manager.gui.domain.source.cmd_completion import (
+    CMD_KINDS,
+    cmd_help,
+    cmd_insertion,
+    cmd_words,
+    continues,
+    jsonl_object,
+    jsonl_object_type,
+)
 from openhasp_config_manager.gui.domain.source.completion import (
     CompletionContext,
     complete,
@@ -23,6 +32,7 @@ from openhasp_config_manager.gui.domain.source.docs import (
     placeholder_help,
     property_help,
 )
+from openhasp_config_manager.gui.domain.source.syntax import Language
 from openhasp_config_manager.gui.qt.widgets.hover_card import CardContent, HoverCard
 
 
@@ -51,6 +61,8 @@ class EditorCompletion(QObject):
         self._editor = editor
         self._variables: Callable[[], List[str]] = lambda: []
         self._include_paths: Callable[[], List[str]] = lambda: []
+        self._run_targets: Callable[[], List[str]] = lambda: []
+        self._object_types: Callable[[], Dict[str, str]] = lambda: {}
         self.completer = QCompleter(QStringListModel(self), editor)
         self.completer.setWidget(editor)
         self.completer.setCompletionMode(QCompleter.CompletionMode.PopupCompletion)
@@ -77,24 +89,46 @@ class EditorCompletion(QObject):
         """The files an `!include` can name (asked when its path is typed)."""
         self._include_paths = paths
 
+    def set_run_targets(self, names: Callable[[], List[str]]):
+        """The names on the plate of the files a `run` of a .cmd file can name (asked when its file is typed)."""
+        self._run_targets = names
+
+    def set_object_types(self, types: Callable[[], Dict[str, str]]):
+        """The types of the objects by name (`p1b2` -> `btn`) a .cmd file changes (asked when a .cmd file completes an object)."""
+        self._object_types = types
+
     def show(self, force: bool = False):
         editor = self._editor
         before, _ = editor.edits.text_around_cursor()
         line_number = editor.textCursor().blockNumber() + 1
-        found = editor.object_at_line(line_number)
+        if editor.language == Language.CMD:
+            # the object of a `jsonl` command, which is on its line only
+            found = jsonl_object(editor.textCursor().block().text())
+            object_line = 1
+        else:
+            found = editor.object_at_line(line_number)
+            object_line = line_number
         context = completion_context(before, editor.language, inside_object=found is not None)
         if context is None:
             self.popup.hide()
             return
         self._kind = context.kind
         self._context = context
-        self._object_type = object_type_at_line([] if found is None else [found], line_number)
-        present = [prop.key for prop in found.properties] if found is not None else []
-        directive = found is not None and found.is_directive
-        properties = keys_for(self._object_type, context.prefix, present, directive)
-        paths = self._include_paths() if context.kind == "include" else []
-        values = value_words(self._object_type, context.key) if context.kind == "value" else []
-        words = complete(context, properties, self._variables() if context.kind == "variable" else [], paths, values)
+        if context.target is not None and context.kind in ("member", "member_value"):
+            self._object_type = self._object_types().get(context.target)
+        elif editor.language == Language.CMD and found is not None:
+            self._object_type = jsonl_object_type(found, self._object_types())
+        else:
+            self._object_type = object_type_at_line([] if found is None else [found], object_line)
+        if context.kind in CMD_KINDS:
+            words = cmd_words(context, self._run_targets, self._object_type)
+        else:
+            present = [prop.key for prop in found.properties] if found is not None else []
+            directive = found is not None and found.is_directive
+            properties = keys_for(self._object_type, context.prefix, present, directive)
+            paths = self._include_paths() if context.kind == "include" else []
+            values = value_words(self._object_type, context.key) if context.kind == "value" else []
+            words = complete(context, properties, self._variables() if context.kind == "variable" else [], paths, values)
         if not words or (not force and not context.prefix):
             self.popup.hide()
             return
@@ -110,7 +144,9 @@ class EditorCompletion(QObject):
     def _show_docs(self, word: str):
         """Shows what the highlighted entry of the completion list is, next to the list."""
         popup = self.popup
-        if self._kind == "property":
+        if self._kind in CMD_KINDS:
+            found = cmd_help(self._context, word, self._object_type)
+        elif self._kind == "property":
             found = directive_help(word) or property_help(word, self._object_type)
         elif self._kind == "placeholder":
             found = placeholder_help(word, self._object_type)
@@ -132,7 +168,10 @@ class EditorCompletion(QObject):
         cursor = editor.textCursor()
         block = cursor.block()
         context = self._context
-        if self._kind == "property":
+        if self._kind in CMD_KINDS:
+            insertion = cmd_insertion(block.text(), cursor.positionInBlock(), context, word, self._object_type)
+            start, end, text, after = insertion.start, insertion.end, insertion.text, insertion.cursor
+        elif self._kind == "property":
             line, column = block.text(), cursor.positionInBlock()
             insertion = property_insertion(line, column, context, word, self._object_type)
             start, end, text, after = insertion.start, insertion.end, insertion.text, insertion.cursor
@@ -156,6 +195,8 @@ class EditorCompletion(QObject):
         cursor.setPosition(block.position() + after)
         cursor.endEditBlock()
         editor.setTextCursor(cursor)
-        if self._kind == "property" and value_words(self._object_type, word):
+        if (self._kind in CMD_KINDS and continues(context, word, self._object_type)) or (
+            self._kind == "property" and value_words(self._object_type, word)
+        ):
             # the values of the property right away; the completer hides its list after this, so show it once it did
             QTimer.singleShot(0, lambda: self.show(force=True))
