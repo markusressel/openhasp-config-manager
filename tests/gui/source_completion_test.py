@@ -42,7 +42,7 @@ class TestContext(TestBase):
 
     def test_other_files(self):
         assert completion_context("x", Language.TEXT) is None
-        assert completion_context("run ", Language.CMD) is None
+        assert completion_context('jsonl {"a": 1} x', Language.CMD) is None
         assert completion_context('  "name": "{{ a', Language.JSON) is None
 
 
@@ -124,7 +124,7 @@ class TestKeyWithoutQuotes(TestBase):
         assert at('{"text": "a, b') is None
         assert at("// say, al") is None
         assert at('{"src": "http://x", al') == CompletionContext("property", "al", 20, quoted=False)
-        assert completion_context("run al", Language.CMD, inside_object=True) is None
+        assert completion_context("run al", Language.CMD, inside_object=True).kind == "file"
 
     def test_text_values_start_with_their_quotes(self):
         assert is_text_property("align") and is_text_property("text") and is_text_property("src")

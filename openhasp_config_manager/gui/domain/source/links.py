@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, List, Optional, Set
 
+from openhasp_config_manager.gui.domain.file_operations import ConfigFiles
 from openhasp_config_manager.gui.domain.source.syntax import Language
 
 _REFERENCE = re.compile(r"L:/[^\s\"']+?\.(?:jsonl|cmd)(?=$|[\s\"'])")
@@ -43,6 +44,22 @@ def link_at(line: str, column: int, language: Language) -> Optional[Link]:
 def include_targets(config_dir: Path) -> List[str]:
     """:return: the .jsonl files of a config directory as an `!include` names them, sorted, without hidden folders and files"""
     return sorted(path.relative_to(config_dir).as_posix() for path in link_targets(config_dir) if path.suffix == ".jsonl")
+
+
+def run_targets(config_dir: Path, near: Path) -> List[str]:
+    """
+    :param near: the file with the `run`
+    :return: the names on the plate (`common_page_md_content.jsonl`) of the files a `run` in `near` can name: those of the common
+        folder and of the device of `near`, of every device if `near` is a common file. Sorted, without duplicates.
+    """
+    files = ConfigFiles(config_dir)
+    device = files.device_of(near)
+    names = set()
+    for path in link_targets(config_dir):
+        area = files.area_of(path)
+        if area is not None and (device is None or area in (files.common, device)):
+            names.add(files.plate_name(path))
+    return sorted(names)
 
 
 def plate_names(path: Path, config_dir: Path) -> Set[str]:

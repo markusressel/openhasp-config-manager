@@ -1,7 +1,7 @@
 """
 What can be completed at the cursor in a file: property names of an object, the values of a property that takes one of a few
 (`"mode": "dots"`, see `value_choices`), the variables inside of a template, the placeholders of openHASP in a `text` (`%ip%`, see
-`placeholders.py`), and the path of an `!include`. Qt-free.
+`placeholders.py`), and the path of an `!include`. What is completed in a .cmd file is in `cmd_completion.py`. Qt-free.
 """
 
 import re
@@ -77,6 +77,9 @@ class CompletionContext:
     quoted: bool = True
     # the property of which the value is typed (kind "value")
     key: Optional[str] = None
+    # in a .cmd file: the object of the line (`p1b2`) for the kinds "member" and "member_value", the first argument of a command
+    # for the second one (`start` of `service start http`), see `cmd_completion.py`
+    target: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -104,6 +107,11 @@ def completion_context(
         return CompletionContext("include", match.group(1), match.start(1))
     if (variable := variable_context(line)) is not None:
         return variable
+    if language == Language.CMD:
+        # imported here: the completion of .cmd files builds on this module
+        from openhasp_config_manager.gui.domain.source.cmd_completion import cmd_context
+
+        return cmd_context(line)
     if language == Language.JSONL:
         if (start := _placeholder_start(line)) is not None:
             return CompletionContext("placeholder", line[start:], start)
