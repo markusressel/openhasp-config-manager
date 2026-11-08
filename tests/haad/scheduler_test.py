@@ -85,12 +85,40 @@ async def test_an_active_claim_shows_its_page_and_keeps_the_screen_on(simulator,
     plate.clear()
 
     await _set(simulator, plate, "switch.a", "on")
-    assert plate.commands == ["idle short", "page 1"]
+    assert plate.commands == ["page 1", "idle short", 'backlight {"state": true, "brightness": 204}']
     assert plate.http == [ALWAYS_ON]
     plate.clear()
 
     await _set(simulator, plate, "switch.a", "off")
     assert plate.http == [DEFAULTS]
+
+
+async def test_the_screen_stays_on_only_while_the_page_of_the_claim_is_shown(simulator, plate: FakePlate, pages):
+    await pages(("switch.a", {"keep_awake": True}), ("switch.b", {}))
+    await _set(simulator, plate, "switch.a", "on")
+    plate.clear()
+
+    # the user swipes to another page: the screen dims as usual
+    await plate.send("state/page", "2")
+    assert plate.http == [DEFAULTS]
+    plate.clear()
+
+    # and back
+    await plate.send("state/page", "1")
+    assert plate.http == [ALWAYS_ON]
+
+
+async def test_a_claim_that_does_not_get_the_page_does_not_keep_the_screen_on(simulator, plate: FakePlate, pages):
+    await pages(("switch.a", {"priority": Priority.HIGH}), ("switch.b", {"keep_awake": True}))
+    await _set(simulator, plate, "switch.a", "on")
+    plate.clear()
+
+    await _set(simulator, plate, "switch.b", "on")
+    assert plate.http == []
+
+    await _set(simulator, plate, "switch.a", "off")
+    assert plate.http == [ALWAYS_ON]
+    assert _pages(plate) == ["page 2"]
 
 
 async def test_claims_that_are_active_at_the_start_are_applied_after_the_pages_are_pushed(

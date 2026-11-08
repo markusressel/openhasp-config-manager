@@ -13,7 +13,11 @@ from tests.haad.fakes import FakePlate, Http, Mqtt
 
 TIME_ENTITY = "sensor.time"
 GUI_DEFAULTS = Http("POST", "config", {"idle1": 60, "idle2": 120, "rotate": 1, "cursor": 0, "bckl": 32, "save": "gui"})
-ALWAYS_ON = [Http("POST", "config", {"idle1": 15, "idle2": 0, "save": "gui"}), Mqtt("hasp/mqtt_name/command/idle", "short")]
+ALWAYS_ON = [
+    Http("POST", "config", {"idle1": 15, "idle2": 0, "save": "gui"}),
+    Mqtt("hasp/mqtt_name/command/idle", "short"),
+    Mqtt("hasp/mqtt_name/command/backlight", '{"state": true, "brightness": 204}'),
+]
 
 
 def _cmd(payload: str) -> Mqtt:
@@ -215,8 +219,9 @@ async def test_printer_page(simulator, start_plate, plate: FakePlate):
     await plate.send("state/p2b20", {"event": "up"})
     assert plate.traffic == [
         _cmd("p2b12.text_color=#B22222"),
-        *ALWAYS_ON,
+        # the screen stays on once the page is shown
         Mqtt("hasp/mqtt_name/command/page", "2"),
+        *ALWAYS_ON,
         _cmd("p2b26.text=Stage: printing"),
         _cmd("p2b30.text=1s"),
         _cmd("p2b28.val=12"),
@@ -299,8 +304,8 @@ async def test_media_page(simulator, start_plate, plate: FakePlate):
     await plate.settle()
     # the page's reaction was registered before the label's (register_objects() runs before initialize_objects())
     assert plate.traffic == [
-        *ALWAYS_ON,
         Mqtt("hasp/mqtt_name/command/page", "1"),
+        *ALWAYS_ON,
         _cmd("p1b25.text=Artist"),
         _cmd("p1b30.enabled=True"),
         _cmd("p1b30.val=40"),

@@ -60,6 +60,7 @@ class PlateConfig:
         screen_brightness_default: ScreenState = ScreenState(True, 255),
         screen_brightness_short_idle: ScreenState = ScreenState(True, 20),
         screen_brightness_long_idle: ScreenState = ScreenState(False, 255),
+        screen_brightness_keep_awake: ScreenState = ScreenState(True, 204),
         screen: Optional[Screen] = None,
         theme: Theme = Theme(),
         gui: Optional[GuiDefaults] = None,
@@ -67,6 +68,8 @@ class PlateConfig:
         focus: FocusConfig = FocusConfig(),
     ):
         """
+        :param screen_brightness_keep_awake: the screen while a claim keeps it on (see PageScheduler), once it was
+            not touched for a while (instead of screen_brightness_short_idle)
         :param screen: the screen size for code-defined layouts; default: from the device's config (config_dir)
         :param theme: default properties of code-defined objects. Fonts and images it references must be on the plate's flash.
         :param gui: the idle timeouts; default: from the device's config (config_dir)
@@ -77,6 +80,7 @@ class PlateConfig:
         self.screen_brightness_default = screen_brightness_default
         self.screen_brightness_short_idle = screen_brightness_short_idle
         self.screen_brightness_long_idle = screen_brightness_long_idle
+        self.screen_brightness_keep_awake = screen_brightness_keep_awake
         self.screen = screen
         self.theme = theme
         self.gui = gui
@@ -143,13 +147,17 @@ class PlateController:
         )
 
         self.scheduler = PageScheduler(controller=self.controller, plate=self, config=self._config.focus)
+        # whether a claim keeps the screen on, see set_keep_awake()
+        self._keep_awake = False
 
     async def set_keep_awake(self, keep_awake: bool):
         """Keeps the screen on (no idle dimming), or restores the idle timeouts. The PageScheduler calls this."""
         self.controller.logger.info(f"{'Keeping' if keep_awake else 'No longer keeping'} the screen of plate {self._name} on")
+        self._keep_awake = keep_awake
         if keep_awake:
             await self.set_gui_config2(idle1=15, idle2=0)
             await self.screen_controller.set_idle(state="short")
+            await self._apply_screen_state(self._config.screen_brightness_keep_awake)
         else:
             defaults = self.gui_defaults
             await self.set_gui_config(idle1=defaults.idle1, idle2=defaults.idle2)
@@ -293,9 +301,9 @@ class PlateController:
                 )
             elif event_payload == "short":
                 self.controller.logger.debug("Device idle for short time")
-                await self.screen_controller.set_backlight(
-                    state=self._config.screen_brightness_short_idle.on,
-                    brightness=self._config.screen_brightness_short_idle.brightness,
+                await self._apply_screen_state(
+                    self._config.screen_brightness_keep_awake if self._keep_awake
+                    else self._config.screen_brightness_short_idle
                 )
             elif event_payload == "long":
                 self.controller.logger.debug("Device idle for long time")
@@ -307,6 +315,9 @@ class PlateController:
                 self.controller.logger.warning(f"Got unexpected state/idle event: {event_topic} - {event_payload}")
 
         self._screen_brightness_task = await self.listen_openhasp_event(path="state/idle", callback=_on_status_event)
+
+    async def _apply_screen_state(self, screen_state: ScreenState):
+        await self.screen_controller.set_backlight(state=screen_state.on, brightness=screen_state.brightness)
 
     async def sync(self):
         for page in self.pages.values():

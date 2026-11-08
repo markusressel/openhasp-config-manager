@@ -25,6 +25,7 @@ async def test_keep_awake_applies_the_always_on_config_or_the_gui_defaults(simul
     assert [m if isinstance(m, Http) else f"{m.topic.rsplit('/', 1)[1]} {m.payload}" for m in plate.traffic] == [
         Http("POST", "config", {"idle1": 15, "idle2": 0, "save": "gui"}),
         "idle short",
+        'backlight {"state": true, "brightness": 204}',
     ]
     assert _gui_config_publishes(simulator) == []
     plate.clear()
@@ -64,6 +65,20 @@ async def test_auto_brightness_follows_idle_state(plate_controller, plate: FakeP
         'backlight {"state": true, "brightness": 255}',
     ]
     assert "Got unexpected state/idle event: hasp/mqtt_name/state/idle - unexpected" in caplog.text
+
+
+async def test_a_screen_kept_on_dims_to_the_keep_awake_brightness(plate_controller, plate: FakePlate):
+    await plate_controller.set_keep_awake(True)
+    plate.clear()
+
+    # touched, then idle again
+    await plate.send("state/idle", "off")
+    await plate.send("state/idle", "short")
+
+    assert plate.commands == [
+        'backlight {"state": true, "brightness": 255}',
+        'backlight {"state": true, "brightness": 204}',
+    ]
 
 
 async def test_auto_brightness_uses_plate_config(start_plate, plate: FakePlate):
