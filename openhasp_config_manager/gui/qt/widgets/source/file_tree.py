@@ -112,7 +112,8 @@ class FileTreeWidget(QWidget):
         layout = UiComponents.create_column(parent=self)
 
         header = UiComponents.create_row(alignment=QtCore.Qt.AlignmentFlag.AlignVCenter)
-        header.addWidget(UiComponents.create_label("Files", role="section"), 1)
+        # the dock is titled "Files" already
+        header.addStretch(1)
         self._show_all_button = UiComponents.create_button(
             title="",
             icon="eye-off-outline",

@@ -50,7 +50,10 @@ SLOT_PROPERTY = "railSlot"
 OPEN_PROPERTY = "railOpen"
 BUTTON_PROPERTY = "railButton"
 
-LAYOUT_KEY = "window/tool_windows"
+# the arrangement of the docks; the version goes up when the docks change in a way that an older arrangement would put
+# them in a bad place (2: the Files tree got a dock of its own, the Plates dock went into the Devices dock)
+LAYOUT_VERSION = 2
+LAYOUT_KEY = f"window/tool_windows_v{LAYOUT_VERSION}"
 SHOW_RAILS_KEY = "window/show_rails"
 # what a dragged button carries: the object name of its dock
 MIME_TYPE = "application/x-openhasp-config-manager-tool-window"
@@ -575,7 +578,11 @@ class ToolWindowRails(QObject):
                 lengths = [self.layout.sizes[primary][index], self.layout.sizes[secondary][index]]
             else:
                 total = sum(dock.height() if orientation == Qt.Orientation.Vertical else dock.width() for dock in docks)
-                lengths = [total // 2, total - total // 2]
+                lower = total - total // 2
+                if orientation == Qt.Orientation.Vertical:
+                    # the lower place takes what its dock asks for, up to half: a short list doesn't need more
+                    lower = min(lower, max(shown[secondary].sizeHint().height(), shown[secondary].minimumSizeHint().height()))
+                lengths = [total - lower, lower]
             self._window.resizeDocks(docks, lengths, orientation)
         self._sized = True
 
@@ -593,6 +600,9 @@ class ToolWindowRails(QObject):
                 self._remember_size(slot, self._docks[name])
 
     def _remember_size(self, slot: Slot, dock: QDockWidget):
+        if not self._sized:
+            # the places don't have their sizes yet: what Qt gave them at first isn't worth keeping
+            return
         # also of a dock that was just closed: its geometry is the last one it had
         if not dock.isFloating() and dock.width() > 0 and dock.height() > 0:
             self.layout.sizes[slot] = (dock.width(), dock.height())

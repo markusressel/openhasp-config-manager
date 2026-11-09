@@ -171,7 +171,9 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
   its last one, with the device's `PlateLink` (`PlateConnections.link`); `MainWindow.connection` is the active tab's. Live preview keeps running in a background tab and sends what
   changes for its device, also edits of a shared file in another tab; it runs on at most `MAX_LIVE_PREVIEWS` devices
   (`gui/domain/live_preview.py`), more are refused, nothing is turned off by itself. The status shows in a dot in each tab's
-  title, in the Plates dock (`gui/qt/widgets/plates_panel.py`, a row per open device) and, for the active tab, the status bar.
+  title, in the Devices dock (`gui/qt/widgets/devices_panel.py`, a row per device of the config directory: the open ones
+  with their plate, the others dimmed; its context menu opens, closes, deploys, restores, reboots) and, for the active tab, the
+  status bar. The Files tree (with Save/Revert/Deploy below it) is a dock of its own, `files_dock`.
 - **Remembered state**: what should survive a restart for a config directory or a device goes into `UiSession`/`DeviceSession`
   (`gui/domain/ui_session.py`) as a dataclass field with a default, then `ui_session.save()` (`gui/qt/ui_session_store.py`).
   The open tabs (`UiSession.open_tabs`, `MainWindow._remember_tabs`) are opened again on start (`_restore_tabs`; part
@@ -185,7 +187,8 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
   closes the other open view of its place), the places show theirs at the same time (the two of a side split it). A view moves to
   another place by dragging its button to another group or rail, or with *Move to* in the button's context menu; the title bars
   of the docks can't be dragged. `ToolWindowLayout` is the only arrangement: `apply_layout` builds the docks from it, and it is
-  remembered with the sizes of the places in the `window/tool_windows` setting (*Restore default layout* resets it). Pass
+  remembered with the sizes of the places in the `window/tool_windows_v<LAYOUT_VERSION>` setting (*Restore default layout* resets it;
+  bump `LAYOUT_VERSION` when a remembered arrangement would put new or changed docks in a bad place). Pass
   `icon=` (mdi6), `slot=` (its first place) and `is_open=` to `_add_dock`, and add its `toggleViewAction()` to the View menu
   (`menus.py`); a dock without them still gets a button (at the bottom left, closed); one that can't be closed, like the preview,
   gets none. The buttons keep no state of their own: checked is the dock's `toggleViewAction`, so showing or hiding a dock any way

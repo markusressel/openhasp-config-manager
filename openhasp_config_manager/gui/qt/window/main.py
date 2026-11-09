@@ -10,7 +10,6 @@ from PyQt6.QtWidgets import (
     QMainWindow,
     QStackedWidget,
     QDockWidget,
-    QSplitter,
     QMessageBox,
     QVBoxLayout,
 )
@@ -61,15 +60,14 @@ from openhasp_config_manager.gui.qt.theme import ThemeMode, apply_theme
 from openhasp_config_manager.gui.qt.async_bridge import run_async
 from openhasp_config_manager.gui.qt.widgets.source.code_view import CodeView
 from openhasp_config_manager.gui.qt.widgets.source.rendered_view import FileRenderedView
-from openhasp_config_manager.gui.qt.widgets.device_list import DeviceListWidget
 from openhasp_config_manager.gui.qt.widgets.source.file_tree import FileTreeWidget
 from openhasp_config_manager.gui.qt.widgets.message_panel import MessagePanel, DiskConflictBanner, file_list_text
-from openhasp_config_manager.gui.qt.widgets.plates_panel import PlateRow, PlatesPanel
+from openhasp_config_manager.gui.qt.widgets.devices_panel import DeviceAction, DeviceRow, DevicesPanel
 from openhasp_config_manager.gui.qt.widgets.pagelayout import OpenHaspDevicePagesData
 from openhasp_config_manager.gui.qt.widgets.pagelayout.page_layout_editor import PageLayoutEditorWidget
 from openhasp_config_manager.gui.qt.widgets.pagelayout.plate_link import PlateLink
 from openhasp_config_manager.gui.qt.widgets.source.source_editor import SourceEditorWidget
-from openhasp_config_manager.manager import ConfigManager
+from openhasp_config_manager.manager import CONFIG_FILE_NAME, ConfigManager
 from openhasp_config_manager.openhasp_client.model.device import Device
 
 LOGGER = logging.getLogger(__name__)
@@ -179,25 +177,24 @@ class MainWindow(QMainWindow):
         center_layout.addWidget(self.disk_changes_banner)
         center_layout.addWidget(self.center_stack, 1)
 
-        # left: devices and their files
-        self.device_list_widget = DeviceListWidget()
-        self.device_list_widget.deviceSelected.connect(self.on_device_selected)
-        self.device_list_widget.reloadClicked.connect(self.load_plates)
-
-        # the files of the device of the active tab, and which of them new objects go into
+        # left: the files of the device of the active tab (and which of them new objects go into), with their changes
         self.file_tree_widget = FileTreeWidget()
         self.file_tree_widget.highlightRequested.connect(lambda key: self.page_layout_editor_widget.highlight_component(key))
         self.file_tree_widget.targetRequested.connect(lambda key: self.page_layout_editor_widget.set_target_component(key))
+        self.file_tree_widget.setMinimumWidth(260)
+        self.files_dock = self._add_dock(
+            "Files", "files_dock", self.file_tree_widget, icon="file-tree-outline", slot=Slot.LEFT_TOP, is_open=True
+        )
 
-        self.sidebar = QSplitter(Qt.Orientation.Vertical)
-        self.sidebar.addWidget(self.device_list_widget)
-        self.sidebar.addWidget(self.file_tree_widget)
-        # the file tree grows with the window
-        self.sidebar.setStretchFactor(1, 1)
-        self.sidebar.setChildrenCollapsible(False)
-        self.sidebar.setMinimumWidth(260)
+        # below them: the devices of the config directory, with the plates of the open ones (connection, Live preview, the
+        # page they show and what is wrong)
+        self.devices_panel = DevicesPanel()
+        self.devices_panel.deviceClicked.connect(self.on_device_selected)
+        self.devices_panel.reloadClicked.connect(self.load_plates)
+        self.devices_panel.liveToggled.connect(self.set_live_preview)
+        self.devices_panel.actionRequested.connect(self._on_device_action)
         self.devices_dock = self._add_dock(
-            "Devices", "devices_dock", self.sidebar, icon="devices", slot=Slot.LEFT_TOP, is_open=True
+            "Devices", "devices_dock", self.devices_panel, icon="devices", slot=Slot.LEFT_BOTTOM, is_open=True
         )
 
         # center: the render preview, the other docks are around it (`ToolWindowRails`). It can't be closed: there is
@@ -248,14 +245,6 @@ class MainWindow(QMainWindow):
         self.device_logs = DeviceLogs(on_enable_colors=self.log_colors.ask, parent=self)
         self.logs_dock = self._add_dock("Logs", "logs_dock", self.device_logs.stack, icon="console", slot=Slot.BOTTOM_RIGHT)
         self.logs_dock.toggleViewAction().toggled.connect(self.device_logs.set_open)
-
-        # the plates of the open devices: their connection, Live preview, the page they show and what is wrong
-        self.plates_panel = PlatesPanel()
-        self.plates_panel.deviceClicked.connect(lambda name: self.device_tabs.activate(self.device_tabs.find(name)))
-        self.plates_panel.liveToggled.connect(self.set_live_preview)
-        self.plates_dock = self._add_dock(
-            "Plates", "plates_dock", self.plates_panel, icon="tablet-dashboard", slot=Slot.BOTTOM_RIGHT
-        )
 
         # what the plate of the active tab shows, from screenshots now and then. Closed at first: a screenshot keeps the plate
         # busy, they are only taken while the dock can be seen.
@@ -435,7 +424,7 @@ class MainWindow(QMainWindow):
         self.source_editor.refresh_theme()
         self.device_logs.refresh_theme()
         self.device_tabs.refresh_theme()
-        self.plates_panel.refresh_theme()
+        self.devices_panel.refresh_theme()
         for editor in self.device_tabs.editors:
             editor.jsonl_preview.refresh_theme()
             editor.problems_panel.refresh_theme()
@@ -450,19 +439,9 @@ class MainWindow(QMainWindow):
             self.restoreGeometry(geometry)
         else:
             self.resize(1440, 900)
-        sidebar = settings.value("window/sidebar")
-        if sidebar is None or not self.sidebar.restoreState(sidebar):
-            # once the window has its size: the device list compact, the file tree takes the rest
-            QtCore.QTimer.singleShot(0, self._size_sidebar)
 
     def restore_default_layout(self):
         self.rails.reset()
-        self._size_sidebar()
-
-    def _size_sidebar(self):
-        total = sum(self.sidebar.sizes())
-        devices = 130
-        self.sidebar.setSizes([devices, max(120, total - devices)])
 
     def quit_discarding_drafts(self):
         """Close without asking about unsaved drafts, e.g. on SIGTERM: the drafts are lost."""
@@ -499,7 +478,6 @@ class MainWindow(QMainWindow):
         self.code_view.save_state()
         settings = QSettings()
         settings.setValue("window/geometry", self.saveGeometry())
-        settings.setValue("window/sidebar", self.sidebar.saveState())
         self.rails.save()
         super().closeEvent(event)
 
@@ -507,7 +485,7 @@ class MainWindow(QMainWindow):
 
     def load_plates(self):
         """Analyze the config directory in the background and show its devices."""
-        self.device_list_widget.show_loading()
+        self.devices_panel.show_loading()
         if self.device is None:
             self.message_panel.show_loading("Loading devices…", str(self.config_manager.cfg_root))
             self.center_stack.setCurrentWidget(self.message_panel)
@@ -548,7 +526,7 @@ class MainWindow(QMainWindow):
 
     def _on_devices_failed(self, ex: Exception):
         self._set_load_error(None, ex)
-        self.device_list_widget.show_error()
+        self.devices_panel.show_error()
         self.message_panel.show_error(
             title="Could not load the config directory",
             error=f"{self.config_manager.cfg_root}\n\n{error_text(ex)}",
@@ -559,7 +537,7 @@ class MainWindow(QMainWindow):
     def _set_devices(self, devices: List[Device]):
         self.devices = devices
         self._state_publisher.request()
-        self.device_list_widget.set_devices(self.devices, selected=self._selected_name)
+        self._update_plates()
 
     @property
     def device(self) -> Optional[Device]:
@@ -673,7 +651,7 @@ class MainWindow(QMainWindow):
             self._apply_changes_to_draft(changed)
 
     def _show_tab(self, tab: Optional[DeviceTab]):
-        """Point the panels at the device of a tab: the Files tree, the status bar, the Plates panel, the log."""
+        """Point the panels at the device of a tab: the Files tree, the status bar, the Devices panel, the log."""
         editor = self.page_layout_editor_widget
         device = None if tab is None else tab.device
         self.status_bar.set_connection(self.connection.status)
@@ -714,7 +692,7 @@ class MainWindow(QMainWindow):
         self.ui_session.session.selected_device = None if tab is None else tab.name
         self.ui_session.save()
         self._remember_tabs()
-        self.device_list_widget.set_devices(self.devices, selected=self._selected_name)
+        self._update_plates()
         self._update_draft_actions()
         self._state_publisher.request()
 
@@ -768,7 +746,7 @@ class MainWindow(QMainWindow):
     # --- plates ---
 
     def _on_connection_changed(self, name: str, status: ConnectionStatus):
-        """The connection to the plate of an open device changed: its tabs, the Plates panel and the status bar show it."""
+        """The connection to the plate of an open device changed: its tabs, the Devices panel and the status bar show it."""
         for tab in self.device_tabs.of_device(name):
             self.device_tabs.set_connection(tab, status)
         if status.link == LinkState.PLATE_OFFLINE:
@@ -792,7 +770,7 @@ class MainWindow(QMainWindow):
         return live_preview_refusal(name, sorted(others))
 
     def set_live_preview(self, name: str, on: bool):
-        """Turn Live preview of an open device on or off (e.g. in the Plates panel), as its action in the toolbar does."""
+        """Turn Live preview of an open device on or off (e.g. in the Devices panel), as its action in the toolbar does."""
         action = self.connections.link(name).action_live_preview
         if action.isEnabled():
             action.setChecked(on)
@@ -800,15 +778,38 @@ class MainWindow(QMainWindow):
         self._update_plates()
 
     def _update_plates(self):
+        """The rows of the Devices panel: every device of the config directory, with the plate of each open one."""
+        open_names = set(self.connections.names)
         rows = [
-            PlateRow(
-                device=name,
-                connection=self.connections.get(name).status,
-                live=self.connections.link(name).live,
-            )
-            for name in self.connections.names
+            DeviceRow(device=name, connection=self.connections.get(name).status, live=self.connections.link(name).live)
+            if name in open_names
+            else DeviceRow(device=name)
+            for name in sorted(device.name for device in self.devices)
         ]
-        self.plates_panel.set_rows(rows, active=self._selected_name)
+        self.devices_panel.set_rows(rows, active=self._selected_name)
+
+    def _on_device_action(self, name: str, action: DeviceAction):
+        """An entry of the context menu of a device in the Devices panel."""
+        if action == DeviceAction.OPEN:
+            self.on_device_selected(name)
+        elif action == DeviceAction.CLOSE:
+            for tab in list(self.device_tabs.of_device(name)):
+                if not self.close_tab(tab):
+                    break
+        elif action == DeviceAction.RESTORE_PLATE:
+            self.connections.link(name).action_restore_plate.trigger()
+        elif action in (DeviceAction.DEPLOY, DeviceAction.REBOOT):
+            # they work on the device of the active tab
+            self.on_device_selected(name)
+            if self._selected_name == name and self.device is not None:
+                if action == DeviceAction.DEPLOY:
+                    self.action_deploy.trigger()
+                else:
+                    self.device_controls.on_reboot_clicked()
+        elif action == DeviceAction.CONFIG:
+            device = next(device for device in self.devices if device.name == name)
+            self.jsonl_dock.show()
+            self.source_sync.open_file(device.path / CONFIG_FILE_NAME)
 
     def _update_tab_title(self, tab: Optional[DeviceTab]):
         """The title of a tab marks unsaved changes of the files it shows (of a part tab: see `PartFocus.undo_scope`)."""

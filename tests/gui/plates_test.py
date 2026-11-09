@@ -193,7 +193,8 @@ class TestConnections(TestBase):
         wait_until(lambda: client.closed)
         assert window.connections.names == [TEST_DEVICE]
         assert not broker.client(TEST_DEVICE).closed
-        assert [row.device for row in window.plates_panel.rows] == [TEST_DEVICE]
+        # the device stays in the Devices panel, closed
+        assert [(row.device, row.is_open) for row in window.devices_panel.rows] == [(OTHER_DEVICE, False), (TEST_DEVICE, True)]
 
 
 class TestLivePreviewPerDevice(TestBase):
@@ -246,8 +247,8 @@ class TestLivePreviewPerDevice(TestBase):
         assert plates.calls(TEST_DEVICE) == []
 
 
-class TestPlatesPanel(TestBase):
-    def test_a_row_per_open_device(self, window, broker, plates):
+class TestDevicesPanel(TestBase):
+    def test_a_row_per_device_with_its_plate(self, window, broker, plates):
         # GIVEN
         broker.client(TEST_DEVICE).listeners[0](False, ConnectionRefusedError("refused"))
 
@@ -257,19 +258,55 @@ class TestPlatesPanel(TestBase):
         window.connections.get(OTHER_DEVICE).page_out_of_sync(4)
 
         # THEN
-        wait_until(lambda: len(window.plates_panel.rows) == 2 and window.plates_panel.rows[0].connection.error is not None)
-        tree = window.plates_panel.tree
+        panel = window.devices_panel
+        wait_until(lambda: panel.row(TEST_DEVICE).connection.error is not None)
+        tree = panel.tree
         rows = [[tree.topLevelItem(row).text(column) for column in range(5)] for row in range(tree.topLevelItemCount())]
-        assert rows[0][:2] == [TEST_DEVICE, "Broker unreachable"]
-        assert "refused" in rows[0][4]
-        assert rows[1][0] == OTHER_DEVICE
-        assert rows[1][4] == "Out of sync: page 4"
-        assert [row.live for row in window.plates_panel.rows] == [False, True]
+        assert rows[0][0] == OTHER_DEVICE
+        assert rows[0][4] == "Out of sync: page 4"
+        assert rows[1][:2] == [TEST_DEVICE, "Broker unreachable"]
+        assert "refused" in rows[1][4]
+        assert [row.live for row in panel.rows] == [True, False]
 
-    def test_a_click_focuses_the_tab_of_the_device(self, window):
+    def test_a_click_opens_or_focuses_the_tab_of_the_device(self, window):
+        # GIVEN: the other device is closed
+        panel = window.devices_panel
+        assert window.close_tab(_tab(window, OTHER_DEVICE))
+        tree = panel.tree
+        assert tree.topLevelItem(0).text(1) == "Not open"
+
         # WHEN
-        tree = window.plates_panel.tree
         tree.itemClicked.emit(tree.topLevelItem(0), 0)
+
+        # THEN: its tab opens, and its plate is shown
+        wait_until(lambda: window.device is not None and window.device.name == OTHER_DEVICE)
+        wait_until(lambda: panel.row(OTHER_DEVICE).is_open)
+
+        # WHEN: the other one is clicked
+        tree.itemClicked.emit(tree.topLevelItem(1), 0)
 
         # THEN
         assert window.device.name == TEST_DEVICE
+
+    def test_the_context_menu_closes_a_device_and_opens_its_config(self, window):
+        # GIVEN
+        from openhasp_config_manager.gui.qt.widgets.devices_panel import DeviceAction
+
+        panel = window.devices_panel
+        menu = panel.menu(OTHER_DEVICE)
+        assert [action.text() for action in menu.actions() if action.text()][:2] == ["Show", "Close"]
+
+        # WHEN
+        next(action for action in menu.actions() if action.text() == "Close").trigger()
+
+        # THEN
+        assert window.device_tabs.find(OTHER_DEVICE) is None
+        assert not panel.row(OTHER_DEVICE).is_open
+        assert not next(action for action in panel.menu(OTHER_DEVICE).actions() if action.text() == "Deploy").isEnabled()
+
+        # WHEN
+        panel.actionRequested.emit(OTHER_DEVICE, DeviceAction.CONFIG)
+
+        # THEN: in the text editor
+        assert window.jsonl_dock.isVisible() or not window.isVisible()
+        assert any(path.name == "config.json" and path.parent.name == OTHER_DEVICE for path in window.source_editor.open_files)
