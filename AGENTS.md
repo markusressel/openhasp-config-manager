@@ -194,8 +194,10 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
   through lambdas get the rails collected after the window and crash Qt in their event filter.
 - **Preview controls** float inside the preview (`PagePreviewWidget.add_overlay`); `fit_to_view` keeps their rows free, so the plate is
   never covered. Messages about an object go next to it (`show_message`), errors also to the status bar (`OperationStatus.failed`).
-- **Live device** dock (`live_device_dock`, created in `MainWindow.create_basic_layout`, hidden at first): screenshots of the
-  plate of the active tab (`OpenHaspClient.take_screenshot`). When to take one is decided by `ScreenshotScheduler`
+- **Live device** dock (`live_device_dock`, created in `MainWindow.create_basic_layout`, hidden at first): the controls of the
+  plate of the active tab (`MainWindow.device_controls`, `gui/qt/widgets/device_controls.py`: screen on/off, brightness, pages,
+  reboot; one for the window, the brightness remembered per device, the preview of the active tab darkened like the screen) and
+  screenshots of it (`OpenHaspClient.take_screenshot`). When to take one is decided by `ScreenshotScheduler`
   (`gui/domain/live_screen.py`, Qt-free, driven by the time it is given): every interval (default 30 s, app-wide QSettings key
   `live_device/interval`, 0 = only after changes), after a `ScreenChange` (deploy and *Restore plate* through
   `ConnectionController.plate_restored`, a page sent or reported by the plate, the page buttons, *Live preview* sends:

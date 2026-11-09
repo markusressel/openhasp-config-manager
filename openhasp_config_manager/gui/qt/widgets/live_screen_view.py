@@ -43,8 +43,8 @@ class _ScreenImage(QWidget):
 
 class LiveScreenView(QWidget):
     """
-    The *Live device* dock: the last screenshot of the plate of the active tab, when it was taken, a busy indicator while one
-    is taken, a Refresh button and how often to take one. `LiveScreens` decides when.
+    The *Live device* dock: the controls of the plate of the active tab (`set_controls`), the last screenshot of it, when it
+    was taken, a busy indicator while one is taken, a Refresh button and how often to take one. `LiveScreens` decides when.
     """
 
     refreshRequested = QtCore.pyqtSignal()
@@ -54,6 +54,7 @@ class LiveScreenView(QWidget):
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
         layout = UiComponents.create_column(parent=self, margin_start=4, margin_end=4, margin_top=4, margin_bottom=4)
+        self._layout = layout
 
         bar = UiComponents.create_row()
         self.refresh_button = QToolButton()
@@ -96,6 +97,10 @@ class LiveScreenView(QWidget):
         layout.addWidget(self.image, 1)
         self.set_interval(DEFAULT_INTERVAL)
         self.set_device(None)
+
+    def set_controls(self, controls: QWidget):
+        """The controls of the plate, above the screenshot."""
+        self._layout.insertWidget(0, controls)
 
     def set_device(self, name: Optional[str]):
         """:param name: the device whose plate is shown, None without a tab"""

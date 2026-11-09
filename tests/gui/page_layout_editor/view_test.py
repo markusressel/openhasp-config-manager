@@ -88,7 +88,7 @@ class TestScreenBrightness(TestBase):
         # the middle of the view is on the plate
         return image.pixelColor(image.width() // 2, image.height() // 2).lightness()
 
-    def test_the_slider_darkens_the_preview_and_off_darkens_it_most(self, editor):
+    def test_a_lower_brightness_darkens_the_preview_and_off_darkens_it_most(self, editor):
         # GIVEN: a white object over the whole plate
         editor.resize(900, 700)
         editor.show()
@@ -98,15 +98,15 @@ class TestScreenBrightness(TestBase):
         )
         editor.set_page_index(9)
         editor.page_preview_widget.fit_to_view()
-        controls = editor.device_controls
+        preview = editor.page_preview_widget
 
         # WHEN
         full = self._lightness(editor)
-        controls._brightness_slider.setValue(20)
+        preview.set_screen_brightness(20)
         dim = self._lightness(editor)
-        controls.screenChanged.emit(20, False)
+        preview.set_screen_brightness(20, False)
         off = self._lightness(editor)
-        controls.screenChanged.emit(100, True)
+        preview.set_screen_brightness(100, True)
         back = self._lightness(editor)
 
         # THEN

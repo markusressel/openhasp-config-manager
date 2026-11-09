@@ -37,7 +37,6 @@ from openhasp_config_manager.gui.qt.layouts import frozen
 from openhasp_config_manager.gui.qt.operations import BusyState, OperationStatus
 from openhasp_config_manager.gui.qt.async_bridge import qBridge
 from openhasp_config_manager.gui.qt.ui_session_store import UiSessionStore
-from openhasp_config_manager.gui.qt.widgets.device_controls import DeviceControlsWidget
 from openhasp_config_manager.gui.qt.widgets.message_panel import ErrorBanner
 from openhasp_config_manager.gui.qt.widgets.pagelayout import OpenHaspDevicePagesData
 from openhasp_config_manager.gui.qt.widgets.pagelayout.jsonl_preview import PageJsonlPreviewWidget
@@ -111,8 +110,6 @@ class PageLayoutEditorWidget(QWidget):
         # what is wrong with the objects on the page
         self.problems: List[Problem] = []
 
-        # remote control of the selected plate; the preview shows its brightness
-        self.device_controls = DeviceControlsWidget(status=status)
         # what is wrong with the objects of the page
         self.problems_panel = ProblemsPanel()
 
@@ -131,7 +128,6 @@ class PageLayoutEditorWidget(QWidget):
         self._create_actions()
         self._create_toolbar()
 
-        self.device_controls.screenChanged.connect(self.page_preview_widget.set_screen_brightness)
         self.problems_panel.layoutChanged.connect(self.page_preview_widget.update_overlays)
         self.problems_panel.problemClicked.connect(self.page_preview_widget.select_object)
         self.page_preview_widget.set_mode(PreviewMode.Interact)
@@ -340,8 +336,6 @@ class PageLayoutEditorWidget(QWidget):
 
         preview = self.page_preview_widget
         self.zoom_slider = create_zoom_slider(preview)
-        self._device_controls_bar = floating_bar([self.device_controls])
-        preview.add_overlay(self._device_controls_bar, OverlayAnchor.TOP_LEFT)
         preview.add_overlay(self.problems_panel, OverlayAnchor.BOTTOM_LEFT)
         preview.add_overlay(
             floating_bar(
@@ -799,8 +793,6 @@ class PageLayoutEditorWidget(QWidget):
             self.part_bar.hide()
         else:
             self._update_part_bar()
-        # the plate is controlled in the tab of the device: a part tab keeps the room for the part (in a small window)
-        self.page_preview_widget.set_overlay_visible(self._device_controls_bar, mode is None)
         self.page_preview_widget.set_dimmed_predicate(self._dimmed_predicate())
         self.page_preview_widget.set_focus(self._shown_predicate())
         if fit:

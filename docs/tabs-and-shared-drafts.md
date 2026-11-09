@@ -235,7 +235,7 @@ Each phase is one PR with tests. Phases on different files run in parallel.
 - **Only the instance is shown**: the other objects of the page are hidden (`EditableWidget.set_shown`, which `set_dimmed`
   doesn't undo), and the view is zoomed to fit the instance (up to 4x, with a margin), centered between the bars, without
   scrollbars. "Show the page" goes back to the dimmed page and the zoom of the page.
-- **A small window stays usable**: a part tab hides the device controls over the preview (they belong to the device tab), the
+- **A small window stays usable**: the device controls are in the Live device dock, not over the preview, the
   widget picker shrinks to its icons when the editor is narrow (in device tabs too), and the buttons of the part bar lose their
   titles before the bar would wrap. The instance list is at least 4 characters wide. The window's minimum size is 960x600.
   The preview is never narrower than its widest floating bar, also after a bar got wider (an event filter follows their
