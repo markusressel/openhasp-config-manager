@@ -126,8 +126,9 @@ open at once, the instance that is edited belongs to the tab:
   by side. A part tab with Live preview sends the page of its instance.
 - **Where the status is shown:**
   - a dot in the title of each tab (connected, connecting, broker unreachable, Live preview on), with the details in its tooltip;
-  - a **Plates** panel (dock): one row per open device with its connection, Live preview on/off, the page the plate shows, and
-    errors (out-of-sync pages); a click focuses the device's tab;
+  - the **Devices** panel (dock): one row per device of the config directory; an open device shows its connection, Live
+    preview on/off, the page the plate shows, and errors (out-of-sync pages), the others are dimmed; a click opens or focuses
+    the device's tab (it replaced the device list and the Plates panel of the first version);
   - the status bar keeps its connection button (`StatusBar.set_connection`) for the active tab's device only.
 - **The log** gets a tab per open device. The active tab of the preview selects the device's log tab; the log of a device
   streams only while its log tab is shown (as today: no connection while nobody looks).
@@ -208,7 +209,7 @@ Each phase is one PR with tests. Phases on different files run in parallel.
   error banner). A device has only one tab until the part tabs (phase 6), which decide how a part tab and the device tab share
   Live preview. `PlateLink` follows the draft of its device itself (`set_session`), so edits from other tabs reach it.
 - **Phase 5: the page the plate shows** is what the plate reports on its `state/page` topic. It sends that only when the page
-  changes, so the Plates panel shows "–" until the plate switched pages once after connecting.
+  changes, so the Devices panel shows "–" until the plate switched pages once after connecting.
 
 ### Phase 6: part tabs
 

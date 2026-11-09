@@ -37,7 +37,7 @@ _SEVERITY_ORDER = [Severity.NEUTRAL, Severity.OK, Severity.WARNING, Severity.ERR
 @dataclass(frozen=True)
 class ConnectionStatus:
     """
-    The connection to a plate, as shown in the status bar, the tabs and the Plates panel: the link (MQTT broker and the
+    The connection to a plate, as shown in the status bar, the tabs and the Devices panel: the link (MQTT broker and the
     plate's LWT), whether something is being sent, the page the plate reported to show, and the pages that may show
     something else on the plate than in the editor because sending them failed.
     """
@@ -96,7 +96,7 @@ class ConnectionStatus:
 
     @property
     def problems(self) -> List[str]:
-        """:return: what is wrong besides the state of the link, e.g. for the Plates panel"""
+        """:return: what is wrong besides the state of the link, e.g. for the Devices panel"""
         result = []
         if self.link == LinkState.BROKER_UNREACHABLE and self.error:
             result.append(self.error)

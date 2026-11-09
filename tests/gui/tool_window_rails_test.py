@@ -141,6 +141,8 @@ class TestToolWindowRails(TestBase):
         window.resize(1440, 900)
         window.show()
         wait_until(lambda: window.rails.rail(Side.BOTTOM).isVisible())
+        # the places got their sizes
+        wait_until(lambda: window.rails._sized)
         return window
 
     @staticmethod
@@ -155,18 +157,23 @@ class TestToolWindowRails(TestBase):
         # THEN: every view but the preview has a button
         assert rails.button(window.preview_dock) is None
         assert self._names(rails, Side.LEFT, False) == ["devices_dock"]
+        assert self._names(rails, Side.LEFT, True) == ["files_dock"]
         assert self._names(rails, Side.RIGHT, False) == ["properties_dock"]
         assert self._names(rails, Side.RIGHT, True) == ["live_device_dock"]
         assert self._names(rails, Side.BOTTOM, False) == ["jsonl_dock", "page_jsonl_dock"]
-        assert self._names(rails, Side.BOTTOM, True) == ["logs_dock", "plates_dock"]
+        assert self._names(rails, Side.BOTTOM, True) == ["logs_dock"]
         assert rails.button(window.jsonl_dock).isChecked()
         assert not rails.button(window.logs_dock).isChecked()
+        # the devices take the room of their rows, the files below them the rest
+        devices, files = window.devices_dock, window.files_dock
+        wait_until(lambda: devices.isVisible() and files.isVisible() and devices.height() < files.height() / 2)
+        assert abs(devices.height() - devices.sizeHint().height()) < 30
 
     def test_views_of_two_places_are_open_together_and_one_per_place(self, window):
         # GIVEN
         window = self._shown(window)
         rails = window.rails
-        code, logs, plates = window.jsonl_dock, window.logs_dock, window.plates_dock
+        code, logs, page = window.jsonl_dock, window.logs_dock, window.page_jsonl_dock
 
         # WHEN: the logs are opened with their button
         rails.button(logs).click()
@@ -177,28 +184,28 @@ class TestToolWindowRails(TestBase):
         assert abs(logs.geometry().y() - code.geometry().y()) < 5
         assert logs.geometry().y() > window.preview_dock.geometry().bottom()
 
-        # WHEN: the plates of the same place are opened from code
-        plates.show()
+        # WHEN: the page JSONL of the place of the code is opened from code
+        page.show()
 
-        # THEN: the logs close
-        assert logs.isHidden()
-        assert not rails.button(logs).isChecked()
-        assert rails.button(plates).isChecked()
-        assert code.isVisible()
-
-        # WHEN: clicked again, the plates close
-        rails.button(plates).click()
-
-        # THEN
-        assert plates.isHidden()
-        assert not rails.button(plates).isChecked()
-
-        # WHEN: the code is closed with the action of the View menu
-        code.toggleViewAction().trigger()
-
-        # THEN
+        # THEN: the code closes, the logs stay
         assert code.isHidden()
         assert not rails.button(code).isChecked()
+        assert rails.button(page).isChecked()
+        assert logs.isVisible()
+
+        # WHEN: clicked again, the page JSONL closes
+        rails.button(page).click()
+
+        # THEN
+        assert page.isHidden()
+        assert not rails.button(page).isChecked()
+
+        # WHEN: the logs are closed with the action of the View menu
+        logs.toggleViewAction().trigger()
+
+        # THEN
+        assert logs.isHidden()
+        assert not rails.button(logs).isChecked()
 
         # WHEN: the default layout is restored
         window.restore_default_layout()
@@ -214,18 +221,21 @@ class TestToolWindowRails(TestBase):
         logs = window.logs_dock
         logs.show()
 
-        # WHEN: the logs go below the devices
+        # WHEN: the logs go below the devices, the place of the files
         rails.move("logs_dock", Slot.LEFT_BOTTOM)
 
-        # THEN: still open, with their button in the second group of the left rail
-        assert self._names(rails, Side.LEFT, True) == ["logs_dock"]
+        # THEN: still open, with their button in the second group of the left rail; the files close
+        assert self._names(rails, Side.LEFT, True) == ["files_dock", "logs_dock"]
         assert "logs_dock" not in self._names(rails, Side.BOTTOM, True)
         assert rails.slot_of(logs) == Slot.LEFT_BOTTOM
-        wait_until(lambda: logs.isVisible() and logs.geometry().y() > window.devices_dock.geometry().bottom())
+        devices = window.devices_dock
+        wait_until(lambda: logs.isVisible() and logs.geometry().y() > devices.geometry().bottom())
         assert logs.geometry().right() < window.preview_dock.geometry().x()
-        assert window.devices_dock.isVisible()
-        # the two places of the side share it in halves
-        wait_until(lambda: abs(logs.height() - window.devices_dock.height()) < 20)
+        assert devices.isVisible()
+        assert window.files_dock.isHidden()
+        # the place keeps its size
+        height = rails.layout.sizes[Slot.LEFT_BOTTOM][1]
+        wait_until(lambda: abs(logs.height() - height) < 10)
 
         # WHEN: with the context menu of its button, to the place of the code
         menu = rails.menu(logs)
@@ -237,20 +247,80 @@ class TestToolWindowRails(TestBase):
         assert logs.isVisible()
         assert window.jsonl_dock.isHidden()
 
+    @staticmethod
+    def _drop(container, name: str, point):
+        """A button of a dock dropped on a rail, as Qt delivers it at the end of a drag."""
+        from PyQt6.QtCore import QMimeData, QPointF, Qt
+        from PyQt6.QtGui import QDragEnterEvent, QDragMoveEvent, QDropEvent
+        from PyQt6.QtWidgets import QApplication
+
+        from openhasp_config_manager.gui.qt.window.tool_window_rails import MIME_TYPE
+
+        # the buttons have their places, as while the user drags
+        QApplication.processEvents()
+        data = QMimeData()
+        data.setData(MIME_TYPE, name.encode())
+        action, button, modifier = Qt.DropAction.MoveAction, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier
+        for event_type in (QDragEnterEvent, QDragMoveEvent):
+            event = event_type(point, action, data, button, modifier)
+            QApplication.sendEvent(container, event)
+            assert event.isAccepted()
+        QApplication.sendEvent(container, QDropEvent(QPointF(point), action, data, button, modifier))
+
+    def test_a_button_is_dragged_to_another_rail_and_back(self, window):
+        # GIVEN
+        from PyQt6.QtCore import QPoint
+
+        window = self._shown(window)
+        rails = window.rails
+        right = rails.container(Side.RIGHT)
+
+        # WHEN: the devices are dropped at the end of the right rail, below the live device
+        self._drop(right, "devices_dock", QPoint(right.width() // 2, right.height() - 5))
+
+        # THEN: open in their new place, at the right of the preview
+        assert self._names(rails, Side.RIGHT, True) == ["live_device_dock", "devices_dock"]
+        assert self._names(rails, Side.LEFT, False) == []
+        # its button can be seen on its new rail
+        assert rails.button(window.devices_dock).isVisible()
+        wait_until(
+            lambda: window.devices_dock.isVisible() and window.devices_dock.x() > window.preview_dock.geometry().right()
+        )
+
+        # WHEN: the files are dropped there too, before the live device
+        live = right.buttons(True)[0].geometry()
+        self._drop(right, "files_dock", QPoint(live.center().x(), live.top() + 2))
+
+        # THEN: the files are the open view of the place, the devices closed; the left rail is empty, but still there to
+        # take a button back
+        left = rails.container(Side.LEFT)
+        assert self._names(rails, Side.LEFT, False) == [] and self._names(rails, Side.LEFT, True) == []
+        assert rails.rail(Side.LEFT).isVisible() and left.width() > 10
+        assert self._names(rails, Side.RIGHT, True) == ["files_dock", "live_device_dock", "devices_dock"]
+        assert window.files_dock.isVisible() and window.devices_dock.isHidden()
+
+        # WHEN: the devices go back to the top of the left rail
+        self._drop(left, "devices_dock", QPoint(left.width() // 2, 5))
+
+        # THEN: opened with its button, at the left of the preview again
+        assert self._names(rails, Side.LEFT, False) == ["devices_dock"]
+        rails.button(window.devices_dock).click()
+        wait_until(lambda: window.devices_dock.isVisible() and window.devices_dock.x() < window.preview_dock.x())
+
     def test_the_arrangement_is_remembered(self, create_window):
         # GIVEN
         first = self._shown(create_window())
-        first.rails.move("plates_dock", Slot.RIGHT_BOTTOM, 0)
-        first.plates_dock.show()
+        first.rails.move("devices_dock", Slot.RIGHT_BOTTOM, 0)
+        first.devices_dock.show()
 
         # WHEN
         first.close()
         second = self._shown(create_window())
 
         # THEN
-        assert second.rails.slot_of(second.plates_dock) == Slot.RIGHT_BOTTOM
-        assert self._names(second.rails, Side.RIGHT, True) == ["plates_dock", "live_device_dock"]
-        assert second.plates_dock.isVisible()
+        assert second.rails.slot_of(second.devices_dock) == Slot.RIGHT_BOTTOM
+        assert self._names(second.rails, Side.RIGHT, True) == ["devices_dock", "live_device_dock"]
+        assert second.devices_dock.isVisible()
 
     def test_a_dock_added_later_gets_a_button(self, window):
         # GIVEN

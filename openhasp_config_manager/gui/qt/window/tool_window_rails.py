@@ -49,8 +49,12 @@ ICON_PROPERTY = "railIcon"
 SLOT_PROPERTY = "railSlot"
 OPEN_PROPERTY = "railOpen"
 BUTTON_PROPERTY = "railButton"
+COMPACT_PROPERTY = "railCompact"
 
-LAYOUT_KEY = "window/tool_windows"
+# the arrangement of the docks; the version goes up when the docks change in a way that an older arrangement would put
+# them in a bad place (2: the Files tree got a dock of its own, the Plates dock went into the Devices dock)
+LAYOUT_VERSION = 2
+LAYOUT_KEY = f"window/tool_windows_v{LAYOUT_VERSION}"
 SHOW_RAILS_KEY = "window/show_rails"
 # what a dragged button carries: the object name of its dock
 MIME_TYPE = "application/x-openhasp-config-manager-tool-window"
@@ -69,7 +73,12 @@ _TOOLBAR_AREAS = {
 
 
 def describe_dock(
-    dock: QDockWidget, icon: Optional[str] = None, slot: Optional[Slot] = None, is_open: bool = False, button: bool = True
+    dock: QDockWidget,
+    icon: Optional[str] = None,
+    slot: Optional[Slot] = None,
+    is_open: bool = False,
+    button: bool = True,
+    compact: bool = False,
 ):
     """
     How a dock shows on the rails. A dock that isn't described gets a button with a generic icon, at the bottom left.
@@ -78,6 +87,8 @@ def describe_dock(
     :param slot: its place, until the user moves it
     :param is_open: open at the first start (and after "Restore default layout")
     :param button: False for a dock without a button
+    :param compact: it takes the room its widget asks for (its `sizeHint`, up to half), not half of the side it shares
+        with the dock of the other place, while that split wasn't changed
     """
     if icon is not None:
         dock.setProperty(ICON_PROPERTY, icon)
@@ -85,6 +96,7 @@ def describe_dock(
         dock.setProperty(SLOT_PROPERTY, slot.value)
     dock.setProperty(OPEN_PROPERTY, is_open)
     dock.setProperty(BUTTON_PROPERTY, button)
+    dock.setProperty(COMPACT_PROPERTY, compact)
 
 
 class RailButton(QAbstractButton):
@@ -261,6 +273,12 @@ class RailContainer(QWidget):
             self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
         else:
             self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        # as thick as a button also without one: an empty rail takes drops too
+        thickness = max(RailButton.ICON_SIZE, self.fontMetrics().height()) + 2 * RailButton.PADDING_ACROSS
+        if side.vertical:
+            self.setMinimumWidth(thickness)
+        else:
+            self.setMinimumHeight(thickness)
         self.setAcceptDrops(True)
 
     def buttons(self, secondary: bool) -> List[RailButton]:
@@ -276,6 +294,8 @@ class RailContainer(QWidget):
         for button in buttons:
             button.set_side(self.side)
             group.addWidget(button)
+            # a button from another rail got a new parent, which hides it
+            button.show()
 
     def _along(self, point: QPoint) -> int:
         return point.y() if self.side.vertical else point.x()
@@ -574,8 +594,17 @@ class ToolWindowRails(QObject):
             if primary in self.layout.sizes and secondary in self.layout.sizes:
                 lengths = [self.layout.sizes[primary][index], self.layout.sizes[secondary][index]]
             else:
-                total = sum(dock.height() if orientation == Qt.Orientation.Vertical else dock.width() for dock in docks)
+                vertical = orientation == Qt.Orientation.Vertical
+                total = sum(dock.height() if vertical else dock.width() for dock in docks)
                 lengths = [total // 2, total - total // 2]
+                for index, dock in enumerate(docks):
+                    if dock.property(COMPACT_PROPERTY) is True:
+                        # what it asks for, up to half: a short list doesn't need more
+                        hint, minimum = dock.sizeHint(), dock.minimumSizeHint()
+                        wanted = max(hint.height(), minimum.height()) if vertical else max(hint.width(), minimum.width())
+                        lengths[index] = min(lengths[index], wanted)
+                        lengths[1 - index] = total - lengths[index]
+                        break
             self._window.resizeDocks(docks, lengths, orientation)
         self._sized = True
 
@@ -593,6 +622,9 @@ class ToolWindowRails(QObject):
                 self._remember_size(slot, self._docks[name])
 
     def _remember_size(self, slot: Slot, dock: QDockWidget):
+        if not self._sized:
+            # the places don't have their sizes yet: what Qt gave them at first isn't worth keeping
+            return
         # also of a dock that was just closed: its geometry is the last one it had
         if not dock.isFloating() and dock.width() > 0 and dock.height() > 0:
             self.layout.sizes[slot] = (dock.width(), dock.height())
@@ -712,7 +744,8 @@ class ToolWindowRails(QObject):
                 slot = Slot.of(side, secondary)
                 container.set_buttons(secondary, [self._buttons[self._docks[name]] for name in self.layout.views(slot)])
             rail = self._rails[side]
-            visible = bool(self.buttons(side)) and self.action_show_rails.isChecked()
+            # also without buttons, like the bars of IntelliJ: a button can be dragged back to it
+            visible = self.action_show_rails.isChecked()
             if rail.isHidden() == visible:
                 rail.setVisible(visible)
         self._update_minimum_size()

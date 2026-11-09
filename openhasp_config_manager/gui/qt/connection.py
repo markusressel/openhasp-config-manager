@@ -19,7 +19,7 @@ LOGGER = logging.getLogger(__name__)
 class ConnectionController(QtCore.QObject):
     """
     Keeps an MQTT connection to the broker of a plate and follows the plate's LWT and page topics, so the status bar, the
-    tabs and the Plates panel can show whether the broker and the plate are reachable, and which page it shows. Also tracks
+    tabs and the Devices panel can show whether the broker and the plate are reachable, and which page it shows. Also tracks
     whether something is being sent and which pages are out of sync after a failed send.
     """
 
