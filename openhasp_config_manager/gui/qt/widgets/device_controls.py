@@ -1,4 +1,4 @@
-from typing import Optional, Awaitable
+from typing import Awaitable, Dict, Optional, Tuple
 
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import QFrame, QMessageBox, QSlider, QToolButton, QWidget
@@ -14,10 +14,9 @@ from openhasp_config_manager.openhasp_client.openhasp import OpenHaspClient
 
 class DeviceControlsWidget(QWidget):
     """
-    A compact bar with controls for a single device (it floats on the preview), such as buttons to
-      - turn the screen on/off
-      - reboot the device
-      - switch pages
+    A compact bar with controls for the plate of a device (in the *Live device* dock, for the device of the active tab):
+    turn the screen on/off, its brightness, switch pages and reboot it. The brightness and whether the screen is on are
+    remembered per device (by its name), to show them again when its tab is (`screen_state`).
     """
 
     # the brightness (1..100) and whether the screen is on, to show it in the preview
@@ -32,6 +31,8 @@ class DeviceControlsWidget(QWidget):
         self.client: Optional[OpenHaspClient] = None
         self.busy = BusyState(self)
         self.busy.changed.connect(lambda _: self._update_enabled())
+        # the brightness (1..100) and whether the screen is on, of the devices it was set for
+        self._screens: Dict[str, Tuple[int, bool]] = {}
         # dragging the slider changes the value many times per second: one command per value would flood MQTT
         self._brightness = LatestValueThrottle(self._set_brightness, interval_ms=50, parent=self)
 
@@ -43,7 +44,21 @@ class DeviceControlsWidget(QWidget):
         self._brightness.cancel()
         self.device = device
         self.client = None if device is None else OpenHaspClient(device)
+        if device is not None:
+            # the slider shows what was set for the device, without sending it again
+            self._brightness_slider.blockSignals(True)
+            self._brightness_slider.setValue(self.screen_state(device.name)[0])
+            self._brightness_slider.blockSignals(False)
         self._update_enabled()
+
+    def screen_state(self, name: str) -> Tuple[int, bool]:
+        """:return: the brightness (1..100) last set for a device and whether its screen is on (as far as we know)"""
+        return self._screens.get(name, (100, True))
+
+    def _set_screen(self, brightness: int, on: bool):
+        if self.device is not None:
+            self._screens[self.device.name] = (brightness, on)
+        self.screenChanged.emit(brightness, on)
 
     def _update_enabled(self):
         self._content.setEnabled(self.device is not None and not self.busy.busy)
@@ -108,9 +123,9 @@ class DeviceControlsWidget(QWidget):
 
     @qBridge(int)
     def __on_brightness_changed(self, value: int):
-        self.screenChanged.emit(value, True)
         if self.device is None:
             return
+        self._set_screen(value, True)
         self._brightness.push(value)
 
     def _set_brightness(self, value: int):
@@ -123,12 +138,12 @@ class DeviceControlsWidget(QWidget):
 
     @qBridge()
     def on_turn_on_clicked(self):
-        self.screenChanged.emit(self._brightness_slider.value(), True)
+        self._set_screen(self._brightness_slider.value(), True)
         self._run(self.client.set_backlight(state=True), "Turning the screen on")
 
     @qBridge()
     def on_turn_off_clicked(self):
-        self.screenChanged.emit(self._brightness_slider.value(), False)
+        self._set_screen(self._brightness_slider.value(), False)
         self._run(self.client.set_backlight(state=False), "Turning the screen off")
 
     @qBridge()

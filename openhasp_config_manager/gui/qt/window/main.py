@@ -53,6 +53,7 @@ from openhasp_config_manager.gui.qt.window.status_bar import StatusBarController
 from openhasp_config_manager.gui.qt.window.tool_window_rails import ToolWindowRails, describe_dock
 from openhasp_config_manager.gui.qt.connection import ConnectionController, PlateConnections
 from openhasp_config_manager.gui.qt.log_stream import LogStreamController
+from openhasp_config_manager.gui.qt.widgets.device_controls import DeviceControlsWidget
 from openhasp_config_manager.gui.qt.widgets.log_view import LogView
 from openhasp_config_manager.gui.qt.operations import OperationStatus, error_text
 from openhasp_config_manager.gui.qt.ui_session_store import UiSessionStore
@@ -259,6 +260,19 @@ class MainWindow(QMainWindow):
         # what the plate of the active tab shows, from screenshots now and then. Closed at first: a screenshot keeps the plate
         # busy, they are only taken while the dock can be seen.
         self.live_screens = LiveScreens(parent=self)
+        # the controls of that plate (screen, brightness, pages, reboot), above its screenshot; the preview of the active
+        # tab is darkened like the screen
+        self.device_controls = DeviceControlsWidget(status=self.status)
+        self.device_controls.screenChanged.connect(
+            lambda brightness, on: self.page_layout_editor_widget.page_preview_widget.set_screen_brightness(brightness, on)
+        )
+        self.device_controls.pageCommandSent.connect(
+            lambda: self._with_connection(
+                self.page_layout_editor_widget, lambda connection: connection.screen_changed(ScreenChange.COMMAND)
+            )
+        )
+        self.device_controls.busy.changed.connect(lambda _: self._update_sending(self.page_layout_editor_widget))
+        self.live_screens.view.set_controls(self.device_controls)
         self.live_device_dock = self._add_dock(
             "Live device", "live_device_dock", self.live_screens.view, icon="monitor-screenshot", slot=Slot.RIGHT_BOTTOM
         )
@@ -319,12 +333,8 @@ class MainWindow(QMainWindow):
         editor.editPartRequested.connect(active(lambda part, instance: self.edit_part(part, instance, editor.session)))
         editor.partDone.connect(active(lambda: self.close_tab(self.device_tabs.active)))
         editor.action_edit_mode.toggled.connect(active(self._on_edit_mode_toggled))
-        editor.device_controls.pageCommandSent.connect(
-            lambda: self._with_connection(editor, lambda connection: connection.screen_changed(ScreenChange.COMMAND))
-        )
-        for busy in [editor.busy, editor.device_controls.busy]:
-            busy.changed.connect(lambda _: self._update_sending(editor))
-            busy.changed.connect(active(lambda _: self._update_draft_actions()))
+        editor.busy.changed.connect(lambda _: self._update_sending(editor))
+        editor.busy.changed.connect(active(lambda _: self._update_draft_actions()))
         self.center_stack.addWidget(editor)
         self.properties_stack.addWidget(editor.property_editor)
         self.page_jsonl_stack.addWidget(editor.jsonl_preview)
@@ -403,7 +413,11 @@ class MainWindow(QMainWindow):
 
     def _update_sending(self, editor: PageLayoutEditorWidget):
         self._with_connection(
-            editor, lambda connection: connection.set_sending(editor.busy.busy or editor.device_controls.busy.busy)
+            editor,
+            lambda connection: connection.set_sending(
+                # the controls are those of the device of the active tab
+                editor.busy.busy or (editor is self.page_layout_editor_widget and self.device_controls.busy.busy)
+            ),
         )
 
     def _with_connection(self, editor: PageLayoutEditorWidget, action):
@@ -589,7 +603,6 @@ class MainWindow(QMainWindow):
             # the editors keep their page and zoom (hidden meanwhile), to go on with them
             tab.device = None
             tab.loaded = None
-            tab.editor.device_controls.set_device(None)
             tab.message = lambda panel: panel.show_loading(f"Loading {name}…", "Rendering the templates of the device's pages")
         if self._selected_name == name:
             self._show_tab(self.device_tabs.active)
@@ -644,7 +657,6 @@ class MainWindow(QMainWindow):
         connection and Live preview of the previous one keep running.
         """
         if previous is not None:
-            previous.editor.device_controls.set_device(None)
             if not self.disk_changes_banner.isHidden():
                 # offered again when the tab is shown again
                 previous.changed_files |= {self.cfg_root / path for path in self.disk_changes}
@@ -668,7 +680,10 @@ class MainWindow(QMainWindow):
         self._update_plates()
         self.device_logs.show(None if tab is None else tab.name)
         self.live_screens.show(None if tab is None else tab.name)
-        editor.device_controls.set_device(device)
+        self.device_controls.set_device(device)
+        if tab is not None:
+            # what was set for the device's screen, also through another of its tabs
+            editor.page_preview_widget.set_screen_brightness(*self.device_controls.screen_state(tab.name))
         self.status_bar.set_device(None if tab is None else tab.name)
         if device is None:
             self.file_tree_widget.clear()
@@ -720,7 +735,6 @@ class MainWindow(QMainWindow):
             link.set_view(others[0].editor if others else None)
         if isinstance(tab, PartTab):
             tab.focus.close()
-        tab.editor.device_controls.set_device(None)
         tab.editor.clear()
         tab.editor.set_plate(None)
         if not others:

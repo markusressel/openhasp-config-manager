@@ -128,3 +128,47 @@ class TestLiveDevice(TestBase):
         clock.now += 1000
         live.poll()
         assert plate.count == 3
+
+    def test_controls_the_plate_of_the_active_tab(self, window, monkeypatch):
+        # GIVEN: the commands reach a fake plate
+        from openhasp_config_manager.gui.qt.widgets import device_controls
+
+        sent = []
+
+        class _Client:
+            def __init__(self, device):
+                self.name = device.name
+
+            async def set_backlight(self, state=None, brightness=None):
+                sent.append((self.name, state, brightness))
+
+            async def next_page(self):
+                sent.append((self.name, "next"))
+
+        monkeypatch.setattr(device_controls, "OpenHaspClient", _Client)
+        controls = window.device_controls
+        controls.set_device(controls.device)
+        preview = window.page_layout_editor_widget.page_preview_widget
+
+        # THEN: in the Live device dock, for the device of the active tab
+        assert window.live_device_dock.isAncestorOf(controls)
+        assert controls.device.name == TEST_DEVICE
+
+        # WHEN: the brightness is lowered and the page changed
+        controls._brightness_slider.setValue(30)
+        wait_until(lambda: (TEST_DEVICE, None, 30) in sent)
+        controls.on_next_page_clicked()
+
+        # THEN: the plate gets them, and the preview is darkened like its screen
+        wait_until(lambda: (TEST_DEVICE, "next") in sent)
+        assert preview._darkness > 0
+        assert controls.screen_state(TEST_DEVICE) == (30, True)
+
+        # WHEN: the tab is shown again (another device was active meanwhile)
+        controls.set_device(None)
+        controls._brightness_slider.setValue(100)
+        window._show_tab(window.device_tabs.active)
+
+        # THEN: the slider shows what was set for the device, without sending it again
+        assert controls._brightness_slider.value() == 30
+        assert [command for command in sent if command[2:] == (100,)] == []
