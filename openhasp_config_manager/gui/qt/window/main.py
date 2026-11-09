@@ -34,7 +34,7 @@ from openhasp_config_manager.gui.domain.draft.model import PartInstance
 from openhasp_config_manager.gui.domain.draft.page_objects import get_navigable_page_indices
 from openhasp_config_manager.gui.domain.draft.part_focus import PartFocus
 from openhasp_config_manager.gui.domain.draft.session import PlateSession
-from openhasp_config_manager.gui.domain.tool_window_rails import Side
+from openhasp_config_manager.gui.domain.tool_window_rails import Slot
 from openhasp_config_manager.gui.domain.ui_session import TabSession
 from openhasp_config_manager.gui.qt.components import ThemedIcons
 from openhasp_config_manager.gui.qt.config_watcher import ConfigWatcher
@@ -72,9 +72,6 @@ from openhasp_config_manager.manager import ConfigManager
 from openhasp_config_manager.openhasp_client.model.device import Device
 
 LOGGER = logging.getLogger(__name__)
-
-# the version of the saved arrangement of the docks: a state of another version is not restored
-DOCK_STATE_VERSION = 3
 
 
 class MainWindow(QMainWindow):
@@ -133,8 +130,6 @@ class MainWindow(QMainWindow):
         self.file_tree_widget.fileActionRequested.connect(self.file_actions.request)
         create_menus(self)
         self._update_draft_actions()
-        # the arrangement of the docks as built above, before the saved one is restored
-        self._default_dock_state = self.saveState(DOCK_STATE_VERSION)
         self._restore_window_state()
         # the editor starts in interact mode, which has nothing to show in the properties
         self.properties_dock.hide()
@@ -200,18 +195,19 @@ class MainWindow(QMainWindow):
         self.sidebar.setStretchFactor(1, 1)
         self.sidebar.setChildrenCollapsible(False)
         self.sidebar.setMinimumWidth(260)
-        self.devices_dock = self._add_dock("Devices", "devices_dock", self.sidebar, icon="devices", side=Side.LEFT)
-        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.devices_dock)
-
-        # center: the render preview. It can't be closed: there is nothing to do without it
-        self.preview_dock = self._add_dock("Preview", "preview_dock", center, closable=False)
-        self.splitDockWidget(self.devices_dock, self.preview_dock, Qt.Orientation.Horizontal)
-
-        # right: the properties of the selected object
-        self.properties_dock = self._add_dock(
-            "Properties", "properties_dock", self.properties_stack, icon="tune-vertical", side=Side.RIGHT
+        self.devices_dock = self._add_dock(
+            "Devices", "devices_dock", self.sidebar, icon="devices", slot=Slot.LEFT_TOP, is_open=True
         )
-        self.splitDockWidget(self.preview_dock, self.properties_dock, Qt.Orientation.Horizontal)
+
+        # center: the render preview, the other docks are around it (`ToolWindowRails`). It can't be closed: there is
+        # nothing to do without it
+        self.preview_dock = self._add_dock("Preview", "preview_dock", center, closable=False)
+        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.preview_dock)
+
+        # right: the properties of the selected object, shown in edit mode
+        self.properties_dock = self._add_dock(
+            "Properties", "properties_dock", self.properties_stack, icon="tune-vertical", slot=Slot.RIGHT_TOP
+        )
 
         # below the preview: the files as text (source), and the JSONL of the page (rendered)
         self.source_editor = SourceEditorWidget(self.cfg_root)
@@ -236,24 +232,20 @@ class MainWindow(QMainWindow):
         self.file_tree_widget.editPartRequested.connect(lambda part: self.edit_part(part))
         self.source_editor.set_part_check(self.file_tree_widget.is_part_file)
         self.source_editor.editPartRequested.connect(lambda part: self.edit_part(part))
-        self.jsonl_dock = self._add_dock("Code", "jsonl_dock", self.code_view, icon="code-braces", side=Side.BOTTOM)
-        self.splitDockWidget(self.preview_dock, self.jsonl_dock, Qt.Orientation.Vertical)
+        self.jsonl_dock = self._add_dock(
+            "Code", "jsonl_dock", self.code_view, icon="code-braces", slot=Slot.BOTTOM_LEFT, is_open=True
+        )
 
         # the JSONL of the page in the preview: the objects of all files that contribute to it, the way the plate gets them
         self.page_jsonl_dock = self._add_dock(
-            "Page JSONL", "page_jsonl_dock", self.page_jsonl_stack, icon="code-json", side=Side.BOTTOM
+            "Page JSONL", "page_jsonl_dock", self.page_jsonl_stack, icon="code-json", slot=Slot.BOTTOM_LEFT
         )
-        self.tabifyDockWidget(self.jsonl_dock, self.page_jsonl_dock)
 
         # the logs of the plates of the tabs, next to the code. Closed at first: they hold the only telnet connection a plate
         # allows while the dock is open.
         self.log_colors = LogColors(self)
         self.device_logs = DeviceLogs(on_enable_colors=self.log_colors.ask, parent=self)
-        self.logs_dock = self._add_dock("Logs", "logs_dock", self.device_logs.stack, icon="console", side=Side.BOTTOM)
-        self.tabifyDockWidget(self.jsonl_dock, self.logs_dock)
-        self.jsonl_dock.raise_()
-        self.logs_dock.hide()
-        # open, also while another dock of its tab group is raised
+        self.logs_dock = self._add_dock("Logs", "logs_dock", self.device_logs.stack, icon="console", slot=Slot.BOTTOM_RIGHT)
         self.logs_dock.toggleViewAction().toggled.connect(self.device_logs.set_open)
 
         # the plates of the open devices: their connection, Live preview, the page they show and what is wrong
@@ -261,23 +253,18 @@ class MainWindow(QMainWindow):
         self.plates_panel.deviceClicked.connect(lambda name: self.device_tabs.activate(self.device_tabs.find(name)))
         self.plates_panel.liveToggled.connect(self.set_live_preview)
         self.plates_dock = self._add_dock(
-            "Plates", "plates_dock", self.plates_panel, icon="tablet-dashboard", side=Side.BOTTOM
+            "Plates", "plates_dock", self.plates_panel, icon="tablet-dashboard", slot=Slot.BOTTOM_RIGHT
         )
-        self.tabifyDockWidget(self.jsonl_dock, self.plates_dock)
 
         # what the plate of the active tab shows, from screenshots now and then. Closed at first: a screenshot keeps the plate
         # busy, they are only taken while the dock can be seen.
         self.live_screens = LiveScreens(parent=self)
         self.live_device_dock = self._add_dock(
-            "Live device", "live_device_dock", self.live_screens.view, icon="monitor-screenshot", side=Side.BOTTOM
+            "Live device", "live_device_dock", self.live_screens.view, icon="monitor-screenshot", slot=Slot.RIGHT_BOTTOM
         )
-        self.tabifyDockWidget(self.jsonl_dock, self.live_device_dock)
-        self.live_device_dock.hide()
-        # not while it is behind another dock of its tab group
+        # not while it is behind another dock or floating out of sight
         self.live_device_dock.visibilityChanged.connect(self.live_screens.set_visible)
-        self.jsonl_dock.raise_()
-        self._size_docks()
-        # a button per dock at the edges of the window, on the side of the preview the dock is on
+        # arranges the docks around the preview, with a button per dock at the edges of the window
         self.rails = ToolWindowRails(self, self.preview_dock)
 
         self.status_bar = StatusBarController(
@@ -382,12 +369,6 @@ class MainWindow(QMainWindow):
         # the properties can only be changed in edit mode
         self.properties_dock.setVisible(enabled)
 
-    def _size_docks(self):
-        self.resizeDocks([self.preview_dock, self.jsonl_dock], [520, 280], Qt.Orientation.Vertical)
-        self.resizeDocks(
-            [self.devices_dock, self.preview_dock, self.properties_dock], [280, 700, 360], Qt.Orientation.Horizontal
-        )
-
     def _add_dock(
         self,
         title: str,
@@ -395,16 +376,19 @@ class MainWindow(QMainWindow):
         widget: QWidget,
         closable: bool = True,
         icon: Optional[str] = None,
-        side: Optional[Side] = None,
+        slot: Optional[Slot] = None,
+        is_open: bool = False,
     ) -> QDockWidget:
         """
-        A dock of the window. Every closable dock gets a button on the tool window rails (`ToolWindowRails`).
+        A dock of the window. Every closable dock gets a place around the preview and a button on the tool window rails
+        (`ToolWindowRails`), which arrange it.
 
         :param icon: the mdi6 icon of its button
-        :param side: the rail of its button until the dock is seen (it starts hidden)
+        :param slot: its place until the user moves it
+        :param is_open: open at the first start
         """
         dock = QDockWidget(title, self)
-        describe_dock(dock, icon=icon, side=side)
+        describe_dock(dock, icon=icon, slot=slot, is_open=is_open)
         dock.setObjectName(name)
         dock.setWidget(widget)
         features = QDockWidget.DockWidgetFeature.DockWidgetMovable | QDockWidget.DockWidgetFeature.DockWidgetFloatable
@@ -452,28 +436,13 @@ class MainWindow(QMainWindow):
             self.restoreGeometry(geometry)
         else:
             self.resize(1440, 900)
-        state = settings.value("window/state")
-        if state is not None:
-            self.restoreState(state, DOCK_STATE_VERSION)
         sidebar = settings.value("window/sidebar")
         if sidebar is None or not self.sidebar.restoreState(sidebar):
             # once the window has its size: the device list compact, the file tree takes the rest
             QtCore.QTimer.singleShot(0, self._size_sidebar)
 
     def restore_default_layout(self):
-        for dock in [
-            self.devices_dock,
-            self.preview_dock,
-            self.properties_dock,
-            self.jsonl_dock,
-            self.page_jsonl_dock,
-            self.logs_dock,
-            self.plates_dock,
-            self.live_device_dock,
-        ]:
-            dock.setFloating(False)
-        self.restoreState(self._default_dock_state, DOCK_STATE_VERSION)
-        self._size_docks()
+        self.rails.reset()
         self._size_sidebar()
 
     def _size_sidebar(self):
@@ -516,7 +485,6 @@ class MainWindow(QMainWindow):
         self.code_view.save_state()
         settings = QSettings()
         settings.setValue("window/geometry", self.saveGeometry())
-        settings.setValue("window/state", self.saveState(DOCK_STATE_VERSION))
         settings.setValue("window/sidebar", self.sidebar.saveState())
         self.rails.save()
         super().closeEvent(event)

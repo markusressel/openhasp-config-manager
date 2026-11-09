@@ -75,6 +75,7 @@ class TestLiveDevice(TestBase):
     def test_shows_the_plate_and_refreshes_after_a_restore(self, window, plate):
         # GIVEN
         from openhasp_config_manager.gui.domain.live_screen import ScreenChange
+        from openhasp_config_manager.gui.domain.tool_window_rails import Slot
 
         live = window.live_screens
         clock = live._clock = _Clock()
@@ -117,9 +118,11 @@ class TestLiveDevice(TestBase):
         live.poll()
         wait_until(lambda: plate.count == 3)
 
-        # WHEN: the dock is behind another one, nothing is taken
+        # WHEN: another view of its place opens, it closes, and nothing is taken
         wait_until(lambda: not live.screen_of(TEST_DEVICE).scheduler.running)
-        window.jsonl_dock.raise_()
+        window.rails.move("live_device_dock", Slot.BOTTOM_LEFT)
+        window.jsonl_dock.show()
+        assert window.live_device_dock.isHidden()
         wait_until(lambda: live.screen_of(TEST_DEVICE).scheduler.paused == "hidden")
         window.connection.plate_restored()
         clock.now += 1000

@@ -3,21 +3,16 @@ from pathlib import Path
 import pytest
 
 from openhasp_config_manager.gui.domain.tool_window_rails import (
-    Placement,
     RailClick,
-    Rect,
     Side,
-    arrange,
+    Slot,
+    ToolWindowLayout,
     click_action,
-    place,
-    side_of,
+    drop_target,
 )
 from tests import TestBase
 from tests.gui.helpers import wait_until
 from tests.helpers import DEVICE_DIR, copy_test_config
-
-# the preview, in the middle of the window
-CENTER = Rect(300, 50, 800, 500)
 
 
 @pytest.fixture
@@ -25,50 +20,119 @@ def cfg_root(tmp_path) -> Path:
     return copy_test_config(tmp_path, {f"{DEVICE_DIR}/boot.cmd": "run L:/home_page.jsonl\n"})
 
 
-class TestPlacement(TestBase):
-    def test_the_side_is_where_the_view_is_next_to_the_preview(self):
-        assert side_of(Rect(0, 50, 290, 800), CENTER) == Side.LEFT
-        assert side_of(Rect(1110, 50, 300, 800), CENTER) == Side.RIGHT
-        assert side_of(Rect(300, 560, 800, 200), CENTER) == Side.BOTTOM
-        assert side_of(Rect(300, 0, 800, 40), CENTER) == Side.TOP
+def _layout() -> ToolWindowLayout:
+    layout = ToolWindowLayout()
+    layout.add("devices", Slot.LEFT_TOP, is_open=True)
+    layout.add("code", Slot.BOTTOM_LEFT, is_open=True)
+    layout.add("page", Slot.BOTTOM_LEFT)
+    layout.add("logs", Slot.BOTTOM_RIGHT)
+    return layout
 
-    def test_a_column_at_the_left_that_reaches_below_the_preview_is_at_the_left(self):
-        assert side_of(Rect(0, 600, 290, 200), CENTER) == Side.LEFT
 
-    def test_a_view_below_the_preview_and_the_left_column_is_at_the_bottom(self):
-        assert side_of(Rect(0, 600, 1400, 200), CENTER) == Side.BOTTOM
+class TestLayout(TestBase):
+    def test_the_places_of_the_rails(self):
+        assert Slot.LEFT_BOTTOM.side == Side.LEFT and Slot.LEFT_BOTTOM.secondary
+        assert Slot.BOTTOM_LEFT.side == Side.BOTTOM and not Slot.BOTTOM_LEFT.secondary
+        assert Slot.of(Side.RIGHT, True) == Slot.RIGHT_BOTTOM
+        assert Slot.BOTTOM_LEFT.partner() == Slot.BOTTOM_RIGHT
+        assert Slot.RIGHT_TOP.label == "Right top"
 
-    def test_the_position_runs_along_the_rail(self):
-        assert place(Rect(0, 70, 290, 800), CENTER) == Placement(Side.LEFT, 70)
-        assert place(Rect(420, 560, 800, 200), CENTER, tab=2) == Placement(Side.BOTTOM, 420, 2)
+    def test_a_click_opens_a_closed_view_and_closes_an_open_one(self):
+        assert click_action(is_open=False) == RailClick.SHOW
+        assert click_action(is_open=True) == RailClick.HIDE
 
-    def test_views_are_ordered_along_the_rail_and_a_tab_group_like_its_tabs(self):
-        rails = arrange(
-            [
-                ("logs", Placement(Side.BOTTOM, 400, 1)),
-                ("devices", Placement(Side.LEFT, 0)),
-                ("code", Placement(Side.BOTTOM, 400, 0)),
-                ("plates", Placement(Side.BOTTOM, 900)),
-                ("page", Placement(Side.BOTTOM, 400, 1)),
-            ]
-        )
+    def test_the_first_half_of_a_rail_is_its_first_group(self):
+        # buttons of the first group at 20 and 60, of the second at 380
+        assert drop_target(Side.LEFT, 400, 10, [20, 60], [380]) == (Slot.LEFT_TOP, 0)
+        assert drop_target(Side.LEFT, 400, 40, [20, 60], [380]) == (Slot.LEFT_TOP, 1)
+        assert drop_target(Side.LEFT, 400, 150, [20, 60], [380]) == (Slot.LEFT_TOP, 2)
+        assert drop_target(Side.LEFT, 400, 390, [20, 60], [380]) == (Slot.LEFT_BOTTOM, 1)
+        # an empty group takes drops too
+        assert drop_target(Side.BOTTOM, 1000, 900, [100], []) == (Slot.BOTTOM_RIGHT, 0)
 
-        assert rails[Side.LEFT] == ["devices"]
-        # same position and tab: in the order given
-        assert rails[Side.BOTTOM] == ["code", "logs", "page", "plates"]
-        assert rails[Side.RIGHT] == []
+    def test_one_open_view_per_place(self):
+        layout = _layout()
 
-    def test_placement_survives_the_settings_and_a_broken_one_is_ignored(self):
-        placement = Placement(Side.RIGHT, 120, 1)
+        assert layout.shown(Slot.BOTTOM_LEFT) == "code"
+        # opening the page closes the code, the logs of another place don't
+        layout.set_open("logs", True)
+        assert layout.others_open("page") == ["code"]
+        assert layout.others_open("logs") == []
 
-        assert Placement.from_json(placement.to_json()) == placement
-        assert Placement.from_json({"side": "middle", "position": 1}) is None
-        assert Placement.from_json("left") is None
+    def test_a_view_moves_to_another_place_and_within_its_place(self):
+        layout = _layout()
+        layout.set_open("logs", True)
 
-    def test_a_click_shows_a_closed_view_raises_one_behind_a_tab_and_hides_a_visible_one(self):
-        assert click_action(is_open=False, is_raised=False) == RailClick.SHOW
-        assert click_action(is_open=True, is_raised=False) == RailClick.RAISE
-        assert click_action(is_open=True, is_raised=True) == RailClick.HIDE
+        # an open view stays open, the open one of its new place closes
+        assert layout.move("logs", Slot.BOTTOM_LEFT, 1)
+        assert layout.views(Slot.BOTTOM_LEFT) == ["code", "logs", "page"]
+        assert layout.open == {"devices", "logs"}
+
+        # within its place: before the view at the index
+        assert not layout.move("code", Slot.BOTTOM_LEFT, 3)
+        assert layout.views(Slot.BOTTOM_LEFT) == ["logs", "page", "code"]
+        assert not layout.move("code", Slot.BOTTOM_LEFT, 0)
+        assert layout.views(Slot.BOTTOM_LEFT) == ["code", "logs", "page"]
+
+        # to the end of an empty place
+        assert layout.move("page", Slot.RIGHT_BOTTOM)
+        assert layout.views(Slot.RIGHT_BOTTOM) == ["page"]
+
+    def test_the_arrangement_survives_the_settings(self):
+        layout = _layout()
+        layout.move("page", Slot.LEFT_BOTTOM)
+        layout.set_open("page", True)
+        layout.sizes[Slot.LEFT_BOTTOM] = (280, 300)
+
+        restored = ToolWindowLayout()
+        assert restored.load(layout.to_json())
+        restored.add("devices", Slot.LEFT_TOP, is_open=True)
+        restored.add("code", Slot.BOTTOM_LEFT, is_open=True)
+        restored.add("page", Slot.BOTTOM_LEFT)
+        restored.add("logs", Slot.BOTTOM_RIGHT)
+        # a view that wasn't there before goes to its place, closed or open as it starts
+        restored.add("new", Slot.BOTTOM_RIGHT, is_open=True)
+
+        assert restored.views(Slot.LEFT_BOTTOM) == ["page"]
+        assert restored.views(Slot.BOTTOM_LEFT) == ["code"]
+        assert restored.views(Slot.BOTTOM_RIGHT) == ["logs", "new"]
+        assert restored.open == {"devices", "code", "page", "new"}
+        assert restored.sizes == {Slot.LEFT_BOTTOM: (280, 300)}
+
+    def test_the_remembered_order_of_a_place(self):
+        layout = _layout()
+        layout.move("page", Slot.BOTTOM_LEFT, 0)
+
+        restored = ToolWindowLayout()
+        restored.load(layout.to_json())
+        restored.add("code", Slot.BOTTOM_LEFT)
+        restored.add("page", Slot.BOTTOM_LEFT)
+
+        assert restored.views(Slot.BOTTOM_LEFT) == ["page", "code"]
+
+    def test_a_broken_setting_is_ignored(self):
+        layout = ToolWindowLayout()
+
+        assert not layout.load({"slots": {"middle": ["code"]}, "open": []})
+        assert not layout.load("left")
+        layout.add("code", Slot.BOTTOM_LEFT, is_open=True)
+        assert layout.views(Slot.BOTTOM_LEFT) == ["code"]
+
+    def test_reset_and_normalize(self):
+        layout = _layout()
+        layout.move("code", Slot.RIGHT_TOP)
+        layout.sizes[Slot.RIGHT_TOP] = (1, 2)
+
+        layout.reset()
+
+        assert layout.views(Slot.BOTTOM_LEFT) == ["code", "page"]
+        assert layout.open == {"devices", "code"}
+        assert layout.sizes == {}
+
+        # two open views of a place (remembered from another version): the first one stays
+        layout.open.add("page")
+        layout.normalize()
+        assert layout.open == {"devices", "code"}
 
 
 class TestToolWindowRails(TestBase):
@@ -76,112 +140,160 @@ class TestToolWindowRails(TestBase):
     def _shown(window):
         window.resize(1440, 900)
         window.show()
-        wait_until(lambda: window.rails.side_of(window.jsonl_dock) == Side.BOTTOM)
+        wait_until(lambda: window.rails.rail(Side.BOTTOM).isVisible())
         return window
 
-    def test_a_button_per_view_follows_the_view(self, window):
+    @staticmethod
+    def _names(rails, side: Side, secondary: bool):
+        return [button.dock.objectName() for button in rails.container(side).buttons(secondary)]
+
+    def test_a_button_per_view_in_the_group_of_its_place(self, window):
         # GIVEN
         window = self._shown(window)
         rails = window.rails
 
-        # THEN: every view but the preview has a button, on its side
+        # THEN: every view but the preview has a button
         assert rails.button(window.preview_dock) is None
-        assert rails.side_of(window.devices_dock) == Side.LEFT
-        assert rails.side_of(window.properties_dock) == Side.RIGHT
-        # the logs and the live device were never seen: after the others, which are in the order of their tabs
-        wait_until(
-            lambda: (
-                [button.dock.objectName() for button in rails.buttons(Side.BOTTOM)]
-                == ["jsonl_dock", "page_jsonl_dock", "plates_dock", "logs_dock", "live_device_dock"]
-            )
-        )
-        plates = rails.button(window.plates_dock)
-        assert plates.isChecked()
+        assert self._names(rails, Side.LEFT, False) == ["devices_dock"]
+        assert self._names(rails, Side.RIGHT, False) == ["properties_dock"]
+        assert self._names(rails, Side.RIGHT, True) == ["live_device_dock"]
+        assert self._names(rails, Side.BOTTOM, False) == ["jsonl_dock", "page_jsonl_dock"]
+        assert self._names(rails, Side.BOTTOM, True) == ["logs_dock", "plates_dock"]
+        assert rails.button(window.jsonl_dock).isChecked()
+        assert not rails.button(window.logs_dock).isChecked()
 
-        # WHEN: a view behind another one of its tab group is clicked, it is raised
-        plates.click()
+    def test_views_of_two_places_are_open_together_and_one_per_place(self, window):
+        # GIVEN
+        window = self._shown(window)
+        rails = window.rails
+        code, logs, plates = window.jsonl_dock, window.logs_dock, window.plates_dock
 
-        # THEN
-        wait_until(lambda: not window.plates_dock.visibleRegion().isEmpty())
-        assert plates.isChecked()
+        # WHEN: the logs are opened with their button
+        rails.button(logs).click()
 
-        # WHEN: clicked again, it is hidden
-        plates.click()
+        # THEN: next to the code, below the preview
+        wait_until(lambda: logs.isVisible() and code.isVisible())
+        wait_until(lambda: logs.geometry().x() > code.geometry().right())
+        assert abs(logs.geometry().y() - code.geometry().y()) < 5
+        assert logs.geometry().y() > window.preview_dock.geometry().bottom()
 
-        # THEN
-        wait_until(lambda: window.plates_dock.isHidden())
-        assert not plates.isChecked()
+        # WHEN: the plates of the same place are opened from code
+        plates.show()
 
-        # WHEN: clicked again, it is shown
-        plates.click()
+        # THEN: the logs close
+        assert logs.isHidden()
+        assert not rails.button(logs).isChecked()
+        assert rails.button(plates).isChecked()
+        assert code.isVisible()
 
-        # THEN
-        wait_until(lambda: not window.plates_dock.visibleRegion().isEmpty())
-        assert plates.isChecked()
-
-        # WHEN: hidden and shown from code
-        window.plates_dock.hide()
-        # THEN
-        assert not plates.isChecked()
-        # WHEN
-        window.plates_dock.show()
-        # THEN
-        assert plates.isChecked()
-
-        # WHEN: closed with the action of the View menu
-        window.page_jsonl_dock.toggleViewAction().trigger()
+        # WHEN: clicked again, the plates close
+        rails.button(plates).click()
 
         # THEN
-        assert window.page_jsonl_dock.isHidden()
-        assert not rails.button(window.page_jsonl_dock).isChecked()
+        assert plates.isHidden()
+        assert not rails.button(plates).isChecked()
 
-        # WHEN: the window state is restored
+        # WHEN: the code is closed with the action of the View menu
+        code.toggleViewAction().trigger()
+
+        # THEN
+        assert code.isHidden()
+        assert not rails.button(code).isChecked()
+
+        # WHEN: the default layout is restored
         window.restore_default_layout()
 
         # THEN
-        assert not window.page_jsonl_dock.isHidden()
-        assert rails.button(window.page_jsonl_dock).isChecked()
+        assert code.isVisible()
+        assert rails.button(code).isChecked()
 
-    def test_a_button_moves_with_its_view(self, window):
+    def test_a_view_moves_to_another_place(self, window):
         # GIVEN
-        from PyQt6.QtCore import Qt
-
         window = self._shown(window)
+        rails = window.rails
+        logs = window.logs_dock
+        logs.show()
 
-        # WHEN: the user puts the code at the right
-        window.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, window.jsonl_dock)
+        # WHEN: the logs go below the devices
+        rails.move("logs_dock", Slot.LEFT_BOTTOM)
+
+        # THEN: still open, with their button in the second group of the left rail
+        assert self._names(rails, Side.LEFT, True) == ["logs_dock"]
+        assert "logs_dock" not in self._names(rails, Side.BOTTOM, True)
+        assert rails.slot_of(logs) == Slot.LEFT_BOTTOM
+        wait_until(lambda: logs.isVisible() and logs.geometry().y() > window.devices_dock.geometry().bottom())
+        assert logs.geometry().right() < window.preview_dock.geometry().x()
+        assert window.devices_dock.isVisible()
+        # the two places of the side share it in halves
+        wait_until(lambda: abs(logs.height() - window.devices_dock.height()) < 20)
+
+        # WHEN: with the context menu of its button, to the place of the code
+        menu = rails.menu(logs)
+        move_to = next(action.menu() for action in menu.actions() if action.text() == "Move to")
+        next(action for action in move_to.actions() if action.text() == "Bottom left").trigger()
+
+        # THEN: the code of its new place closes
+        assert rails.slot_of(logs) == Slot.BOTTOM_LEFT
+        assert logs.isVisible()
+        assert window.jsonl_dock.isHidden()
+
+    def test_the_arrangement_is_remembered(self, create_window):
+        # GIVEN
+        first = self._shown(create_window())
+        first.rails.move("plates_dock", Slot.RIGHT_BOTTOM, 0)
+        first.plates_dock.show()
+
+        # WHEN
+        first.close()
+        second = self._shown(create_window())
 
         # THEN
-        rails = window.rails
-        wait_until(lambda: rails.side_of(window.jsonl_dock) == Side.RIGHT)
-        assert rails.button(window.jsonl_dock) in rails.buttons(Side.RIGHT)
-        assert rails.button(window.jsonl_dock) not in rails.buttons(Side.BOTTOM)
-        assert rails.rail(Side.RIGHT).isVisible()
+        assert second.rails.slot_of(second.plates_dock) == Slot.RIGHT_BOTTOM
+        assert self._names(second.rails, Side.RIGHT, True) == ["plates_dock", "live_device_dock"]
+        assert second.plates_dock.isVisible()
 
     def test_a_dock_added_later_gets_a_button(self, window):
         # GIVEN
-        from PyQt6.QtCore import Qt
         from PyQt6.QtWidgets import QLabel
 
         window = self._shown(window)
 
-        # WHEN: like the docks of the window, but not described for the rails, and hidden before it was seen
+        # WHEN: like the docks of the window, but not described for the rails
         dock = window._add_dock("Later", "later_dock", QLabel("later"))
-        window.tabifyDockWidget(window.jsonl_dock, dock)
-        dock.hide()
 
-        # THEN: at the bottom, where the docks nested around the preview are
-        wait_until(lambda: window.rails.side_of(dock) == Side.BOTTOM)
+        # THEN: at the bottom left, closed
+        wait_until(lambda: window.rails.button(dock) is not None)
+        assert window.rails.slot_of(dock) == Slot.BOTTOM_LEFT
         assert window.rails.button(dock).text() == "Later"
-        assert not window.rails.button(dock).isChecked()
+        assert dock.isHidden()
 
-        # WHEN: one in a dock area of its own
-        other = window._add_dock("Right", "right_dock", QLabel("right"))
-        window.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, other)
+        # WHEN: one with a place, open
+        other = window._add_dock("Right", "right_dock", QLabel("right"), slot=Slot.RIGHT_BOTTOM, is_open=True)
 
-        # THEN
-        wait_until(lambda: window.rails.side_of(other) == Side.RIGHT)
-        assert window.rails.button(other).isChecked()
+        # THEN: the live device of its place stays closed
+        wait_until(lambda: window.rails.button(other) is not None)
+        assert window.rails.side_of(other) == Side.RIGHT
+        wait_until(lambda: other.isVisible())
+
+    def test_a_floating_view_keeps_its_place_open(self, window):
+        # GIVEN
+        window = self._shown(window)
+        code, page = window.jsonl_dock, window.page_jsonl_dock
+
+        # WHEN: the code floats, and the page of its place opens
+        code.setFloating(True)
+        page.show()
+
+        # THEN: both are open
+        assert code.isVisible() and page.isVisible()
+
+        # WHEN: the code is docked again
+        code.setFloating(False)
+
+        # THEN: it is the open view of its place again
+        wait_until(lambda: page.isHidden())
+        assert code.isVisible()
+        assert window.rails.slot_of(code) == Slot.BOTTOM_LEFT
 
     def test_the_rails_can_be_hidden(self, window):
         # GIVEN
