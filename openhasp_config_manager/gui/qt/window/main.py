@@ -177,24 +177,24 @@ class MainWindow(QMainWindow):
         center_layout.addWidget(self.disk_changes_banner)
         center_layout.addWidget(self.center_stack, 1)
 
-        # left: the files of the device of the active tab (and which of them new objects go into), with their changes
-        self.file_tree_widget = FileTreeWidget()
-        self.file_tree_widget.highlightRequested.connect(lambda key: self.page_layout_editor_widget.highlight_component(key))
-        self.file_tree_widget.targetRequested.connect(lambda key: self.page_layout_editor_widget.set_target_component(key))
-        self.file_tree_widget.setMinimumWidth(260)
-        self.files_dock = self._add_dock(
-            "Files", "files_dock", self.file_tree_widget, icon="file-tree-outline", slot=Slot.LEFT_TOP, is_open=True
-        )
-
-        # below them: the devices of the config directory, with the plates of the open ones (connection, Live preview, the
-        # page they show and what is wrong)
+        # left: the devices of the config directory, with the plates of the open ones (connection, Live preview, the page
+        # they show and what is wrong); as high as its rows
         self.devices_panel = DevicesPanel()
         self.devices_panel.deviceClicked.connect(self.on_device_selected)
         self.devices_panel.reloadClicked.connect(self.load_plates)
         self.devices_panel.liveToggled.connect(self.set_live_preview)
         self.devices_panel.actionRequested.connect(self._on_device_action)
         self.devices_dock = self._add_dock(
-            "Devices", "devices_dock", self.devices_panel, icon="devices", slot=Slot.LEFT_BOTTOM, is_open=True
+            "Devices", "devices_dock", self.devices_panel, icon="devices", slot=Slot.LEFT_TOP, is_open=True, compact=True
+        )
+
+        # below them: the files of the device of the active tab (and which of them new objects go into), with their changes
+        self.file_tree_widget = FileTreeWidget()
+        self.file_tree_widget.highlightRequested.connect(lambda key: self.page_layout_editor_widget.highlight_component(key))
+        self.file_tree_widget.targetRequested.connect(lambda key: self.page_layout_editor_widget.set_target_component(key))
+        self.file_tree_widget.setMinimumWidth(260)
+        self.files_dock = self._add_dock(
+            "Files", "files_dock", self.file_tree_widget, icon="file-tree-outline", slot=Slot.LEFT_BOTTOM, is_open=True
         )
 
         # center: the render preview, the other docks are around it (`ToolWindowRails`). It can't be closed: there is
@@ -377,6 +377,7 @@ class MainWindow(QMainWindow):
         icon: Optional[str] = None,
         slot: Optional[Slot] = None,
         is_open: bool = False,
+        compact: bool = False,
     ) -> QDockWidget:
         """
         A dock of the window. Every closable dock gets a place around the preview and a button on the tool window rails
@@ -385,9 +386,10 @@ class MainWindow(QMainWindow):
         :param icon: the mdi6 icon of its button
         :param slot: its place until the user moves it
         :param is_open: open at the first start
+        :param compact: as high (or wide) as its widget asks for, see `describe_dock`
         """
         dock = QDockWidget(title, self)
-        describe_dock(dock, icon=icon, slot=slot, is_open=is_open)
+        describe_dock(dock, icon=icon, slot=slot, is_open=is_open, compact=compact)
         dock.setObjectName(name)
         dock.setWidget(widget)
         features = QDockWidget.DockWidgetFeature.DockWidgetMovable | QDockWidget.DockWidgetFeature.DockWidgetFloatable

@@ -89,7 +89,7 @@ class DevicesPanel(QWidget):
         self.show_loading()
 
     def sizeHint(self) -> QtCore.QSize:
-        """As high as its rows (at least 4), so the Files tree above it gets the rest."""
+        """As high as its rows (at least 4), so the Files tree below it gets the rest."""
         hint = super().sizeHint()
         row_height = max(self.tree.sizeHintForRow(0), self.fontMetrics().height() + 4)
         rows = max(4, len(self._rows))
