@@ -178,14 +178,20 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
   tabs once their device is loaded, found by the description of their instance); tabs of devices or parts that are gone are
   skipped, and Live preview is never turned on again. App-wide
   preferences (window geometry, theme, view toggles) are plain `QSettings` keys.
-- **Views (docks) and tool window rails**: every panel is a `QDockWidget` made with `MainWindow._add_dock`, nested around the
-  preview dock. `ToolWindowRails` (`gui/qt/window/tool_window_rails.py`, placement logic Qt-free in `gui/domain/tool_window_rails.py`)
-  puts a button for each dock on the rail at the edge where the dock is, next to the preview (left, right, top or bottom), and moves
-  it when the dock is dragged elsewhere. A new dock gets its button by itself (the rails find every dock of the window; one that can't
-  be closed, like the preview, gets none); pass `icon=` (mdi6) and `side=` (its rail while it was never seen, e.g. hidden at the start)
-  to `_add_dock`, and add its `toggleViewAction()` to the View menu (`menus.py`). The buttons keep no state of their own: checked is the
-  dock's `toggleViewAction`, so showing or hiding a dock any way shows on its button. The sides of hidden docks are remembered in
-  the `window/rail_placements` setting, *View > Tool window bars* hides the rails (`window/show_rails`).
+- **Views (docks) and tool window rails**: every panel is a `QDockWidget` made with `MainWindow._add_dock`, arranged around the
+  preview dock like the tool windows of IntelliJ. `ToolWindowRails` (`gui/qt/window/tool_window_rails.py`, the model Qt-free in
+  `gui/domain/tool_window_rails.py`) puts a rail of buttons at the left, right and bottom edge; each rail has two groups, and each
+  group is a place (`Slot`: left top/bottom, right top/bottom, bottom left/right). A place shows one view at a time (opening one
+  closes the other open view of its place), the places show theirs at the same time (the two of a side split it). A view moves to
+  another place by dragging its button to another group or rail, or with *Move to* in the button's context menu; the title bars
+  of the docks can't be dragged. `ToolWindowLayout` is the only arrangement: `apply_layout` builds the docks from it, and it is
+  remembered with the sizes of the places in the `window/tool_windows` setting (*Restore default layout* resets it). Pass
+  `icon=` (mdi6), `slot=` (its first place) and `is_open=` to `_add_dock`, and add its `toggleViewAction()` to the View menu
+  (`menus.py`); a dock without them still gets a button (at the bottom left, closed); one that can't be closed, like the preview,
+  gets none. The buttons keep no state of their own: checked is the dock's `toggleViewAction`, so showing or hiding a dock any way
+  shows on its button. A floating dock keeps its place open for another view. *View > Tool window bars* hides the rails
+  (`window/show_rails`). Connect signals of the rails with bound methods and keep back-references weak (`weakref`): cycles
+  through lambdas get the rails collected after the window and crash Qt in their event filter.
 - **Preview controls** float inside the preview (`PagePreviewWidget.add_overlay`); `fit_to_view` keeps their rows free, so the plate is
   never covered. Messages about an object go next to it (`show_message`), errors also to the status bar (`OperationStatus.failed`).
 - **Live device** dock (`live_device_dock`, created in `MainWindow.create_basic_layout`, hidden at first): screenshots of the
