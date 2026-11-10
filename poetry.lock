@@ -1679,14 +1679,14 @@ files = [
 
 [[package]]
 name = "telnetlib3"
-version = "5.0.1"
+version = "5.0.2"
 description = "Python Telnet server and client CLI and Protocol library"
 optional = false
 python-versions = ">=3.9"
 groups = ["main"]
 files = [
-    {file = "telnetlib3-5.0.1-py3-none-any.whl", hash = "sha256:3a257d41981d460f6377f00e713a91979c5fe706434b4d3a52933789606cceeb"},
-    {file = "telnetlib3-5.0.1.tar.gz", hash = "sha256:6fde197ffb71cf26ad27fe2c88694d8364f4b1cc962a37762e0cf7e79b9afaed"},
+    {file = "telnetlib3-5.0.2-py3-none-any.whl", hash = "sha256:87cd7348b6e53c6e707c73a169d53f6b6cfc32b6a803b1aed7e027b27a52886d"},
+    {file = "telnetlib3-5.0.2.tar.gz", hash = "sha256:30bee6ccbacc5c7540ae1a4fb990809eb81993d98900597c0795a5d1ad45e40f"},
 ]
 
 [package.dependencies]
@@ -1971,4 +1971,4 @@ gui = ["PyQt6", "QtAwesome", "pfzy", "qt-themes", "segno", "watchdog"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12,<3.15"
-content-hash = "d32592a83dafbc5d5ed58c75559a9f81e58a634c131d60905e7ccdfd412bb696"
+content-hash = "9bbb7827781a41a85fc4c5dbb77a32af2b1107858dda19cac013dbe51aa4e4ba"
