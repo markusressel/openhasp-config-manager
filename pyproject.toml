@@ -28,7 +28,7 @@ dependencies = [
     "yarl>=1.24.2",
     "orjson>=3.11.9",
     "aiomqtt", # compromise to get it working with appdaemon 4.5.0
-    "paho-mqtt>=1.6.1,<2.2.0",
+    "paho-mqtt>=2.2.0,<3.0.0",
     "telnetlib3>=5.0.2",
     "pillow>=12.3.0",
 ]
