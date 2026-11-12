@@ -4,12 +4,14 @@ version = "0.10.0"
 description = "A tool to manage all of your openHASP device configs in a centralized place."
 license = "AGPL-3.0-or-later"
 readme = "README.md"
-requires-python = ">=3.12,<3.15"
+requires-python = ">=3.12,<3.16"
 authors = [{ name = "Markus Ressel", email = "mail@markusressel.de" }]
 keywords = ["openhasp", "config", "management", "mqtt", "home automation", "appdaemon"]
 classifiers = [
     "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.15",
+    "Programming Language :: Python :: 3.14",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.12",
     "Development Status :: 5 - Production/Stable",

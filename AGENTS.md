@@ -19,7 +19,7 @@ Changes to public APIs of `openhasp_config_manager.haad` or `openhasp_config_man
 
 ## Setup
 
-- Python: 3.13 for this repository (`.python-version`), `>=3.12,<3.15` supported. The haad integration needs Python 3.14 (see Testing).
+- Python: 3.13 for this repository (`.python-version`), `>=3.12,<3.16` supported. The haad integration needs Python 3.14 (see Testing).
 - Dependencies: `poetry install --extras gui` (the `gui` extra is optional; AppDaemon and haad are not extras, see Testing). A `.venv` in the repository root is used by the commands below.
 - Run the CLI: `.venv/bin/openhasp-config-manager --help`, e.g. `gui -c ./openhasp-configs`.
 
