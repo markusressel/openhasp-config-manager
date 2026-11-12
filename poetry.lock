@@ -1951,5 +1951,5 @@ gui = ["PyQt6", "QtAwesome", "pfzy", "qt-themes", "segno", "watchdog"]
 
 [metadata]
 lock-version = "2.1"
-python-versions = ">=3.12,<3.15"
-content-hash = "b50f5aaf5e1b0c63ac46193df9aa045832f6f77964329ec71b81e94ff6e34525"
+python-versions = ">=3.12,<3.16"
+content-hash = "3e734092f3101445dc3b2783983c9f96a5e8a1f5f261eb7a225f12edf706d5f0"
