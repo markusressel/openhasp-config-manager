@@ -185,7 +185,7 @@ class PlateController:
         return Screen(width=screen.width, height=screen.height)
 
     def add_page(self, page: PageController) -> PageController:
-        self.controller.logger.info(f"Adding page '{page.__class__.__name__}' at index {page.index} to plate {self._name}")
+        self.controller.logger.debug(f"Adding page '{page.__class__.__name__}' at index {page.index} to plate {self._name}")
         self.pages[page.index] = page
         return page
 
@@ -206,14 +206,14 @@ class PlateController:
         await self.screen_controller.init()
         await self.setup_auto_brightness()
 
-        self.controller.logger.info(f"Initializing {len(self.pages)} pages for plate {self._name}...")
+        self.controller.logger.debug(f"Initializing {len(self.pages)} pages for plate {self._name}...")
 
         for page in self.pages.values():
-            self.controller.logger.info(f"Initializing page {page.index} for plate {self._name}")
+            self.controller.logger.debug(f"Initializing page {page.index} for plate {self._name}")
             await self.declare_objects(page)
             self.render_layout(page)
             await self.push_layout(page)
-            self.controller.logger.info(f"Initializing objects for page {page.index} for plate {self._name}")
+            self.controller.logger.debug(f"Initializing objects for page {page.index} for plate {self._name}")
             await page.initialize_objects()
 
         await self.set_navigation()
@@ -243,7 +243,7 @@ class PlateController:
             if self._layout_dump_dir is not None:
                 declarations = {o.obj_id: o.declaration for o in page.objects.values()}
                 path = write_dump(self._layout_dump_dir, self._name, page.index, rendered, declarations)
-                self.controller.logger.info(f"Layout of page {page.index} written to {path}")
+                self.controller.logger.debug(f"Layout of page {page.index} written to {path}")
 
     async def push_layout(self, page: Optional[PageController] = None):
         """

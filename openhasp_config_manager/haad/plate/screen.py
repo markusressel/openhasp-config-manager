@@ -39,5 +39,5 @@ class ScreenController:
         return await self.client.set_idle_state(state)
 
     async def set_default_auto_brightness_config(self):
-        self.controller.logger.info("Setting default auto brightness config")
+        self.controller.logger.debug("Setting default auto brightness config")
         await self.client.set_gui_config(config=self.device.config.gui)

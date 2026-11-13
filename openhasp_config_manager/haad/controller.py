@@ -119,11 +119,11 @@ class OpenHaspController(HaadController):
             return
 
         try:
-            self.logger.info(f"Setting up plate '{self._name}'...")
+            self.logger.debug(f"Setting up plate '{self._name}'...")
             await self.setup_plate()
-            self.logger.info(f"Initializing plate controller for '{self._name}'...")
+            self.logger.debug(f"Initializing plate controller for '{self._name}'...")
             await self.plate_controller.init()
-            self.logger.info(f"Plate '{self._name}' setup complete, scheduling sync...")
+            self.logger.debug(f"Plate '{self._name}' setup complete, scheduling sync...")
             await self.schedule_sync()
             self.logger.info(f"Plate '{self._name}' is now online and ready.")
         except Exception as ex:
@@ -163,7 +163,7 @@ class OpenHaspController(HaadController):
             # task already running
             return
 
-        self.logger.info(f"Setting up online state listener for {self._name}...")
+        self.logger.debug(f"Setting up online state listener for {self._name}...")
 
         async def _on_lwt_event(event_topic: str, event_payload: bytes):
             event_payload = event_payload.decode("utf-8")
@@ -183,7 +183,7 @@ class OpenHaspController(HaadController):
                 callback=_on_lwt_event,
             )
         )
-        self.logger.info(f"Online state listener for {self._name} setup complete.")
+        self.logger.debug(f"Online state listener for {self._name} setup complete.")
 
     # async def _setup_auto_deploy_when_online(self):
     #     async def _on_lwt_event(event_topic: str, event_payload: bytes):
