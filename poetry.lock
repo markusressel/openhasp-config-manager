@@ -1319,19 +1319,19 @@ windows-terminal = ["colorama (>=0.4.6)"]
 
 [[package]]
 name = "pyqt6"
-version = "6.12.0"
+version = "6.12.1"
 description = "Python bindings for the Qt cross platform application toolkit"
 optional = true
 python-versions = ">=3.10"
 groups = ["main"]
 markers = "extra == \"gui\""
 files = [
-    {file = "pyqt6-6.12.0-cp310-abi3-macosx_14_0_universal2.whl", hash = "sha256:fd173c00432fa60580e6c4e44aa0c30b60160b0873832799fc65aa0d582647a0"},
-    {file = "pyqt6-6.12.0-cp310-abi3-manylinux_2_34_x86_64.whl", hash = "sha256:1922bf7440310845a4fd06f4242288084dc26cf682a67e561b115570a8def3d1"},
-    {file = "pyqt6-6.12.0-cp310-abi3-manylinux_2_39_aarch64.whl", hash = "sha256:2799f2e75594af313222a2dc2da9f965fe88be29ee4293d7937e7763630f5610"},
-    {file = "pyqt6-6.12.0-cp310-abi3-win_amd64.whl", hash = "sha256:c764f22d101ea9885533ee8452752b929e2ad1d3d77a5c1c12ac82e5f30c99ae"},
-    {file = "pyqt6-6.12.0-cp310-abi3-win_arm64.whl", hash = "sha256:c4db4696d70bdaa224545190283d070cffeca54b4060b8a10676b5b16aa96f67"},
-    {file = "pyqt6-6.12.0.tar.gz", hash = "sha256:d3e021b716bae880224422f9d1b894d2d53de7e60e60dbc43f860723f9cc300b"},
+    {file = "pyqt6-6.12.1-cp310-abi3-macosx_14_0_universal2.whl", hash = "sha256:f3c5588b42e786e25d94e070366762225a863de77c884a6aabc7553a9eeb98ad"},
+    {file = "pyqt6-6.12.1-cp310-abi3-manylinux_2_34_x86_64.whl", hash = "sha256:b432aa5ffbdaf90a0b909fd47cb1aa908808ae20928561beed0db9fe2ac6347e"},
+    {file = "pyqt6-6.12.1-cp310-abi3-manylinux_2_39_aarch64.whl", hash = "sha256:04d189a18acdd8d5d64f3e99152af42381f26761f1e84c049dec317efe5372a9"},
+    {file = "pyqt6-6.12.1-cp310-abi3-win_amd64.whl", hash = "sha256:91c3a6a520f3e35e022bb7e05a6bf7d47d5b25eb0f0d6ca9c734c18d12d470ff"},
+    {file = "pyqt6-6.12.1-cp310-abi3-win_arm64.whl", hash = "sha256:86f77dcb30882014fce9fe0912d9d7aed7f20f17b957b7c5fb0ee67410e89870"},
+    {file = "pyqt6-6.12.1.tar.gz", hash = "sha256:17bb18b3ae953ab54b23026291ecea2579b028597b56c281a752c8ed66dd1a58"},
 ]
 
 [package.dependencies]
